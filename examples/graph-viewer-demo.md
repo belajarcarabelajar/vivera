@@ -33,3 +33,18 @@ positions produced by a force-directed layout computed offline (numpy, sampled
 repulsion + edge attraction), then embeds them as one JSON payload in the page.
 
 Open the HTML file directly in any browser — no server needed.
+
+## Regenerating the demo
+
+The committed HTML is produced by [`scripts/make-graph-demo.py`](../scripts/make-graph-demo.py),
+which is fully seeded — same seed, byte-identical output:
+
+```bash
+python3 scripts/make-graph-demo.py                     # default seed → examples/graph-viewer-demo.html
+python3 scripts/make-graph-demo.py --seed 42 --out /tmp/alt.html
+```
+
+Requires numpy. The privacy property holds by construction: the generator's
+vocabulary is fictional, so no real-world string can enter the output — and a
+quick `grep` audit against identity strings is part of the script's own
+final output.

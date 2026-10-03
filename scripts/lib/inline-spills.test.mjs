@@ -7,10 +7,10 @@
 // JSON keeps only a pointer, at `state.metadata.outputPath`, alongside
 // `truncated` and `contentType`. Measured on this machine: 81 such files,
 // 42 KB to 1.0 MB, e.g.
-//   /home/belajarcarabelajar/.local/share/opencode/tool-output/tool_0d7cfa36b001C9KMYQTPKU4kUn
+//   /home/testuser/.local/share/opencode/tool-output/tool_0d7cfa36b001C9KMYQTPKU4kUn
 //
 // The export path wants the note to be SELF-CONTAINED. A note that says "the
-// real output is at /home/belajarcarabelajar/.local/share/opencode/..." is
+// real output is at /home/testuser/.local/share/opencode/..." is
 // self-contained only for the machine that wrote it, and the file may already
 // be gone — at least one pointer in the live database today points at a file
 // that no longer exists. So the export inlines the bytes.

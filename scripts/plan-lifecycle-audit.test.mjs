@@ -15,7 +15,7 @@
 // the three buckets are the contract under test here, not the arithmetic.
 //
 // Every fixture is a throwaway registry under the system temp dir. Nothing in
-// this file reads or writes /home/belajarcarabelajar/Dokumen/Obsidian Vault, and
+// this file reads or writes ~/Dokumen/Obsidian Vault, and
 // nothing depends on whether the real project checkouts exist on the machine
 // running it.
 //
@@ -29,7 +29,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as audit from './plan-lifecycle-audit.mjs';
@@ -309,7 +309,7 @@ test('the CLI never reads the real vault: it runs entirely off PLAN_PUBLISH_CONF
   const f = fixture('injection', MIXED);
   const r = run([], f);
   assert.ok(r.stdout.includes(f.vault), `the report must name the vault it read from:\n${r.stdout}`);
-  assert.ok(!r.stdout.includes('/home/belajarcarabelajar/Dokumen/Obsidian Vault'),
+  assert.ok(!r.stdout.includes(path.join(homedir(), 'Dokumen/Obsidian Vault')),
     'the report must come from the injected config, not the real registry');
   f.cleanup();
 });

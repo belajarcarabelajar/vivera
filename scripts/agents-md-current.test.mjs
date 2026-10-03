@@ -49,10 +49,11 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-import { ALWAYS_ON_BLOCK, extractSection, normalise, checkAgentsMd } from './agents-md-current.mjs';
+import { ALWAYS_ON_BLOCK, UV_TOOL_SITE_PACKAGES, extractSection, normalise, checkAgentsMd } from './agents-md-current.mjs';
 
 // ---------- fixtures ----------
 
@@ -421,7 +422,12 @@ test(
 
 // ---------- live: the real defect (RED today, by design) ----------
 
-const AI_SKILLS = '/home/belajarcarabelajar/ai-skills';
+// The live check targets the machine's real ai-skills checkout, not the copy
+// of the repo this file runs from: a worktree carries a possibly mid-edit
+// AGENTS.md, and the thing under test is the checkout agent sessions actually
+// read. $AI_SKILLS_ROOT names it explicitly for non-default layouts;
+// $HOME/ai-skills is the documented location.
+const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'ai-skills');
 const live = existsSync(AI_SKILLS) ? test : test.skip;
 
 live('the real ai-skills AGENTS.md carries the current graphify block', () => {
@@ -440,5 +446,29 @@ live('the real ai-skills AGENTS.md carries the current graphify block', () => {
     `ai-skills AGENTS.md is stale. ${result.reason}\n\n` +
       `The section currently claims:\n${result.found ?? '(nothing found)'}\n\n` +
       `The installed block (${ALWAYS_ON_BLOCK}) says:\n${result.expected}`,
+  );
+});
+
+// ---------- hygiene: no machine-specific path in the source ----------
+
+test('the fallback site-packages path is derived from the machine, never baked in', () => {
+  // A hard-coded /home/<user> literal resolves on exactly one machine. On
+  // every other checkout the fallback silently names a directory that cannot
+  // exist, and a drift report naming a path nobody has is how a real drift
+  // report gets ignored. The fallback must therefore stay homedir-derived,
+  // and this test reads the module's own source to keep it that way.
+  const source = readFileSync(
+    fileURLToPath(new URL('./agents-md-current.mjs', import.meta.url)),
+    'utf8',
+  );
+  assert.doesNotMatch(
+    source,
+    /['"`]\/home\//,
+    'agents-md-current.mjs hard-codes a path starting with /home/; derive it from os.homedir() instead',
+  );
+  assert.equal(
+    UV_TOOL_SITE_PACKAGES,
+    join(homedir(), '.local/share/uv/tools/graphifyy/lib/python3.14/site-packages'),
+    'the fallback must be the uv tool layout under the machine home',
   );
 });

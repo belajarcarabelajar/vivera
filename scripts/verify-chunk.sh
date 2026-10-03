@@ -8,7 +8,10 @@
 #
 # Usage: verify-chunk.sh <batch-id, e.g. rem-090>
 set -uo pipefail
-cd /home/belajarcarabelajar/ai-skills
+# Repo root, detected from the script's own location rather than hard-coded, so
+# the script works in any checkout or worktree of the repo, from any cwd.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
 ID="${1:?usage: verify-chunk.sh <batch-id>}"
 F="vault-index/semantic/chunk-${ID}.json"
 

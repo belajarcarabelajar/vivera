@@ -40,21 +40,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { resolveConfiguredPath } from './lib/local-config.mjs';
+
 /**
- * Where a chunk's `source_file` and its anchor paths resolve. Overridable
- * rather than hardcoded at the call site, matching `vault-index-merge.mjs`: a
- * caller auditing a corpus other than this machine's must not have to edit this
- * file, and a unit test must be able to point at a temp fixture root instead of
- * the real vault (which may not even exist off this host).
+ * The corpus roots a chunk's `source_file` and its anchor paths resolve against
+ * by default: $ARCHIVE_ROOT and $VAULT_ROOT, else local.config.json's
+ * "archiveRoot" and "vaultRoot" (copy local.config.example.json); with neither
+ * set, the call throws. Resolved per call, never at import, matching
+ * `vault-index-rebuild.mjs`, so importing this module cannot throw and a
+ * changed env var is picked up on the next call. Any caller may instead pass
+ * explicit `roots`, so auditing a corpus other than this machine's never
+ * requires editing this file, and a unit test can point at a temp fixture root
+ * instead of the real vault (which may not even exist off this host).
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string[]} corpus root paths, archive first
  */
-export const DEFAULT_ROOTS = Object.freeze([
-  '/home/belajarcarabelajar/Documents/conversations-archive',
-  '/home/belajarcarabelajar/Dokumen/Obsidian Vault',
-]);
+export function resolveDefaultRoots({ configPath } = {}) {
+  return [
+    resolveConfiguredPath({ envVar: 'ARCHIVE_ROOT', configKey: 'archiveRoot', label: 'conversations archive root', configPath }),
+    resolveConfiguredPath({ envVar: 'VAULT_ROOT', configKey: 'vaultRoot', label: 'Obsidian vault root', configPath }),
+  ];
+}
 const DIR = 'vault-index/semantic';
 
 /** Locate a real file by repo-relative path across the vault roots. */
-export function resolveFile(rel, roots = DEFAULT_ROOTS) {
+export function resolveFile(rel, roots = resolveDefaultRoots()) {
   for (const r of roots) {
     const p = path.join(r, rel);
     if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
@@ -142,7 +153,7 @@ function unquoteForms(q) {
 // substring test), so a separate shape heuristic would only add noise.
 
 export function checkChunk(chunkPath, opts = {}) {
-  const roots = opts?.roots ?? DEFAULT_ROOTS;
+  const roots = opts?.roots ?? resolveDefaultRoots();
   const chunk = JSON.parse(fs.readFileSync(chunkPath, 'utf8'));
   const cache = new Map();
   const get = (rel) => {

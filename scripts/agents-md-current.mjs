@@ -55,22 +55,26 @@
 // itself is `graphify install`, not this module.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 /**
  * Fallback location of the packaged always-on block.
  *
- * Tied to the uv tool layout (`~/.local/share/uv/tools/<tool>/lib/python<XY>/
- * site-packages`), so it needs updating whenever graphifyy is reinstalled against
- * a different interpreter version — a reinstall into python3.15 moves this path
- * without any other visible sign. It is a fallback, not the primary: the real
+ * Tied to the uv tool layout under the machine home (`~/.local/share/uv/tools/
+ * <tool>/lib/python<XY>/site-packages`), so it needs updating whenever graphifyy
+ * is reinstalled against a different interpreter version: a reinstall into
+ * python3.15 moves this path without any other visible sign. It is a fallback,
+ * not the primary: the real
  * lookup is `discoverAlwaysOnBlock()`, which derives the path from the resolved
  * `graphify` executable and so survives a version bump. Kept exported because a
  * test wants to be able to say where it looked.
  */
-export const UV_TOOL_SITE_PACKAGES =
-  '/home/belajarcarabelajar/.local/share/uv/tools/graphifyy/lib/python3.14/site-packages';
+export const UV_TOOL_SITE_PACKAGES = path.join(
+  os.homedir(),
+  '.local/share/uv/tools/graphifyy/lib/python3.14/site-packages',
+);
 
 /**
  * Locate the packaged `agents-md.md`, i.e. the exact bytes a repo's `## graphify`

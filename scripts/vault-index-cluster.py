@@ -1,4 +1,4 @@
-#!/home/belajarcarabelajar/.local/share/uv/tools/graphifyy/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """vault-index cluster — T10: communities over the merged vault graph.
 
@@ -32,7 +32,17 @@ passed. `exclude_hubs_percentile` is left at its default for the same reason the
 plan does not mention it.
 
 Usage:
-    python3 vault-index-cluster.py GRAPH.json        # mapping JSON on stdout
+    GRAPHIFY_SITE_PACKAGES=/path/to/graphify/site-packages \
+        python3 vault-index-cluster.py GRAPH.json     # mapping JSON on stdout
+
+GRAPHIFY_SITE_PACKAGES is required and has no default. The path is a
+machine-specific uv tool venv, and a silent wrong guess would cluster with a
+different graphify install than the one that built the graph. vault-index.mjs
+resolves the same variable the same way for the detector, so one setting drives
+both scripts; the runner (vault-index-cluster.mjs) inherits its environment
+down to this script, so a value exported above it, or put in the git-ignored
+local.config.json the JS side reads, is all a configured host needs. This
+script reads only the environment.
 
 The output is a single JSON object on stdout. Anything graphify prints goes to
 stderr, so stdout stays parseable. The mapping is keyed by node id and carries the
@@ -44,14 +54,28 @@ import json
 import os
 import sys
 
-# graphify's installed site-packages, injected onto sys.path rather than depended
-# on the ambient interpreter. Same layout as vault-index.mjs, so the two scripts
-# agree on where graphify lives and a host with it elsewhere only has to set
-# GRAPHIFY_SITE_PACKAGES for both.
-GRAPHIFY_SITE_PACKAGES = os.environ.get(
-    "GRAPHIFY_SITE_PACKAGES",
-    "/home/belajarcarabelajar/.local/share/uv/tools/graphifyy/lib/python3.14/site-packages",
-)
+
+def require_site_packages():
+    """Return graphify's site-packages from the environment, or refuse to guess.
+
+    There is deliberately no fallback path: the correct value is a machine's uv
+    tool venv, and any default baked in here would be one host's layout shipped
+    to every other checkout (the bug this replaces).
+    """
+    site_packages = os.environ.get("GRAPHIFY_SITE_PACKAGES")
+    if not site_packages:
+        print(
+            "vault-index-cluster.py: GRAPHIFY_SITE_PACKAGES is not set. Point it at"
+            " graphify's installed site-packages directory (the same variable"
+            " vault-index.mjs reads), e.g.:",
+            file=sys.stderr,
+        )
+        print(
+            "  GRAPHIFY_SITE_PACKAGES=/path/to/graphify/site-packages"
+            " python3 vault-index-cluster.py GRAPH.json",
+            file=sys.stderr,
+        )
+    return site_packages
 
 
 def build_graph(data):
@@ -84,6 +108,14 @@ def main():
     if len(sys.argv) != 2:
         print("usage: vault-index-cluster.py GRAPH.json", file=sys.stderr)
         return 2
+
+    site_packages = require_site_packages()
+    if site_packages is None:
+        return 2
+    # Both imports below (networkx in build_graph, graphify.cluster further
+    # down) resolve from here, so a plain python3 works as long as the env var
+    # points at a directory holding both.
+    sys.path.insert(0, site_packages)
 
     graph_path = sys.argv[1]
     with open(graph_path, encoding="utf-8") as handle:

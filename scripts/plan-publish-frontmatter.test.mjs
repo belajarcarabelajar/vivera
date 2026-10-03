@@ -23,11 +23,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { splitFrontmatter, mergeFrontmatter, PUBLISHER_VERSION } from './plan-publish-frontmatter.mjs';
 
-const PLAN_PATH = '/home/belajarcarabelajar/ai-skills/docs/code-plan/plans/2026-09-26-plan-publish-to-obsidian.md';
-const VAULT_ROOT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PLAN_PATH = path.join(ROOT, 'docs', 'code-plan', 'plans', '2026-09-26-plan-publish-to-obsidian.md');
+const VAULT_ROOT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 const INDEX_PATH = `${VAULT_ROOT}/01 - Projects/ai-skills/index.md`;
 const INDEX_LINK = '01 - Projects/ai-skills/index';
 const FILENAME = '2026-09-26-plan-publish-to-obsidian.md';

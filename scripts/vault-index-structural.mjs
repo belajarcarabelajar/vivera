@@ -66,7 +66,7 @@
 //     - A node whose `source_file` would be blank is not emitted at all.
 //     - The frontmatter's own `source_path:` is parsed as data and NEVER used as
 //       a `source_file`. 320 real notes carry one, and they point at
-//       `/home/belajarcarabelajar/Proyek/...` — absolute, outside the vault, and
+//       `~/Proyek/...`, absolute, outside the vault, and
 //       exactly the shape that produced the 1,299. Honouring it would reintroduce
 //       the defect in a form that looks deliberate.
 //     - `report.noSourceFile` counts anything that got through, and a test

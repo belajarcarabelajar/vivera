@@ -35,6 +35,9 @@
 //   bun scripts/vault-index-verify.mjs --no-graphify   # pure checks only (fast, CI-safe)
 //   bun scripts/vault-index-verify.mjs --graph <path>  # default: <vault>/graphify-out/graph.json
 //
+// Corpus roots: $ARCHIVE_ROOT and $VAULT_ROOT, else local.config.json (copy
+// local.config.example.json). With neither set, resolution throws.
+//
 // The graphify read paths are the slow part and need the vault on disk, so
 // `--no-graphify` exists for the unit test, which drives the pure functions with
 // fixtures and never touches the vault.
@@ -45,10 +48,31 @@ import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { scan } from './vault-index.mjs';
+import { resolveConfiguredPath } from './lib/local-config.mjs';
 
-/** The two corpus roots. Matches vault-index-rebuild.mjs. */
-export const ARCHIVE_ROOT = '/home/belajarcarabelajar/Documents/conversations-archive';
-export const VAULT_ROOT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+/**
+ * The archive corpus root: $ARCHIVE_ROOT, else local.config.json's
+ * "archiveRoot" (copy local.config.example.json). Resolved per call, never at
+ * import, so importing this module cannot throw and a changed env var is picked
+ * up on the next call. Matches vault-index-rebuild.mjs.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to the conversations archive root
+ */
+export function resolveArchiveRoot({ configPath } = {}) {
+  return resolveConfiguredPath({ envVar: 'ARCHIVE_ROOT', configKey: 'archiveRoot', label: 'conversations archive root', configPath });
+}
+
+/**
+ * The vault corpus root: $VAULT_ROOT, else local.config.json's "vaultRoot".
+ * Same contract as resolveArchiveRoot.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to the Obsidian vault root
+ */
+export function resolveVaultRoot({ configPath } = {}) {
+  return resolveConfiguredPath({ envVar: 'VAULT_ROOT', configKey: 'vaultRoot', label: 'Obsidian vault root', configPath });
+}
 
 /** Default graph location, relative to the vault root. */
 export const DEFAULT_GRAPH_RELPATH = 'graphify-out/graph.json';
@@ -56,8 +80,19 @@ export const DEFAULT_GRAPH_RELPATH = 'graphify-out/graph.json';
 /** Where this script lives, so the manifest and worklist are found relative to it. */
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** Resolved locations of the three inputs, relative to the repo root. */
-export const GRAPH_PATH = resolvePath(VAULT_ROOT, DEFAULT_GRAPH_RELPATH);
+/**
+ * The default graph location under the resolved vault root. A function rather
+ * than a const so it tracks the same env/config seam as the roots, and so
+ * importing this module resolves neither.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to <vault root>/graphify-out/graph.json
+ */
+export function resolveGraphPath(opts = {}) {
+  return resolvePath(resolveVaultRoot(opts), DEFAULT_GRAPH_RELPATH);
+}
+
+/** Repo-relative inputs, independent of the corpus roots. */
 export const MANIFEST_PATH = resolvePath(HERE, '../vault-index/manifest.json');
 export const WORKLIST_PATH = resolvePath(HERE, '../vault-index/semantic/batches.json');
 
@@ -154,8 +189,8 @@ export function pickGodNode(graph) {
  * @returns {{status: number|null, stdout: string, stderr: string}}
  */
 export function runGraphify(args, opts = {}) {
-  const graph = opts.graph ?? GRAPH_PATH;
-  const cwd = opts.cwd ?? VAULT_ROOT;
+  const graph = opts.graph ?? resolveGraphPath();
+  const cwd = opts.cwd ?? resolveVaultRoot();
   const res = spawnSync('graphify', [...args, '--graph', graph], {
     encoding: 'utf8',
     cwd,
@@ -220,7 +255,7 @@ export function checkReadPaths(graph, opts = {}) {
  *   withGraphify?: boolean}} [opts]
  */
 export function verify(opts = {}) {
-  const graphPath = opts.graphPath ?? GRAPH_PATH;
+  const graphPath = opts.graphPath ?? resolveGraphPath();
   const manifestPath = opts.manifestPath ?? MANIFEST_PATH;
   const worklistPath = opts.worklistPath ?? WORKLIST_PATH;
   const withGraphify = opts.withGraphify ?? true;
@@ -241,7 +276,7 @@ export function verify(opts = {}) {
   // The excluded prefixes come from the detector, not from a hardcoded list:
   // reimplementing the ignore rules is how a boundary gets crossed silently.
   const ignored = [];
-  for (const root of [ARCHIVE_ROOT, VAULT_ROOT]) {
+  for (const root of [resolveArchiveRoot(), resolveVaultRoot()]) {
     ignored.push(...scan(root).ignored);
   }
 
@@ -265,7 +300,7 @@ function main() {
   const argv = process.argv.slice(2);
   const withGraphify = !argv.includes('--no-graphify');
   const graphFlag = argv.indexOf('--graph');
-  const graphPath = graphFlag !== -1 && argv[graphFlag + 1] ? resolvePath(argv[graphFlag + 1]) : GRAPH_PATH;
+  const graphPath = graphFlag !== -1 && argv[graphFlag + 1] ? resolvePath(argv[graphFlag + 1]) : resolveGraphPath();
 
   const report = verify({ graphPath, withGraphify });
 

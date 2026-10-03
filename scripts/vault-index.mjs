@@ -47,12 +47,12 @@
 //
 // Paths are relativised against the resolved root on the way out, always, and a
 // path that cannot be relativised raises rather than being returned as-is. An
-// absolute path escaping this module would end up as a worklist entry naming
-// `/home/<user>/...`, which is both machine-specific (so the worklist does not
-// reproduce) and a mild disclosure of the directory layout. The manifest is
-// already repo-relative by construction — graphify writes it that way when
-// given a root (#777) — so the two sides of the subtraction agree by design
-// rather than by luck.
+// absolute path escaping this module would end up as a worklist entry naming an
+// absolute path under the operator's home directory, which is both
+// machine-specific (so the worklist does not reproduce) and a mild disclosure
+// of the directory layout. The manifest is already repo-relative by
+// construction; graphify writes it that way when given a root (#777), so the
+// two sides of the subtraction agree by design rather than by luck.
 //
 // Sorting is unconditional. This output is the input to a fan-out across
 // parallel subagents; an unsorted list makes the same work look different on
@@ -63,39 +63,58 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, statSync } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
+import { resolveConfiguredPath } from './lib/local-config.mjs';
+
 /**
  * graphify's installed site-packages, injected onto `sys.path` rather than
- * depended on the ambient interpreter. The interpreter is a plain `python3` —
- * a dedicated virtualenv would pin this module to one uv tool install, and the
- * only thing being imported is a pure-python detector that needs nothing the
- * system interpreter lacks.
- *
- * The default is this machine's uv tool layout. `GRAPHIFY_SITE_PACKAGES` (and
- * `GRAPHIFY_PYTHON`, read just below) override both halves of the dependency so
- * the module can run on a host whose graphify lives elsewhere. Without the
- * seam the only usable value would be one machine's absolute path, which is
- * exactly what made the suite red on every other host. A per-call
- * `opts.sitePackages` still wins over the environment.
+ * depended on the ambient interpreter, and the interpreter that runs the
+ * snippet. Both halves of the dependency are machine-specific: graphify lives
+ * in a uv tool venv whose location no two hosts agree on, so both resolve at
+ * call time, never at import time, through `lib/local-config.mjs`: the
+ * environment variable first, then the git-ignored `local.config.json`, then an
+ * error that names the env var and the config file. There is deliberately no
+ * default path: a silent wrong guess would run the detector against a different
+ * graphify install than the one that built the manifest, and the only usable
+ * hard-coded value would be one machine's absolute path, which is exactly what
+ * made the suite red on every other host. A per-call `opts.sitePackages` /
+ * `opts.python` still wins over both.
  */
-export const GRAPHIFY_SITE_PACKAGES =
-  process.env.GRAPHIFY_SITE_PACKAGES ||
-  '/home/belajarcarabelajar/.local/share/uv/tools/graphifyy/lib/python3.14/site-packages';
+const SITE_PACKAGES_CONFIG = {
+  envVar: 'GRAPHIFY_SITE_PACKAGES',
+  configKey: 'graphifySitePackages',
+  label: 'graphify site-packages',
+};
+
+const PYTHON_CONFIG = {
+  envVar: 'GRAPHIFY_PYTHON',
+  configKey: 'graphifyPython',
+  label: 'the graphify python interpreter',
+};
+
+/** `resolveConfiguredPath`, re-thrown under the module's error prefix. */
+function resolveSeam({ envVar, configKey, label }, configPath) {
+  try {
+    return resolveConfiguredPath({ envVar, configKey, label, configPath });
+  } catch (err) {
+    throw new VaultIndexError(err.message, { cause: err });
+  }
+}
 
 /**
  * The interpreter that runs `PYTHON_SNIPPET`, from a per-call override, then
- * the environment, then `python3`.
+ * the environment, then `local.config.json`.
  *
  * One resolver rather than a `??` chain repeated in the probe and the detector:
  * `graphifyAvailable` must ask the same question the detector will, or it can
  * report a host ready and then fail on the first real spawn.
  */
 function pythonBinary(opts) {
-  return opts.python ?? process.env.GRAPHIFY_PYTHON ?? 'python3';
+  return opts.python ?? resolveSeam(PYTHON_CONFIG, opts.configPath);
 }
 
-/** The site-packages directory to inject, from a per-call override then the env. */
+/** The site-packages directory to inject, from a per-call override then the seam. */
 function sitePackagesDir(opts) {
-  return opts.sitePackages ?? GRAPHIFY_SITE_PACKAGES;
+  return opts.sitePackages ?? resolveSeam(SITE_PACKAGES_CONFIG, opts.configPath);
 }
 
 /**
@@ -300,18 +319,29 @@ function runDetect(absRoot, opts) {
  *
  * The probe imports the package the same way `PYTHON_SNIPPET` does, so it
  * answers the module's own capability rather than guessing from a path that
- * happens to exist. `spawnSync` with argv, never a shell string: the
- * site-packages directory is data and stays data. A missing interpreter is a
- * `false`, not a throw — this is the question "is the boundary usable", and an
- * unusable boundary is the answer, not an error.
+ * happens to exist. An interpreter or site-packages that cannot even be
+ * resolved (no env var, no local.config.json) is the same answer: the boundary
+ * is not usable on this host, and that is a `false`, not a throw.
+ * `spawnSync` with argv, never a shell string: the site-packages directory is
+ * data and stays data. A missing interpreter is a `false`, not a throw; this
+ * is the question "is the boundary usable", and an unusable boundary is the
+ * answer, not an error.
  *
- * @param {{python?: string, sitePackages?: string}} [opts]
+ * @param {{python?: string, sitePackages?: string, configPath?: string}} [opts]
  * @returns {boolean}
  */
 export function graphifyAvailable(opts = {}) {
+  let python;
+  let sitePackages;
+  try {
+    python = pythonBinary(opts);
+    sitePackages = sitePackagesDir(opts);
+  } catch {
+    return false;
+  }
   const probe = spawnSync(
-    pythonBinary(opts),
-    ['-c', 'import sys; sys.path.insert(0, sys.argv[1]); import graphify', sitePackagesDir(opts)],
+    python,
+    ['-c', 'import sys; sys.path.insert(0, sys.argv[1]); import graphify', sitePackages],
     { encoding: 'utf8' },
   );
   return probe.status === 0;
@@ -371,8 +401,9 @@ function detectBuckets(absRoot, opts) {
  * Every eligible note in `root`, as sorted repo-relative paths.
  *
  * @param {string} root
- * @param {{python?: string, sitePackages?: string, buckets?: readonly string[],
- *   extensions?: readonly string[]}} [opts]
+ * @param {{python?: string, sitePackages?: string, configPath?: string,
+ *   buckets?: readonly string[], extensions?: readonly string[]}} [opts]
+ *   `configPath` is a test-only override for the local.config.json location.
  * @returns {string[]}
  */
 export function listEligible(root, opts = {}) {
@@ -433,7 +464,8 @@ export function readManifest(root) {
  * asserts exactly that identity.
  *
  * @param {string} root
- * @param {object} [opts] forwarded to `listEligible`
+ * @param {object} [opts] forwarded to `listEligible`; `configPath` overrides
+ *   the local.config.json location (test-only)
  * @returns {{eligible: string[], indexed: string[], worklist: string[],
  *   counts: object}}
  */

@@ -27,7 +27,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -455,7 +455,10 @@ test(
 
 // ---------- live: the real repo's adapted plugin ----------
 
-const AI_SKILLS = '/home/belajarcarabelajar/ai-skills';
+// The live check targets the machine's real ai-skills checkout, not the copy of
+// the repo this file runs from; $AI_SKILLS_ROOT names it explicitly for
+// non-default layouts, and $HOME/ai-skills is the documented location.
+const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'ai-skills');
 const live = existsSync(AI_SKILLS) && installedPresent ? test : test.skip;
 
 live('the plugin is V2 on both sides, and the installer says why', () => {

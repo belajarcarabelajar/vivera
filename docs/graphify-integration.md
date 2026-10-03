@@ -1,8 +1,9 @@
 # graphify Integration Runbook
 
-Written 2026-10-01. Targets `graphify` v0.9.73 on this machine (Arch Linux, Intel
-i3-10105, 8 threads, Intel UHD 630 iGPU, **no CUDA**, 7.6 GB RAM with ~2 GB
-typically free, zram swap).
+Written 2026-10-01. Targets `graphify` v0.9.73. The methodology below was
+measured on a modest personal Linux machine (one measured example: 8 threads,
+**no CUDA**, 7.6 GB RAM with ~2 GB typically free, zram swap); those hardware
+figures are an example, not requirements.
 
 This file is written for a future session that has no access to the
 conversation that produced it. Every number below was measured on this machine
@@ -10,7 +11,7 @@ on 2026-10-01 unless the text explicitly marks it UNMEASURED or labels it as
 arithmetic derived from measured inputs. Nothing here is inferred from
 documentation or from another machine.
 
-House rule this file obeys (`/home/belajarcarabelajar/AGENTS.md`): never state an
+House rule this file obeys (`~/AGENTS.md`): never state an
 unverified claim as fact, separate findings from guesses, and state in-file how
 to revert every change.
 
@@ -87,7 +88,7 @@ uv tool install "graphifyy[ollama]"
 ```
 
 - Reinstall/repair: `uv tool install --force "graphifyy[ollama]"`
-- Installed binary: `/home/belajarcarabelajar/.local/bin/graphify`
+- Installed binary: `~/.local/bin/graphify`
 - Verified version at time of writing: **0.9.73**
 
 Revert: `uv tool uninstall graphifyy`. This removes only the tool; it touches no
@@ -130,7 +131,7 @@ real key here.
 Set `G` and the env block once per shell, then use the commands below verbatim.
 
 ```bash
-export G=/home/belajarcarabelajar/.local/bin/graphify
+export G=~/.local/bin/graphify
 export OLLAMA_HOST=http://localhost:11434
 export OLLAMA_API_KEY=ollama
 export OLLAMA_MODEL=gpt-oss:120b-cloud

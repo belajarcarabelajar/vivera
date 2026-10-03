@@ -1,0 +1,26 @@
+{
+  "vault": "/home/<user>/Obsidian Vault",
+  "destDirTemplate": "01 - Projects/{project}/plans",
+  "indexTemplate": "01 - Projects/{project}/index.md",
+  "stageInVault": true,
+  "projects": [
+    {
+      "name": "example-project",
+      "root": "/home/<user>/projects/example-project",
+      "mirror": true,
+      "worktrees": [
+        "/home/<user>/projects/example-project-wt/feature-branch"
+      ]
+    },
+    {
+      "name": "another-project",
+      "root": "/home/<user>/projects/another-project",
+      "mirror": true
+    },
+    {
+      "name": "vault",
+      "root": "/home/<user>/Obsidian Vault",
+      "mirror": false
+    }
+  ]
+}

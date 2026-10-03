@@ -124,7 +124,7 @@ function note(body, { related = true, extra = [] } = {}) {
     'status: Draft',
     'project: Snipset',
     ...(related ? ['related: ["[[01 - Projects/Snipset/index]]"]'] : []),
-    'source_path: /home/belajarcarabelajar/Proyek/Snipset/docs/code-plan/plans/....md',
+    'source_path: /home/testuser/Proyek/Snipset/docs/code-plan/plans/....md',
     'source_hash: 67f1d26b3b8a',
     ...extra,
     '---',
@@ -287,7 +287,7 @@ test('parseFrontmatter stops at the closing `---` and does not swallow the body'
   // become a `source_file`. Asserting the value survives proves it was parsed
   // as data, and the `source_file` assertions elsewhere prove it was not used
   // as one.
-  assert.equal(fm.source_path, '/home/belajarcarabelajar/Proyek/Snipset/docs/code-plan/plans/....md');
+  assert.equal(fm.source_path, '/home/testuser/Proyek/Snipset/docs/code-plan/plans/....md');
 });
 
 test('parseFrontmatter does not let a `__proto__` key reach the prototype', () => {
@@ -745,7 +745,7 @@ test('a file outside the root is refused rather than emitted with a traversing s
 
 test('an absolute path inside the root is made repo-relative, not emitted absolute', (t) => {
   // T2 hands over absolute paths from `find`. Emitting them verbatim would put
-  // `/home/belajarcarabelajar/Dokumen/...` into 300,000 source_file values and
+  // `/home/<user>/Dokumen/...` into 300,000 source_file values and
   // every one of them would fail the validator.
   const root = fixture(t, { '01 - Projects/Snipset/index.md': note('# S\n', { related: false }) });
   const abs = path.join(root, '01 - Projects/Snipset/index.md');
@@ -758,7 +758,7 @@ test('an absolute path inside the root is made repo-relative, not emitted absolu
 });
 
 test('a source_path in the frontmatter is never used as a source_file', (t) => {
-  // The measured frontmatter carries `source_path: /home/belajarcarabelajar/
+  // The measured frontmatter carries `source_path: /home/<user>/
   // Proyek/Snipset/...` — an ABSOLUTE path to a file outside the vault. It is
   // provenance metadata about where the note was published from. Using it would
   // produce exactly the 1,299 unverifiable nodes the rebuild exists to remove,
@@ -766,7 +766,7 @@ test('a source_path in the frontmatter is never used as a source_file', (t) => {
   const root = fixture(t, { 'plan.md': note('# Plan\n') });
   const { chunk } = structural(root, ['plan.md']);
   for (const n of chunk.nodes) {
-    assert.notEqual(n.source_file, '/home/belajarcarabelajar/Proyek/Snipset/docs/code-plan/plans/....md');
+    assert.notEqual(n.source_file, '/home/testuser/Proyek/Snipset/docs/code-plan/plans/....md');
     assert.ok(!n.source_file.includes('source_path'));
   }
   assertAttributable(chunk);

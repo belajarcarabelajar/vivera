@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Ultimate All-in-One AI Coding Agent Skill Pipeline",
   "type": "module",
+  "author": "Iwan Kurniawan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/belajarcarabelajar/ai-skills.git"
+  },
   "scripts": {
     "render-diagrams": "bash scripts/render-diagrams.sh",
     "validate": "bun scripts/validate-skill.mjs",

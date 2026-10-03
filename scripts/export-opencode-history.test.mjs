@@ -32,8 +32,8 @@ import { fileURLToPath } from 'node:url';
 import { Database } from 'bun:sqlite';
 
 import {
-  main, parseArgs, projectSlug, matchesProjectDir, resolveVaultRoot,
-  DEFAULT_VAULT_ROOT, VAULT_ENV_VAR, CONVERSATIONS_DIR, ATTACHMENTS_DIRNAME,
+  main, parseArgs, projectSlug, matchesProjectDir, resolveVaultRoot, defaultVaultRoot,
+  VAULT_ENV_VAR, CONVERSATIONS_DIR, ATTACHMENTS_DIRNAME,
 } from './export-opencode-history.mjs';
 import { buildFixtureDb, FIXTURE_SESSION_IDS, FIXTURE_PROJECT_WORKTREE } from './lib/test-fixture-db.mjs';
 
@@ -674,15 +674,100 @@ test('a vault whose own name contains a space works end to end', async () => {
   }
 });
 
-test('resolveVaultRoot prefers the flag, then the env var, then the documented default', () => {
+test('resolveVaultRoot prefers the flag, then the environment', () => {
   assert.equal(resolveVaultRoot({}, '/tmp/flag'), '/tmp/flag');
   assert.equal(resolveVaultRoot({ [VAULT_ENV_VAR]: '/tmp/env' }, '/tmp/flag'), '/tmp/flag');
   assert.equal(resolveVaultRoot({ [VAULT_ENV_VAR]: '/tmp/env' }, null), '/tmp/env');
-  assert.equal(resolveVaultRoot({}, null), DEFAULT_VAULT_ROOT);
-  // A blank env var is not a vault. Falling back to the real default because a
-  // shell exported an empty string would be a nasty surprise.
-  assert.equal(resolveVaultRoot({ [VAULT_ENV_VAR]: '   ' }, null), DEFAULT_VAULT_ROOT);
-  assert.ok(DEFAULT_VAULT_ROOT.includes(' '), 'the real vault path contains a space; a test that assumed otherwise proves nothing');
+});
+
+// ---------- 10b. the default vault is configured at call time, not hard-coded ----------
+
+/**
+ * Run `fn` with OPENCODE_EXPORT_VAULT set or cleared, restoring whatever the
+ * shell had afterwards. The tests below exercise the configured default, so
+ * they set `process.env` explicitly and clean up: a value leaked into the
+ * environment could redirect a later test into someone's real vault.
+ */
+function withVaultEnv(value, fn) {
+  const prev = process.env[VAULT_ENV_VAR];
+  if (value === undefined) delete process.env[VAULT_ENV_VAR];
+  else process.env[VAULT_ENV_VAR] = value;
+  try {
+    return fn();
+  } finally {
+    if (prev === undefined) delete process.env[VAULT_ENV_VAR];
+    else process.env[VAULT_ENV_VAR] = prev;
+  }
+}
+
+test('the default vault comes from the environment before local.config.json', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'export-history-vault-env-'));
+  try {
+    const configPath = path.join(root, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault-from-config' }), 'utf8');
+    withVaultEnv('/env/vault-from-env', () => {
+      assert.equal(defaultVaultRoot(configPath), '/env/vault-from-env');
+      assert.equal(resolveVaultRoot({}, null, configPath), '/env/vault-from-env');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the default vault falls back to local.config.json "vaultRoot" when the environment is silent', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'export-history-vault-config-'));
+  try {
+    const configPath = path.join(root, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault-from-config' }), 'utf8');
+    withVaultEnv(undefined, () => {
+      // A blank env entry is not a vault either: it falls through exactly like
+      // an absent one, for the same reason a blank shell value must not select
+      // a real vault by accident.
+      assert.equal(defaultVaultRoot(configPath), '/cfg/vault-from-config');
+      assert.equal(resolveVaultRoot({ [VAULT_ENV_VAR]: '   ' }, null, configPath), '/cfg/vault-from-config');
+      assert.equal(resolveVaultRoot({}, null, configPath), '/cfg/vault-from-config');
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('with no environment and no config the default vault throws, naming the env var and the example file', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'export-history-vault-missing-'));
+  try {
+    // The config path points inside a directory that does not exist, so this
+    // test cannot depend on whether this checkout happens to carry its own
+    // local.config.json.
+    const configPath = path.join(root, 'absent', 'local.config.json');
+    withVaultEnv(undefined, () => {
+      assert.throws(() => defaultVaultRoot(configPath), (err) => {
+        assert.match(err.message, /OPENCODE_EXPORT_VAULT/);
+        assert.match(err.message, /local\.config\.example\.json/);
+        return true;
+      });
+      assert.throws(() => resolveVaultRoot({}, null, configPath), /OPENCODE_EXPORT_VAULT/);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('importing the module resolves no default vault', () => {
+  // A child process with the env var stripped: if the default were resolved at
+  // module load, the import itself would throw on a machine that configures no
+  // vault (this checkout has no local.config.json, and the var is gone here).
+  const env = { ...process.env };
+  delete env[VAULT_ENV_VAR];
+  const proc = Bun.spawnSync({
+    cmd: ['bun', '--eval', "await import('./scripts/export-opencode-history.mjs');"],
+    cwd: REPO_ROOT,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const stderr = proc.stderr.toString();
+  assert.equal(proc.exitCode, 0, `importing the module failed: ${stderr}`);
+  assert.equal(stderr, '');
 });
 
 test('parseArgs keeps a spaced value intact and never splits on it', () => {
@@ -694,7 +779,7 @@ test('parseArgs keeps a spaced value intact and never splits on it', () => {
 });
 
 test('projectSlug reduces a worktree to one safe directory segment', () => {
-  assert.equal(projectSlug('/home/belajarcarabelajar'), 'home-belajarcarabelajar');
+  assert.equal(projectSlug('/home/testuser'), 'home-testuser');
   assert.equal(projectSlug('/fixture/project-a'), 'fixture-project-a');
   assert.equal(projectSlug('/'), 'root', 'the filesystem root has no name left to slug');
   assert.equal(projectSlug(''), 'unknown-project');
@@ -756,12 +841,14 @@ test('importing the module does not run an export', () => {
   assert.equal(stderr, '', `importing wrote to stderr:\n${stderr}`);
 });
 
-test('the real vault and the real database are named but never opened by these tests', () => {
-  // Documentation as an assertion: the default paths are the real ones, which is
-  // exactly why every test above passes both --db and --vault, and passes an
-  // empty env to main() so a stray OPENCODE_EXPORT_VAULT cannot redirect one.
+test('the vault default is configured, never hard-coded', () => {
+  // Documentation as an assertion: the env var name is the contract shared with
+  // the usage text and with anyone's shell alias, and the default is a function
+  // resolved at call time, never a path baked into this module. Every test above
+  // still passes both --db and --vault, and an empty env to main(), so no test
+  // can be redirected into whatever this machine has configured.
   assert.equal(VAULT_ENV_VAR, 'OPENCODE_EXPORT_VAULT');
-  assert.equal(DEFAULT_VAULT_ROOT, '/home/belajarcarabelajar/Dokumen/Obsidian Vault');
+  assert.equal(typeof defaultVaultRoot, 'function');
   assert.equal(CONVERSATIONS_DIR, '05 - Conversations');
   assert.equal(ATTACHMENTS_DIRNAME, '.attachments');
 });

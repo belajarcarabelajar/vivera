@@ -1,0 +1,6 @@
+{
+  "vaultRoot": "/home/<user>/Obsidian Vault",
+  "archiveRoot": "/home/<user>/conversations-archive",
+  "graphifySitePackages": "/home/<user>/.local/share/uv/tools/graphifyy/lib/python3.<minor>/site-packages",
+  "graphifyPython": "/home/<user>/.local/share/uv/tools/graphifyy/bin/python"
+}

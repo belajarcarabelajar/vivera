@@ -99,6 +99,7 @@ import { writeFileSync, mkdirSync, readdirSync, readFileSync, statSync } from 'n
 import { resolve as resolvePath, sep } from 'node:path';
 
 import { validateChunk } from './lib/chunk-schema.mjs';
+import { resolveConfiguredPath } from './lib/local-config.mjs';
 
 /**
  * Top-level key order of the emitted file.
@@ -334,22 +335,33 @@ export const CHUNK_FILE_SCHEMES = Object.freeze([
 export const NON_CHUNK_FILES = Object.freeze(['batches.json']);
 
 /**
- * Where a `source_file` may resolve to.
+ * The two roots a `source_file` may resolve to, in merge order.
  *
  * Both roots are searched for every path because the corpus straddles them:
  * transcripts live in `conversations-archive` (moved out of the vault on
  * 2026-10-02, so `05 - Conversations` no longer resolves under the vault
- * root), and vault notes resolve under `Obsidian Vault`.
+ * root), and vault notes resolve under `Obsidian Vault`. Archive first, vault
+ * second: first root wins, matching the order `vault-index-rebuild.mjs`
+ * assembles for the same corpus.
  *
- * Overridable rather than hardcoded at the call site, because a caller merging
- * a corpus other than this machine's must not have to edit this file, and a
- * root list that only ever names two directories on one host is a constant
- * pretending to be a convention.
+ * Resolved per call, never at import: `$ARCHIVE_ROOT` and `$VAULT_ROOT` win,
+ * then local.config.json's "archiveRoot" and "vaultRoot" (copy
+ * local.config.example.json), and with neither set the call throws naming the
+ * env var, the config file and the example to copy. That is the same rule
+ * `vault-index-rebuild.mjs` applies, for the same reason. A root list that
+ * only ever names two directories on one host is a constant pretending to be
+ * a convention, and a caller merging a corpus other than this machine's must
+ * not have to edit this file.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string[]} frozen `[archiveRoot, vaultRoot]`
  */
-export const DEFAULT_SOURCE_ROOTS = Object.freeze([
-  '/home/belajarcarabelajar/Documents/conversations-archive',
-  '/home/belajarcarabelajar/Dokumen/Obsidian Vault',
-]);
+export function resolveSourceRoots({ configPath } = {}) {
+  return Object.freeze([
+    resolveConfiguredPath({ envVar: 'ARCHIVE_ROOT', configKey: 'archiveRoot', label: 'conversations archive root', configPath }),
+    resolveConfiguredPath({ envVar: 'VAULT_ROOT', configKey: 'vaultRoot', label: 'Obsidian vault root', configPath }),
+  ]);
+}
 
 /**
  * How many dropped nodes `report.unattributableSamples` will name.
@@ -460,14 +472,16 @@ function resolveUnderRoots(sourceFile, roots) {
  * counters and make the report unable to say which cause applied.
  *
  * @param {string} dir
- * @param {{roots?: string[]}} [opts]
+ * @param {{roots?: string[]}} [opts] `roots` defaults to
+ *   {@link resolveSourceRoots}, i.e. the configured corpus roots
+ *   ($ARCHIVE_ROOT/$VAULT_ROOT, else local.config.json)
  * @returns {{chunks: Array<{name: string, chunk: object}>, report: object}}
  *   `chunks` is in merge order. `report` carries `chunkFilesByScheme`,
  *   `chunkFilesRead`, `nodesUnattributable`, `unattributableFiles` and
  *   `unattributableSamples`.
  */
 export function loadChunks(dir, opts = {}) {
-  const roots = opts?.roots ?? DEFAULT_SOURCE_ROOTS;
+  const roots = opts?.roots ?? resolveSourceRoots();
   if (!Array.isArray(roots) || roots.length === 0) {
     throw new TypeError(`roots must be a non-empty array of directories, got ${JSON.stringify(roots)}`);
   }

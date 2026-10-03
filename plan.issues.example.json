@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "projects": {
+    "example-project": "<owner>/example-project",
+    "another-project": "<owner>/another-project"
+  },
+  "issues": {}
+}

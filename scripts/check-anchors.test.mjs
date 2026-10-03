@@ -13,12 +13,12 @@
 // 4. checkChunk catches: missing files, out-of-range lines, padding blocks,
 //    and verbatim quote failures
 
-import { test } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { parseAnchors, paddingRanges, resolveFile, checkChunk } from './check-anchors.mjs';
+import { parseAnchors, paddingRanges, resolveFile, checkChunk, resolveDefaultRoots } from './check-anchors.mjs';
 
 // ---------- parseAnchors ----------
 
@@ -315,4 +315,85 @@ test('checkChunk handles missing rationale', () => {
   assert.equal(result.nodes, 1);
   assert.equal(result.anchorsParsed, 0);
   cleanup(dir, root);
+});
+
+// --- default roots: env var first, then local.config.json, never a default ----
+
+describe('resolveDefaultRoots', () => {
+  // Both variables are managed by every test so a value inherited from the
+  // caller's shell cannot flip a case; afterEach restores what was there.
+  const envKeys = ['VAULT_ROOT', 'ARCHIVE_ROOT'];
+  let saved;
+
+  beforeEach(() => {
+    saved = envKeys.map((key) => [key, process.env[key]]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  // The file is never created: resolution must take the env branch without
+  // reading, or throwing against, any real local.config.json.
+  function absentConfig() {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-anchors-roots-'));
+    return { configPath: path.join(dir, 'absent.json'), cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
+  }
+
+  test('roots come from their env vars when set, archive first', () => {
+    process.env.VAULT_ROOT = '/tmp/vault-from-env';
+    process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+    const { configPath, cleanup: rmConfig } = absentConfig();
+    try {
+      assert.deepEqual(resolveDefaultRoots({ configPath }), ['/tmp/archive-from-env', '/tmp/vault-from-env']);
+    } finally {
+      rmConfig();
+    }
+  });
+
+  test('env wins over the config file, per key', () => {
+    process.env.VAULT_ROOT = '/env/vault';
+    delete process.env.ARCHIVE_ROOT;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-anchors-roots-'));
+    const configPath = path.join(dir, 'local.config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      assert.deepEqual(resolveDefaultRoots({ configPath }), ['/cfg/archive', '/env/vault']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('with no env var, roots fall back to the config file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-anchors-roots-'));
+    const configPath = path.join(dir, 'local.config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      assert.deepEqual(resolveDefaultRoots({ configPath }), ['/cfg/archive', '/cfg/vault']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no default path: with no env var and no config it throws, naming the env var and the example file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const { configPath, cleanup: rmConfig } = absentConfig();
+    try {
+      // The archive root is resolved first, so it is the one an entirely empty
+      // config trips over.
+      assert.throws(() => resolveDefaultRoots({ configPath }), /set ARCHIVE_ROOT/);
+      assert.throws(() => resolveDefaultRoots({ configPath }), /local\.config\.example\.json/);
+      // With the archive root provided, the missing vault root is what throws.
+      process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+      assert.throws(() => resolveDefaultRoots({ configPath }), /set VAULT_ROOT/);
+    } finally {
+      rmConfig();
+    }
+  });
 });

@@ -10,9 +10,9 @@
 - **Subagent Role:** Note Reader — concept and rationale extraction
 - **Parent Goal:** `docs/code-plan/plans/2026-10-02-subagent-driven-vault-index.md`
 - **Delegation Mode:** `isolated-files` — your chunk file is yours alone
-- **Working directory:** `/home/belajarcarabelajar/ai-skills`
-- **Vault root (transcripts):** `/home/belajarcarabelajar/Documents/conversations-archive`
-- **Vault root (plans, wiki, notes):** `/home/belajarcarabelajar/Dokumen/Obsidian Vault`
+- **Working directory:** `~/ai-skills`
+- **Vault root (transcripts):** `~/Documents/conversations-archive`
+- **Vault root (plans, wiki, notes):** `~/Dokumen/Obsidian Vault`
 
 ### 1a. Git Boundary
 
@@ -173,7 +173,7 @@ misses. Use the script — it matches on substring and prints which chunk
 emitted each id:
 
 ```bash
-cd /home/belajarcarabelajar/ai-skills
+cd ~/ai-skills
 bun scripts/vault-index-ids.mjs tgrep          # by subject or slug fragment
 bun scripts/vault-index-ids.mjs                # list every id
 bun scripts/vault-index-ids.mjs --owner=concept--exact-id
@@ -262,7 +262,7 @@ evidence rather than treated as a second opinion.
 
 ## 6. Verification — run this yourself before reporting
 
-From `/home/belajarcarabelajar/ai-skills`:
+From `~/ai-skills`:
 
 ```bash
 ./scripts/verify-chunk.sh <NNN>

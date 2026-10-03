@@ -36,12 +36,12 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, chmodSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve, isAbsolute, sep } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import {
-  GRAPHIFY_SITE_PACKAGES,
   DEFAULT_BUCKETS,
   DEFAULT_EXTENSIONS,
   graphifyAvailable,
@@ -72,20 +72,21 @@ const SPAWN_TIMEOUT_MS = 60_000;
 // ---------- host capability ----------
 //
 // The `spawning` tests below are the ones that actually cross into python: they
-// import `graphify` and assert on what it walked. The site-packages default in
-// the module is one machine's uv layout, so on a host without that install
-// every one of those spawns dies with `ModuleNotFoundError` — a red file
-// reporting "this host has no graphify" as a bug in the worklist arithmetic.
-// The probe asks the module itself whether its boundary is usable (and honours
-// `GRAPHIFY_SITE_PACKAGES` / `GRAPHIFY_PYTHON`), and when it is not the
-// `spawning` tests skip with the reason, exactly as the `live vault` tests at
-// the bottom of this file already do. On a host WITH graphify nothing changes:
-// the fixtures are synthetic and every assertion still runs.
+// import `graphify` and assert on what it walked. Where graphify lives is a
+// machine-specific seam (env vars `GRAPHIFY_SITE_PACKAGES` / `GRAPHIFY_PYTHON`,
+// else the git-ignored local.config.json), so on a host that has not configured
+// it the resolution ends in an error by design. The probe asks the module
+// whether its boundary is usable, and when it is not the `spawning` tests skip
+// with the reason, exactly as the `live vault` tests at the bottom of this file
+// already do. On a host WITH the seam configured nothing changes: the fixtures
+// are synthetic and every assertion still runs.
 //
 // The tests that do NOT cross the boundary — the two root-validation throws,
-// the snippet-source check, the three readManifest checks, and the
-// missing-interpreter check — stay plain `test` and run everywhere, so this
-// gate hides no behaviour that can be checked without graphify.
+// the snippet-source check, the three readManifest checks, the
+// missing-interpreter check, the python-failure check and the seam tests: stay
+// plain `test` and run
+// everywhere, so this gate hides no behaviour that can be checked without
+// graphify.
 const GRAPHIFY_READY = graphifyAvailable();
 
 /** `test` for a case that needs the graphify detector; skips when it is absent. */
@@ -94,7 +95,12 @@ function spawning(name, fn) {
     name,
     {
       timeout: SPAWN_TIMEOUT_MS,
-      ...(GRAPHIFY_READY ? {} : { skip: `graphify is not importable via ${GRAPHIFY_SITE_PACKAGES}` }),
+      ...(GRAPHIFY_READY
+        ? {}
+        : {
+            skip:
+              'graphify is not configured on this host; set GRAPHIFY_SITE_PACKAGES and GRAPHIFY_PYTHON, or local.config.json (see local.config.example.json)',
+          }),
     },
     fn,
   );
@@ -352,38 +358,52 @@ spawning('the module does not silently lose files that detect() reports but we d
   assert.equal(counts.droppedByExtension, 1, 'the dropped file was not accounted for');
 });
 
-spawning('a python failure surfaces as a named error carrying stderr', () => {
-  // Pointed at a path that exists but whose parent chain makes the snippet
-  // itself fail, the module must not swallow the reason. A silent empty result
-  // here would read as "nothing to index", which is the exact failure this
-  // module exists to prevent.
+test('a python failure surfaces as a named error carrying stderr', { timeout: SPAWN_TIMEOUT_MS }, () => {
+  // A failing detector run must surface as a named error carrying stderr,
+  // never as an empty result: a silent empty result here would read as
+  // "nothing to index", which is the exact failure this module exists to
+  // prevent. The failure is injected through the per-call python seam with a
+  // stub interpreter that touches a breadcrumb, writes a marker to stderr and
+  // exits 3, the same pattern the cluster suite uses, so the proof does not
+  // depend on which interpreter or packages the host has. An earlier version
+  // induced the failure by pointing site-packages at a directory that does not
+  // exist, but a bogus sys.path entry does not fail an import: when the
+  // configured interpreter carries graphify in its own site-packages the
+  // import succeeds, and the test was measuring host configuration instead of
+  // the module.
   const root = makeFixture();
-  const { PATH: savedPath } = process.env;
-  try {
-    // A site-packages that does not exist makes the import fail, and the import
-    // is the first thing the snippet does.
-    const original = GRAPHIFY_SITE_PACKAGES;
-    assert.ok(existsSync(original), 'the real graphify site-packages should exist on this machine');
-    // Exercise the error path without mutating the exported constant: use a
-    // fixture root plus an override that points at a missing interpreter path.
-    assert.throws(
-      () => listEligible(root, { sitePackages: join(tmpdir(), 'no-such-site-packages-4b1c') }),
-      (err) => {
-        assert.match(err.message, /vault-index/);
-        assert.ok(err.stderr !== undefined, 'the error should carry stderr for diagnosis');
-        return true;
-      },
-    );
-  } finally {
-    process.env.PATH = savedPath;
-  }
+  const dir = mkdtempSync(join(tmpdir(), 'vault-index-python-fail-'));
+  madeDirs.push(dir);
+  const stub = join(dir, 'failing-python.sh');
+  const breadcrumb = join(dir, 'failing-python-ran');
+  writeFileSync(stub, `#!/bin/sh\ntouch '${breadcrumb}'\necho 'stub-interpreter-failed' >&2\nexit 3\n`, 'utf8');
+  chmodSync(stub, 0o755);
+  // sitePackages is passed so seam resolution never runs; the stub ignores it,
+  // so the path need not exist.
+  assert.throws(
+    () => listEligible(root, { python: stub, sitePackages: join(dir, 'unused-site-packages') }),
+    (err) => {
+      assert.match(err.message, /vault-index/);
+      assert.ok(err.stderr !== undefined, 'the error should carry stderr for diagnosis');
+      assert.match(err.stderr, /stub-interpreter-failed/, `stderr should carry the stub's marker, got ${JSON.stringify(err.stderr)}`);
+      assert.equal(err.exitCode, 3, `the stub's exit code should be surfaced, got ${err.exitCode}`);
+      assert.ok(existsSync(breadcrumb), 'the stub interpreter never ran');
+      return true;
+    },
+  );
 });
 
 test('the python binary can be overridden, so a missing interpreter is nameable', () => {
   const root = makeFixture();
-
+  // The site-packages override keeps this test about the interpreter alone:
+  // without it, an unconfigured host would fail on path resolution before the
+  // spawn ever happened.
   assert.throws(
-    () => listEligible(root, { python: join(tmpdir(), 'no-such-python-7d3e') }),
+    () =>
+      listEligible(root, {
+        python: join(tmpdir(), 'no-such-python-7d3e'),
+        sitePackages: join(tmpdir(), 'unused-site-packages-1c9b'),
+      }),
     (err) => {
       assert.match(err.message, /vault-index/);
       return true;
@@ -391,16 +411,212 @@ test('the python binary can be overridden, so a missing interpreter is nameable'
   );
 });
 
+// ---------- the machine-specific path seam ----------
+//
+// site-packages and interpreter resolve env -> local.config.json -> error via
+// scripts/lib/local-config.mjs. These tests prove the seam without the real
+// graphify: a stub package written into a temp site-packages answers with one
+// file whose name carries a marker, so a run that reports the marker went
+// through the stub, and one that does not resolved its site-packages somewhere
+// else. Env overrides are set explicitly and restored in `withEnv`'s finally,
+// and the config always lives in a temp file, so nothing here depends on
+// machine paths and nothing writes local.config.json into the repo.
+
+function withEnv(overrides, fn) {
+  const saved = new Map();
+  for (const [key, value] of Object.entries(overrides)) {
+    saved.set(key, process.env[key]);
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    fn();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+function hostPython() {
+  const candidate = process.env.GRAPHIFY_PYTHON || 'python3';
+  const probe = spawnSync(candidate, ['-c', 'print(1)'], { encoding: 'utf8' });
+  return probe.status === 0 ? candidate : null;
+}
+
+const HOST_PYTHON = hostPython();
+const NEEDS_PYTHON_SKIP = HOST_PYTHON === null ? 'no usable python interpreter on this host' : false;
+
+/**
+ * A graphify stub plus a breadcrumb interpreter wrapper, both inside `dir`.
+ *
+ * The stub's `detect()` ignores the root it is handed and answers with a single
+ * file named after `marker`, so the marker in a worklist is proof that this
+ * stub, and therefore the site-packages value it was reached through, ran.
+ * The wrapper execs the real interpreter after touching `breadcrumb`, so the
+ * breadcrumb is proof that the configured interpreter, not some fallback, ran.
+ */
+function makeSeamFixture(dir, marker) {
+  const pkg = join(dir, 'graphify');
+  mkdirSync(pkg, { recursive: true });
+  writeFileSync(join(pkg, '__init__.py'), '', 'utf8');
+  // Shaped so PYTHON_SNIPPET can read it exactly like the real detect().
+  writeFileSync(
+    join(pkg, 'detect.py'),
+    [
+      `MARKER = ${JSON.stringify(marker)}`,
+      'def detect(root):',
+      '    root = str(root)',
+      '    return {',
+      '        "files": {"document": [root + "/notes/" + MARKER + ".md"], "paper": []},',
+      '        "total_files": 1,',
+      '        "total_words": 3,',
+      '        "ignored": [],',
+      '        "unclassified": [],',
+      '        "walk_errors": [],',
+      '        "graphifyignore_patterns": 0,',
+      '        "scan_root": root,',
+      '    }',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
+  const real = spawnSync(HOST_PYTHON, ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+  if (real.status !== 0) return { sitePackages: dir, markerPython: null, breadcrumb: null };
+  const executable = String(real.stdout).trim();
+  const wrapper = join(dir, 'marked-python.sh');
+  const breadcrumb = join(dir, 'marked-python-ran');
+  writeFileSync(wrapper, `#!/bin/sh\ntouch '${breadcrumb}'\nexec '${executable}' "$@"\n`, 'utf8');
+  chmodSync(wrapper, 0o755);
+  return { sitePackages: dir, markerPython: wrapper, breadcrumb };
+}
+
+test('the module carries no hard-coded home path', () => {
+  // The seam replaced a default that was one machine's uv tool layout, and the
+  // resolution chain now ends in an error rather than a guess, so any /home/
+  // literal left in this module would be reachable on some host. Reading the
+  // module's own source is the cheapest guard against it creeping back.
+  const source = readFileSync(new URL('./vault-index.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\/home\//);
+});
+
+test('with no environment and no config the seam throws an actionable error', () => {
+  const root = makeFixture();
+  withEnv({ GRAPHIFY_SITE_PACKAGES: undefined, GRAPHIFY_PYTHON: undefined }, () => {
+    // Pinned to the site-packages half by passing a python override, so the
+    // assertion does not depend on which half resolution happens to hit first
+    // (the interpreter is resolved before the spawn, never after it).
+    assert.throws(
+      () =>
+        listEligible(root, {
+          python: 'python3',
+          configPath: join(tmpdir(), 'vault-index-absent-config-9d4e.json'),
+        }),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /vault-index/);
+        assert.match(err.message, /GRAPHIFY_SITE_PACKAGES/);
+        assert.match(err.message, /local\.config\.json/);
+        return true;
+      },
+    );
+    // And with no override at all, resolution still refuses with an error
+    // naming its env var and the config file, never a default path.
+    assert.throws(
+      () =>
+        listEligible(root, { configPath: join(tmpdir(), 'vault-index-absent-config-9d4e.json') }),
+      (err) => {
+        assert.match(err.message, /vault-index/);
+        assert.match(err.message, /GRAPHIFY_(SITE_PACKAGES|PYTHON)/);
+        assert.match(err.message, /local\.config\.json/);
+        return true;
+      },
+    );
+  });
+});
+
+test('GRAPHIFY_SITE_PACKAGES from the environment drives the injected site-packages', { skip: NEEDS_PYTHON_SKIP }, () => {
+  const root = makeFixture();
+  const dir = mkdtempSync(join(tmpdir(), 'vault-index-seam-env-'));
+  madeDirs.push(dir);
+  const { sitePackages } = makeSeamFixture(dir, 'env-seam-marker');
+  withEnv({ GRAPHIFY_SITE_PACKAGES: sitePackages }, () => {
+    const eligible = listEligible(root, {
+      python: HOST_PYTHON,
+      configPath: join(dir, 'absent-config.json'),
+    });
+    assert.ok(
+      eligible.includes('notes/env-seam-marker.md'),
+      `the stub's marker is missing from [${eligible.join(', ')}]: the env value was not injected`,
+    );
+  });
+});
+
+test('GRAPHIFY_PYTHON from the environment is the interpreter that runs', { skip: NEEDS_PYTHON_SKIP }, () => {
+  const root = makeFixture();
+  const dir = mkdtempSync(join(tmpdir(), 'vault-index-seam-py-'));
+  madeDirs.push(dir);
+  const { sitePackages, markerPython, breadcrumb } = makeSeamFixture(dir, 'env-python-marker');
+  withEnv({ GRAPHIFY_PYTHON: markerPython }, () => {
+    const eligible = listEligible(root, {
+      sitePackages,
+      configPath: join(dir, 'absent-config.json'),
+    });
+    assert.ok(eligible.includes('notes/env-python-marker.md'), 'the stub site-packages did not run');
+    assert.ok(existsSync(breadcrumb), 'the marked interpreter never ran: GRAPHIFY_PYTHON was ignored');
+  });
+});
+
+test('local.config.json provides both halves when the environment is empty', { skip: NEEDS_PYTHON_SKIP }, () => {
+  const root = makeFixture();
+  const dir = mkdtempSync(join(tmpdir(), 'vault-index-seam-config-'));
+  madeDirs.push(dir);
+  const { sitePackages, markerPython, breadcrumb } = makeSeamFixture(dir, 'config-seam-marker');
+  const configPath = join(dir, 'local.config.json');
+  writeFileSync(
+    configPath,
+    JSON.stringify({ graphifySitePackages: sitePackages, graphifyPython: markerPython }),
+  );
+  withEnv({ GRAPHIFY_SITE_PACKAGES: undefined, GRAPHIFY_PYTHON: undefined }, () => {
+    const eligible = listEligible(root, { configPath });
+    assert.ok(
+      eligible.includes('notes/config-seam-marker.md'),
+      `the stub's marker is missing from [${eligible.join(', ')}]: the config was not read`,
+    );
+    assert.ok(existsSync(breadcrumb), 'the config python never ran: graphifyPython was ignored');
+  });
+});
+
+test('the environment wins over local.config.json', { skip: NEEDS_PYTHON_SKIP }, () => {
+  const root = makeFixture();
+  const dir = mkdtempSync(join(tmpdir(), 'vault-index-seam-precedence-'));
+  madeDirs.push(dir);
+  const envStub = makeSeamFixture(join(dir, 'env-sp'), 'env-wins-marker');
+  const configStub = makeSeamFixture(join(dir, 'config-sp'), 'config-loses-marker');
+  const configPath = join(dir, 'local.config.json');
+  writeFileSync(configPath, JSON.stringify({ graphifySitePackages: configStub.sitePackages }));
+  withEnv({ GRAPHIFY_SITE_PACKAGES: envStub.sitePackages }, () => {
+    const eligible = listEligible(root, { python: HOST_PYTHON, configPath });
+    assert.ok(eligible.includes('notes/env-wins-marker.md'), 'the env value did not run');
+    assert.ok(
+      !eligible.includes('notes/config-loses-marker.md'),
+      'the config value ran despite the environment being set',
+    );
+  });
+});
+
 // ---------- live vault (skipped when absent) ----------
 
-const VAULT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+const VAULT = join(homedir(), 'Dokumen/Obsidian Vault');
 
 // The transcript half of the corpus. 05 - Conversations/ moved here on
 // 2026-10-02 (vault commit 51b7a59): 50 files >1MB, 300 MB total, OOMed
 // Obsidian's metadata cache at ~3.9GB on every launch. Scanning the vault
 // alone reports 572 eligible and has done since the move -- not a boundary
 // failure, just a corpus that is no longer there.
-const ARCHIVE = '/home/belajarcarabelajar/Documents/conversations-archive';
+const ARCHIVE = join(homedir(), 'Documents/conversations-archive');
 // Both halves are required: the live tests scan the real corpus THROUGH the
 // detector, so a host with the vault but no graphify would fail them for the
 // same "not installed here" reason the spawning tests now skip on. The vault

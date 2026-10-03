@@ -45,6 +45,9 @@
 //   bun scripts/vault-index-rebuild.mjs             # dry run, writes nothing
 //   bun scripts/vault-index-rebuild.mjs --write     # back up, then write graph.json
 //
+// Corpus roots: $VAULT_ROOT and $ARCHIVE_ROOT, else local.config.json (copy
+// local.config.example.json). With neither set, the run exits with an error.
+//
 // The dry run is the default on purpose: the thing being overwritten is the
 // vault's only record of 6,155 nodes of accumulated work.
 
@@ -57,10 +60,30 @@ import { createHash } from 'node:crypto';
 import { scan } from './vault-index.mjs';
 import { structural } from './vault-index-structural.mjs';
 import { loadChunks, merge, writeGraph } from './vault-index-merge.mjs';
+import { resolveConfiguredPath } from './lib/local-config.mjs';
 
-/** The two corpus roots. Transcripts moved out of the vault on 2026-10-02. */
-export const VAULT_ROOT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
-export const ARCHIVE_ROOT = '/home/belajarcarabelajar/Documents/conversations-archive';
+/**
+ * The vault corpus root: $VAULT_ROOT, else local.config.json's "vaultRoot".
+ * Resolved per call, never at import, so importing this module cannot throw
+ * and a changed env var is picked up on the next call.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to the Obsidian vault root
+ */
+export function resolveVaultRoot({ configPath } = {}) {
+  return resolveConfiguredPath({ envVar: 'VAULT_ROOT', configKey: 'vaultRoot', label: 'Obsidian vault root', configPath });
+}
+
+/**
+ * The archive corpus root: $ARCHIVE_ROOT, else local.config.json's "archiveRoot".
+ * Transcripts moved out of the vault on 2026-10-02, so this is its own root.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to the conversations archive root
+ */
+export function resolveArchiveRoot({ configPath } = {}) {
+  return resolveConfiguredPath({ envVar: 'ARCHIVE_ROOT', configKey: 'archiveRoot', label: 'conversations archive root', configPath });
+}
 
 /** A non-empty string, or null. */
 function filled(value) {
@@ -196,7 +219,7 @@ export function degreeZero(graph) {
 }
 
 /** The vault's current HEAD, or null when it cannot be read. */
-export function vaultHead(root = VAULT_ROOT) {
+export function vaultHead(root = resolveVaultRoot()) {
   try {
     return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() || null;
   } catch {
@@ -211,7 +234,7 @@ export function vaultHead(root = VAULT_ROOT) {
  *   previous: object, builtAtCommit?: string|null}} opts
  * @returns {{graph: object, report: object, normalization: object, semReport: object}}
  */
-export function assemble({ vaultRoot = VAULT_ROOT, archiveRoot = ARCHIVE_ROOT, semanticDir, previous, builtAtCommit = null }) {
+export function assemble({ vaultRoot = resolveVaultRoot(), archiveRoot = resolveArchiveRoot(), semanticDir, previous, builtAtCommit = null }) {
   const roots = [archiveRoot, vaultRoot];
   const structuralChunks = [];
   const eligibleByRoot = [];
@@ -354,9 +377,11 @@ function main() {
   const argv = process.argv.slice(2);
   const write = argv.includes('--write');
   const manifestOnly = argv.includes('--manifest-only');
+  const vaultRoot = resolveVaultRoot();
+  const archiveRoot = resolveArchiveRoot();
   const semanticDir = resolvePath(fileURLToPath(new URL('../vault-index/semantic', import.meta.url)));
-  const graphPath = resolvePath(VAULT_ROOT, 'graphify-out/graph.json');
-  const reportPath = resolvePath(VAULT_ROOT, 'graphify-out/GRAPH_REPORT.md');
+  const graphPath = resolvePath(vaultRoot, 'graphify-out/graph.json');
+  const reportPath = resolvePath(vaultRoot, 'graphify-out/GRAPH_REPORT.md');
 
   if (!existsSync(graphPath)) {
     console.error(`no existing graph at ${graphPath} — nothing to merge onto`);
@@ -371,7 +396,7 @@ function main() {
   // second merge, so it reads the file directly.
   if (manifestOnly) {
     const graph = JSON.parse(readFileSync(graphPath, 'utf8'));
-    const roots = [ARCHIVE_ROOT, VAULT_ROOT];
+    const roots = [archiveRoot, vaultRoot];
     const eligibleByRoot = roots.map((root) => ({ root, eligible: scan(root).eligible }));
     const manifest = buildManifest({ graph, roots, eligibleByRoot, builtAtCommit: vaultHead() });
     console.log('--- vault-index/manifest.json (from the graph on disk) ---');
@@ -428,7 +453,7 @@ function main() {
 
   const manifest = buildManifest({
     graph,
-    roots: [ARCHIVE_ROOT, VAULT_ROOT],
+    roots: [archiveRoot, vaultRoot],
     eligibleByRoot,
     builtAtCommit: vaultHead(),
   });
@@ -444,7 +469,7 @@ function main() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const backupDir = resolvePath(VAULT_ROOT, `graphify-out/backup-${stamp}-t9`);
+  const backupDir = resolvePath(vaultRoot, `graphify-out/backup-${stamp}-t9`);
   mkdirSync(backupDir, { recursive: true });
   copyFileSync(graphPath, resolvePath(backupDir, 'graph.json'));
   if (existsSync(reportPath)) copyFileSync(reportPath, resolvePath(backupDir, 'GRAPH_REPORT.md'));

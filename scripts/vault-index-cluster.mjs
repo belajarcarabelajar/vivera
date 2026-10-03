@@ -22,6 +22,11 @@
 //   bun scripts/vault-index-cluster.mjs --write         # back up, then write graph.json
 //   bun scripts/vault-index-cluster.mjs --graph <path>  # default: <vault>/graphify-out/graph.json
 //
+// The vault root and the graphify interpreter are machine-specific: $VAULT_ROOT
+// and $GRAPHIFY_PYTHON, else local.config.json (copy local.config.example.json
+// to the repo root and fill it in). With neither set, the run exits with an
+// error naming both the env var and the config file.
+//
 // The dry run is the default on purpose: the file being overwritten is the vault's
 // only record of 20,214 nodes of accumulated work.
 
@@ -31,9 +36,21 @@ import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serializeGraph } from './vault-index-merge.mjs';
+import { resolveConfiguredPath } from './lib/local-config.mjs';
 
-/** The vault root. Matches vault-index-rebuild.mjs. */
-export const VAULT_ROOT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+/**
+ * The vault root: $VAULT_ROOT, else local.config.json's "vaultRoot". Resolved
+ * per call, never at import, so importing this module cannot throw and a
+ * changed env var is picked up on the next call. This is the same root
+ * vault-index-rebuild.mjs clusters against, resolved through the same helper
+ * so the two runners cannot disagree about where the vault is.
+ *
+ * @param {{configPath?: string}} [opts] test-only config file override
+ * @returns {string} absolute path to the Obsidian vault root
+ */
+export function resolveVaultRoot({ configPath } = {}) {
+  return resolveConfiguredPath({ envVar: 'VAULT_ROOT', configKey: 'vaultRoot', label: 'Obsidian vault root', configPath });
+}
 
 /** Default graph location, relative to the vault root. */
 export const DEFAULT_GRAPH_RELPATH = 'graphify-out/graph.json';
@@ -42,32 +59,52 @@ export const DEFAULT_GRAPH_RELPATH = 'graphify-out/graph.json';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PYTHON_SCRIPT = resolvePath(HERE, 'vault-index-cluster.py');
 
+const PYTHON_CONFIG = {
+  envVar: 'GRAPHIFY_PYTHON',
+  configKey: 'graphifyPython',
+  label: 'the graphify python interpreter',
+};
+
 /**
  * The interpreter that can import graphify and networkx.
  *
  * graphify is a uv tool, so its dependencies live in the tool's own venv, not in
  * the system interpreter. Measured 2026-10-03: system `python3` has neither
- * `networkx` nor `graphify`; the venv python has both. `GRAPHIFY_PYTHON`
- * overrides, the same seam vault-index.mjs already exposes.
+ * `networkx` nor `graphify`; the venv python has both. Where that venv lives is
+ * machine-specific, so the interpreter resolves per call through
+ * `lib/local-config.mjs`: `$GRAPHIFY_PYTHON`, then the git-ignored
+ * `local.config.json`'s "graphifyPython", then an error naming both. There is
+ * deliberately no default path: a silent wrong guess would cluster a graph
+ * through a different graphify install than the one that built it, and the only
+ * hard-coded value would be one machine's absolute path. `opts.configPath`
+ * overrides the config file location (test-only).
+ *
+ * @param {{configPath?: string}} [opts]
+ * @returns {string} absolute path to a python binary
  */
-const PYTHON = process.env.GRAPHIFY_PYTHON || '/home/belajarcarabelajar/.local/share/uv/tools/graphifyy/bin/python';
-export { PYTHON };
+export function pythonBinary({ configPath } = {}) {
+  return resolveConfiguredPath({ ...PYTHON_CONFIG, configPath });
+}
 
 /**
  * Run the python clustering helper and parse its stdout.
  *
  * @param {string} graphPath
+ * @param {{python?: string, configPath?: string}} [opts] `python` is a per-call
+ *   interpreter override; `configPath` overrides the local.config.json location
+ *   (test-only)
  * @returns {{nodeCount: number, linkCount: number, communityCount: number,
  *   degreeZero: number, singletons: number, largest: number[],
  *   unassigned: string[], mapping: Record<string, {community: number, community_name: string}>}}
  */
-export function computeCommunities(graphPath) {
-  const res = spawnSync(PYTHON, [PYTHON_SCRIPT, graphPath], {
+export function computeCommunities(graphPath, opts = {}) {
+  const python = opts.python ?? pythonBinary(opts);
+  const res = spawnSync(python, [PYTHON_SCRIPT, graphPath], {
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
   });
   if (res.error) {
-    throw new Error(`could not run python3: ${res.error.message}`);
+    throw new Error(`could not run ${python}: ${res.error.message}`);
   }
   if (res.status !== 0) {
     throw new Error(`vault-index-cluster.py exited ${res.status}: ${String(res.stderr ?? '').trim()}`);
@@ -121,7 +158,10 @@ function main() {
   const graphFlag = argv.indexOf('--graph');
   const graphPath = graphFlag !== -1 && argv[graphFlag + 1]
     ? resolvePath(argv[graphFlag + 1])
-    : resolvePath(VAULT_ROOT, DEFAULT_GRAPH_RELPATH);
+    // Resolved here rather than at the top of main, so a `--graph` dry run on
+    // an unconfigured host still works: the vault root is only needed when the
+    // default graph location is.
+    : resolvePath(resolveVaultRoot(), DEFAULT_GRAPH_RELPATH);
 
   if (!existsSync(graphPath)) {
     console.error(`no graph at ${graphPath} — nothing to cluster`);
@@ -173,7 +213,7 @@ function main() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const backupDir = resolvePath(VAULT_ROOT, `graphify-out/backup-${stamp}-t10`);
+  const backupDir = resolvePath(resolveVaultRoot(), `graphify-out/backup-${stamp}-t10`);
   mkdirSync(backupDir, { recursive: true });
   copyFileSync(graphPath, resolvePath(backupDir, 'graph.json'));
   console.log(`  backup: ${backupDir}`);

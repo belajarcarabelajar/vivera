@@ -32,7 +32,7 @@
 //   * every `main()` call gets an explicit `--db` AND an explicit `--vault`;
 //   * every `main()` call gets an EMPTY env, never `process.env`, so a stray
 //     `OPENCODE_EXPORT_VAULT` in the developer's shell cannot redirect a test
-//     into `/home/belajarcarabelajar/Dokumen/Obsidian Vault`;
+//     into the configured real vault;
 //   * `RUNS` below records every (db, vault) this file ever asked for, and
 //     test 13 asserts that no recorded path is the real one. The discipline is
 //     therefore checked, not just asserted in a comment.
@@ -49,8 +49,7 @@ import path from 'node:path';
 import { Database } from 'bun:sqlite';
 
 import {
-  main, conversationsRoot, attachmentsRoot, projectSlug,
-  DEFAULT_VAULT_ROOT, CONVERSATIONS_DIR,
+  main, conversationsRoot, attachmentsRoot, projectSlug, defaultVaultRoot, CONVERSATIONS_DIR,
 } from './export-opencode-history.mjs';
 import { DEFAULT_OPENCODE_DB_PATH, countSessions, openReadonly } from './lib/opencode-db.mjs';
 import {
@@ -66,8 +65,22 @@ import {
 // already in this snapshot and every test below would be reading an artefact of
 // the import rather than of its own runs.
 
-const REAL_VAULT_CONVERSATIONS = path.join(DEFAULT_VAULT_ROOT, CONVERSATIONS_DIR);
-const vaultEntriesAtImport = existsSync(DEFAULT_VAULT_ROOT) ? readdirSync(DEFAULT_VAULT_ROOT).sort() : null;
+// The real vault, resolved exactly the way a user of this script resolves it:
+// the env var, else local.config.json. Null when this machine configures none,
+// in which case there is no real path to guard and test 13 leans on its tmpdir
+// rule, which subsumes the real-vault comparisons.
+const REAL_VAULT = (() => {
+  try {
+    return defaultVaultRoot();
+  } catch {
+    return null;
+  }
+})();
+
+const REAL_VAULT_CONVERSATIONS = REAL_VAULT === null ? null : path.join(REAL_VAULT, CONVERSATIONS_DIR);
+const vaultEntriesAtImport = REAL_VAULT !== null && existsSync(REAL_VAULT)
+  ? readdirSync(REAL_VAULT).sort()
+  : null;
 
 // A fixed old date, chosen here rather than read off a clock, so "the mtime
 // moved" is a comparison against a number this file decided. 2001-01-01 is far
@@ -802,9 +815,10 @@ test('--dry-run over a fresh destination leaves no directory behind', async () =
 test('importing the exporter created nothing, and no run in this file touched a real path', () => {
   // The snapshot was taken at MODULE LOAD — after the import of
   // `export-opencode-history.mjs` was evaluated, before any test body ran. If
-  // the module had run an export on import, it would have written into
-  // DEFAULT_VAULT_ROOT and created `05 - Conversations/` there, which this
-  // assertion would then see.
+  // the module had run an export on import, it would have written into the
+  // configured real vault and created `05 - Conversations/` there, which this
+  // assertion would then see. When this machine configures no real vault the
+  // check cannot be made and is skipped; the RUNS assertions below always stay.
   //
   // This asserts the DELTA, not absolute absence. Asserting
   // `existsSync(...) === false` conflated "this file never writes to the real
@@ -813,8 +827,8 @@ test('importing the exporter created nothing, and no run in this file touched a 
   // while the first stays true, so the old form failed for a correct build.
   // The snapshot comparison below is the claim this test actually means, and it
   // holds whether or not a real export has ever been run.
-  if (vaultEntriesAtImport !== null) {
-    const presentNow = readdirSync(DEFAULT_VAULT_ROOT).includes(CONVERSATIONS_DIR);
+  if (REAL_VAULT !== null && vaultEntriesAtImport !== null) {
+    const presentNow = readdirSync(REAL_VAULT).includes(CONVERSATIONS_DIR);
     const presentAtImport = vaultEntriesAtImport.includes(CONVERSATIONS_DIR);
     assert.equal(
       presentNow,
@@ -843,8 +857,10 @@ test('importing the exporter created nothing, and no run in this file touched a 
     assert.ok(dbPath.startsWith(tmpdir()), `a run opened a database outside the temp tree: ${dbPath}`);
     assert.ok(rec.vault !== null, `a run printed no vault line: ${JSON.stringify(rec.argv)}`);
     const vaultPath = rec.vault.slice('vault: '.length);
-    assert.notEqual(vaultPath, DEFAULT_VAULT_ROOT, `a run wrote to the REAL vault: ${vaultPath}`);
-    assert.ok(!vaultPath.startsWith(DEFAULT_VAULT_ROOT + path.sep), `a run wrote inside the REAL vault: ${vaultPath}`);
+    if (REAL_VAULT !== null) {
+      assert.notEqual(vaultPath, REAL_VAULT, `a run wrote to the REAL vault: ${vaultPath}`);
+      assert.ok(!vaultPath.startsWith(REAL_VAULT + path.sep), `a run wrote inside the REAL vault: ${vaultPath}`);
+    }
     assert.ok(vaultPath.startsWith(tmpdir()), `a run wrote outside the temp tree: ${vaultPath}`);
   }
 });

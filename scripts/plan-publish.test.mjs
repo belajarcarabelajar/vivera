@@ -3,7 +3,7 @@
 // Guards for the plan-publishing CLI. The CLI is the only component that
 // touches the real vault, so every test here drives it as a SUBPROCESS against
 // a throwaway vault under the system temp dir. Nothing in this file reads or
-// writes /home/belajarcarabelajar/Dokumen/Obsidian Vault, and nothing here
+// writes the machine's vault (~/Dokumen/Obsidian Vault), and nothing here
 // depends on whether the real project checkouts exist on the machine.
 //
 // Why subprocesses instead of importing the module: the contract under test is

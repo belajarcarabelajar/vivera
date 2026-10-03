@@ -17,7 +17,7 @@
 //
 // FOUR THINGS THIS FILE IS CAREFUL ABOUT
 //
-//   1. THE VAULT PATH CONTAINS A SPACE. `/home/belajarcarabelajar/Dokumen/
+//   1. THE VAULT PATH CONTAINS A SPACE. The real vault is named `Dokumen/
 //      Obsidian Vault`. A value is taken as ONE argv element, never as a
 //      fragment of a line someone split, and every path is built with
 //      `node:path`. `--vault=PATH` and `--vault PATH` both work; nothing here
@@ -62,8 +62,9 @@ import { renderSession } from './lib/render-session.mjs';
 import { planWrites } from './lib/sync-writer.mjs';
 import { PATTERN_NAMES } from './lib/redact.mjs';
 import { DEFAULT_ALLOWED_ROOT } from './lib/inline-spills.mjs';
+import { resolveConfiguredPath } from './lib/local-config.mjs';
 
-// ---------- the destination, as constants ----------
+// ---------- the destination ----------
 
 /** The vault folder conversations are mirrored into. */
 export const CONVERSATIONS_DIR = '05 - Conversations';
@@ -71,11 +72,34 @@ export const CONVERSATIONS_DIR = '05 - Conversations';
 /** Sibling of the per-project folders; holds the unpacked inline attachments. */
 export const ATTACHMENTS_DIRNAME = '.attachments';
 
-/** The real vault. Its space is the reason every path here goes through node:path. */
-export const DEFAULT_VAULT_ROOT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
-
 /** Env fallback for `--vault`, so a shell alias can carry it. */
 export const VAULT_ENV_VAR = 'OPENCODE_EXPORT_VAULT';
+
+/**
+ * The vault used when the flag and the environment say nothing.
+ *
+ * Resolved per call, never at import, so importing this module reads nothing
+ * and cannot throw, and a changed env var is picked up on the next call. The
+ * config key "vaultRoot" is deliberately shared with `vault-index-rebuild.mjs`:
+ * both tools operate on the same vault.
+ *
+ * There is no default path. A silent wrong guess would write exports into the
+ * wrong tree, so an unconfigured call throws naming the env var and
+ * local.config.example.json instead.
+ *
+ * @param {string} [configPath] test-only config file override; defaults to
+ *   <repo root>/local.config.json
+ * @returns {string} the vault root
+ * @throws {Error} when neither the env var nor the config file answers
+ */
+export function defaultVaultRoot(configPath = undefined) {
+  return resolveConfiguredPath({
+    envVar: VAULT_ENV_VAR,
+    configKey: 'vaultRoot',
+    label: 'export target vault',
+    configPath,
+  });
+}
 
 const USAGE = `usage:
   bun scripts/export-opencode-history.mjs [options]
@@ -83,7 +107,8 @@ const USAGE = `usage:
   --dry-run            resolve and render every selected session, write nothing
   --limit N            process at most N sessions, oldest first (0 processes none)
   --vault PATH         destination vault root
-                       (default: $${VAULT_ENV_VAR}, else ${DEFAULT_VAULT_ROOT})
+                       (default: $${VAULT_ENV_VAR}, else "vaultRoot" in
+                       local.config.json -- see local.config.example.json)
   --db PATH            OpenCode database, opened read-only
                        (default: ${DEFAULT_OPENCODE_DB_PATH})
   --project-dir PATH   export only sessions whose directory is PATH or below it
@@ -189,17 +214,27 @@ export function parseArgs(argv) {
 }
 
 /**
- * Flag, then environment, then the documented default.
+ * Flag, then environment, then the configured default.
  *
- * A blank environment variable is treated as absent. Falling through to the REAL
- * vault because someone's shell exported an empty string is the kind of
- * surprise that ends up in a git remote nobody was watching.
+ * `env` is passed in rather than read from `process.env` so a test cannot be
+ * redirected by the shell it happens to run in; when it says nothing, the
+ * decision falls to `defaultVaultRoot()`, which does read `process.env` and
+ * local.config.json. A blank environment variable is treated as absent.
+ * Falling through to the REAL vault because someone's shell exported an empty
+ * string is the kind of surprise that ends up in a git remote nobody was
+ * watching.
+ *
+ * @param {Record<string, string|undefined>} env
+ * @param {string|null} flagValue the `--vault` value
+ * @param {string} [configPath] test-only config file override, passed through
+ *   to `defaultVaultRoot()`
+ * @returns {string} the vault root
  */
-export function resolveVaultRoot(env = {}, flagValue = null) {
+export function resolveVaultRoot(env = {}, flagValue = null, configPath = undefined) {
   if (typeof flagValue === 'string' && flagValue.trim() !== '') return path.resolve(flagValue);
   const fromEnv = env && typeof env === 'object' ? env[VAULT_ENV_VAR] : undefined;
   if (typeof fromEnv === 'string' && fromEnv.trim() !== '') return path.resolve(fromEnv);
-  return DEFAULT_VAULT_ROOT;
+  return defaultVaultRoot(configPath);
 }
 
 // ---------- destination layout ----------
@@ -219,7 +254,7 @@ const SEGMENT_EDGES = /^-+|-+$/g;
 /**
  * One safe directory name for a worktree path.
  *
- * `/home/belajarcarabelajar` -> `home-belajarcarabelajar`.
+ * `/Users/alice` -> `users-alice`.
  *
  * The result is joined onto the vault, so it must be a single segment with no
  * separator and no `..` in it — which the same allowlist that produces hyphens

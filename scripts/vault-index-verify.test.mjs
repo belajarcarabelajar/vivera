@@ -10,14 +10,21 @@
 // `checkReadPaths` takes an injected runner so its logic is still unit-tested
 // without spawning graphify.
 
-import { test } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   sourceFilesOf,
   checkCoverage,
   checkExcludedPrefixes,
   pickGodNode,
   checkReadPaths,
+  resolveArchiveRoot,
+  resolveVaultRoot,
+  resolveGraphPath,
+  DEFAULT_GRAPH_RELPATH,
 } from './vault-index-verify.mjs';
 
 // A small graph: a-b-c chain plus an isolated node. `b` is the god (degree 2).
@@ -134,4 +141,96 @@ test('checkReadPaths reports no connected node to query on an edgeless graph', (
   assert.equal(ok, false);
   assert.equal(checks.length, 1);
   assert.match(checks[0].detail, /no connected node/);
+});
+
+// --- corpus roots: env var first, then local.config.json, never a default ----
+
+describe('resolveArchiveRoot / resolveVaultRoot / resolveGraphPath', () => {
+  // Both variables are managed by every test so a value inherited from the
+  // caller's shell cannot flip a case; afterEach restores what was there.
+  const envKeys = ['VAULT_ROOT', 'ARCHIVE_ROOT'];
+  let saved;
+
+  beforeEach(() => {
+    saved = envKeys.map((key) => [key, process.env[key]]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  // The file is never created: resolution must take the env branch without
+  // reading, or throwing against, any real local.config.json.
+  function absentConfig() {
+    const dir = mkdtempSync(join(tmpdir(), 'verify-roots-'));
+    return { configPath: join(dir, 'absent.json'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  }
+
+  test('each root comes from its env var when set', () => {
+    process.env.VAULT_ROOT = '/tmp/vault-from-env';
+    process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+    const { configPath, cleanup } = absentConfig();
+    try {
+      assert.equal(resolveVaultRoot({ configPath }), '/tmp/vault-from-env');
+      assert.equal(resolveArchiveRoot({ configPath }), '/tmp/archive-from-env');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('env wins over the config file, per key', () => {
+    process.env.VAULT_ROOT = '/env/vault';
+    delete process.env.ARCHIVE_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'verify-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      assert.equal(resolveVaultRoot({ configPath }), '/env/vault');
+      assert.equal(resolveArchiveRoot({ configPath }), '/cfg/archive');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('with no env var, a root falls back to the config file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'verify-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      assert.equal(resolveVaultRoot({ configPath }), '/cfg/vault');
+      assert.equal(resolveArchiveRoot({ configPath }), '/cfg/archive');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no default path: with no env var and no config it throws, naming the env var and the example file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const { configPath, cleanup } = absentConfig();
+    try {
+      assert.throws(() => resolveVaultRoot({ configPath }), /set VAULT_ROOT/);
+      assert.throws(() => resolveVaultRoot({ configPath }), /local\.config\.example\.json/);
+      assert.throws(() => resolveArchiveRoot({ configPath }), /set ARCHIVE_ROOT/);
+      assert.throws(() => resolveArchiveRoot({ configPath }), /local\.config\.example\.json/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('resolveGraphPath joins DEFAULT_GRAPH_RELPATH under the resolved vault root', () => {
+    process.env.VAULT_ROOT = '/tmp/vault-from-env';
+    delete process.env.ARCHIVE_ROOT;
+    const { configPath, cleanup } = absentConfig();
+    try {
+      assert.equal(resolveGraphPath({ configPath }), join('/tmp/vault-from-env', DEFAULT_GRAPH_RELPATH));
+    } finally {
+      cleanup();
+    }
+  });
 });

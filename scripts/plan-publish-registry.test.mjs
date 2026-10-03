@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -24,7 +24,7 @@ import {
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const VAULT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+const VAULT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 
 // The real registry names every project root by absolute path, so the two
 // "real registry" tests below only have a subject where those roots exist. On a
@@ -392,7 +392,7 @@ test(
 
 test('destPathFor places a plan under 01 - Projects/Snipset/plans/ inside the vault', () => {
   const f = fixture('dest', [{ name: 'Snipset', rootRel: 'Snipset', mirror: true }]);
-  const plan = '/home/belajarcarabelajar/Proyek/Snipset/docs/code-plan/plans/2026-09-26-example.md';
+  const plan = '/home/testuser/Proyek/Snipset/docs/code-plan/plans/2026-09-26-example.md';
   const dest = destPathFor(f.registry, { name: 'Snipset' }, plan);
   assert.ok(dest.includes('01 - Projects/Snipset/plans/'), `got ${dest}`);
   assert.equal(dest, path.join(VAULT, '01 - Projects', 'Snipset', 'plans', '2026-09-26-example.md'));
@@ -402,7 +402,7 @@ test('destPathFor places a plan under 01 - Projects/Snipset/plans/ inside the va
 
 test('destPathFor keeps the space in the vault path intact', () => {
   const registry = loadRegistry();
-  const dest = destPathFor(registry, { name: 'ram-audit' }, '/home/belajarcarabelajar/ram-audit/docs/code-plan/plans/p.md');
+  const dest = destPathFor(registry, { name: 'ram-audit' }, '/home/testuser/ram-audit/docs/code-plan/plans/p.md');
   assert.equal(dest.includes('Obsidian Vault'), true);
   assert.equal(dest, `${VAULT}/01 - Projects/ram-audit/plans/p.md`);
 });

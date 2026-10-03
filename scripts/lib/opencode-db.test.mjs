@@ -32,7 +32,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, existsSync, copyFileSync, statSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { Database } from 'bun:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,7 +54,9 @@ import {
   FIXTURE_PNG_BASE64,
 } from './test-fixture-db.mjs';
 
-const REAL_DB = '/home/belajarcarabelajar/.local/share/opencode/opencode.db';
+// Referenced by name only (the guard test below never opens it): joined to
+// the machine home so this file runs unchanged on any checkout.
+const REAL_DB = path.join(homedir(), '.local/share/opencode/opencode.db');
 
 // ---------- fixtures ----------
 

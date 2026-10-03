@@ -90,17 +90,23 @@ jobs:
       # developer's own Obsidian vault via plans.publish.json (the first two
       # also need the real Snipset database), which a hosted runner does not
       # have. On a runner with no vault the registry enumerates nothing, and the
-      # skipif audit exits 1 with "nothing measured" — which would be a red build
+      # skipif audit exits 1 with "nothing measured", which would be a red build
       # reporting the absence of data as a defect. `bun run ci` covers what is
       # portable, and the local commands below are the ones that close the loop.
+      # Hosted runners lack the machine-only tgrep CLI that validate-skill.mjs requires; skip cleanly.
       - name: Run Skill Validation Script
-        run: bun scripts/validate-skill.mjs
+        run: |
+          command -v tgrep >/dev/null 2>&1 || { echo "tgrep not available on this runner; skipping (local-only prerequisite)"; exit 0; }
+          bun scripts/validate-skill.mjs
 
       - name: Run Unit Tests
         run: bun test scripts/
 
+      # Hosted runners lack the private snipset CLI; skip cleanly instead of probing an unreachable database.
       - name: Check trigger prompts against the Snipset database
-        run: bun run snippets:check
+        run: |
+          command -v snipset >/dev/null 2>&1 || { echo "snipset not available on this runner; skipping (local-only integration)"; exit 0; }
+          bun run snippets:check
 
       - name: Test Installer Dry-Run
         run: |

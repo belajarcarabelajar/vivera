@@ -25,7 +25,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,7 +41,10 @@ import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(__dirname, 'skipif-registry-audit.mjs');
 
-const VAULT = '/home/belajarcarabelajar/Dokumen/Obsidian Vault';
+// The vault root recorded in fixture registries. The audit never opens it (see
+// the header), so any absolute path works; joined to the machine home so this
+// file runs unchanged on any checkout.
+const VAULT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 
 // ---------- fixtures ----------
 

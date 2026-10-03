@@ -223,9 +223,10 @@ cd ai-skills
 
 ### Prerequisites
 
+- **`git`**: hard prerequisite (version control, repo self-check, `core.hooksPath` setup).
 - **Bun >= 1.1.0** ([bun.sh](https://bun.sh)): **mandatory runtime.** All dependency installation uses `bun install` / `bun add`, and all JS/TS execution uses `bun test` / `bun run`. `npm install`, `npm test`, `yarn`, and `pnpm` are strictly prohibited. `curl -fsSL https://bun.sh/install | bash`
 - **Node.js is not required.** Every script in this repository runs under Bun, and the only lockfile is `bun.lock`.
-- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited.
+- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited. `tgrep` is optional: install.sh prints one warning when it is missing and the skill falls back to plain `rg`.
 
 ### Supported Harnesses & Target Paths
 
@@ -793,8 +794,8 @@ machine-specific path can run on a machine that is not this one:
 | Variable | Read by | Default |
 |---|---|---|
 | `OBSIDIAN_VAULT` | `spike-skipif-corpus.mjs` | `$HOME/Dokumen/Obsidian Vault` |
-| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs` | this machine's uv tool layout |
-| `GRAPHIFY_PYTHON` | `vault-index.mjs` | `python3` |
+| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs`, `vault-index-cluster.mjs` / `.py` | unset: the `graphifySitePackages` key in gitignored `local.config.json` (see `local.config.example.json`), else an actionable error |
+| `GRAPHIFY_PYTHON` | `vault-index.mjs`, `vault-index-cluster.mjs` | unset: the `graphifyPython` key in `local.config.json`, else an actionable error |
 
 `bun test scripts/` **skips, rather than fails,** the tests whose premise the
 current host cannot satisfy: a checkout elsewhere, a machine without the
@@ -925,7 +926,7 @@ systemctl --user reset-failed plan-mirror-check.service
 ```bash
 bun run export:history [options]
 bun scripts/export-opencode-history.mjs --dry-run --limit 5
-bun scripts/export-opencode-history.mjs --project-dir /home/belajarcarabelajar/ai-skills
+bun scripts/export-opencode-history.mjs --project-dir ~/ai-skills
 ```
 
 ### Safety and Content Guarantees
@@ -945,7 +946,7 @@ bun scripts/export-opencode-history.mjs --project-dir /home/belajarcarabelajar/a
 |---|---|
 | `--dry-run` | Render and resolve sessions without writing notes or attachments to disk. |
 | `--limit N` | Process at most N sessions, oldest first (0 processes none). |
-| `--vault PATH` | Destination Obsidian vault root (defaults to `$OPENCODE_EXPORT_VAULT` or `/home/belajarcarabelajar/Dokumen/Obsidian Vault`). |
+| `--vault PATH` | Destination Obsidian vault root (defaults to `$OPENCODE_EXPORT_VAULT`, else the `vaultRoot` key in `local.config.json`; see `local.config.example.json`). |
 | `--db PATH` | Path to the OpenCode SQLite database (defaults to `~/.local/share/opencode/opencode.db`). |
 | `--project-dir PATH` | Filter to export only sessions associated with PATH or its subdirectories. |
 
@@ -1189,6 +1190,14 @@ cannot see. Run it locally when you own the vault.
 
 ---
 
+## Third-Party Notices and Disclaimer
+
+The graphify skill copy under `.opencode/skills/graphify/` and `.opencode/plugins/graphify.js` originate from the graphify project by Safi Shamsi, MIT licensed; full notices are in `THIRD-PARTY-NOTICES.md`.
+
+This project is an independent personal pipeline and is not affiliated with, endorsed by, or sponsored by any vendor whose tools it references, including Claude, OpenCode, Gemini, TinyFish, and graphify.
+
+---
+
 ## License
 
-[MIT License](LICENSE) — Copyright (c) 2026 belajarcarabelajar
+[MIT License](LICENSE). Copyright (c) 2026 Iwan Kurniawan.

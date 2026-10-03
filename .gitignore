@@ -40,3 +40,12 @@ plan.issues.local.json
 # products:  git add -f graphify-out/graph.json
 # Never force-add the cache or the two path-marker files.
 graphify-out/
+
+# Machine-local private state, kept out of the public tree: vault paths, plan
+# drafts and local sync config that describe this machine only.
+vault-index/
+spike-out/
+docs/code-plan/
+plans.publish.json
+plan.issues.json
+local.config.json

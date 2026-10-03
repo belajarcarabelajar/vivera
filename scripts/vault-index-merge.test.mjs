@@ -62,7 +62,7 @@
 // the real vault passes on this machine and fails on the next one, and the
 // counts it would assert are exactly the counts that are allowed to drift.
 
-import { test, describe } from 'node:test';
+import { test, describe, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -74,7 +74,7 @@ import {
   DEFAULT_GHOST_POLICY,
   discoverChunkFiles,
   loadChunks,
-  DEFAULT_SOURCE_ROOTS,
+  resolveSourceRoots,
   CHUNK_FILE_SCHEMES,
   NON_CHUNK_FILES,
   NODE_KEY_ORDER,
@@ -1479,17 +1479,121 @@ describe('loadChunks', () => {
 
   test('a directory with no chunk files is empty, not an error', () => {
     // A first run over a fresh semantic dir has nothing to merge; that is not a
-    // defect and must not be reported as one.
+    // defect and must not be reported as one. The roots are throwaway paths:
+    // with no chunk files there is nothing to attribute, so nothing is ever
+    // looked up under them, and naming real corpus roots would drag the host's
+    // env or local.config.json into a test that needs none of it.
     const dir = mkdtempSync(join(tmpdir(), 'vault-merge-empty-'));
     try {
       const { files } = discoverChunkFiles(dir);
       assert.deepEqual(files, []);
-      const { chunks, report } = loadChunks(dir, { roots: DEFAULT_SOURCE_ROOTS });
+      const { chunks, report } = loadChunks(dir, { roots: [join(dir, 'a'), join(dir, 'b')] });
       assert.deepEqual(chunks, []);
       assert.equal(report.chunkFilesRead, 0);
       assert.equal(report.nodesUnattributable, 0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------- 12. the source roots: env first, config second, never a default ----------
+
+// The old DEFAULT_SOURCE_ROOTS constant named two directories on one machine;
+// resolveSourceRoots resolves them per call instead: $ARCHIVE_ROOT and
+// $VAULT_ROOT first, then local.config.json, and with neither set it throws
+// rather than guessing. Everything here passes a configPath into a temp dir
+// and manages both env vars explicitly, so the suite never reads the repo's
+// own local.config.json and passes on a machine that has none.
+
+describe('resolveSourceRoots', () => {
+  // Both variables are managed by every test so a value inherited from the
+  // caller's shell cannot flip a case; afterEach restores what was there.
+  const envKeys = ['ARCHIVE_ROOT', 'VAULT_ROOT'];
+  let saved;
+
+  beforeEach(() => {
+    saved = envKeys.map((key) => [key, process.env[key]]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  // The file is never created: resolution must take the env branch without
+  // reading, or throw against, any real local.config.json.
+  function absentConfig() {
+    const dir = mkdtempSync(join(tmpdir(), 'vault-merge-roots-'));
+    return { configPath: join(dir, 'absent.json'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  }
+
+  test('each root comes from its env var, archive first', () => {
+    process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+    process.env.VAULT_ROOT = '/tmp/vault-from-env';
+    const { configPath, cleanup } = absentConfig();
+    try {
+      assert.deepEqual(resolveSourceRoots({ configPath }), ['/tmp/archive-from-env', '/tmp/vault-from-env']);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('env wins over the config file', () => {
+    process.env.ARCHIVE_ROOT = '/env/archive';
+    delete process.env.VAULT_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'vault-merge-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ archiveRoot: '/cfg/archive', vaultRoot: '/cfg/vault' }), 'utf8');
+    try {
+      const roots = resolveSourceRoots({ configPath });
+      assert.equal(roots[0], '/env/archive');
+      assert.equal(roots[1], '/cfg/vault', 'the root with no env var still falls back to the config');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('with no env var, both roots fall back to the config file', () => {
+    delete process.env.ARCHIVE_ROOT;
+    delete process.env.VAULT_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'vault-merge-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ archiveRoot: '/cfg/archive', vaultRoot: '/cfg/vault' }), 'utf8');
+    try {
+      assert.deepEqual(resolveSourceRoots({ configPath }), ['/cfg/archive', '/cfg/vault']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no default path: with no env var and no config it throws, naming the env var and the example file', () => {
+    delete process.env.ARCHIVE_ROOT;
+    delete process.env.VAULT_ROOT;
+    const { configPath, cleanup } = absentConfig();
+    try {
+      // The archive root is resolved first, so with both missing it is the
+      // archive's error that surfaces.
+      assert.throws(() => resolveSourceRoots({ configPath }), /set ARCHIVE_ROOT/);
+      assert.throws(() => resolveSourceRoots({ configPath }), /local\.config\.example\.json/);
+      process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+      assert.throws(() => resolveSourceRoots({ configPath }), /set VAULT_ROOT/);
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('the returned pair is frozen', () => {
+    process.env.ARCHIVE_ROOT = '/frozen/archive';
+    process.env.VAULT_ROOT = '/frozen/vault';
+    const { configPath, cleanup } = absentConfig();
+    try {
+      const roots = resolveSourceRoots({ configPath });
+      assert.ok(Object.isFrozen(roots), 'a caller must not be able to reorder or extend the roots');
+    } finally {
+      cleanup();
     }
   });
 });

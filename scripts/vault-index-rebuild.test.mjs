@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'bun:test';
+import { test, expect, describe, beforeEach, afterEach } from 'bun:test';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,8 @@ import {
   gateVerdict,
   buildManifest,
   resolveUnderRoots,
+  resolveVaultRoot,
+  resolveArchiveRoot,
 } from './vault-index-rebuild.mjs';
 
 const doc = (id, source_file) => ({ id, file_type: 'document', source_file });
@@ -262,6 +264,86 @@ describe('buildManifest', () => {
       expect(m.skipped[0].path).toBe('orphan.md');
       expect(m.totals.skipped).toBe(1);
       expect(m.totals.indexed).toBe(1);
+    } finally {
+      cleanup();
+    }
+  });
+});
+
+// --- corpus roots: env var first, then local.config.json, never a default ----
+
+describe('resolveVaultRoot / resolveArchiveRoot', () => {
+  // Both variables are managed by every test so a value inherited from the
+  // caller's shell cannot flip a case; afterEach restores what was there.
+  const envKeys = ['VAULT_ROOT', 'ARCHIVE_ROOT'];
+  let saved;
+
+  beforeEach(() => {
+    saved = envKeys.map((key) => [key, process.env[key]]);
+  });
+
+  afterEach(() => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  // The file is never created: resolution must take the env branch without
+  // reading, or throw against, any real local.config.json.
+  function absentConfig() {
+    const dir = mkdtempSync(join(tmpdir(), 'vault-roots-'));
+    return { configPath: join(dir, 'absent.json'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  }
+
+  test('each root comes from its env var when set', () => {
+    process.env.VAULT_ROOT = '/tmp/vault-from-env';
+    process.env.ARCHIVE_ROOT = '/tmp/archive-from-env';
+    const { configPath, cleanup } = absentConfig();
+    try {
+      expect(resolveVaultRoot({ configPath })).toBe('/tmp/vault-from-env');
+      expect(resolveArchiveRoot({ configPath })).toBe('/tmp/archive-from-env');
+    } finally {
+      cleanup();
+    }
+  });
+
+  test('env wins over the config file', () => {
+    process.env.VAULT_ROOT = '/env/vault';
+    delete process.env.ARCHIVE_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'vault-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      expect(resolveVaultRoot({ configPath })).toBe('/env/vault');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('with no env var, a root falls back to the config file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const dir = mkdtempSync(join(tmpdir(), 'vault-roots-'));
+    const configPath = join(dir, 'local.config.json');
+    writeFileSync(configPath, JSON.stringify({ vaultRoot: '/cfg/vault', archiveRoot: '/cfg/archive' }), 'utf8');
+    try {
+      expect(resolveVaultRoot({ configPath })).toBe('/cfg/vault');
+      expect(resolveArchiveRoot({ configPath })).toBe('/cfg/archive');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('no default path: with no env var and no config it throws, naming the env var and the example file', () => {
+    delete process.env.VAULT_ROOT;
+    delete process.env.ARCHIVE_ROOT;
+    const { configPath, cleanup } = absentConfig();
+    try {
+      expect(() => resolveVaultRoot({ configPath })).toThrow(/set VAULT_ROOT/);
+      expect(() => resolveVaultRoot({ configPath })).toThrow(/local\.config\.example\.json/);
+      expect(() => resolveArchiveRoot({ configPath })).toThrow(/set ARCHIVE_ROOT/);
+      expect(() => resolveArchiveRoot({ configPath })).toThrow(/local\.config\.example\.json/);
     } finally {
       cleanup();
     }

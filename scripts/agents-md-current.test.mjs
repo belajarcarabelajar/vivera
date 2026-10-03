@@ -12,7 +12,7 @@
 //     does not exist. The graph is built on demand, so never assume one is
 //     present — check `test -f graphify-out/graph.json` before relying on it.
 //
-// That sentence is false. ai-skills has a 644 KB graph whose `built_at_commit`
+// That sentence is false. vivera has a 644 KB graph whose `built_at_commit`
 // equals HEAD; the vault has 5.7 MB. It is stale text left by an older graphify
 // release and it survived every reinstall, because the installer treats "a
 // `## graphify` section already exists" as a reason to refresh the section —
@@ -42,7 +42,7 @@
 // would be permanently red until someone fixes it and permanently green
 // afterwards, and in neither state is it evidence of anything. The one live
 // test at the bottom is the deliberate exception and is written so that RED is
-// the correct state today: it asserts the ai-skills block is current, and it
+// the correct state today: it asserts the vivera block is current, and it
 // fails, quoting the stale sentence it found. It goes green when the installer
 // is re-run, and before that its failure is the measurement.
 
@@ -422,15 +422,15 @@ test(
 
 // ---------- live: the real defect (RED today, by design) ----------
 
-// The live check targets the machine's real ai-skills checkout, not the copy
+// The live check targets the machine's real vivera checkout, not the copy
 // of the repo this file runs from: a worktree carries a possibly mid-edit
 // AGENTS.md, and the thing under test is the checkout agent sessions actually
 // read. $AI_SKILLS_ROOT names it explicitly for non-default layouts;
-// $HOME/ai-skills is the documented location.
-const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'ai-skills');
+// $HOME/vivera is the documented location.
+const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'vivera');
 const live = existsSync(AI_SKILLS) ? test : test.skip;
 
-live('the real ai-skills AGENTS.md carries the current graphify block', () => {
+live('the real vivera AGENTS.md carries the current graphify block', () => {
   // THE RED TEST. It asserts `current === true`, so it fails today — and the
   // failure message is the measurement: it quotes the stale sentence that is
   // actually in the file rather than printing a diff nobody reads. It goes
@@ -443,7 +443,7 @@ live('the real ai-skills AGENTS.md carries the current graphify block', () => {
   assert.equal(
     result.current,
     true,
-    `ai-skills AGENTS.md is stale. ${result.reason}\n\n` +
+    `vivera AGENTS.md is stale. ${result.reason}\n\n` +
       `The section currently claims:\n${result.found ?? '(nothing found)'}\n\n` +
       `The installed block (${ALWAYS_ON_BLOCK}) says:\n${result.expected}`,
   );

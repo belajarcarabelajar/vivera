@@ -107,7 +107,7 @@ function planFiles(vault) {
   const ownDir = path.join(ROOT, 'docs', 'code-plan', 'plans');
   if (fs.existsSync(ownDir)) {
     for (const file of fs.readdirSync(ownDir).sort()) {
-      if (file.endsWith('.md')) files.push({ file: path.join(ownDir, file), project: 'ai-skills' });
+      if (file.endsWith('.md')) files.push({ file: path.join(ownDir, file), project: 'vivera' });
     }
   }
   return files;
@@ -117,7 +117,7 @@ function rowsFromFile(file, project) {
   const md = fs.readFileSync(file, 'utf8');
   const { frontmatter } = extractFrontmatter(md);
   const plan = parseUltraPlanYaml(frontmatter);
-  const rel = path.relative(project === 'ai-skills' ? ROOT : resolveVault(), file);
+  const rel = path.relative(project === 'vivera' ? ROOT : resolveVault(), file);
   const rows = [];
   for (const task of plan.tasks || []) {
     for (const step of task.run || []) {

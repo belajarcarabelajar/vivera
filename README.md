@@ -928,7 +928,7 @@ systemctl --user reset-failed plan-mirror-check.service
 ```bash
 bun run export:history [options]
 bun scripts/export-opencode-history.mjs --dry-run --limit 5
-bun scripts/export-opencode-history.mjs --project-dir ~/ai-skills
+bun scripts/export-opencode-history.mjs --project-dir ~/vivera
 ```
 
 ### Safety and Content Guarantees

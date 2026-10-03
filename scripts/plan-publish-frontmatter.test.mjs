@@ -31,8 +31,8 @@ import { splitFrontmatter, mergeFrontmatter, PUBLISHER_VERSION } from './plan-pu
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLAN_PATH = path.join(ROOT, 'docs', 'code-plan', 'plans', '2026-09-26-plan-publish-to-obsidian.md');
 const VAULT_ROOT = path.join(homedir(), 'Dokumen/Obsidian Vault');
-const INDEX_PATH = `${VAULT_ROOT}/01 - Projects/ai-skills/index.md`;
-const INDEX_LINK = '01 - Projects/ai-skills/index';
+const INDEX_PATH = `${VAULT_ROOT}/01 - Projects/vivera/index.md`;
+const INDEX_LINK = '01 - Projects/vivera/index';
 const FILENAME = '2026-09-26-plan-publish-to-obsidian.md';
 
 // A realistic `ultra-plan/v1` document. The `tasks:` block is deliberately
@@ -78,7 +78,7 @@ function ctx({ exists = false, vaultRoot = VAULT_ROOT, ...over } = {}) {
   return {
     seen,
     planPath: PLAN_PATH,
-    projectName: 'ai-skills',
+    projectName: 'vivera',
     today: '2026-09-26',
     indexPath: INDEX_PATH,
     vaultRoot,
@@ -158,7 +158,7 @@ test('type and para use the vault-measured vocabulary, not the PARA folder names
   // schema change, which the vault's own skill forbids without approval.
   assert.equal(fmValue(out, 'type'), 'note');
   assert.equal(fmValue(out, 'para'), 'project');
-  assert.equal(fmValue(out, 'project'), 'ai-skills');
+  assert.equal(fmValue(out, 'project'), 'vivera');
   assert.equal(fmValue(out, 'source_path'), PLAN_PATH);
 });
 

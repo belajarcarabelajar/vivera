@@ -18,7 +18,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 
-console.log('==> Validating Ultimate All-in-One AI Skills Repository...');
+console.log('==> Validating the Vivera farm (Ultimate All-in-One AI Skills Repository)...');
 let errors = 0;
 
 // 0b. The runner contract must match what the plan template documents.

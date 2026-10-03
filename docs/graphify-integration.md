@@ -63,7 +63,7 @@ Consequences for planning:
    excluded set "1227 notes". That was wrong: **1227 is the file count inside
    `03 - Resources/LLM Wiki/sources/` specifically**, not the total excluded
    across all exclusion sets. See §4.3.)
-3. This repository (`ai-skills`) declares **no** cloud-extraction boundary in its
+3. This repository (`vivera`) declares **no** cloud-extraction boundary in its
    `.graphifyignore` — the file says so itself. Adding one is a separate, reviewed
    task.
 
@@ -729,7 +729,7 @@ Two structural reasons:
 **Ghost ids do not decode to files.** All 1,299 were tested for it: reversing
 each id against the vault's 3,390 paths resolved **0**. An id like
 `scripts_watch_inbox_py_path` looks like `scripts/watch_inbox.py` + symbol
-`Path`, but the vault holds markdown notes, not the `ai-skills` Python tree the
+`Path`, but the vault holds markdown notes, not the `vivera` Python tree the
 ghost ids were minted from. Ids are not a cheaper attribution route; only
 label match works, and only sometimes.
 

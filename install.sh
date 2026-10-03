@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — Setup symlinks for the Ultimate All-in-One AI Coding Agent Skill
+# install.sh - Plant the Vivera skill farm: symlink the Ultimate All-in-One AI Coding Agent Skill into every harness
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,7 +24,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "==> Configuring Ultimate All-in-One AI Coding Agent Skill..."
+echo "==> Sowing Vivera: configuring the Ultimate All-in-One AI Coding Agent Skill..."
 echo "    Source: $MASTER_FILE"
 
 # 0. Prerequisites Check. Hard requirements: git and bun only. Everything else
@@ -213,4 +213,4 @@ else
   echo "[SKIP] Not a git checkout; skipping core.hooksPath (the hook is opt-in)."
 fi
 
-echo "==> Ultimate AI Coding Skill installation complete!"
+echo "==> Vivera farm planted: the Ultimate AI Coding Skill installation is complete!"

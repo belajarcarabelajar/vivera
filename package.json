@@ -1,12 +1,12 @@
 {
-  "name": "ai-skills",
+  "name": "vivera",
   "version": "1.0.0",
   "description": "Ultimate All-in-One AI Coding Agent Skill Pipeline",
   "type": "module",
   "author": "Iwan Kurniawan",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/belajarcarabelajar/ai-skills.git"
+    "url": "git+https://github.com/belajarcarabelajar/vivera.git"
   },
   "scripts": {
     "render-diagrams": "bash scripts/render-diagrams.sh",

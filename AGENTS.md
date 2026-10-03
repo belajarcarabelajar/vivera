@@ -1,8 +1,8 @@
+Note: the graphify rules below apply when the `graphify` CLI and `graphify-out/graph.json` exist (run `graphify update .` to build the graph; see install.sh to install the CLI). If they are absent, skip the graphify steps and use normal file reading.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-These rules apply when the `graphify` CLI and `graphify-out/graph.json` exist (run `graphify update .` to build the graph; see install.sh to install the CLI). If they are absent, skip the graphify steps and use normal file reading.
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 

@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,7 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const VAULT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 
-// The real registry names every project root by absolute path, so the two
+// The real registry names every project root by absolute path, so the
 // "real registry" tests below only have a subject where those roots exist. On a
 // clone elsewhere (a CI runner, a VPS) this checkout is not the ai-skills root
 // the config registers, and enumeratePlans() reads no plans at all: asserting
@@ -34,8 +34,22 @@ const VAULT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 // enumeration would pass vacuously. Both gates derive their answer from the
 // registry rather than a hardcoded host, so they run on the machine that owns
 // the checkouts and skip, with the reason, everywhere else.
-const selfProject = loadRegistry().projects.find((p) => path.resolve(p.root) === rootDir);
-const realPlans = enumeratePlans(loadRegistry());
+//
+// plans.publish.json itself is machine-local, gitignored config (see
+// .gitignore): it names this machine's vault and project checkouts, so a fresh
+// clone does not carry it and loadRegistry() would throw before a single test
+// ran. The module-level reads are therefore guarded on its existence, and every
+// test that needs the real registry skips with the reason instead.
+const REGISTRY_PATH = path.join(rootDir, 'plans.publish.json');
+const REGISTRY_PRESENT = existsSync(REGISTRY_PATH);
+const REGISTRY_SKIP =
+  'plans.publish.json is absent: it is gitignored, machine-local publish-routing config (see .gitignore) naming this machine\'s vault and project checkouts, so a fresh clone does not carry it; '
+  + 'copy plans.publish.example.json to plans.publish.json and register this checkout to run this test';
+const withRegistry = REGISTRY_PRESENT ? test : (name, fn) => test(name, { skip: REGISTRY_SKIP }, fn);
+const selfProject = REGISTRY_PRESENT
+  ? loadRegistry().projects.find((p) => path.resolve(p.root) === rootDir)
+  : undefined;
+const realPlans = REGISTRY_PRESENT ? enumeratePlans(loadRegistry()) : [];
 
 // Build a registry of the shape loadRegistry() returns, with every project root
 // under a fresh temp directory. `rootRel` is relative to that temp base, so
@@ -109,7 +123,7 @@ test('loadRegistry throws and names the path when the config file is absent', ()
   );
 });
 
-test('loadRegistry reads the repo config, whichever projects it lists today', () => {
+withRegistry('loadRegistry reads the repo config, whichever projects it lists today', () => {
   const r = loadRegistry();
   assert.equal(r.vault, VAULT);
   assert.equal(r.destDirTemplate, '01 - Projects/{project}/plans');
@@ -275,7 +289,7 @@ test('resolveProject throws naming the plan path when no project matches', () =>
 
 test(
   'resolveProject routes a real repo plan to the ai-skills project',
-  { skip: selfProject ? false : `${rootDir} is not a registered project root in plans.publish.json` },
+  { skip: !REGISTRY_PRESENT ? REGISTRY_SKIP : selfProject ? false : `${rootDir} is not a registered project root in plans.publish.json` },
   () => {
     const registry = loadRegistry();
     const p = resolveProject(registry, path.join(rootDir, 'docs', 'code-plan', 'plans', '2026-09-26-plan-publish-to-obsidian.md'));
@@ -308,7 +322,7 @@ test('resolveProject still prefers a longer registered root over a worktree clai
   cleanup(f);
 });
 
-test('resolveProject routes the real Snipset SEO worktree to Snipset, not to a second project', () => {
+withRegistry('resolveProject routes the real Snipset SEO worktree to Snipset, not to a second project', () => {
   const registry = loadRegistry();
   const wt = (registry.projects.find((p) => p.name === 'Snipset') ?? {}).worktrees;
   assert.ok(Array.isArray(wt) && wt.length > 0,
@@ -377,7 +391,7 @@ test('enumeratePlans never enumerates a worktree, so history is not mirrored twi
 
 test(
   'enumeratePlans over the real registry returns each plan once',
-  { skip: realPlans.length ? false : 'no registered project root holds a plans directory on this host' },
+  { skip: !REGISTRY_PRESENT ? REGISTRY_SKIP : realPlans.length ? false : 'no registered project root holds a plans directory on this host' },
   () => {
     const registry = loadRegistry();
     const found = enumeratePlans(registry);
@@ -400,7 +414,7 @@ test('destPathFor places a plan under 01 - Projects/Snipset/plans/ inside the va
   cleanup(f);
 });
 
-test('destPathFor keeps the space in the vault path intact', () => {
+withRegistry('destPathFor keeps the space in the vault path intact', () => {
   const registry = loadRegistry();
   const dest = destPathFor(registry, { name: 'ram-audit' }, '/home/testuser/ram-audit/docs/code-plan/plans/p.md');
   assert.equal(dest.includes('Obsidian Vault'), true);

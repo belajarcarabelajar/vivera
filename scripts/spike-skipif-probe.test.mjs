@@ -9,6 +9,26 @@ import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+// The cassette files are machine-local, untracked state: `spike-out/` holds the
+// corpus and the scored artefact the probe recorded on the machine that ran the
+// spike, and .gitignore keeps the directory out of the tree, so a fresh clone
+// carries neither file. The tests below that read them from disk would die
+// there with ENOENT, so each one gates on the file it actually reads and skips
+// with a reason that says what is missing and why. On a machine that HAS the
+// cassette nothing changes: every assertion still runs.
+const CORPUS_FILE = path.join(ROOT, 'spike-out', 'corpus.json');
+const SCORED_FILE = path.join(ROOT, 'spike-out', 'two-class.json');
+const corpusPresent = fs.existsSync(CORPUS_FILE);
+const scoredPresent = fs.existsSync(SCORED_FILE);
+const cassetteSkipReason = (missing) =>
+  `${missing} is absent: spike-out/ is gitignored, machine-local spike output (see .gitignore), so a fresh clone does not carry it; `
+  + 're-record the cassette with scripts/spike-skipif-corpus.mjs and scripts/spike-skipif-probe.mjs to run this test';
+const withCorpus = corpusPresent ? test : (name, fn) => test(name, { skip: cassetteSkipReason('spike-out/corpus.json') }, fn);
+const withCassette =
+  corpusPresent && scoredPresent
+    ? test
+    : (name, fn) => test(name, { skip: cassetteSkipReason('spike-out/corpus.json and spike-out/two-class.json') }, fn);
+
 test('summarize scores a corpus against the frozen classifier snapshot', () => {
   const corpus = [
     { id: 'a', cmd: 'bun test x.test.mjs', label: 'behavioural' },
@@ -107,17 +127,11 @@ test('verdictFor refuses to rule on a corpus too small to rule on', () => {
   assert.match(v.reason, /sample/i);
 });
 
-test('the probe replays the committed cassette and reproduces the committed scores', async () => {
+withCassette('the probe replays the committed cassette and reproduces the committed scores', async () => {
   // T4 Step 3. Replay must be byte-identical to record, otherwise the probe
   // has a determinism bug and its numbers mean nothing.
-  const scored = path.join(ROOT, 'spike-out', 'two-class.json');
-  if (!fs.existsSync(scored)) {
-    // Nothing recorded yet: the probe has not run. Skipping is honest; failing
-    // would break the suite before the first probe run.
-    return;
-  }
-  const saved = JSON.parse(fs.readFileSync(scored, 'utf8'));
-  const corpus = JSON.parse(fs.readFileSync(path.join(ROOT, 'spike-out', 'corpus.json'), 'utf8'));
+  const saved = JSON.parse(fs.readFileSync(SCORED_FILE, 'utf8'));
+  const corpus = JSON.parse(fs.readFileSync(CORPUS_FILE, 'utf8'));
   const replayed = await runReplay(corpus);
   // The written report spreads the summary at the top level rather than nesting
   // it, so both sides are read through the same accessor.
@@ -129,16 +143,14 @@ test('the probe replays the committed cassette and reproduces the committed scor
   assert.equal(replayed.summarize.verdict.verdict, saved.verdict.verdict);
 });
 
-test('every reference label agrees with the frozen classifier snapshot', () => {
-  const corpusFile = path.join(ROOT, 'spike-out', 'corpus.json');
-  if (!fs.existsSync(corpusFile)) return;
-  const corpus = JSON.parse(fs.readFileSync(corpusFile, 'utf8'));
+withCorpus('every reference label agrees with the frozen classifier snapshot', () => {
+  const corpus = JSON.parse(fs.readFileSync(CORPUS_FILE, 'utf8'));
   for (const row of corpus) {
     assert.equal(row.label, classifySpikeSkipIf(row.cmd), `stale label on ${row.cmd}`);
   }
 });
 
-test('a replay does not re-date the recording, because recordedAt means "when the calls were made"', async () => {
+withCorpus('a replay does not re-date the recording, because recordedAt means "when the calls were made"', async () => {
   // The defect this locks: the CLI wrote `recordedAt: new Date().toISOString()`
   // on every run, including replay. Replay re-derives every number in the file
   // from the cassette without making one request, so that line overwrote the
@@ -153,7 +165,7 @@ test('a replay does not re-date the recording, because recordedAt means "when th
   // invisible until the CLI was actually invoked.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jev-probe-replay-'));
   const target = path.join(tmp, 'two-class.json');
-  const corpus = JSON.parse(fs.readFileSync(path.join(ROOT, 'spike-out', 'corpus.json'), 'utf8'));
+  const corpus = JSON.parse(fs.readFileSync(CORPUS_FILE, 'utf8'));
 
   // Seed a target that claims a recording on a distinctive day.
   const seededAt = '2026-01-02T03:04:05.000Z';
@@ -161,7 +173,7 @@ test('a replay does not re-date the recording, because recordedAt means "when th
 
   const { execFileSync } = await import('node:child_process');
   const probeCli = path.join(ROOT, 'scripts', 'spike-skipif-probe.mjs');
-  execFileSync('bun', [probeCli, '--replay', '--corpus', path.join(ROOT, 'spike-out', 'corpus.json'), '--out', target], {
+  execFileSync('bun', [probeCli, '--replay', '--corpus', CORPUS_FILE, '--out', target], {
     encoding: 'utf8',
   });
 
@@ -179,7 +191,7 @@ test('a replay does not re-date the recording, because recordedAt means "when th
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-test('a replay that reproduces the file writes nothing, so verification does not dirty the tree', async () => {
+withCassette('a replay that reproduces the file writes nothing, so verification does not dirty the tree', async () => {
   // Why this exists: replay stamps its own `replayedAt`, so a replay that always
   // wrote left the committed evidence one second newer after every check. A
   // committed evidence file that diffs on each read teaches the next reader to
@@ -188,14 +200,13 @@ test('a replay that reproduces the file writes nothing, so verification does not
   // The property is stronger than "does not re-date" — it is "says nothing new,
   // says nothing at all". The write still happens when the re-derived numbers
   // differ, which is the seeded-fixture test above exercising.
-  const committed = path.join(ROOT, 'spike-out', 'two-class.json');
-  const before = fs.readFileSync(committed);
+  const before = fs.readFileSync(SCORED_FILE);
   const { execFileSync } = await import('node:child_process');
-  const out = execFileSync('bun', [path.join(ROOT, 'scripts', 'spike-skipif-probe.mjs'), '--replay', '--out', committed], {
+  const out = execFileSync('bun', [path.join(ROOT, 'scripts', 'spike-skipif-probe.mjs'), '--replay', '--out', SCORED_FILE], {
     encoding: 'utf8',
   });
   assert.match(out, /write\s+skipped/, 'a replay with nothing to add must not write');
-  assert.deepEqual(fs.readFileSync(committed), before, 'the committed evidence changed on a no-op replay');
+  assert.deepEqual(fs.readFileSync(SCORED_FILE), before, 'the committed evidence changed on a no-op replay');
 });
 
 async function runReplay(corpus) {

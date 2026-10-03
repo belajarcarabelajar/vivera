@@ -36,6 +36,28 @@ const EXPECTED_EVIDENCE_COMMAND_SOURCE =
 const EXPECTED_FILE_PROBE_SOURCE =
   '/(^|[\\s;&|(])(grep|egrep|rg|cat|head|tail|ls|find|wc|test)\\b/';
 
+// The cassette files are machine-local, untracked state. `spike-out/` holds the
+// corpus the spike harvested and the scored artefact the probe wrote, on the
+// machine that ran the spike, and .gitignore keeps the directory out of the
+// tree, so a fresh clone carries neither file. The three tests below read them
+// from disk and would die there with ENOENT, so each one gates on the file it
+// actually reads and skips with a reason that says what is missing and why.
+// On a machine that HAS the cassette nothing changes: every assertion still
+// runs.
+const CORPUS_FILE = 'spike-out/corpus.json';
+const SCORED_FILE = 'spike-out/two-class.json';
+const corpusPresent = fs.existsSync(SPIKE_CORPUS_PATH);
+const scoredPresent = fs.existsSync(SPIKE_SCORED_PATH);
+const cassetteSkipReason = (missing) =>
+  `${missing} is absent: spike-out/ is gitignored, machine-local spike output (see .gitignore), so a fresh clone does not carry it; `
+  + 're-record the cassette with scripts/spike-skipif-corpus.mjs and scripts/spike-skipif-probe.mjs to run this test';
+const withCorpus = corpusPresent ? test : (name, fn) => test(name, { skip: cassetteSkipReason(CORPUS_FILE) }, fn);
+const withScored = scoredPresent ? test : (name, fn) => test(name, { skip: cassetteSkipReason(SCORED_FILE) }, fn);
+const withCassette =
+  corpusPresent && scoredPresent
+    ? test
+    : (name, fn) => test(name, { skip: cassetteSkipReason(`${CORPUS_FILE} and ${SCORED_FILE}`) }, fn);
+
 test('a tool that must succeed first is behavioural', () => {
   // The rule as written: a tool invocation qualifies even when a grep filters
   // its output, because the tool has to pass before the grep is ever read.
@@ -77,7 +99,7 @@ test('the frozen regex sources are byte-identical to the literals they were copi
   );
 });
 
-test('the freeze is dated to the day the probe actually ran', () => {
+withScored('the freeze is dated to the day the probe actually ran', () => {
   assert.equal(SPIKE_CLASSIFIER_FROZEN_ON, '2026-09-30');
   // The date is not a claim, it is read back out of the recorded artefact. If
   // the cassette is ever re-recorded on another day, this fails and the freeze
@@ -87,7 +109,7 @@ test('the freeze is dated to the day the probe actually ran', () => {
   assert.equal(recordedDay, SPIKE_CLASSIFIER_FROZEN_ON, `two-class.json was recorded on ${recordedDay}, not ${SPIKE_CLASSIFIER_FROZEN_ON}`);
 });
 
-test('the frozen classifier reproduces the label of all 200 committed corpus rows', () => {
+withCorpus('the frozen classifier reproduces the label of all 200 committed corpus rows', () => {
   const corpus = JSON.parse(fs.readFileSync(SPIKE_CORPUS_PATH, 'utf8'));
   assert.equal(corpus.length, 200, 'the committed corpus is 200 rows; a different count means the file was regenerated');
 
@@ -103,7 +125,7 @@ test('the frozen classifier reproduces the label of all 200 committed corpus row
   );
 });
 
-test('the replayed probe still reproduces the committed agreement 0.995', async () => {
+withCassette('the replayed probe still reproduces the committed agreement 0.995', async () => {
   // Replay mode reads the cassette. No network, no API key.
   const { runProbe } = await import('./spike-skipif-probe.mjs');
   const corpus = JSON.parse(fs.readFileSync(SPIKE_CORPUS_PATH, 'utf8'));

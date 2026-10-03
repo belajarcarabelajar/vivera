@@ -727,6 +727,49 @@ test('--status exits 0 and reports a drifted mirror without failing', () => {
   cleanup(f);
 });
 
+// ---------- missing machine-local config ----------
+
+test('a missing plans.publish.json exits 1 and says how to create it', () => {
+  // plans.publish.json is machine-local state: gitignored, never committed, so
+  // a FRESH CLONE does not have it. The failure must say that and point at the
+  // tracked plans.publish.example.json template, not just name the absent file.
+  const f = fixture('missing-config');
+  rmSync(f.config);
+  assert.equal(existsSync(f.config), false, 'precondition: the config must be gone');
+
+  const r = run(['--status'], f);
+  assert.equal(r.code, 1, `a missing config must exit 1, got ${r.code}: ${r.stdout}${r.stderr}`);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.ok(out.includes(f.config), `the error must name the missing file:\n${out}`);
+  assert.match(out, /machine-local/, `the error must say the config is machine-local:\n${out}`);
+  assert.match(out, /untracked/, `the error must say the config is untracked:\n${out}`);
+  assert.ok(
+    out.includes('plans.publish.example.json'),
+    `the error must point at the tracked template to copy:\n${out}`,
+  );
+  cleanup(f);
+});
+
+test('the exported verdict reports a missing config as UNROUTABLE with the copy-the-template hint', () => {
+  // ultra-plan-runner gates on planFreshness, so on a fresh clone the mirror
+  // gate is the place a user actually meets this failure. The detail must carry
+  // the same guidance the CLI prints, not only "cannot load ...".
+  const f = fixture('missing-config-gate');
+  rmSync(f.config);
+  const plan = f.writePlan(PLAN, PLAN_BODY);
+
+  const v = cli.planFreshness(plan, { config: f.config });
+  assert.equal(v.state, 'UNROUTABLE', `got ${v.state}: ${v.detail}`);
+  assert.equal(v.applicable, true, 'a missing config must fail closed, not pass the gate');
+  assert.match(v.detail, /machine-local/, `the detail must say the config is machine-local:\n${v.detail}`);
+  assert.match(v.detail, /untracked/, `the detail must say the config is untracked:\n${v.detail}`);
+  assert.ok(
+    v.detail.includes('plans.publish.example.json'),
+    `the detail must point at the tracked template:\n${v.detail}`,
+  );
+  cleanup(f);
+});
+
 // ---------- usage ----------
 
 test('an unknown flag exits 2 and writes nothing', () => {

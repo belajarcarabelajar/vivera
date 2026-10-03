@@ -530,6 +530,15 @@ test('config round-trips and a missing file is an explicit error', () => {
     // A missing config is not an empty registry: syncing with no repository map
     // would refuse every plan, and the message must name the missing file.
     assert.throws(() => loadConfig(path.join(dir, 'nope.json')), /missing plan\/issue config/);
+    // plan.issues.json is machine-local state (gitignored, untracked), so a
+    // fresh clone legitimately lacks it: the error must tell the reader what to
+    // do, naming the tracked plan.issues.example.json template to copy.
+    assert.throws(
+      () => loadConfig(path.join(dir, 'nope.json')),
+      (e) => /machine-local/.test(e.message)
+        && /untracked/.test(e.message)
+        && e.message.includes('plan.issues.example.json'),
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

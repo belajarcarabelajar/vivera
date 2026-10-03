@@ -20,18 +20,31 @@ const CLI = path.join(ROOT, 'scripts', 'spike-alt-corpus.mjs');
 // empty harvest would pass vacuously. Both are wrong, so the tests that assert
 // on the real corpus skip with the reason instead of manufacturing confidence.
 //
+// plans.publish.json is itself machine-local, gitignored config (see
+// .gitignore): a fresh clone does not carry it, and `harvest()` would throw
+// `missing plan publish config` at module load before a single test ran. The
+// module-level harvest is therefore guarded on its existence, and the tests
+// that need the registry skip with a reason that says which case is which.
 // The recorded measurement is tied to two specific plans (the clipboard
 // profanity filter and the release-pinning follow-up), so `liveRecorded` is
 // narrower than `liveCorpus`: it runs only where both are actually harvested,
 // which is the premise the recorded numbers were produced under.
-const harvestedSets = harvest();
+const REGISTRY_PATH = process.env.PLAN_PUBLISH_CONFIG || path.join(ROOT, 'plans.publish.json');
+const REGISTRY_PRESENT = fs.existsSync(REGISTRY_PATH);
+const REGISTRY_ABSENT_SKIP =
+  'plans.publish.json is absent: it is gitignored, machine-local publish-routing config (see .gitignore) naming this machine\'s project checkouts, so a fresh clone does not carry it; '
+  + 'copy plans.publish.example.json to plans.publish.json and register this checkout to run this test';
+const NO_HARVEST_SKIP =
+  'plans.publish.json loaded, but none of the project roots it names is visible from this host (they are machine-local absolute paths), so harvest() found no plans to assert on';
+const liveSkip = REGISTRY_PRESENT ? NO_HARVEST_SKIP : REGISTRY_ABSENT_SKIP;
+const harvestedSets = REGISTRY_PRESENT ? harvest() : [];
 const hasRealCorpus = harvestedSets.length > 0;
 const hasRecordedCorpus =
   harvestedSets.length === 2 &&
   harvestedSets.some((s) => s.key === 'profanity') &&
   harvestedSets.some((s) => s.key === 'pinning');
-const liveCorpus = hasRealCorpus ? test : test.skip;
-const liveRecorded = hasRecordedCorpus ? test : test.skip;
+const liveCorpus = hasRealCorpus ? test : (name, fn) => test(name, { skip: liveSkip }, fn);
+const liveRecorded = hasRecordedCorpus ? test : (name, fn) => test(name, { skip: liveSkip }, fn);
 
 test('an alternative is found through every markdown wrapper a plan uses', () => {
   const md = [
@@ -145,26 +158,36 @@ test('cross-set pairs are never folded into the scored total', () => {
   assert.equal(bal.crossSet, 4);
 });
 
-test('the CLI exits non-zero and writes nothing on a degenerate corpus', () => {
-  // The refusal must be a refusal, not a warning. A balance check that only
-  // ever passes is not a check, and a file written on the degenerate branch is
-  // a file a later reader will score.
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'alt-corpus-'));
-  const out = path.join(tmp, 'alt-corpus.json');
-  let status = 0;
-  let stderr = '';
-  try {
-    execFileSync('bun', [CLI, '--out', out], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  } catch (e) {
-    status = e.status;
-    stderr = String(e.stderr ?? '');
-  }
-  assert.equal(status, 1, 'a degenerate corpus must exit 1');
-  assert.match(stderr, /E_PRECOND_IMBALANCE/);
-  assert.match(stderr, /near-duplicate 0/);
-  assert.equal(fs.existsSync(out), false, 'nothing may be written on the degenerate branch');
-  fs.rmSync(tmp, { recursive: true, force: true });
-});
+test(
+  'the CLI exits non-zero and writes nothing on a degenerate corpus',
+  {
+    // The CLI reads plans.publish.json (gitignored, machine-local config; see
+    // .gitignore) before it can reach the balance refusal, and without it dies
+    // on `missing plan publish config` with the wrong stderr. Skip with the
+    // reason; with the registry present the refusal path is exercised as is.
+    skip: REGISTRY_PRESENT ? false : REGISTRY_ABSENT_SKIP,
+  },
+  () => {
+    // The refusal must be a refusal, not a warning. A balance check that only
+    // ever passes is not a check, and a file written on the degenerate branch is
+    // a file a later reader will score.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'alt-corpus-'));
+    const out = path.join(tmp, 'alt-corpus.json');
+    let status = 0;
+    let stderr = '';
+    try {
+      execFileSync('bun', [CLI, '--out', out], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (e) {
+      status = e.status;
+      stderr = String(e.stderr ?? '');
+    }
+    assert.equal(status, 1, 'a degenerate corpus must exit 1');
+    assert.match(stderr, /E_PRECOND_IMBALANCE/);
+    assert.match(stderr, /near-duplicate 0/);
+    assert.equal(fs.existsSync(out), false, 'nothing may be written on the degenerate branch');
+    fs.rmSync(tmp, { recursive: true, force: true });
+  },
+);
 
 test('the balance check would exit zero on a populated corpus', () => {
   // The other direction, and the one that matters: a check that refuses

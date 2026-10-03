@@ -94,7 +94,21 @@ function firstLine(s) {
 
 export function loadConfig(configPath = DEFAULT_CONFIG) {
   if (!existsSync(configPath)) {
-    throw new Error(`missing plan/issue config: ${configPath}. Create it with at least {"version":1,"projects":{}} before syncing.`);
+    // A MISSING FILE IS THE FRESH-CLONE CASE, NOT A BROKEN MACHINE: this file
+    // is machine-local state (gitignored, so untracked), and the tracked
+    // plan.issues.example.json is the template a new machine copies. The
+    // original message stays the first line, so anything matching the old text
+    // still matches; the rest tells the reader what to do instead of only what
+    // is missing. The file is never created implicitly: a repository map is
+    // hand-edited state, and guessing one would file plans in the wrong repo.
+    const example = path.join(rootDir, 'plan.issues.example.json');
+    throw new Error(
+      `missing plan/issue config: ${configPath}. `
+      + `${path.basename(configPath)} is machine-local and untracked (gitignored), so a fresh clone does not have it. `
+      + `Copy the tracked template plan.issues.example.json over it (${example}) `
+      + 'and edit the copied projects to real owner/repo values '
+      + '(at minimum {"version":1,"projects":{}}) before syncing.',
+    );
   }
   let cfg;
   try {

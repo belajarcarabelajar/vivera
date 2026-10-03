@@ -66,7 +66,7 @@ import { extractAttachments } from './extract-attachments.mjs';
 import { fenceInline, inlineSpill } from './inline-spills.mjs';
 
 /** Stamped into the frontmatter so a note names the thing that produced it. */
-export const GENERATOR = 'ai-skills/render-session@1.0.0';
+export const GENERATOR = 'vivera/render-session@1.0.0';
 
 /** The section heading shape. `## [seq 0] user` — see `parseFrontmatter`. */
 export const SECTION_PREFIX = '## [seq ';

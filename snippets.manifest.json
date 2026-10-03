@@ -8,35 +8,35 @@
       "uuid": "87f42bad-9b3f-441e-ab97-632ceeba4728",
       "keyword": ";'",
       "name": "Implementation Plan",
-      "description": "Plan + TDD + WAJIB subagent fan-out (chunking, batch manifest, high fan-out floor, parent diff audit), debt sweep with learning harvest, graphify sync. Source: ai-skills/snippets/orkestrasi-ngoding-plan.md"
+      "description": "Plan + TDD + WAJIB subagent fan-out (chunking, batch manifest, high fan-out floor, parent diff audit), debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-ngoding-plan.md"
     },
     {
       "source": "snippets/orkestrasi-debugging.md",
       "uuid": "f8934c15-955a-4fd2-8ff7-8e3dc86dbcb9",
       "keyword": "';",
       "name": "Debug Agent Prompt",
-      "description": "RCA + WAJIB hypothesis-parallel subagent fan-out, learning harvest, graphify sync. Source: ai-skills/snippets/orkestrasi-debugging.md"
+      "description": "RCA + WAJIB hypothesis-parallel subagent fan-out, learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-debugging.md"
     },
     {
       "source": "snippets/orkestrasi-pr.md",
       "uuid": "e9b1be28-b4b0-4de4-98a3-3296ec0489c1",
       "keyword": ";;'",
       "name": "PR Delivery and Batch Merge",
-      "description": "Isolated worktree + branch, one PR per session, derived naming via pr-registry, topological batch merge with per-merge rebase and local verification, debt sweep with learning harvest, graphify sync. Source: ai-skills/snippets/orkestrasi-pr.md"
+      "description": "Isolated worktree + branch, one PR per session, derived naming via pr-registry, topological batch merge with per-merge rebase and local verification, debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-pr.md"
     },
     {
       "source": "snippets/orkestrasi-pr-review.md",
       "uuid": "70fe751b-7e98-4b9d-bedc-0271363cc958",
       "keyword": "prr",
       "name": "PR Review Standalone",
-      "description": "Review-only by default; merges to main only when pre-authorized and every safe gate passes (correct verdict, green checks, mergeable), graphify sync. Source: ai-skills/snippets/orkestrasi-pr-review.md"
+      "description": "Review-only by default; merges to main only when pre-authorized and every safe gate passes (correct verdict, green checks, mergeable), graphify sync. Source: vivera/snippets/orkestrasi-pr-review.md"
     },
     {
       "source": "snippets/orkestrasi-brainstorm.md",
       "uuid": "75eb7664-f22c-46d4-a834-edf5fb7ae7cb",
       "keyword": "brn",
       "name": "Brainstorm Intent Lock",
-      "description": "Grill-until-locked brainstorm BEFORE any plan: grounds in repo, asks via question tool, locks tasks A/B/C/D into approved intent, graphify sync. Source: ai-skills/snippets/orkestrasi-brainstorm.md"
+      "description": "Grill-until-locked brainstorm BEFORE any plan: grounds in repo, asks via question tool, locks tasks A/B/C/D into approved intent, graphify sync. Source: vivera/snippets/orkestrasi-brainstorm.md"
     }
   ]
 }

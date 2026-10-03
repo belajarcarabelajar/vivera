@@ -1,5 +1,7 @@
 Note: the graphify rules below apply when the `graphify` CLI and `graphify-out/graph.json` exist (run `graphify update .` to build the graph; see install.sh to install the CLI). If they are absent, skip the graphify steps and use normal file reading.
 
+Vivera is the name of this repository (the farm). Documents and tool output may use Harvest Moon: Back to Nature flavored terms: the shipping bin (PR registry), Harvest Sprites (subagents), the Blue Feather (a pull request), and Power Berries (permanent capability upgrades). The mapping lives in docs/vivera-glossary.md; commands and paths keep their literal meaning.
+
 ## graphify
 
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.

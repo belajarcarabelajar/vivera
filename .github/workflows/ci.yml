@@ -3,7 +3,7 @@ name: CI Validation
 # ---------------------------------------------------------------------------
 # DO NOT ADD AN AUTOMATIC TRIGGER TO THIS FILE.
 #
-# By explicit user policy (2026-09-28): as long as the ai-skills pipeline is
+# By explicit user policy (2026-09-28): as long as the vivera pipeline is
 # the execution path for this repository, this workflow must not run on push or
 # on pull request. GitHub Actions minutes on the free tier are the scarce
 # resource here, and an automatic `push` trigger spends them on every commit

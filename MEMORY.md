@@ -7,7 +7,7 @@
 
 ---
 
-## Task Group: ai-skills repo (super-ultra-code-plan skill maintenance)
+## Task Group: vivera repo (super-ultra-code-plan skill maintenance)
 
 | # | Rule (`WHEN <situation> → DO <action>, NOT <anti-pattern>`) | Origin session |
 |---|---|---|

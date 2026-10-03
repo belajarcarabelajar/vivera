@@ -1,6 +1,6 @@
 ---
 name: deep-research-worked-example
-description: Worked example demonstrating the deep-research-report-template structure on a topic relevant to the ai-skills repo.
+description: Worked example demonstrating the deep-research-report-template structure on a topic relevant to the vivera repo.
 triggers:
   - example deep research
   - worked example research report
@@ -22,7 +22,7 @@ Compaction is the act of summarizing or evicting content from the short-term lay
 
 Summarization is the simplest to implement but suffers from compounding error. Each successive summary loses more nuance than the last, and after three or four compaction cycles the original intent is often irretrievable. Sliding window with retrieval is more robust because the originals remain available, but it places hard requirements on the retrieval index and on the agent's ability to formulate good queries against past turns. Structured distillation is the most reliable but requires deliberate scaffolding — the agent must know which facts matter enough to slot before the window evicts them.
 
-The ai-skills repository's routing rules favor sliding window with retrieval through the context-mode MCP, which provides a BM25-over-FTS5 index of past session events[5]. The choice is appropriate for the project's emphasis on recall over paraphrase.
+The vivera repository's routing rules favor sliding window with retrieval through the context-mode MCP, which provides a BM25-over-FTS5 index of past session events[5]. The choice is appropriate for the project's emphasis on recall over paraphrase.
 
 ## Mid-Term Episodic Capture
 

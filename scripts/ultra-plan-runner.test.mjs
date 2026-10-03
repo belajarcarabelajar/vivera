@@ -1074,21 +1074,33 @@ test('an idempotency_key may name a behaviour rather than a path', () => {
   assert.deepEqual(errors, []);
 });
 
-test('every plan in docs/code-plan/plans still validates', () => {
-  // The regression this locks. A check added to the runner is a check every
-  // existing plan must survive; four of them failed it on the first run, which
-  // is exactly the shape of breakage a unit test on the new check alone misses.
-  const dir = path.join(ROOT, 'docs', 'code-plan', 'plans');
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
-  assert.ok(files.length > 0, 'no plans found to check');
-  const broken = [];
-  for (const f of files) {
-    const { frontmatter } = extractFrontmatter(fs.readFileSync(path.join(dir, f), 'utf8'));
-    const { errors } = validatePlan(parseUltraPlanYaml(frontmatter), null);
-    if (errors.length) broken.push(`${f}: ${errors.join('; ')}`);
-  }
-  assert.deepEqual(broken, []);
-});
+test(
+  'every plan in docs/code-plan/plans still validates',
+  {
+    // docs/code-plan/ is machine-local, gitignored plan storage (see
+    // .gitignore): the plans live in the checkout that wrote them and a fresh
+    // clone carries none, where readdirSync would throw ENOENT. Skip with the
+    // reason instead; on a checkout that HAS the plans every assertion runs.
+    skip: existsSync(path.join(ROOT, 'docs', 'code-plan', 'plans'))
+      ? false
+      : 'docs/code-plan/plans is absent: docs/code-plan/ is gitignored, machine-local plan storage (see .gitignore), so a fresh clone does not carry the plans this test validates',
+  },
+  () => {
+    // The regression this locks. A check added to the runner is a check every
+    // existing plan must survive; four of them failed it on the first run, which
+    // is exactly the shape of breakage a unit test on the new check alone misses.
+    const dir = path.join(ROOT, 'docs', 'code-plan', 'plans');
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
+    assert.ok(files.length > 0, 'no plans found to check');
+    const broken = [];
+    for (const f of files) {
+      const { frontmatter } = extractFrontmatter(fs.readFileSync(path.join(dir, f), 'utf8'));
+      const { errors } = validatePlan(parseUltraPlanYaml(frontmatter), null);
+      if (errors.length) broken.push(`${f}: ${errors.join('; ')}`);
+    }
+    assert.deepEqual(broken, []);
+  },
+);
 
 test('a loose skip_if is a hard error once the allowlist exists', () => {
   const plan = {

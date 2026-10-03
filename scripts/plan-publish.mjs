@@ -118,6 +118,29 @@ function hashOf(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12);
 }
 
+// A MISSING CONFIG IS THE FRESH-CLONE CASE, NOT A BROKEN MACHINE
+//
+// plans.publish.json is machine-local state: it is gitignored, so it is
+// untracked, so a fresh clone legitimately does not have it. The registry
+// module's error names the absent file but cannot say any of that, so the CLI
+// extends the message here, at the two places it surfaces (main, and
+// planFreshness, whose detail the runner's mirror gate prints). The original
+// message stays the FIRST line, so anything matching the old text still
+// matches, and the guidance is appended only when the file is actually absent:
+// on a machine that has the file, every parse or validation failure reads
+// byte-identically to before.
+function configLoadMessage(configPath, message) {
+  if (existsSync(configPath)) return message;
+  const example = path.join(rootDir, 'plans.publish.example.json');
+  return [
+    message,
+    '',
+    `${path.basename(configPath)} is machine-local and untracked (gitignored), so a fresh clone does not have it.`,
+    'Copy the tracked template plans.publish.example.json over it and edit it for this machine:',
+    `  cp ${example} ${configPath}`,
+  ].join('\n');
+}
+
 // FRESHNESS HAS TWO KEYS, NOT ONE
 //
 // `source_hash` alone is not enough, and that was observed rather than reasoned
@@ -490,7 +513,7 @@ export function planFreshness(rawPlanPath, opts = {}) {
     return {
       applicable: true,
       state: 'UNROUTABLE',
-      detail: `cannot load plan publish config: ${e.message}`,
+      detail: `cannot load plan publish config: ${configLoadMessage(configPath, e.message)}`,
       dest: null,
       label: path.basename(absolute(rawPlanPath)),
     };
@@ -680,7 +703,7 @@ function main(argv) {
     try {
       registry = loadRegistry(configPath);
     } catch (e) {
-      console.error(`❌ ${e.message}`);
+      console.error(`❌ ${configLoadMessage(configPath, e.message)}`);
       process.exit(1);
     }
 

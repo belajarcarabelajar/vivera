@@ -455,10 +455,10 @@ test(
 
 // ---------- live: the real repo's adapted plugin ----------
 
-// The live check targets the machine's real ai-skills checkout, not the copy of
+// The live check targets the machine's real vivera checkout, not the copy of
 // the repo this file runs from; $AI_SKILLS_ROOT names it explicitly for
-// non-default layouts, and $HOME/ai-skills is the documented location.
-const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'ai-skills');
+// non-default layouts, and $HOME/vivera is the documented location.
+const AI_SKILLS = process.env.AI_SKILLS_ROOT ?? join(homedir(), 'vivera');
 const live = existsSync(AI_SKILLS) && installedPresent ? test : test.skip;
 
 live('the plugin is V2 on both sides, and the installer says why', () => {

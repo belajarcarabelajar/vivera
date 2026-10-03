@@ -7,7 +7,7 @@
 //
 // Every fixture here is built inline (temp dirs or plain objects) on purpose:
 // the tests must not depend on whether the real Snipset / ram-audit /
-// ai-skills checkouts happen to exist on the machine running them.
+// vivera checkouts happen to exist on the machine running them.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +28,7 @@ const VAULT = path.join(homedir(), 'Dokumen/Obsidian Vault');
 
 // The real registry names every project root by absolute path, so the
 // "real registry" tests below only have a subject where those roots exist. On a
-// clone elsewhere (a CI runner, a VPS) this checkout is not the ai-skills root
+// clone elsewhere (a CI runner, a VPS) this checkout is not the vivera root
 // the config registers, and enumeratePlans() reads no plans at all: asserting
 // then would report the checkout's location as a routing bug, while an empty
 // enumeration would pass vacuously. Both gates derive their answer from the
@@ -288,12 +288,12 @@ test('resolveProject throws naming the plan path when no project matches', () =>
 });
 
 test(
-  'resolveProject routes a real repo plan to the ai-skills project',
+  'resolveProject routes a real repo plan to the vivera project',
   { skip: !REGISTRY_PRESENT ? REGISTRY_SKIP : selfProject ? false : `${rootDir} is not a registered project root in plans.publish.json` },
   () => {
     const registry = loadRegistry();
     const p = resolveProject(registry, path.join(rootDir, 'docs', 'code-plan', 'plans', '2026-09-26-plan-publish-to-obsidian.md'));
-    assert.equal(p.name, 'ai-skills');
+    assert.equal(p.name, 'vivera');
   },
 );
 

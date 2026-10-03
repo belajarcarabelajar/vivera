@@ -10,7 +10,7 @@
 - **Subagent Role:** Note Reader — concept and rationale extraction
 - **Parent Goal:** `docs/code-plan/plans/2026-10-02-subagent-driven-vault-index.md`
 - **Delegation Mode:** `isolated-files` — your chunk file is yours alone
-- **Working directory:** `~/ai-skills`
+- **Working directory:** `~/vivera`
 - **Vault root (transcripts):** `~/Documents/conversations-archive`
 - **Vault root (plans, wiki, notes):** `~/Dokumen/Obsidian Vault`
 
@@ -173,7 +173,7 @@ misses. Use the script — it matches on substring and prints which chunk
 emitted each id:
 
 ```bash
-cd ~/ai-skills
+cd ~/vivera
 bun scripts/vault-index-ids.mjs tgrep          # by subject or slug fragment
 bun scripts/vault-index-ids.mjs                # list every id
 bun scripts/vault-index-ids.mjs --owner=concept--exact-id
@@ -262,7 +262,7 @@ evidence rather than treated as a second opinion.
 
 ## 6. Verification — run this yourself before reporting
 
-From `~/ai-skills`:
+From `~/vivera`:
 
 ```bash
 ./scripts/verify-chunk.sh <NNN>

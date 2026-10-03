@@ -3,14 +3,14 @@
 // Does a repo's `## graphify` section still say what the INSTALLED graphify says?
 //
 // This exists because of a specific, measured falsehood. Two repos on this
-// machine — ai-skills and the Obsidian vault — carry an always-on block that
+// machine — vivera and the Obsidian vault — carry an always-on block that
 // opens with:
 //
 //     No knowledge graph has been built in this directory yet: `graphify-out/`
 //     does not exist. The graph is built on demand, so never assume one is
 //     present — check `test -f graphify-out/graph.json` before relying on it.
 //
-// Both of those repos DO have a graph: 644 KB in ai-skills (with
+// Both of those repos DO have a graph: 644 KB in vivera (with
 // `built_at_commit` equal to HEAD) and 5.7 MB in the vault. The sentence is
 // stale text from an older graphify release that no reinstall removed, and the
 // installed 0.9.73 ships wording which correctly says the project HAS a graph.
@@ -181,7 +181,7 @@ export function normalise(text) {
  *     pre-#1688 install can leave more than one behind.
  *   - Walk forward for the first line that `startsWith('## ')` on the RAW line.
  *     That index is the exclusive end. If none exists the section runs to EOF,
- *     which is the ai-skills layout and the vault's (its `## graphify` is the last
+ *     which is the vivera layout and the vault's (its `## graphify` is the last
  *     H2 of 125 lines, at 111).
  *
  * Trailing blank lines inside the span are dropped so the result compares equal

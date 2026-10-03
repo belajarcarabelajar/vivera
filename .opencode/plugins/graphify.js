@@ -38,7 +38,7 @@ export default {
       if (!input || typeof input.command !== "string") return;
 
       // A differently-id'd copy of this plugin (e.g. ~/.opencode/plugins and
-      // ~/ai-skills/.opencode/plugins) may already have injected the reminder.
+      // ~/vivera/.opencode/plugins) may already have injected the reminder.
       // Reuse its marker so only one echo is prepended per session.
       if (input.command.includes("[graphify]")) {
         reminded = true;

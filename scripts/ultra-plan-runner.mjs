@@ -43,6 +43,7 @@ export const RUNNER_CONTRACT_KEYS = [
   'schema', 'plan_id', 'status', 'runner_contract',
   'defaults.retry_transient_max', 'defaults.step_timeout_s', 'defaults.on_precondition_fail',
   'defaults.allow_loose_skip_if', 'defaults.require_impacts', 'defaults.allow_no_impacts',
+  'defaults.retry_if',
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
   'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
@@ -906,6 +907,34 @@ const EXIT_CLASSES = {
   143: { klass: 'terminated', transient: false, basis: 'exit 143 (SIGTERM)' },
 };
 
+// `defaults.retry_if` decides whether a step's `retry` budget is spent on a
+// failure the classification calls DETERMINISTIC.
+//
+// WHY THIS IS OPT-IN, and why the default is the older behaviour.
+//
+// The runner already skips a retry when the exit code proves one cannot help
+// (`transient === false`: 127, 126, 130, 143). That was a safe improvement
+// because it only ever removed attempts that were provably wasted. Making the
+// STRICT policy the default is a different kind of change: `transient:
+// 'unknown'` covers the ordinary exit 1, which is both a deterministic assertion
+// failure and a flaky test. Defaulting to "do not retry unknown" would stop
+// retrying flaky tests for every plan in the registry, including plans belonging
+// to repositories this one does not own. So the strict policy is opt-in, and a
+// plan asks for it by name.
+//
+// The value is validated rather than defaulted silently, for the same reason
+// `on_precondition_fail` throws on an unrecognised value: a typo must not
+// quietly grant the weaker semantics.
+const RETRY_IF_VALUES = ['any', 'transient'];
+
+export function validateRetryIf(value) {
+  if (value === undefined) return 'any';
+  if (!RETRY_IF_VALUES.includes(value)) {
+    throw new Error(`defaults.retry_if must be one of ${RETRY_IF_VALUES.map((v) => `"${v}"`).join(' or ')}, got ${JSON.stringify(value)}`);
+  }
+  return value;
+}
+
 export function classifyFailure({ exit, timedOut = false }) {
   if (timedOut) return { klass: 'timeout', transient: true, basis: 'ETIMEDOUT from spawnSync' };
   const known = EXIT_CLASSES[exit];
@@ -975,6 +1004,8 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
   if (!['stop-task-continue-independent', 'halt-plan'].includes(onPreconditionFail)) {
     throw new Error(`defaults.on_precondition_fail must be "stop-task-continue-independent" or "halt-plan", got ${JSON.stringify(onPreconditionFail)}`);
   }
+  // Throws on an unrecognised value, for the same reason the line above does.
+  const retryIf = validateRetryIf(plan.defaults?.retry_if);
 
   const status = new Map();
   const ledger = [];
@@ -1045,8 +1076,20 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
         // old behaviour, because a flaky test and a real failure share exit 1
         // and guessing either way would be wrong.
         const cls = classifyFailure(r);
-        if (cls.transient === false) {
-          skippedRetry = `retry skipped: ${cls.basis}, and a re-run cannot change it`;
+        // Two distinct reasons to stop spending the retry budget. The first is a
+        // fact about the failure: the exit code proves a re-run cannot help, and
+        // that has been unconditional since it was added, because it only ever
+        // removes a provably wasted attempt. The second is a POLICY: a plan that
+        // declares `retry_if: transient` spends the budget only on a failure the
+        // classification actually calls transient, which means `unknown` (the
+        // ordinary exit 1, where a flaky test and a real failure look identical)
+        // is no longer retried either.
+        const deterministic = cls.transient === false;
+        const strictUnknown = retryIf === 'transient' && cls.transient !== true;
+        if (deterministic || strictUnknown) {
+          skippedRetry = deterministic
+            ? `retry skipped: ${cls.basis}, and a re-run cannot change it`
+            : `retry skipped under retry_if: transient (${cls.basis})`;
           log(`      (${skippedRetry})`);
           break;
         }

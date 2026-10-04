@@ -145,9 +145,40 @@ export function loadRegistry(registryPath = DEFAULT_REGISTRY) {
   return registry;
 }
 
-export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY) {
+export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY, { expectedRaw = null } = {}) {
   assertNoCollisions(registry.sessions, registryPath);
   mkdirSync(path.dirname(path.resolve(registryPath)), { recursive: true });
+  // Compare-and-swap, when the caller says what it read.
+  //
+  // Atomicity is not mutual exclusion, and this comment is the second time it has
+  // to be said: `writeFileAtomic` makes each write INDIVISIBLE in its parts, and
+  // two writers can still interleave, so the later rename silently discards the
+  // earlier one. For the shipping bin that means a session's claim vanishes while
+  // its branch and worktree remain on disk, and the next claim reuses them. That
+  // is the failure `assertNoCollisions` is meant to catch, arriving too late to
+  // catch it.
+  //
+  // The check is compare-and-swap on the exact bytes the caller read. There is no
+  // lock file, deliberately: a lock needs a stale-lock policy, and a stale lock
+  // needs a decision about what a crashed holder does to the next one. Those are
+  // their own failure modes, and importing them here would trade a silent lost
+  // write for a refused legitimate claim.
+  //
+  // The residual window is stated rather than hidden: between the re-read below
+  // and the rename, another process could still write. That window is one
+  // function call wide instead of the whole session, and `mutateRegistry` closes
+  // it by re-reading and RE-APPLYING, which is why that wrapper exists.
+  if (expectedRaw !== null) {
+    const current = existsSync(registryPath) ? readFileSync(registryPath, 'utf8') : null;
+    if (current !== expectedRaw) {
+      const err = new Error(
+        `PR registry ${registryPath} changed since it was read; refusing to overwrite another writer's work. `
+        + 'Re-run the command, it re-reads and re-applies.',
+      );
+      err.code = 'EREGISTRYCONFLICT';
+      throw err;
+    }
+  }
   // Atomic, with one generation of backup. The registry is the shipping bin: it
   // decides which session owns which branch and worktree, and it is gitignored,
   // so a truncated write is unrecoverable from git. `keepBackup` leaves the
@@ -155,6 +186,57 @@ export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY) {
   // moment right after a bad write. See scripts/lib/atomic-write.mjs.
   writeFileAtomic(registryPath, `${JSON.stringify(registry, null, 2)}\n`, { keepBackup: true });
   return registryPath;
+}
+
+// The exact bytes `loadRegistry` read, or null when the file did not exist.
+//
+// Returned separately because the parsed object cannot answer "did the file
+// change": re-serialising it produces different whitespace and key order from
+// whatever is on disk, so comparing re-serialised forms would report a conflict
+// every time. The comparison has to be on the raw text.
+export function readRegistryRaw(registryPath = DEFAULT_REGISTRY) {
+  return existsSync(registryPath) ? readFileSync(registryPath, 'utf8') : null;
+}
+
+/**
+ * Apply a mutation to the registry with compare-and-swap, re-reading and
+ * re-applying if another writer got there first.
+ *
+ * `mutate` must be a pure function of the registry, because it WILL be called
+ * again on a fresh read when a conflict happens. A mutation that closes over
+ * state from its first call produces a different result the second time, which
+ * is a bug this wrapper cannot detect.
+ *
+ * Returns `{ result, registry, attempts }`.
+ */
+export function mutateRegistry(mutate, { registryPath = DEFAULT_REGISTRY, retries = 3 } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    const raw = readRegistryRaw(registryPath);
+    const registry = loadRegistry(registryPath);
+    const result = mutate(registry);
+    // `mutate` may return the registry itself, or an object that carries one
+    // alongside whatever else the caller wants (`claimSlot` returns
+    // `{session, created, registry}`). Detecting that by testing for a `sessions`
+    // array is deliberate: an earlier version used `result.registry ?? registry`,
+    // which SILENTLY discarded the mutation whenever the caller returned a bare
+    // registry, writing back the unmodified load instead. Every test still passed,
+    // because the tests went through the CLI path that returns the wrapper.
+    const candidate = (result && typeof result === 'object' && Array.isArray(result.sessions))
+      ? result
+      : (result?.registry ?? registry);
+    try {
+      saveRegistry(candidate, registryPath, { expectedRaw: raw });
+      return { result, registry, attempts: attempt };
+    } catch (e) {
+      if (e.code !== 'EREGISTRYCONFLICT') throw e;
+      lastError = e;
+    }
+  }
+  throw new Error(
+    `PR registry ${registryPath} was written by another process ${retries + 1} times in a row. `
+    + `Last conflict: ${lastError?.message ?? 'unknown'}`,
+  );
 }
 
 // The three collisions named in the header comment, asserted on every load and
@@ -192,7 +274,14 @@ export function claimSlot(registry, { plan, session, repoRoot, dependsOn = [] })
     // Re-claiming the same session id is idempotent rather than an error: a
     // retried claim after a crashed session must not need a manual edit, and
     // the derived names are a pure function of the inputs so they cannot drift.
-    return { session: existing, created: false };
+    //
+    // `registry` is returned here too, unchanged, because it is returned in the
+    // create path. The asymmetry was real and it bit a caller: `claimSlot(...).registry`
+    // was `undefined` on exactly the path a crashed-session retry takes, and the
+    // CAS wrapper then wrote back the registry it had loaded rather than the
+    // mutation's own value. The mutation contract has to be the same on both
+    // paths, or a caller cannot rely on it.
+    return { session: existing, created: false, registry };
   }
 
   const known = new Set(registry.sessions.map((s) => s.session));
@@ -404,14 +493,18 @@ function main(argv) {
     if (command === 'claim') {
       if (!flags.plan || !flags.session) usage('claim needs --plan and --session');
       const repoRoot = flags.repo || process.cwd();
-      const registry = loadRegistry(registryPath);
-      const { session, created, registry: next } = claimSlot(registry, {
+      // Through `mutateRegistry`, so two sessions claiming at the same moment
+      // cannot both read the same bytes and have the second rename silently
+      // discard the first claim. The mutation is pure, so re-applying it on a
+      // fresh read produces the same slot, and `claimSlot` is idempotent for the
+      // same session id anyway.
+      const { result } = mutateRegistry((registry) => claimSlot(registry, {
         plan: flags.plan,
         session: flags.session,
         repoRoot,
         dependsOn: flags['depends-on'] ? flags['depends-on'].split(',').map((d) => d.trim()).filter(Boolean) : [],
-      });
-      if (created) saveRegistry(next, registryPath);
+      }), { registryPath });
+      const { session, created } = result;
       console.log(`${created ? '✅ claimed' : '♻️  already claimed'}: ${session.session}`);
       printSession(session);
       if (created) {
@@ -426,18 +519,22 @@ function main(argv) {
 
     if (command === 'pr') {
       if (!positional[0] || !flags.number) usage('pr needs <session> --number <N>');
-      const { registry, session } = setPr(loadRegistry(registryPath), positional[0], Number(flags.number));
-      saveRegistry(registry, registryPath);
-      console.log(`✅ recorded PR #${session.pr} for ${session.session}`);
-      printSession(session);
+      const { result } = mutateRegistry(
+        (registry) => setPr(registry, positional[0], Number(flags.number)),
+        { registryPath },
+      );
+      console.log(`✅ recorded PR #${result.session.pr} for ${result.session.session}`);
+      printSession(result.session);
       return 0;
     }
 
     if (command === 'state') {
       if (!positional[0] || !positional[1]) usage(`state needs <session> <${SESSION_STATES.join('|')}>`);
-      const { registry, session } = setState(loadRegistry(registryPath), positional[0], positional[1]);
-      saveRegistry(registry, registryPath);
-      console.log(`✅ ${session.session} -> ${session.state}`);
+      const { result } = mutateRegistry(
+        (registry) => setState(registry, positional[0], positional[1]),
+        { registryPath },
+      );
+      console.log(`✅ ${result.session.session} -> ${result.session.state}`);
       return 0;
     }
 

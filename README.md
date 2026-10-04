@@ -892,6 +892,71 @@ A line that states the rule is exempt from it, with a two-line lookback so a
 wrapped markdown checklist item can quote the trigger phrase it forbids. The
 window is bounded: a violation four lines below a rule statement is still caught.
 
+### Strict retries: `retry_if`
+
+```yaml
+defaults:
+  retry_if: any        # any (default) | transient
+```
+
+| Value | A retry is spent on |
+|---|---|
+| `any` | Anything except a failure the exit code proves cannot change: 127, 126, 130, 143 |
+| `transient` | Only `transient: true`, which in practice means a timeout |
+
+**The strict policy is opt-in because `transient: 'unknown'` is the ordinary exit
+1**, where a deterministic assertion failure and a flaky test are indistinguishable
+from an exit code. Defaulting to the strict policy would stop retrying flaky tests
+in every existing plan, including plans belonging to repositories this one does
+not own. An unrecognised value throws rather than defaulting, the same as
+`on_precondition_fail`.
+
+### Mutual exclusion for the PR registry
+
+`pr.registry.json` decides which session owns which branch and worktree, and it is
+gitignored, so a lost write cannot be recovered. Atomic writes make each write
+indivisible; they do not stop two writers from interleaving, where the second
+rename silently discards the first.
+
+`saveRegistry` therefore takes `expectedRaw`: the exact bytes the caller read. If
+the file changed since, it refuses. There is **no lock file**, deliberately: a lock
+needs a stale-lock policy, and a stale lock needs a decision about what a crashed
+holder does to the next one. Compare and swap needs neither, because the state it
+reads *is* the state.
+
+```js
+mutateRegistry((registry) => claimSlot(registry, { ... }).registry, { registryPath })
+```
+
+`mutate` must be pure, because it is re-applied on a fresh read when a conflict
+happens. After four conflicts it fails loudly rather than spinning.
+
+The residual window is stated, not hidden: between the re-read and the rename,
+another process could still write. That window is one call wide instead of a whole
+session, and `mutateRegistry` closes it by re-reading and re-applying.
+
+### Backfilling `impacts` into plans that predate it
+
+```bash
+bun scripts/backfill-plan-impacts.mjs --dry-run   # report only
+bun scripts/backfill-plan-impacts.mjs             # rewrite in place
+```
+
+Twelve plans held 108 tasks written before the key existed, each emitting a
+validation warning. Hand-writing 108 impact claims would be writing 108 analyses,
+and an analysis nobody performed is a fabrication wearing the costume of a record.
+Every entry is instead **derived** from what each task already declared in its own
+`files`, plus the consumers of those files in the current tree, plus the command
+that shows them.
+
+The first version of this script reported a file as having no consumer because its
+regex stripped `.mjs` off the stem and then required the closing quote immediately,
+so `from './plan-publish-frontmatter.mjs'` never matched. **83 of 127 tasks came
+back as the "checked, nothing found" sentinel**, and every plan still validated,
+because a sentinel is a legal entry. That is the failure the key exists to
+prevent, reproduced inside the tool that fills it in. After the fix: 88 derived
+entries, 39 sentinels, and a test that re-scans every claimed consumer count.
+
 ### All five share the subagent and evidence rules
 
 All five carry the same subagent and evidence rules, because the most common failure is an agent

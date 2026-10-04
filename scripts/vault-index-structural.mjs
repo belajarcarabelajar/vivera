@@ -634,13 +634,74 @@ export function parseFrontmatter(text) {
   return out;
 }
 
+// The closing fence of a frontmatter block: `---`, optional spaces or tabs, then
+// end-of-line. Sticky (`y`), so it must match exactly at `lastIndex` and nowhere
+// else — which is what lets the caller walk line starts by hand instead of asking
+// the engine to.
+//
+// It carries no `m` flag, and that is not an oversight. With `m`, `$` would also
+// match before a `\n`; without it, `$` matches only at end of input. The two agree
+// here because the alternation tries `\r?\n` FIRST, and it succeeds for every
+// line that has a newline after the dashes — which is every line except the last.
+// On the last line there is no newline, so both forms fall through to `$` and both
+// mean "end of input". Same match, same length, on every input.
+//
+// WHY THIS IS NOT `/^([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m`, which is what it replaced.
+//
+// That pattern opens with an UNBOUNDED LAZY PREFIX. `[\s\S]*?` matches the empty
+// string at every line start, so the engine has to retry it from each one, and it
+// cannot use its literal-prefix search because there is no literal to search for.
+// The cost is quadratic in the size of the text, and it is paid on exactly the
+// input this repository handles most: an exported session transcript, where the
+// note is large and the frontmatter is unterminated or absent after the opening
+// fence.
+//
+// Measured on a 200KB / 400KB / 800KB body with no closing fence:
+//
+//   old  123 ms  →  482 ms  →  1883 ms      (~4x per doubling: quadratic)
+//   new  ~0.2 ms at every size               (linear, single pass)
+//
+// At 1.5MB the old form took 7.7 s and at 3.1MB it took 29.9 s, inside a loop that
+// runs this once per vault file.
+//
+// Two sibling regexes were measured and deliberately left alone, because the same
+// shape is not automatically the same problem: `redact.mjs`'s PEM pattern and
+// `ultra-plan-runner.mjs`'s mermaid-fence matcher also contain a lazy `[\s\S]*?`,
+// but both open with a LITERAL (`-----BEGIN `, '```mermaid'), so the engine's
+// prefix search skips straight to the candidate and they run in ~0.1 ms on an
+// 800KB input. The distinguishing property is not "lazy quantifier" but "no literal
+// prefix for the engine to jump to". Re-measure before changing either.
+const FRONTMATTER_CLOSER = /---[ \t]*(?:\r?\n|$)/y;
+
+/**
+ * Find the closing frontmatter fence, returning its start and the offset just past
+ * it, or null when the block is unterminated.
+ *
+ * One pass. `indexOf('\n')` moves to each line start in native code, so the cost
+ * is linear in the length of the text regardless of where the fence is.
+ */
+function findFrontmatterClose(text) {
+  for (let at = 0; at <= text.length;) {
+    FRONTMATTER_CLOSER.lastIndex = at;
+    const m = FRONTMATTER_CLOSER.exec(text);
+    if (m !== null) return { start: m.index, end: m.index + m[0].length };
+    const nl = text.indexOf('\n', at);
+    if (nl === -1) return null;
+    at = nl + 1;
+  }
+  return null;
+}
+
 /**
  * Strip the frontmatter block, returning the body and the line the body starts on.
  *
  * Kept separate from {@link parseFrontmatter} because the two consumers want
  * opposite things: the frontmatter parser wants the text, the body scanners want
  * it GONE. Sharing one function between them is how a `# Heading` inside a YAML
- * block becomes a section of the document.
+ * block becomes a section of the document. The boundary RULE is the same in both —
+ * a line of `---` plus optional trailing blanks — and is stated once, in
+ * `FRONTMATTER_CLOSER`; {@link parseFrontmatter} tests it against an
+ * already-split line because it needs those lines anyway to parse the YAML.
  *
  * @returns {{ body: string, offset: number}} `offset` is the number of lines
  *   consumed, so a line number found in `body` maps back to the original file by
@@ -653,10 +714,10 @@ function stripFrontmatter(text) {
   const afterOpen = /^---[ \t]*\r?\n/.exec(probe);
   if (afterOpen === null) return { body: source, offset: 0 };
   const rest = probe.slice(afterOpen[0].length);
-  const close = /^([\s\S]*?)^---[ \t]*(?:\r?\n|$)/m.exec(rest);
+  const close = findFrontmatterClose(rest);
   if (close === null) return { body: source, offset: 0 };
-  const consumed = (bom ? 1 : 0) + afterOpen[0].length + close[0].length;
-  return { body: rest.slice(close[0].length), offset: countLines(source.slice(0, consumed)) };
+  const consumed = (bom ? 1 : 0) + afterOpen[0].length + close.end;
+  return { body: rest.slice(close.end), offset: countLines(source.slice(0, consumed)) };
 }
 
 /** Newline count, tolerant of CRLF. A line number is 1-based and this counts them. */

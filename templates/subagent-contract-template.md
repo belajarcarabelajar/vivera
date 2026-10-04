@@ -32,6 +32,7 @@ The parent chunks the work into the smallest independently verifiable units, the
 
 - **Fan-out count:** [N] subagents (below the 10 floor? state the reason: atomic task, no subagent tool in this runtime, or inseparable shared state)
 - **Chunk boundary check:** [ ] every chunk has exactly one owner, [ ] every planned unit is covered, [ ] no two chunks write the same file
+- **Disjoint scopes are a safety property, not a licence to ignore the seams.** Every chunk's `impacts` (frontmatter of the parent plan) names the surfaces it can break, including ones no chunk owns. Before dispatch, the parent checks each of those surfaces against the chunk list and gives it an owner. A surface that belongs to no chunk is still a consumer: either it is assigned, or it is recorded in the parent plan's follow-up backlog with a finish line. The gap between chunks is where a broken consumer lives, and the per-chunk file scope is what would otherwise hide it.
 - **Re-dispatch rule:** a red chunk is re-chunked and re-dispatched alone, never by restarting the whole batch
 
 ```mermaid
@@ -82,6 +83,7 @@ sequenceDiagram
 ## 4. Input Preconditions & Invariants
 - [Precondition 1: e.g. Base interfaces already committed on branch]
 - [Invariant 1: e.g. Do not change existing public function signatures]
+- **Impact reporting is mandatory, not optional.** If this chunk changes a shared interface, an exported shape, a config key, a CLI flag, or a documented rule, the report states it in one line, whether or not the subagent could fix it: `IMPACT: <surface> - <what breaks> - <evidence command>`. The parent then either assigns it to a chunk or records it in the follow-up backlog with a finish line. A subagent that keeps a discovered breakage to itself has not finished the task; it has moved the failure somewhere the parent cannot see it.
 
 ## 5. Required Implementation & Tests
 - **Target Behavior:** [Describe the exact capability or fix to implement]
@@ -91,12 +93,15 @@ sequenceDiagram
 - **Passing Verification (GREEN):**
   - Command: `[command]`
   - Expected Output: Exit 0, 0 failures
+- **Consumers of this change:** [the surfaces from the parent plan's `impacts` that this chunk touches, each checked with its own command]
 
 ## 6. Gather & Synthesize Checkpoint (parent side)
 - [ ] All subagent reports collected at the review checkpoint; none skipped, none pasted raw as the result.
 - [ ] Duplicate and restated findings removed.
 - [ ] Conflicting claims between overlapping reports resolved from the evidence, not by picking the newest report.
 - [ ] Each subagent's success claim re-verified by the parent (diff, log, exit status).
+- [ ] **Every `IMPACT:` line from every report is now either a task in the plan or a `defer:` line in the backlog — zero unassigned.** A name that reached the gather checkpoint and left with no owner is the exact failure this contract exists to prevent: the subagent was forbidden to edit the file, the parent never queued it, and the consumer stays broken while all chunks report green. Count the `IMPACT:` lines and the owners; the two numbers must match.
+- [ ] Every surface named in the parent plan's `impacts` is either updated or verified unchanged, with the command that showed it.
 - [ ] Only new findings, blockers, and evidence merged into the parent task state.
 
 ## 7. Parent Diff Audit Gate Checklist

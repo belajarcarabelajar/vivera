@@ -90,10 +90,10 @@
 > Centralized failure aggregation. Independent tasks are NOT halted by a sibling's failure.
 > Dependent chains halt at the failed node (`FAILED-BLOCKING`); independent-task failures are isolated (`FAILED-ISOLATED`). Report as one batch at end of turn.
 
-| Task | Step | Classification | Exit | Root cause | Retry used | Fallback used | Status |
-|---|---|---|---|---|---|---|---|
-| [T3] | [2] | [environment] | [1] | [dep X absent] | [1/1] | [none] | `FAILED-ISOLATED` |
-| [T5] | [4] | [code] | [1] | [null deref] | [0/1] | [none] | `FAILED-BLOCKING` |
+| Task | Step | Classification | Exit | Expected | Transient | Root cause | Evidence (log tail) | Retry used | Fallback used | Status |
+|---|---|---|---|---|---|---|---|---|---|---|
+| [T3] | [2] | [environment] | [127] | [0] | [false] | [dep X absent] | [tail of stderr] | [0/1] | [none] | `FAILED-ISOLATED` |
+| [T5] | [4] | [code] | [1] | [0] | [unknown] | [null deref] | [tail of stderr] | [0/1] | [none] | `FAILED-BLOCKING` |
 
 ---
 

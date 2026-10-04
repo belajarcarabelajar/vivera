@@ -123,6 +123,7 @@
 // nothing, and `git diff` shows the change in full.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { writeFileAtomic } from './lib/atomic-write.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The runner's own frontmatter and YAML-subset parsers, IMPORTED rather than
@@ -555,10 +556,14 @@ function main(argv) {
     process.exit(1);
   }
 
-  // Only now, after every check has passed, and only if a byte actually changes.
-  // A no-op must leave the file's mtime alone, so "already ticked" stays
-  // distinguishable from "ticked" after the fact.
-  if (result.changed) writeFileSync(planPath, result.text, 'utf8');
+  // Atomic, with one generation of backup. Only now, after every check has
+  // passed, and only if a byte actually changes: a no-op must leave the file's
+  // mtime alone, so "already ticked" stays distinguishable from "ticked" after
+  // the fact. The atomic part matters more than it looks — these plans run to
+  // 40KB and upwards, so a write interrupted half way would leave a document
+  // that still parses but has lost every task after the cut, and the next run
+  // would faithfully rewrite the truncation over the good copy.
+  if (result.changed) writeFileAtomic(planPath, result.text, { keepBackup: true });
 
   console.log(`plan: ${planPath}`);
   for (const row of result.rows) printRow(row);

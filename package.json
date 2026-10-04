@@ -14,6 +14,7 @@
     "test": "bun test scripts/",
     "plan:check": "bun scripts/ultra-plan-runner.mjs",
     "contract:check": "bun scripts/check-runner-contract.mjs",
+    "copy:check": "bun scripts/check-copy-rules.mjs",
     "audit:skipif": "bun scripts/skipif-registry-audit.mjs",
     "plan:run": "bun scripts/ultra-plan-runner.mjs --execute",
     "pr:claim": "bun scripts/pr-registry.mjs claim",

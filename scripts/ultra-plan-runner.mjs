@@ -42,10 +42,10 @@ const SCHEMA_ID = 'ultra-plan/v1';
 export const RUNNER_CONTRACT_KEYS = [
   'schema', 'plan_id', 'status', 'runner_contract',
   'defaults.retry_transient_max', 'defaults.step_timeout_s', 'defaults.on_precondition_fail',
-  'defaults.allow_loose_skip_if',
+  'defaults.allow_loose_skip_if', 'defaults.require_impacts', 'defaults.allow_no_impacts',
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
-  'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key',
+  'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
 ];
 
 // A `skip_if` that only proves a string is present in a file is not an
@@ -477,6 +477,135 @@ export function parseMermaidMaps(body) {
   return { nodes, edges, blockCount: blocks.length, flowBlockCount };
 }
 
+// ---------- Affected surfaces, declared once ----------
+//
+// WHY THIS EXISTS, in the shape of the defect it closes.
+//
+// A plan task declares `files: { create, modify, test }` — the paths it TOUCHES.
+// Nothing in the contract ever asked what it BREAKS. So a task that changes a
+// shared interface, a public export shape, a CLI flag, or a documented rule
+// could declare only its own file, pass every gate, and leave every consumer of
+// that interface untouched. The DAG did not help: `depends_on` orders tasks
+// INSIDE one plan, so a consumer living in another module — or in another
+// repository, or in the README that documents the flag — is not a node and
+// cannot be an edge.
+//
+// The rules that were supposed to cover this gap were all prose: "inspect all
+// callers", "fixed at the shared root cause so sibling callers are not left
+// broken", the debt sweep's "sibling callers the fix touched only partially".
+// Prose fails silently. There was no command that exited non-zero when an agent
+// forgot, which means there was no gate — only a hope.
+//
+// The design is the same one `skip_if` already taught this codebase: a claim
+// that cannot fail is a false pass, so the claim has to carry its own evidence.
+//
+//   impacts: ["<surface> - <the command or graph query that shows the impact>",
+//             "none: <the command that checked and found nothing downstream>"]
+//
+// The `"none: <command>"` sentinel exists for the same reason `skip_if: "false"`
+// does. "This task has no affected surface" is a real answer, and it is exactly
+// as easy to fabricate as a check that was never run. Requiring the command that
+// checked makes the claim falsifiable instead of decorative.
+//
+// FLOW STYLE ONLY. `impacts: ["a", "b"]` parses. The block style does not:
+// `parseBlockSeq` cannot tell a bare scalar `- "text"` from a step map
+// `- cmd: "text"`, so it builds an object either way — empty when the entry
+// holds no `:`, a one-key map when it does — and the list arrives as objects
+// where strings were written. That is a parser fact, not a preference, so a
+// non-string entry is reported as exactly that instead of being ignored.
+//
+// GRANDFATHERING, twice over, because a check added to the runner is a check
+// every existing plan must survive and several of those plans belong to
+// repositories this one does not own.
+//
+//   defaults.require_impacts: true  the gate is ON for plans that opt in. The
+//                                    plan template sets it, so every plan written
+//                                    from the template is enforced. Off means
+//                                    one aggregated warning, never an error —
+//                                    the same reasoning that made an
+//                                    unclassifiable `skip_if` a warning rather
+//                                    than a verdict this repository cannot own.
+//   defaults.allow_no_impacts: []   per-task opt-out, with the anti-decay rule
+//                                    `allow_loose_skip_if` uses: naming a task
+//                                    that DOES declare impacts is an error, and
+//                                    naming a task that does not exist is an
+//                                    error, so the list cannot decay into a
+//                                    permanent blanket.
+
+// Returns 'ok' | 'missing' | 'invalid'. Pushes its own errors; the caller decides
+// what a `missing` claim is worth.
+function impactsShape(t, errors) {
+  const v = t.impacts;
+  if (v === undefined) return 'missing';
+  if (!Array.isArray(v)) {
+    errors.push(`task ${t.id} impacts must be a list of strings, got ${typeof v}: ${JSON.stringify(v)}. `
+      + 'Write it flow-style: impacts: ["<surface> - <evidence command>", ...]');
+    return 'invalid';
+  }
+  if (v.length === 0) {
+    errors.push(`task ${t.id} impacts is an empty list, which claims nothing and proves nothing. `
+      + 'Name the surfaces this task can break, or record the check that found none as '
+      + '"none: <command>"');
+    return 'invalid';
+  }
+  for (const e of v) {
+    if (typeof e !== 'string' || e.trim() === '') {
+      errors.push(`task ${t.id} impacts has a non-string or blank entry: ${JSON.stringify(e)}. `
+        + 'The block form `- "text"` parses as an object here, not a scalar, so this list is flow-style only: '
+        + 'impacts: ["<surface> - <evidence command>", ...]');
+      return 'invalid';
+    }
+    const noneAt = e.indexOf('none:');
+    if (noneAt !== -1 && e.slice(noneAt + 'none:'.length).trim() === '') {
+      errors.push(`task ${t.id} impacts uses the "none:" sentinel with no command: "${e}". `
+        + 'The sentinel means "a check ran and found no downstream", so it names that check');
+      return 'invalid';
+    }
+  }
+  return 'ok';
+}
+
+function validateImpacts(plan, errors, warnings) {
+  const requireImpacts = plan.defaults?.require_impacts === true;
+  const exempted = new Set(plan.defaults?.allow_no_impacts || []);
+  const used = new Set();
+  const undeclared = [];
+
+  for (const t of plan.tasks || []) {
+    if (!t.id) continue;
+    const state = impactsShape(t, errors);
+    if (state === 'invalid') continue;
+    if (state === 'ok') {
+      // An exemption for a task that now carries its own impacts is dead weight
+      // that hides the next regression, so it is refused rather than ignored.
+      if (exempted.has(t.id)) {
+        errors.push(`defaults.allow_no_impacts names "${t.id}", but task ${t.id} declares its own `
+          + 'impacts; remove the exemption so the claim stays checked');
+      }
+      continue;
+    }
+    if (exempted.has(t.id)) { used.add(t.id); continue; }
+    if (requireImpacts) {
+      errors.push(`task ${t.id} declares no impacts: name the surfaces this task can break, or record `
+        + 'the check that found none as "none: <command>". Focus that makes this task green while a '
+        + 'consumer of the same interface stays broken is the defect this key exists to catch');
+      continue;
+    }
+    undeclared.push(t.id);
+  }
+
+  if (undeclared.length) {
+    warnings.push(`${undeclared.length} task(s) declare no impacts: ${undeclared.join(', ')}. `
+      + 'Set `defaults.require_impacts: true` in this plan to make it an error instead of a warning');
+  }
+  for (const id of exempted) {
+    if (!used.has(id)) {
+      errors.push(`defaults.allow_no_impacts names "${id}", but task ${id} either does not exist or `
+        + 'already declares impacts');
+    }
+  }
+}
+
 // ---------- Validation ----------
 
 export function validatePlan(plan, body) {
@@ -584,6 +713,8 @@ export function validatePlan(plan, body) {
     }
   }
 
+  validateImpacts(plan, errors, warnings);
+
   if (body) {
     const { nodes, edges, blockCount, flowBlockCount } = parseMermaidMaps(body);
     if (blockCount === 0) {
@@ -682,10 +813,154 @@ function idempotencyMismatch(t) {
 
 // ---------- Execution ----------
 
-function run(cmd, timeoutMs) {
-  const r = spawnSync(cmd, { shell: true, encoding: 'utf8', timeout: timeoutMs });
-  const timedOut = r.error && r.error.code === 'ETIMEDOUT';
-  return { exit: timedOut ? 124 : (r.status ?? 1), timedOut, stderr: r.stderr || '', stdout: r.stdout || '' };
+// A step that overruns `step_timeout_s` must take its CHILDREN with it.
+//
+// Measured, not assumed. `spawnSync(..., { shell: true, timeout })` signals only
+// the shell it spawned: on `sh -c "sleep 47 & wait"` with a 2s timeout it
+// returned ETIMEDOUT/SIGTERM and the backgrounded `sleep 47` was still running
+// afterwards. A plan step is written as a command chain (`&&`), and commands in
+// this repository spawn builds, test runners, and browsers, so a timed-out step
+// used to leave exactly the dangling worker the master skill's own Stalled
+// Subagent & Stale-Writer Guardrail warns about — aimed at the agent, and never
+// at the runner executing on its behalf.
+//
+// `detached: true` puts the child in its OWN process group, so one signal to the
+// negated pid reaches every descendant. SIGTERM first (the polite signal, so a
+// build gets to clean up its own temp files), then SIGKILL for whatever is left
+// after a short grace period.
+const GROUP_KILL_GRACE_MS = 500;
+
+function reapGroup(pid, { log } = {}) {
+  if (!pid) return false;
+  let killed = false;
+  for (const signal of ['SIGTERM', 'SIGKILL']) {
+    try {
+      process.kill(-pid, signal);
+      killed = true;
+    } catch (e) {
+      // ESRCH means the group is already gone, which is the success case here.
+      // EPERM means it exists and is not ours, and retrying SIGKILL would not
+      // change that, so both stop the sweep rather than throwing: a cleanup path
+      // that throws would mask the timeout the caller is trying to report.
+      break;
+    }
+    if (signal === 'SIGTERM') {
+      // Synchronous by design. There is no event loop to come back to inside
+      // spawnSync's caller, so the grace period is a blocking wait, and it is
+      // bounded and short by design.
+      spawnSync('sleep', [`${GROUP_KILL_GRACE_MS / 1000}`]);
+    }
+  }
+  if (killed) log?.(`      (reaped the timed-out step's process group ${pid})`);
+  return killed;
+}
+
+function run(cmd, timeoutMs, { log } = {}) {
+  const r = spawnSync(cmd, { shell: true, encoding: 'utf8', timeout: timeoutMs, detached: true });
+  const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT');
+  const reaped = timedOut ? reapGroup(r.pid, { log }) : false;
+  return {
+    exit: timedOut ? 124 : (r.status ?? 1),
+    timedOut,
+    reaped,
+    stderr: r.stderr || '',
+    stdout: r.stdout || '',
+  };
+}
+
+// ---------- Failure classification ----------
+//
+// WHY THIS EXISTS.
+//
+// Every step failure used to be recorded as `code`, so the Error Ledger could not
+// distinguish "the change is wrong" from "the command does not exist on this
+// machine". The master skill carries a six-class taxonomy in prose and in the
+// plan template's §6 — code, test, contract, environment, infrastructure,
+// pre-existing — and the runner emitted two of them: `code` for everything the
+// command produced, and `contract` for its own precondition failures. A missing
+// binary and a failing assertion were the same row.
+//
+// The rule here is that only what the exit code PROVES is classified. That is the
+// same discipline `classifySkipIf` already applies, and it has the same limit:
+// a flaky test and a deterministic failure both exit 1, and nothing in an exit
+// code tells them apart. So `transient` is `true` only where the evidence forces
+// it (a timeout), and `unknown` elsewhere — reported, never guessed. A name the
+// rule cannot justify stays `unknown`.
+//
+//   124 / ETIMEDOUT  timeout      the step outlived its budget
+//   127              environment  the command does not exist (POSIX sh)
+//   126              environment  the command exists and is not executable
+//   130              interrupted  SIGINT reached the step
+//   143              terminated   SIGTERM reached the step
+//   other            code         the command ran and disagreed with expect_exit
+//
+// `transient` answers a different question from `klass`: not "what broke" but
+// "is re-running it worth anything". It is `false` only where the evidence makes a
+// retry provably pointless, so a flaky test still retries exactly as it did
+// before this existed, and a typo'd command fails once instead of twice.
+const EXIT_CLASSES = {
+  124: { klass: 'timeout', transient: true, basis: 'exit 124 (timeout)' },
+  126: { klass: 'environment', transient: false, basis: 'exit 126 (found but not executable)' },
+  127: { klass: 'environment', transient: false, basis: 'exit 127 (command not found)' },
+  130: { klass: 'interrupted', transient: false, basis: 'exit 130 (SIGINT)' },
+  143: { klass: 'terminated', transient: false, basis: 'exit 143 (SIGTERM)' },
+};
+
+export function classifyFailure({ exit, timedOut = false }) {
+  if (timedOut) return { klass: 'timeout', transient: true, basis: 'ETIMEDOUT from spawnSync' };
+  const known = EXIT_CLASSES[exit];
+  if (known) return { ...known };
+  return {
+    klass: 'code',
+    transient: 'unknown',
+    basis: 'exit code alone cannot separate a flaky run from a deterministic one',
+  };
+}
+
+// How much of the command's own output belongs in the ledger.
+//
+// The Iron Law asks for `[Command] → [Exit Code] → [Extracted Log Trace] →
+// [Verdict]`, and the ledger is the artifact meant to deliver the third term. It
+// used to deliver none of it: `run()` captured stderr and stdout and no caller
+// read either, so a FAILED row said "exit 1" and stopped, leaving a human to
+// re-run the command to learn why. A ledger that cannot explain itself forces
+// that re-run, and a re-run of a stateful step is not the same command twice.
+//
+// The cap is deliberate. An unbounded log tail turns a diagnostic into a context
+// flood — the exact failure the Log Capping standard exists to prevent — so the
+// trace is a TAIL, the part a reader actually needs, and the row says so.
+const TRACE_LINES = 4;
+const TRACE_COLS = 160;
+
+// Render one cell: newlines become a visible separator, a pipe would end the
+// markdown cell, and backticks would break the `code` span. Escaping matters
+// because `plan-mark-done.mjs` parses these rows back out of the rendered table.
+export function ledgerTrace({ stderr, stdout }) {
+  const raw = (stderr && stderr.trim()) ? stderr : (stdout || '');
+  const lines = String(raw).replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
+  if (!lines.length) return '';
+  const tail = lines.slice(-TRACE_LINES);
+  const dropped = lines.length - tail.length;
+  const cell = tail
+    .map((l) => l.slice(0, TRACE_COLS).replace(/\|/g, '\\|').replace(/`/g, "'"))
+    .join(' ⏎ ');
+  return dropped > 0 ? `…${dropped} earlier line(s) hidden ⏎ ${cell}` : cell;
+}
+
+// A row is only as useful as the evidence in it, and a blank evidence cell is the
+// one thing that must never reach a human who has to triage it.
+function ledgerCell(e) {
+  return e.trace ? e.trace : '_no output captured_';
+}
+
+// A `run[]` step that does not declare its own `expect_exit` inherits the task's
+// `verify_exit`. Exported for the ledger, which has to print the expectation a
+// step actually carried — not the one the task declared — or the row states half
+// a disagreement.
+function expectedExitOf(t, stepIndex) {
+  const verifyExit = typeof t.verify_exit === 'number' ? t.verify_exit : 0;
+  const step = (Array.isArray(t.run) ? t.run : [])[stepIndex];
+  return step && typeof step.expect_exit === 'number' ? step.expect_exit : verifyExit;
 }
 
 export function executePlan(plan, { execute = false, log = () => {}, dir = process.cwd() } = {}) {
@@ -752,19 +1027,32 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
       continue;
     }
 
-    let ok = true, failStep = null, lastExit = 0, usedRetry = 0;
+    let ok = true, failStep = null, lastExit = 0, usedRetry = 0, failDetail = null, skippedRetry = null, failStepRetry = retryMax;
     for (let s = 0; s < t.run.length; s++) {
       const step = t.run[s];
       const want = typeof step.expect_exit === 'number' ? step.expect_exit : verifyExit;
       const stepRetry = step.retry ?? retryMax;
+      failStepRetry = stepRetry;
       let attempt = 0, r;
       do {
-        r = run(step.cmd, timeoutMs);
+        r = run(step.cmd, timeoutMs, { log });
         attempt++;
         if (r.exit === want) break;
+        // A retry is only worth spending on something that could pass next time.
+        // `transient: false` is reserved for the classes where the exit code
+        // PROVES a re-run cannot help — 127 means the binary is not on this
+        // machine, 130 means someone interrupted the step. `unknown` keeps the
+        // old behaviour, because a flaky test and a real failure share exit 1
+        // and guessing either way would be wrong.
+        const cls = classifyFailure(r);
+        if (cls.transient === false) {
+          skippedRetry = `retry skipped: ${cls.basis}, and a re-run cannot change it`;
+          log(`      (${skippedRetry})`);
+          break;
+        }
       } while (attempt <= stepRetry);
       usedRetry += attempt - 1;
-      if (r.exit !== want) { ok = false; failStep = s + 1; lastExit = r.exit; break; }
+      if (r.exit !== want) { ok = false; failStep = s + 1; lastExit = r.exit; failDetail = { ...r, cls: classifyFailure(r) }; break; }
     }
 
     if (ok) {
@@ -773,7 +1061,7 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
         failed.add(id);
         const st = onPreconditionFail === 'halt-plan' ? 'FAILED-BLOCKING' : (descendants(id, plan.tasks).size ? 'FAILED-BLOCKING' : 'FAILED-ISOLATED');
         status.set(id, st);
-        ledger.push({ task: id, step: t.run.length, klass: 'contract', exit: 0, cause: `declared file(s) still absent after the task ran: ${absent.join(', ')}`, retry: `${usedRetry}/${retryMax}`, status: st });
+        ledger.push({ task: id, step: t.run.length, klass: 'contract', exit: 0, cause: `declared file(s) still absent after the task ran: ${absent.join(', ')}`, retry: `${usedRetry}/${failStepRetry}`, status: st });
         log(`  ${id}: ${st} (postcondition: ${absent.join(', ')})`);
         if (onPreconditionFail === 'halt-plan') planHalted = true;
         continue;
@@ -786,16 +1074,55 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
     const hasChildren = descendants(id, plan.tasks).size > 0;
     const st = hasChildren ? 'FAILED-BLOCKING' : 'FAILED-ISOLATED';
     status.set(id, st);
-    ledger.push({ task: id, step: failStep, klass: 'code', exit: lastExit, cause: 'step command exit mismatch', retry: `${usedRetry}/${retryMax}`, status: st });
-    log(`  ${id}: ${st} at step ${failStep} (exit ${lastExit})`);
+    // The expected exit for the step that failed, so the row states the
+    // disagreement rather than only its own side of it. "exited 1" is half a
+    // fact; "exited 1, expected 0" is the fact a reader can act on.
+    const expected = expectedExitOf(t, failStep - 1);
+    const cls = failDetail?.cls ?? { klass: 'code', transient: 'unknown', basis: 'no step detail recorded' };
+    ledger.push({
+      task: id,
+      step: failStep,
+      klass: cls.klass,
+      exit: lastExit,
+      transient: cls.transient,
+      basis: cls.basis,
+      cause: `step ${failStep} exited ${lastExit}, expected ${expected}`,
+      expected,
+      retry: `${usedRetry}/${failStepRetry}`,
+      status: st,
+      trace: ledgerTrace(failDetail ?? {}),
+      note: skippedRetry,
+    });
+    log(`  ${id}: ${st} at step ${failStep} (exit ${lastExit}, expected ${expected}, ${cls.klass})`);
   }
   return { order, status, ledger };
 }
 
 export function renderLedger(ledger) {
   if (ledger.length === 0) return 'Error Ledger: (empty — no failures)';
-  const head = '| Task | Step | Classification | Exit | Root cause | Retry used | Status |\n|---|---|---|---|---|---|---|';
-  const rows = ledger.map((e) => `| ${e.task} | ${e.step} | ${e.klass} | ${e.exit} | ${e.cause} | ${e.retry} | \`${e.status}\` |`);
+  // COLUMN ORDER IS A CONTRACT, and one consumer depends on it.
+  //
+  // `plan-mark-done.mjs` parses these rows back out of the rendered table and
+  // identifies a row BY SHAPE, not position: the first cell must be id-shaped
+  // and the LAST cell must be a backticked status token. Its own comment says a
+  // later-added column cannot shift the check, and that is what makes widening
+  // this table safe. Two consequences follow, and both are load-bearing:
+  //
+  //   1. `Status` stays LAST. A trace cell is never allowed to become the final
+  //      cell, or every row stops parsing as a ledger row.
+  //   2. The trace cell can never contain an unescaped `|`. `ledgerTrace` escapes
+  //      it for exactly this reason: one pipe in a compiler's output would
+  //      otherwise split the row into two and turn a real failure into a
+  //      phantom task id.
+  const head = '| Task | Step | Classification | Exit | Expected | Transient | Root cause | Evidence (log tail) | Retry used | Status |\n'
+    + '|---|---|---|---|---|---|---|---|---|---|';
+  const rows = ledger.map((e) => {
+    const transient = e.transient === undefined ? '-' : String(e.transient);
+    const basis = e.basis ? `${e.cause} (${e.basis})` : e.cause;
+    const note = e.note ? `${e.note}` : '';
+    const causeCell = [basis, note].filter(Boolean).join(' - ');
+    return `| ${e.task} | ${e.step} | ${e.klass} | ${e.exit} | ${e.expected ?? '—'} | ${transient} | ${causeCell} | ${ledgerCell(e)} | ${e.retry} | \`${e.status}\` |`;
+  });
   return `## Error Ledger\n${head}\n${rows.join('\n')}`;
 }
 

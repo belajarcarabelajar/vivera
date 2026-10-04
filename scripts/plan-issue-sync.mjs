@@ -31,6 +31,7 @@
 // never in the mirror.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileAtomic } from './lib/atomic-write.mjs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -134,7 +135,11 @@ export function loadConfig(configPath = DEFAULT_CONFIG) {
 
 export function saveConfig(cfg, configPath = DEFAULT_CONFIG) {
   mkdirSync(path.dirname(path.resolve(configPath)), { recursive: true });
-  writeFileSync(configPath, `${JSON.stringify({ version: 1, projects: cfg.projects, issues: cfg.issues }, null, 2)}\n`, 'utf8');
+  // Atomic, with one generation of backup. This file is the plan ⇄ GitHub issue
+  // mapping and it is gitignored, so a truncated write here has no recovery path
+  // outside this machine. See scripts/lib/atomic-write.mjs for why the temp file
+  // lives in the target's own directory.
+  writeFileAtomic(configPath, `${JSON.stringify({ version: 1, projects: cfg.projects, issues: cfg.issues }, null, 2)}\n`, { keepBackup: true });
   return configPath;
 }
 

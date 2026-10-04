@@ -9,9 +9,12 @@ defaults:
   step_timeout_s: 120               # per-step hang guardrail
   on_precondition_fail: stop-task-continue-independent   # or: halt-plan
   allow_loose_skip_if: []            # task ids grandfathered from the skip_if probe ban
+  require_impacts: true              # every task must declare the surfaces it can break
+  allow_no_impacts: []               # task ids exempted from impacts; a stale name is an error
 tasks:
   - id: T1
     depends_on: []                  # DAG edges — machine-parseable, must match Mermaid
+    impacts: ["path/to/file1.ts consumers - rg 'file1' src/", "templates/implementation-plan-template.md §4 - bun scripts/validate-skill.mjs"]   # what this task can BREAK, not what it touches (flow-style only)
     files: { create: [path/to/file1.ts], modify: [], test: [path/to/file1.test.ts] }
     idempotency_key: "T1:path/to/file1.ts"
     skip_if: "bun test path/to/file1.test.ts"   # exit 0 = already done → SKIPPED-IDEMPOTENT
@@ -25,6 +28,7 @@ tasks:
         retry: 1
   - id: T2
     depends_on: [T1]
+    impacts: ["path/to/file2.ts consumers - rg 'from .*file1' src/ ; none: bun test path/to/file2.test.ts"]
     files: { create: [path/to/file2.ts], modify: [], test: [path/to/file2.test.ts] }
     idempotency_key: "T2:path/to/file2.ts"
     skip_if: "bun test path/to/file2.test.ts"
@@ -49,6 +53,8 @@ tasks:
 > **A `skip_if` the rules cannot classify gets a warning, not an error.** `classifySkipIf` returns `empty`, `sentinel` (the literal `false` — the documented "this task has no command"), `behavioural`, `loose`, or `unknown`. An `unknown` command — one that is neither a tool invocation nor a file probe, such as `bash scripts/x.sh --verify out.txt` or `pacman -Q rtkit` — draws a `WARN` naming the task and the command, and the plan still runs. That is deliberate: 14 such tasks live in plans belonging to repositories this one does not own. If the command genuinely has no exit status worth asserting, write `skip_if: "false"`; that is a deliberate no-op, not an exemption, and such a task still reports `NEEDS-AGENT` because it declares no `run[]`. There is no `allow_unknown_skip_if` — a second allowlist would decay into a permanent blanket. Run `bun scripts/skipif-registry-audit.mjs` for the current tally.
 >
 > **The other declared fields are enforced too, so keep them honest.** Every `files.modify` and `files.test` path must exist before the steps run, and every `files.create` path must exist after they finish. A `run[]` step with no `expect_exit` inherits `verify_exit`. `idempotency_key` must begin with this task's own id; its right-hand side names the unit of work and is free-form, because a behaviour like `T3:two-stage-trigger` has no filename. `on_precondition_fail` is either `stop-task-continue-independent` or `halt-plan`; anything else throws.
+>
+> **`impacts` is what the task can BREAK, which `files` does not ask.** `files` names the paths a task touches; `impacts` names the surfaces that consume them — sibling callers, the other task that reads this export, the README that documents the flag, the template that mirrors the schema. `depends_on` cannot cover this: it orders tasks inside one plan, so a consumer in another module or another repository is not a node and cannot be an edge. With `defaults.require_impacts: true` a task that declares no `impacts` is a validation error, and an empty list is an error too, because an empty list claims nothing and proves nothing. "Checked, nothing downstream" is a real answer and is written as the sentinel `"none: <the command that checked>"`. Grandfather a task with `defaults.allow_no_impacts: [T3]`; naming a task that does declare impacts is itself an error, so the list cannot become a permanent blanket. **Flow-style only** (`impacts: ["a", "b"]`): the block form `- "text"` parses as an object rather than a scalar, so a block-style list reaches the validator as objects where strings were written and is refused.
 
 ## 1. Intent & Scope
 - **Goal:** [Concise description of target capability or fix]
@@ -72,6 +78,20 @@ flowchart TD
 ```
 > Node ids (`T1`, `T2`, ...) must match `tasks[].id` in frontmatter and the task headings below. Every `depends_on` edge in frontmatter must appear as an arrow here, and every arrow between two task nodes must be declared in `depends_on`. The runner enforces both directions and rejects transitive-only reachability.
 
+## 2b. Affected Surfaces — approval gate blocker if empty
+> The mirror of `tasks[].impacts` in prose. The frontmatter is what the runner reads; this section is what a human reads to judge whether the impact claim is honest. **A task that touches a shared interface, a public export shape, a CLI flag, a config key, or a documented rule lists every consumer of it here, including the ones in other modules, other plans, and the README.** `depends_on` cannot express those: it orders tasks inside one plan, so a consumer elsewhere is not a node and cannot be an edge. Focus that makes one task green while its consumers stay broken is the defect this section exists to prevent.
+>
+> The evidence column is not decoration. "Name the surfaces" is a claim; the command that shows them is the proof, and the same standard `skip_if` is held to.
+
+| Task | Affected surface (module / doc / consumer) | Relationship | Evidence (command or graph query) | Action taken in this plan |
+|---|---|---|---|---|
+| T1 | [path or surface] | [caller / mirror / documented rule] | [`bun test …` / `rg …` / `graphify path "A" "B"`] | [updated / verified unchanged + why] |
+| T2 | none | — | [`<command that checked>`] | no downstream exists |
+
+- [ ] Every task in `tasks[]` appears above, or carries `"none: <command>"` in its `impacts`.
+- [ ] Every surface listed in a subagent's out-of-scope report became a task here or a `defer:` line in §8 — never a silently dropped name.
+- [ ] Docs that describe the changed behaviour (README, templates, runbook, ADR) are in this table.
+
 ## 3. Global Constraints
 - Non-negotiable constraints, safety rules, and platform compatibility requirements.
 - Dependency constraints (e.g. no new external runtime packages unless approved).
@@ -89,6 +109,9 @@ flowchart TD
   - On failure: STOP this task, do NOT guess a substitute, record to §6 Error Ledger, continue only tasks independent of T1.
 - **Idempotency Check (BEFORE Step 1):**
   - [ ] Skip when `skip_if` (frontmatter) exits 0 → mark `SKIPPED-IDEMPOTENT`. A checked box alone never justifies a skip.
+- **Affected-Surface Audit (BEFORE Step 1, and again at Step 4):**
+  - [ ] Every surface in `impacts` (frontmatter) and §2b was checked against the current tree, not assumed from the design.
+  - [ ] Each affected surface outside this task's file scope is either updated by this task or recorded as a follow-up with a finish line. A file this task noticed but did not fix is a named outcome, never a silent omission.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file1.test.ts` | expect: exit non-zero for the right reason | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass the test
 - [ ] **Step 3 — Verify:** cmd: `bun test path/to/file1.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt only downstream (`depends_on` includes T1), keep independent tasks running
@@ -105,6 +128,9 @@ flowchart TD
   - On failure: STOP, record to §6, continue only tasks independent of T2.
 - **Idempotency Check (BEFORE Step 1):**
   - [ ] Skip when `skip_if` exits 0 → `SKIPPED-IDEMPOTENT`.
+- **Affected-Surface Audit (BEFORE Step 1, and again at Step 4):**
+  - [ ] Every surface in `impacts` (frontmatter) and §2b was checked against the current tree.
+  - [ ] Each affected surface outside this task's file scope is either updated here or recorded as a follow-up with a finish line.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file2.test.ts` | expect: exit non-zero | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass
 - [ ] **Step 3 — Verify:** cmd: `bun test path/to/file2.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt downstream, keep independent running
@@ -119,11 +145,15 @@ flowchart TD
 | Build Check | `bun run build` | 0 | Build succeeded | Pending |
 
 ## 6. Error Ledger (aggregated at end; independent tasks not halted)
-| Task | Step | Classification | Exit | Root cause | Retry used | Fallback | Status |
-|---|---|---|---|---|---|---|---|
-| [T?] | [n] | [environment] | [1] | [cause] | [0/1] | [none] | `FAILED-ISOLATED` |
+> The runner writes these rows. Column order is a contract: `plan-mark-done.mjs` reads a row back by SHAPE (id-shaped first cell, backticked status last), so the status column stays last and a log trace can never contain an unescaped `|`.
 
-- Classification: `code` | `test` | `contract` | `environment` | `infrastructure` | `pre-existing`.
+| Task | Step | Classification | Exit | Expected | Transient | Root cause | Evidence (log tail) | Retry used | Status |
+|---|---|---|---|---|---|---|---|---|---|
+| [T?] | [n] | [environment] | [1] | [0] | [false] | [cause] | [tail of stderr/stdout] | [0/1] | `FAILED-ISOLATED` |
+
+- Classification: `code` (the command ran and disagreed) | `timeout` | `environment` (127/126) | `interrupted` (130) | `terminated` (143) | `contract` (the runner's own pre/postcondition).
+- **Transient** answers "is re-running worth anything", not "what broke": `true` only for a timeout, `false` only where the exit code proves a re-run cannot help, and `unknown` otherwise — a flaky test and a deterministic failure share exit 1, so the runner reports the doubt instead of guessing. A `false` row skips its retry and says so in the run log.
+- **Evidence** is the command's own stderr tail (stdout when stderr is empty), bounded to the last few lines, with `_no output captured_` when there was none. A ledger row that cannot explain itself forces a re-run of a stateful step, which is not the same command twice.
 - Status: `FAILED-ISOLATED` | `FAILED-BLOCKING` | `RESOLVED` | `DEFERRED`.
 
 ## 7. Human Approval Gate

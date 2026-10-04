@@ -36,6 +36,7 @@
 // `plan-publish-registry.mjs` holds no vault I/O either.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { writeFileAtomic } from './lib/atomic-write.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -147,7 +148,12 @@ export function loadRegistry(registryPath = DEFAULT_REGISTRY) {
 export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY) {
   assertNoCollisions(registry.sessions, registryPath);
   mkdirSync(path.dirname(path.resolve(registryPath)), { recursive: true });
-  writeFileSync(registryPath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8');
+  // Atomic, with one generation of backup. The registry is the shipping bin: it
+  // decides which session owns which branch and worktree, and it is gitignored,
+  // so a truncated write is unrecoverable from git. `keepBackup` leaves the
+  // previous generation at `<registry>.bak` for the one case that matters — the
+  // moment right after a bad write. See scripts/lib/atomic-write.mjs.
+  writeFileAtomic(registryPath, `${JSON.stringify(registry, null, 2)}\n`, { keepBackup: true });
   return registryPath;
 }
 

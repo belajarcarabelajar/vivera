@@ -73,8 +73,6 @@ const CLOSED_STATE = 'closed';
 // the rebase calculation the way a merge does.
 const TERMINAL_STATES = [TERMINAL_STATE, CLOSED_STATE];
 
-// ---------- Naming ----------
-
 // Branch and worktree names have to survive a POSIX filesystem, a git ref, and
 // a shell. Everything outside this set collapses to a single dash so two
 // different inputs can never produce the same slot by differing only in
@@ -109,8 +107,6 @@ export function worktreeFor(repoRoot, sessionId) {
   const base = path.basename(path.resolve(repoRoot));
   return path.join(path.dirname(path.resolve(repoRoot)), `${base}-wt`, slugify(sessionId, 'session id'));
 }
-
-// ---------- Loading ----------
 
 export function loadRegistry(registryPath = DEFAULT_REGISTRY) {
   if (!existsSync(registryPath)) {
@@ -445,8 +441,6 @@ export function conflictSurface(registry, sessionId) {
     blocked_by: pending,
   };
 }
-
-// ---------- CLI ----------
 
 function usage(msg) {
   if (msg) console.error(`❌ ${msg}`);

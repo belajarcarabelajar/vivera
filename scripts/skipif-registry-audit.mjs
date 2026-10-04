@@ -172,8 +172,6 @@ function resolveClassifier(name) {
   throw new Error(`unknown classifier "${name}": use "live" or "frozen"`);
 }
 
-// ---------- helpers ----------
-
 function today() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -356,8 +354,6 @@ export function auditRegistry(registry, options = {}) {
   };
 }
 
-// ---------- query ----------
-
 // The rows a human asked for. Used by `--class`, `--grep` and `--plan`, and
 // exported so a test can assert the query without shelling out. Never mutates.
 export function selectRows(rows, { cls = null, grep = null, project = null, plan = null } = {}) {
@@ -369,8 +365,6 @@ export function selectRows(rows, { cls = null, grep = null, project = null, plan
     return true;
   });
 }
-
-// ---------- render ----------
 
 const TALLY_ORDER = ['sentinel', 'behavioural', 'loose', 'unknown', 'empty'];
 
@@ -482,8 +476,6 @@ export function renderReport(data) {
   out.push(`   ${USAGE}`);
   return out.join('\n');
 }
-
-// ---------- main ----------
 
 function main(argv) {
   let opts;

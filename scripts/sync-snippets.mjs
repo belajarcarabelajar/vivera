@@ -100,8 +100,6 @@ function pushSnippet(entry, content) {
   ]);
 }
 
-// ---------- Core ----------
-
 export function loadManifest() {
   if (!existsSync(manifestPath)) throw new Error(`missing manifest: ${manifestPath}`);
   const m = JSON.parse(readFileSync(manifestPath, 'utf8'));
@@ -150,8 +148,6 @@ export function checkDrift(manifest, { fetch = fetchSnippet } = {}) {
   }
   return results;
 }
-
-// ---------- CLI ----------
 
 function main(argv) {
   const args = argv.slice(2);

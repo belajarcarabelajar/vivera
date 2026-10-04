@@ -44,7 +44,6 @@ stateDiagram-v2
 ## 2. Phase 1 — Deterministic Reproduction (Failing Test First)
 - **Minimal Reproducer Test / Command:**
   ```bash
-  # Command used to reproduce the bug
   rtk bun test path/to/repro.test.ts
   ```
 - **Observed Failure Output:**

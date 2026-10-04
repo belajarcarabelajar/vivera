@@ -1169,8 +1169,6 @@ export function renderLedger(ledger) {
   return `## Error Ledger\n${head}\n${rows.join('\n')}`;
 }
 
-// ---------- CLI ----------
-
 // ---------- vault mirror gate ----------
 //
 // Why this is a gate and not a warning: the mirror is what a human reads when

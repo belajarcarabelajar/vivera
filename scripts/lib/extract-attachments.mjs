@@ -22,13 +22,9 @@
 //      target the same path instead of churning the vault (AC-8), and two
 //      different images in one message cannot land on one file.
 //
-// AND THE PATH THEY NAME IS NOT REWRITTEN FOR NOTHING. The destination vault is
-// a git repository with `obsidian-git` installed, which commits and pushes on a
-// 10-minute timer, so writing identical bytes is not a harmless no-op: it is a
-// dirty file, a real commit and a real push. So the bytes on disk are compared
-// first, and an identical file is left completely untouched — not written with
-// the same content, not touched at all, mtime included. Same reason
-// `sync-writer.mjs` does it for notes.
+// AND THE PATH THEY NAME IS NOT REWRITTEN FOR NOTHING. Same policy as
+// `sync-writer.mjs` for notes: with obsidian-git pushing on a timer, identical
+// bytes are not written — not touched at all, mtime included.
 //
 // Fallback for unrecognised content: `FALLBACK_EXT` (`.bin`). Never a throw —
 // one odd attachment must not abort the import of a whole session.
@@ -177,13 +173,11 @@ function wikilinkEmbed(filePath, base) {
 /**
  * True when `abs` already holds exactly these bytes.
  *
- * Read-then-compare, never "write it anyway and look at the mtime afterwards":
- * the destination vault is a git repository and `obsidian-git` commits and
- * pushes on a 10-minute timer, so a needless rewrite of identical bytes is a
- * real commit and a real push, and it buries a genuine edit under no-op
- * entries. `Buffer.equals` is the whole point — no trimming, no newline
- * normalisation, no encoding round trip. Anything looser would call a file
- * unchanged when it is not, and the difference would then never be published.
+ * Read-then-compare, never "write it anyway and look at the mtime afterwards"
+ * (the publication reason is the module header). `Buffer.equals` is the whole
+ * point — no trimming, no newline normalisation, no encoding round trip.
+ * Anything looser would call a file unchanged when it is not, and the
+ * difference would then never be published.
  *
  * @param {string} abs absolute path of the destination file
  * @param {Buffer} next bytes about to be written
@@ -275,13 +269,10 @@ export function extractAttachments(files, destDir, opts = {}) {
 
     let result = cache.get(filename);
     if (result === undefined) {
-      // Content-aware write, and the only difference from writing unconditionally.
-      // On a match the file is not opened at all: not "written with the same
-      // bytes", untouched. mtime is left alone because mtime is what
-      // `git status` reads, and a bumped mtime is a dirty file to obsidian-git
-      // no matter what the bytes say. The filename is computed exactly as
-      // before, so a run that used to rewrite a path now skips it instead —
-      // never a different path.
+      // Content-aware write, and the only difference from writing unconditionally:
+      // on a match the file is not opened at all (why: module header). The
+      // filename is computed exactly as before, so a run that used to rewrite a
+      // path now skips it instead — never a different path.
       const unchanged = bytesAlreadyOnDisk(filePath, buffer);
       if (!unchanged) writeFileSync(filePath, buffer);
       result = {
@@ -302,12 +293,6 @@ export function extractAttachments(files, destDir, opts = {}) {
   });
 }
 
-/**
- * @param {number} index
- * @param {string} reason
- * @param {(entry: object) => void} onSkip
- * @returns {object}
- */
 function skip(index, reason, onSkip) {
   const entry = {
     index,

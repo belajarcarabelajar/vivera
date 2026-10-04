@@ -39,8 +39,6 @@ const DEFAULT_CONFIG = path.join(rootDir, 'plans.publish.json');
 // Where a project keeps its plans, relative to the project root.
 const PLANS_SUBDIR = path.join('docs', 'code-plan', 'plans');
 
-// ---------- Config loading ----------
-
 export function loadRegistry(configPath = DEFAULT_CONFIG) {
   if (!existsSync(configPath)) throw new Error(`missing plan publish config: ${configPath}`);
 

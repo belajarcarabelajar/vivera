@@ -491,8 +491,6 @@ function readLog(opts) {
   return readFileSync(opts.from, 'utf8');
 }
 
-// ---------- main ----------
-
 // One line per task the run CONSIDERED, not per task it touched. A task it
 // declined to tick is exactly the one a reader needs to be told about, and a line
 // that is only printed on success is how a red step ends up under a ticked box.

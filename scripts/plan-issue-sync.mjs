@@ -91,8 +91,6 @@ function firstLine(s) {
   return (s || '').trim().split('\n')[0] || 'no output';
 }
 
-// ---------- config ----------
-
 export function loadConfig(configPath = DEFAULT_CONFIG) {
   if (!existsSync(configPath)) {
     // A MISSING FILE IS THE FRESH-CLONE CASE, NOT A BROKEN MACHINE: this file
@@ -368,8 +366,6 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   };
   return { key, action: action.kind, number: next[key].number, url: next[key].url, repo, status, written: true, cfg: { ...cfg, issues: next } };
 }
-
-// ---------- CLI ----------
 
 const USAGE = `usage:
   bun scripts/plan-issue-sync.mjs <plan.md>...          create or sync the issue

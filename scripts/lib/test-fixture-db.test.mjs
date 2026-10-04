@@ -26,8 +26,6 @@ import {
   FIXTURE_PNG_BASE64,
 } from './test-fixture-db.mjs';
 
-// Helper: create a temp directory for test databases.
-//
 // Cleanup everywhere is `fs.rmSync(dir, { recursive: true, force: true })`, never
 // `unlinkSync(dbPath)` + `rmdirSync(dir)`: every reader here opens the WAL
 // database and leaves `-wal`/`-shm` sidecar files behind, so `rmdir` fails with
@@ -36,7 +34,6 @@ function tmpDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'test-fixture-db-'));
 }
 
-// Helper: open a database and run a query
 function query(dbPath, sql, params = []) {
   const db = new Database(dbPath, { readonly: true });
   try {

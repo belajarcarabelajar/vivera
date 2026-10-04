@@ -306,8 +306,6 @@ export function checkChunk(chunkPath, opts = {}) {
   }
   return { ...t, failures };
 }
-
-// ---------------------------------------------------------------- CLI
 if (!import.meta.main) {
   // Imported for its functions (a subagent or another script reusing
   // parseAnchors). Bun runs this file top-level, so guard the CLI.

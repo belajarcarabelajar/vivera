@@ -434,8 +434,6 @@ export function splitDraftPlans(registry) {
   return { candidates, silentDraft: silent };
 }
 
-// ---------- render ----------
-
 const W = (label, n) => `${label}: ${n}`;
 
 export function renderReport(data) {
@@ -554,8 +552,6 @@ function parseArgs(argv) {
   }
   return opts;
 }
-
-// ---------- main ----------
 
 function main(argv) {
   let opts;

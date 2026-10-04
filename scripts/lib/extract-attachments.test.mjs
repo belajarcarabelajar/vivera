@@ -569,13 +569,8 @@ test('an unwritable destDir raises, because that is a real failure and not a per
 
 // ---------- 8. the write is content-aware, so a re-run pushes nothing ----------
 //
-// WHY THIS SECTION EXISTS. The destination vault is a git repository with
-// `obsidian-git` installed, which commits and pushes on a 10-minute timer with
-// nobody watching. So "rewrote the same bytes" is not a harmless no-op: a bumped
-// mtime is a dirty file to `git status`, which becomes a real commit and a real
-// push, and a genuine 1-line edit ends up buried under no-op entries. The
-// extractor therefore compares bytes before writing and leaves an identical file
-// untouched.
+// The policy is the module header's: identical bytes are never written, because
+// obsidian-git turns a bumped mtime into a real commit and a real push.
 //
 // Every test here ages the file with `utimesSync` and asserts the mtime BEFORE
 // the returned flag. `unchanged` is what the function claims about itself; the

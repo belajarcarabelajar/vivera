@@ -109,7 +109,7 @@ export function optimalBatchSize(lambda, mu, costPerSubagent, costPerWaitingTask
   let bestCost = Infinity;
 
   for (let c = 1; c <= maxBatch; c++) {
-    // Skip unstable configurations
+    // Unstable regime: at lambda/mu >= c the queue never drains, so no optimum exists here.
     if (lambda / mu >= c) continue;
 
     const lq = averageQueueLength(lambda, mu, c);

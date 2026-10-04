@@ -369,8 +369,6 @@ export function rewrite(chunk, plans, tiers, opts = {}) {
   }
   return n;
 }
-
-// -------------------------------------------------------------------- CLI
 if (import.meta.main) {
 const argv = process.argv.slice(2);
 if (argv.length === 0) { console.error('usage: repair-anchors.mjs --survey | --tier N [--apply] [--chunk ID]'); process.exit(2); }

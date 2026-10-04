@@ -16,9 +16,8 @@
 //      already returns sorted rows and a renderer with no sort would look
 //      correct against it. Sorting anyway is what makes the property true for
 //      every CALLER, not just the one that happened to use the index. A `seq`
-//      that is not a finite number sorts LAST rather than coercing: `Number(null)
-//      === 0` would file an unsequenced message above the session's real first
-//      message, which is a lie about what happened first.
+//      that is not a finite number sorts LAST rather than coercing (see
+//      `seqOf` for why zero is the wrong fallback).
 //
 //   2. NO MESSAGE TYPE IS DROPPED. Intent Lock D16 chose full fidelity, so
 //      `idle` (2,775 real rows), `compaction` (24), `model-switched` (56),
@@ -218,9 +217,7 @@ function makeRedactor(patterns) {
 /**
  * A message's `seq`, or `null` when it is not a usable number.
  *
- * `null`, not `0`. `Number(null) === 0` and `Number('') === 0`, so a row whose
- * `seq` went missing would sort ABOVE the session's genuine first message and
- * be presented as the thing that happened first.
+ * `null`, not a zero fallback — see the `Number()` note in the body.
  */
 function seqOf(row) {
   // Guarded on the row, not just on `seq`: the sort comparator runs on every
@@ -229,19 +226,10 @@ function seqOf(row) {
   // is written to describe it.
   if (row === null || typeof row !== 'object') return null;
 
-  // `Number()` is NOT a safe coercion here, and this is the whole reason the
-  // function returns null instead of a fallback:
-  //
-  //     Number(null)     === 0
-  //     Number(undefined) === NaN
-  //     Number('')       === 0
-  //     Number(false)    === 0
-  //     Number([])       === 0
-  //
-  // So a row whose `seq` went missing would be filed as sequence ZERO and
-  // rendered as the FIRST thing that happened in the session, which is a lie
-  // about history and the worst failure this module could have. Only a real
-  // finite number, or a string that is entirely a number, is accepted.
+  // `Number()` is not a safe coercion here: it maps null, '', false and [] all
+  // to 0 (and undefined to NaN), so a row whose `seq` went missing would be
+  // filed as sequence ZERO and rendered as the first thing that happened —
+  // a lie about history. Only a real finite number, or an all-digit string, is accepted.
   const raw = row.seq;
   if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
   if (typeof raw !== 'string') return null;

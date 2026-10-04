@@ -91,8 +91,6 @@ export const SNIPPET_CONTRACTS = {
 
 export const REQUIRED_SNIPPETS = Object.keys(SNIPPET_CONTRACTS);
 
-// --- generic helpers -------------------------------------------------------
-
 /** Terms from `terms` absent in `body` (substring match, same as validator). */
 export function findMissingTerms(body, terms) {
   return terms.filter((term) => !body.includes(term));

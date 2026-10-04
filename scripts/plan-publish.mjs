@@ -91,8 +91,6 @@ export const PUBLISH_ALL = 'publish-all';
 
 class UsageError extends Error {}
 
-// ---------- small helpers ----------
-
 // Every path that crosses into a mirror is made ABSOLUTE exactly once, through
 // this one seam, and the resulting single value is what gets routed, read,
 // hashed and written as `source_path`.
@@ -521,8 +519,6 @@ export function planFreshness(rawPlanPath, opts = {}) {
   return freshnessFor(registry, rawPlanPath);
 }
 
-// ---------- check ----------
-
 function checkOne(registry, rawPlanPath) {
   // Delegates to the shared verdict rather than re-deriving it, so --check and
   // the runner gate cannot drift apart by construction. The state names below
@@ -577,8 +573,6 @@ function runCheck(registry, planPaths, { all }) {
   console.error('        vault, stage 2 after approval, stage 3 after execution and the debt sweep.');
   process.exit(1);
 }
-
-// ---------- status ----------
 
 // --status is a report, not a verdict: it always exits 0. A status command that
 // fails is useless in a shell pipeline or a `&&` chain, and a missing mirror is
@@ -685,8 +679,6 @@ function validateArgs(opts) {
   }
   return opts.mode ?? (opts.all ? PUBLISH_ALL : 'publish');
 }
-
-// ---------- main ----------
 
 function main(argv) {
   let opts;

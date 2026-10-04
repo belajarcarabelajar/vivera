@@ -7,9 +7,8 @@
 // The ultra-plan-runner already checks some of these; these are the
 // additional invariants that catch contradictions the runner misses.
 //
-// The key insight: a plan is a set of logical constraints, and a valid
-// execution is a model that satisfies all of them. When two constraints
-// contradict, no model exists, and the plan is unsatisfiable.
+// Treat a plan as a set of constraints: a valid execution is a model that
+// satisfies all of them; contradicting constraints mean no valid execution.
 
 /**
  * Invariant 1: Dependency acyclicity.
@@ -108,24 +107,14 @@ export function hasMutuallyExclusiveScopes(taskScopes) {
  */
 export function hasValidGateOrdering(tasks) {
   const phaseOrder = { planning: 0, implementation: 1, verification: 2, merge: 3 };
-  const seen = new Map();
 
+  // Validates phase names only. Gate ordering itself (no verification before
+  // implementation) is not enforced here; validateParallelDispatch checks the
+  // dependency side once waves exist.
   for (const task of tasks) {
     const order = phaseOrder[task.phase];
     if (order === undefined) {
       return `task "${task.id}" has unknown phase "${task.phase}"`;
-    }
-    seen.set(task.id, order);
-
-    // Check dependencies are in earlier or same phase
-    // (This is a simplified check; full check needs the dependency graph)
-  }
-
-  // Check that no verification task depends on a later-phase task
-  for (const task of tasks) {
-    if (phaseOrder[task.phase] === 2) {
-      // Verification task — all deps must be implementation or earlier
-      // (Full implementation would need dependency graph here)
     }
   }
   return true;
@@ -152,13 +141,12 @@ export function hasUniqueIdempotencyKeys(tasks) {
 
 /**
  * Run all invariants and return a list of violations.
- * @param {object} plan - the plan object
+ * @param {object} plan
  * @returns {string[]} list of violation messages (empty = valid)
  */
 export function validateInvariants(plan) {
   const violations = [];
 
-  // Build dependency graph
   const depGraph = new Map();
   const taskIds = new Set();
   const taskScopes = new Map();
@@ -183,9 +171,7 @@ export function validateInvariants(plan) {
   return violations;
 }
 
-// ============================================================================
 // Parallel dispatch validation
-// ============================================================================
 
 /**
  * Check whether two tasks can be dispatched in parallel.
@@ -206,10 +192,8 @@ export function canDispatchInParallel(taskA, taskB) {
   const depsA = new Set(taskA.depends_on || []);
   const depsB = new Set(taskB.depends_on || []);
 
-  // Check 1: no data dependency in either direction
   const noDependency = !depsA.has(taskB.id) && !depsB.has(taskA.id);
 
-  // Check 2: disjoint write scopes
   const filesA = new Set(taskA.files || []);
   const filesB = new Set(taskB.files || []);
   const overlap = [...filesA].filter((f) => filesB.has(f));
@@ -242,7 +226,6 @@ export function computeWaves(dependencyGraph) {
   const inDegree = new Map();
   const dependents = new Map(); // reverse graph: dep -> tasks that depend on it
 
-  // Initialize
   for (const [task, deps] of dependencyGraph) {
     inDegree.set(task, deps.length);
     for (const dep of deps) {
@@ -251,7 +234,6 @@ export function computeWaves(dependencyGraph) {
     }
   }
 
-  // BFS from wave 0
   let currentWave = [];
   for (const [task, deg] of inDegree) {
     if (deg === 0) {
@@ -301,7 +283,7 @@ export function validateParallelDispatch(batch, waves) {
     throw new Error('validateParallelDispatch: batch must be a non-empty array');
   }
 
-  // Check 1: all tasks in the same wave
+  // All tasks in the same wave
   const waveSet = new Set();
   for (const task of batch) {
     const wave = waves.get(task.id);
@@ -315,7 +297,7 @@ export function validateParallelDispatch(batch, waves) {
     return `batch contains tasks from different waves: ${waveList.join(', ')}. Only tasks in the same wave can be dispatched in parallel.`;
   }
 
-  // Check 2: no overlapping write scopes
+  // Disjoint write scopes within the batch
   const fileOwners = new Map();
   for (const task of batch) {
     for (const file of task.files || []) {
@@ -326,7 +308,7 @@ export function validateParallelDispatch(batch, waves) {
     }
   }
 
-  // Check 3: all dependencies are in earlier waves
+  // Dependencies must sit in earlier waves
   for (const task of batch) {
     const taskWave = waves.get(task.id);
     for (const dep of task.depends_on || []) {

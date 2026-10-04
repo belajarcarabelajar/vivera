@@ -135,8 +135,6 @@ const defaultIo = {
   err: (line) => console.error(line),
 };
 
-// ---------- argv ----------
-
 /** Flags that take a value. A bare `a.startsWith('--')` is not enough: a typo'd
  *  `--limt 3` must not be read as a positional. */
 const VALUE_FLAGS = new Map([
@@ -702,8 +700,6 @@ export async function runExport(opts, env = {}) {
   return summary;
 }
 
-// ---------- reporting ----------
-
 /**
  * Render the summary as the lines this script prints.
  *
@@ -745,8 +741,6 @@ export function formatSummary(summary) {
   }
   return lines;
 }
-
-// ---------- CLI ----------
 
 /**
  * The CLI entry point.

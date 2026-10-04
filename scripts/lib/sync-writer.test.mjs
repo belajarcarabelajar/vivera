@@ -1,13 +1,8 @@
 // scripts/lib/sync-writer.test.mjs
 //
-// The vault this writer targets is a git repository with `obsidian-git`
-// installed, and that plugin commits and pushes on a timer — every 10 minutes,
-// by default, with no human in the loop. So "the exporter wrote a file" is not a
-// local side effect; it is a step in a publication. An exporter that rewrites
-// 1009 unchanged notes on every run produces a 1009-file diff on every run, and
-// the plugin dutifully pushes it. The diff is noise, but the cost is not: it
-// buries a real change in 1008 unchanged ones, and it spends the user's remote
-// bandwidth and history on nothing.
+// The write policy these tests pin lives in `sync-writer.mjs`: obsidian-git
+// commits and pushes on a 10-minute timer with no human in the loop, so a
+// rewrite of unchanged bytes is a real commit and a real push.
 //
 // That is why the central assertion in this file is a timestamp and not a
 // boolean. "Returns `unchanged` is a claim the function makes about itself; an

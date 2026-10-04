@@ -248,10 +248,9 @@ test('a SHUFFLED input still renders in seq order — the test that catches a mi
 
 test('a message with no usable seq sorts last and is labelled, rather than crashing the sort', () => {
   // `seq` is `NOT NULL` in the real schema, so this cannot happen from a real
-  // database. It CAN happen from a caller that assembled rows by hand or from a
-  // future migration, and `Number(null) === 0` would silently file the row at
-  // the TOP of the note, before the session's actual first message. That is the
-  // failure this pins: sort it last, and label it so a reader knows why.
+  // database — it CAN happen from a caller that assembled rows by hand or from
+  // a future migration. The failure this pins: sort it last, and label it so a
+  // reader knows why (the coercion trap itself is documented in `seqOf`).
   const rows = [
     msg(2, 'user', userData('the third message')),
     { ...msg(0, 'user', userData('the orphan message')), seq: null },

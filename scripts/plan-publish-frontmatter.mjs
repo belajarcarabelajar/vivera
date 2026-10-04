@@ -120,8 +120,6 @@ const RELATED_HEADING_RE = /^##[ \t]+related[ \t]*$/i;
 const ANY_HEADING_RE = /^#{1,6}[ \t]+/;
 const LEADING_DATE_RE = /^(\d{4}-\d{2}-\d{2})/;
 
-// ---------- primitives ----------
-
 // A YAML plain scalar cannot start with an indicator character, cannot contain
 // `: ` or ` #`, and cannot be empty. Plan titles and absolute paths hit those
 // cases often enough to matter, and a bare scalar containing them is a
@@ -197,8 +195,6 @@ function vaultLink(indexPath, vaultRoot) {
   return rel.split(path.sep).join('/').replace(/\.md$/i, '');
 }
 
-// ---------- split ----------
-
 // Returns the raw YAML block WITHOUT its `---` fences, plus the remaining body
 // with the single blank line after the closing fence removed. Text that does not
 // open with a fence — or opens one that is never closed — comes back untouched,
@@ -246,8 +242,6 @@ function withRelated(body, planPath) {
 
   return `${body.replace(/[\s]+$/, '')}\n\n## Related\n\n${line}\n`;
 }
-
-// ---------- merge ----------
 
 // ctx: { planPath, projectName, today, exists, indexPath?, vaultRoot? }
 //   exists(indexPath) -> boolean, INJECTED. This module never touches the

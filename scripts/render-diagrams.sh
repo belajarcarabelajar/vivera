@@ -124,8 +124,26 @@ fi
 rendered=$((rendered + 2))
 
 # ---- Publish: sync, pruning orphans ----------------------------------------
+# mmdc output is nondeterministic: two renders of the same block differ in
+# path coordinates while every text node stays identical (measured on this
+# machine, same input, 319944 vs 319930 bytes with identical <p> sequences).
+# A blind copy would therefore dirty the two committed heroes on every run,
+# so a tracked file is only replaced when its text nodes changed. Untracked
+# (gitignored) files are always written; they are throwaway build artifacts.
+#
+# Revert: restore the single `cp` line below and delete `svg_text` and the
+# publish loop. `bun run ci` will dirty the heroes again, which is the
+# symptom this exists to stop.
+# One text node per line, sorted: node ORDER varies between renders as well,
+# so neither byte equality nor a greedy single-span match can tell churn from
+# a real edit. GNU grep -P is required (Arch ships it; the bare `grep -o` form
+# above was measured to keep churning because its greedy span swallows the path
+# data between the first and last node).
+svg_text() { grep -oP '<p>.*?</p>' "$1" 2>/dev/null | sort || true; }
 mkdir -p "$OUTPUT_DIR"
 pruned=0
+kept=0
+updated=0
 while IFS= read -r -d '' existing; do
   base="$(basename "$existing")"
   if [ ! -f "$STAGE_DIR/$base" ]; then
@@ -134,12 +152,23 @@ while IFS= read -r -d '' existing; do
   fi
 done < <(find "$OUTPUT_DIR" -maxdepth 1 -name "*.svg" -print0)
 
-cp "$STAGE_DIR"/*.svg "$OUTPUT_DIR/"
+for staged in "$STAGE_DIR"/*.svg; do
+  base="$(basename "$staged")"
+  dest="$OUTPUT_DIR/$base"
+  if [ -f "$dest" ] && ! git check-ignore -q "$dest" 2>/dev/null; then
+    if [ "$(svg_text "$staged")" = "$(svg_text "$dest")" ]; then
+      kept=$((kept + 1))
+      continue
+    fi
+    updated=$((updated + 1))
+  fi
+  cp "$staged" "$dest"
+done
 
 rm -rf "$TEMP_DIR"
 
 echo ""
-echo "==> Blocks found: $block_count   Rendered: $rendered   Pruned orphans: $pruned"
+echo "==> Blocks found: $block_count   Rendered: $rendered   Pruned orphans: $pruned   Committed updated: $updated   kept: $kept"
 if [ "$errors" -gt 0 ]; then
   echo "❌ $errors rendering error(s). See failures above." >&2
   exit 1

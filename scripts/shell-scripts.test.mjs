@@ -100,12 +100,56 @@ test('render-diagrams.sh slugify function works correctly', () => {
   const script = fs.readFileSync(path.join(SCRIPTS_DIR, 'render-diagrams.sh'), 'utf8');
   const slugifyMatch = script.match(/slugify\(\)\s*\{[^}]+\}/);
   assert.ok(slugifyMatch, 'slugify function not found');
-  
+
   // Test slugify logic
   const slugify = (p) => p.replace(/^.*\//, '').replace(/\.md$/, '').replace(/[^A-Za-z0-9_-]/g, '-').toLowerCase();
   assert.equal(slugify('README.md'), 'readme');
   assert.equal(slugify('docs/guide.md'), 'guide');
   assert.equal(slugify('path/to/file-name.md'), 'file-name');
+});
+
+test('render-diagrams.sh publish keeps a tracked hero whose text is unchanged', () => {
+  // mmdc is nondeterministic (same block, different path coordinates each
+  // run), so the publish step must compare text nodes rather than bytes. The
+  // shipped svg_text() function is extracted and evaluated for real, against
+  // fixtures that reproduce the measured case: identical <p> sequences with
+  // different coordinates, then a genuinely changed diagram.
+  const script = fs.readFileSync(path.join(SCRIPTS_DIR, 'render-diagrams.sh'), 'utf8');
+  const fnMatch = script.match(/svg_text\(\)\s*\{[^}]+\}/);
+  assert.ok(fnMatch, 'svg_text function not found; the publish step has no text comparison');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'svg-text-test-'));
+  try {
+    // Two nodes with path data BETWEEN them that differs: a greedy
+    // `<p>.*</p>` span would swallow that path data and report churn, so this
+    // fixture is what keeps the comparison honest.
+    const committed = '<svg><g><p>Session approved</p><path d="M1 2 C3 4"/><p>Gather reports</p></g></svg>';
+    const rerendered = '<svg><g><p>Session approved</p><path d="M9 9 C9 9"/><p>Gather reports</p></g></svg>';
+    const changed = '<svg><g><p>Session approved twice</p><path d="M1 2 C3 4"/><p>Gather reports</p></g></svg>';
+    fs.writeFileSync(path.join(tmp, 'a.svg'), committed);
+    fs.writeFileSync(path.join(tmp, 'b.svg'), rerendered);
+    fs.writeFileSync(path.join(tmp, 'c.svg'), changed);
+    const run = (f) => spawnSync('bash', ['-c', `${fnMatch[0]}; svg_text "$1"`, 'bash', f], { encoding: 'utf8' });
+    assert.equal(run(path.join(tmp, 'a.svg')).stdout, run(path.join(tmp, 'b.svg')).stdout,
+      'identical text with different coordinates must compare equal, or every ci run dirties the hero');
+    assert.notEqual(run(path.join(tmp, 'a.svg')).stdout, run(path.join(tmp, 'c.svg')).stdout,
+      'changed text must compare different, or a real diagram edit would never publish');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('render-diagrams.sh publish guards tracked files instead of blind-copying', () => {
+  // Structural: the blind `cp stage/*.svg output/` must be gone, replaced by
+  // a loop that keeps a tracked file when its text matches and counts both
+  // outcomes. Without this, the svg_text test above passes while the script
+  // still overwrites the hero on every run.
+  const script = fs.readFileSync(path.join(SCRIPTS_DIR, 'render-diagrams.sh'), 'utf8');
+  assert.ok(!script.includes('cp "$STAGE_DIR"/*.svg "$OUTPUT_DIR/"'),
+    'bare bulk copy is back; the hero will churn on every ci run');
+  assert.ok(script.includes('git check-ignore -q "$dest"'),
+    'no tracked-file guard; gitignored build artifacts and committed heroes take the same path');
+  assert.ok(script.includes('kept=$((kept + 1))') && script.includes('updated=$((updated + 1))'),
+    'publish outcomes are not counted; the ci log cannot show whether a hero changed');
 });
 
 // ---------- sync.sh ----------

@@ -103,6 +103,12 @@ each carries a ceiling and a trigger.
       language the request arrived in.
 - [ ] No em dash in this body, the commit messages, or any user-visible string
       in the diff.
+- [ ] No attribution footer, watermark, badge, or co-author line anywhere in the
+      body or the commits: no `Generated with <tool>`, no `🤖`, no `Co-Authored-By`,
+      no `Signed-off-by`, no vendor or model name. An artifact ends where its
+      content ends. If a credit is genuinely wanted, the user named the exact
+      text; an invented one is a defect even when the name is correct, and one
+      already published a false authorship claim on PR #15.
 - [ ] No secrets, tokens, `.env` content, or unrelated cleanup in the diff.
 - [ ] Every acceptance criterion maps to a check and to evidence.
 - [ ] No reference to this conversation, to the session that produced the

@@ -848,6 +848,50 @@ Pre-authorization covers each PR in the list individually, so merging the first 
 not authorize the second. One unreachable PR is recorded as `not reviewed` and the
 batch continues.
 
+### Copy rules: no em dash, no attribution footer
+
+Two rules about the copy this repository ships, enforced by
+`bun run copy:check` and asserted on every `bun run ci`:
+
+```bash
+bun run copy:check <file>...        # check an artifact (a PR body, a doc)
+bun run copy:check --commits [N]    # check the last N commit messages
+```
+
+| Rule | Pattern |
+|---|---|
+| No em dash | U+2014 in user-visible prose |
+| No attribution footer | `Generated with <tool>`, a `🤖` credit badge, `Co-Authored-By:`, `Signed-off-by:` |
+
+The second rule exists because of PR #15 on 2026-10-04, where a
+`Generated with [Claude Code]` footer was appended to a PR body that no
+template, no instruction, and none of the seven other PRs in this repository
+supported, in a session that was not Claude Code. It published a false claim
+about authorship in a permanently public artifact. Both rules already existed as
+prose; the em-dash rule was in the master skill and in the PR template checklist,
+and 69 em dashes still rode out in one diff. A rule that only exists in prose
+cannot stop anything.
+
+Two scope decisions, both forced by running the checker rather than reading it:
+
+**The patterns match attribution SHAPES, not tool names.** A first version also
+matched bare vendor names and immediately flagged README's harness table, which
+legitimately lists Claude Code and Copilot, plus a mermaid node reading
+`🤖 Subagents execute`. Those are not attributions. A gate that fires on those
+gets learned to be noise, and a noisy gate reports success while checking
+nothing. `Generated with X` is an attribution whatever X is; a bare tool name is
+not.
+
+**Git history is not scanned by CI.** An earlier version checked the last 20
+commit messages and failed on two commits from a previous session, which is not
+CI's to fix and would leave the gate red forever on history nobody will rewrite.
+Run `bun run copy:check --commits` on your own commits before pushing, where a
+hit is a hit on work you just produced.
+
+A line that states the rule is exempt from it, with a two-line lookback so a
+wrapped markdown checklist item can quote the trigger phrase it forbids. The
+window is bounded: a violation four lines below a rule statement is still caught.
+
 ### All five share the subagent and evidence rules
 
 All five carry the same subagent and evidence rules, because the most common failure is an agent

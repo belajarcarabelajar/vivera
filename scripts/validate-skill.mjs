@@ -37,6 +37,86 @@ let errors = 0;
   }
 }
 
+// 0c. The copy rules must still EXIST, and this repository's own artifacts must
+// obey them.
+//
+// Why this checks the rules' presence and not just the artifacts: both rules were
+// already written in prose, and both still shipped anyway. The em dash was
+// specified in the master skill and in the PR template checklist, and 69 of them
+// rode out in a single diff. A `Generated with [Claude Code]` footer went out on
+// PR #15 in a session that was not Claude Code, supported by no template and no
+// precedent in this repository. A rule that only exists in prose cannot stop
+// anything, and a rule that exists only in prose has now been measured failing
+// twice, so both the rule text and the enforcement are asserted here.
+//
+// The SCOPE is deliberately narrow: the user-visible ARTIFACTS of this repository
+// (README, the PR and review templates, the trigger prompts), not every file. The
+// master skill and the code comments legitimately contain em dashes, including in
+// this very rule's quoted examples, and a scan that flagged those would teach
+// people to ignore the scan.
+{
+  const { checkFile, checkCommits } = await import('./check-copy-rules.mjs');
+  const masterPath = path.join(rootDir, 'Super Ultra Code Plan Implementation.md');
+  const masterText = fs.readFileSync(masterPath, 'utf8');
+
+  // Are the rules still WRITTEN DOWN? A rule nobody can find is not a rule, and
+  // this is the half that costs nothing to assert.
+  const missing = [];
+  if (!/never use em dashes/i.test(masterText)) missing.push('the master skill no longer states the em-dash copy rule');
+  if (!/No Attribution Footer, Watermark, or Co-Author Line/i.test(masterText)) {
+    missing.push('the master skill no longer states the no-attribution-footer rule');
+  }
+  if (missing.length) {
+    for (const m of missing) console.error(`❌ ${m}`);
+    errors += missing.length;
+  } else {
+    console.log('✅ Copy rules still stated: em dash and no-attribution-footer.');
+  }
+
+  // Are the TEMPLATES still carrying the checklist item? The PR template is what
+  // an agent reads at PR time, so a rule missing from it is missing where it is
+  // used.
+  const prTemplate = fs.readFileSync(path.join(rootDir, 'templates', 'pull-request-template.md'), 'utf8');
+  if (!/attribution footer, watermark, badge, or co-author line/i.test(prTemplate)) {
+    console.error('❌ templates/pull-request-template.md no longer carries the no-attribution-footer checklist item');
+    errors += 1;
+  } else {
+    console.log('✅ PR template carries both checklist items.');
+  }
+
+  // Are the ARTIFACTS obeying them? Scope: the PR-facing templates.
+  //
+  // NOT this repository's git history. The first version also checked the last 20
+  // commit messages and failed on two commits from an earlier session
+  // (`feat(exa:...`), which is not this session's to fix and would leave CI red
+  // forever on history nobody is going to rewrite. Commit messages are checked by
+  // `bun run copy:check --commits`, which an agent runs on its OWN commits before
+  // pushing, where a hit is a hit on work this session just produced.
+  //
+  // README.md is deliberately NOT in the list either. It carries hundreds of em
+  // dashes that predate the rule and a harness table that legitimately names
+  // Claude Code and Copilot; including it produced dozens of findings on the first
+  // run, which is how a gate gets learned to be noise. The rule targets the copy
+  // this repository SHIPS. Pass it explicitly via `check-copy-rules.mjs` when a
+  // change actually touches it.
+  const artifacts = [
+    'templates/pull-request-template.md',
+    'templates/pr-review-template.md',
+    'templates/code-review-template.md',
+  ];
+  const violations = [];
+  for (const a of artifacts) violations.push(...checkFile(a));
+  if (violations.length === 0) {
+    console.log(`✅ Copy rules obeyed: ${artifacts.length} PR-facing template(s) clean.`);
+  } else {
+    for (const v of violations) {
+      console.error(`❌ ${v.where}  [${v.rule}]${v.detail ? ` ${v.detail}` : ''}`);
+      if (v.line) console.error(`     ${v.line}`);
+    }
+    errors += violations.length;
+  }
+}
+
 // 0. Check Mandatory Prerequisites: tgrep
 try {
   const tgrepOut = execSync('tgrep --version 2>&1 || ~/.local/bin/tgrep --version 2>&1', { encoding: 'utf8' }).trim().split('\n')[0];

@@ -11,6 +11,7 @@ defaults:
   allow_loose_skip_if: []            # task ids grandfathered from the skip_if probe ban
   require_impacts: true              # every task must declare the surfaces it can break
   allow_no_impacts: []               # task ids exempted from impacts; a stale name is an error
+  retry_if: any                      # any | transient. `transient` spends a retry budget ONLY on a failure the classifier calls transient; an unrecognised value throws
 tasks:
   - id: T1
     depends_on: []                  # DAG edges — machine-parseable, must match Mermaid

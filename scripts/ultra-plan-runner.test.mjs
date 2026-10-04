@@ -14,6 +14,7 @@ import {
   executePlan,
   classifySkipIf,
   classifyFailure,
+  validateRetryIf,
   ledgerTrace,
   renderLedger,
   RUNNER_CONTRACT_KEYS,
@@ -1830,4 +1831,88 @@ test('the widened ledger is still parsed by plan-mark-done', () => {
   assert.equal(ledger.has('Task'), false, 'the header is not a task id');
   assert.equal(ledger.has('---'), false, 'the separator is not a task id');
   assert.equal(classifyStatus('FAILED-ISOLATED'), 'failed');
+});
+
+// ---------- defaults.retry_if ----------
+//
+// The regression this locks. Making the STRICT retry policy the default would
+// have stopped retrying flaky tests in every plan in the registry, because
+// `transient: 'unknown'` is exactly the ordinary exit 1 where a deterministic
+// assertion failure and a flaky test look identical from an exit code. That is
+// why the strict policy is opt-in and the default keeps the older behaviour.
+
+const flakyCmd = (marker) => `sh -c 'if [ -f ${marker} ]; then exit 0; else touch ${marker}; exit 1; fi'`;
+
+test('retry_if any keeps the older behaviour: an unknown-transient failure retries', () => {
+  const marker = path.join(tmpdir(), `vivera-retryif-any-${process.pid}`);
+  rmSync(marker, { force: true });
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { retry_if: 'any' },
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd: flakyCmd(marker), expect_exit: 0, retry: 1 }] }],
+  };
+  try {
+    assert.equal(executePlan(plan, { execute: true, log: () => {} }).status.get('T1'), 'PASSED');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+test('retry_if transient spends the budget only on a failure classified transient', () => {
+  const marker = path.join(tmpdir(), `vivera-retryif-strict-${process.pid}`);
+  rmSync(marker, { force: true });
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { retry_if: 'transient' },
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd: flakyCmd(marker), expect_exit: 0, retry: 1 }] }],
+  };
+  try {
+    const { status, ledger } = executePlan(plan, { execute: true, log: () => {} });
+    assert.equal(status.get('T1'), 'FAILED-ISOLATED', 'the strict policy must not retry an unknown-transient failure');
+    assert.equal(ledger[0].retry, '0/1');
+    assert.match(ledger[0].note, /retry skipped under retry_if: transient/);
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+test('retry_if transient still retries a timeout, which IS classified transient', () => {
+  // The strict policy must not become "never retry". A step that outlived its
+  // budget is the one case where a re-run can plausibly succeed.
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { retry_if: 'transient', step_timeout_s: 1 },
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd: 'sleep 5', expect_exit: 0, retry: 1 }] }],
+  };
+  const { ledger } = executePlan(plan, { execute: true, log: () => {} });
+  assert.equal(ledger[0].klass, 'timeout');
+  assert.equal(ledger[0].retry, '1/1', 'a timeout must consume its retry under the strict policy');
+  assert.ok(!ledger[0].note, `a retried timeout must not be reported as skipped, got: ${ledger[0].note}`);
+});
+
+test('an unrecognised retry_if throws rather than defaulting to the weaker semantics', () => {
+  // Same reason `on_precondition_fail` throws: a typo must not quietly grant a
+  // policy nobody asked for.
+  assert.throws(() => validateRetryIf('maybe'), /defaults\.retry_if must be one of/);
+  assert.throws(() => validateRetryIf(true), /defaults\.retry_if must be one of/);
+  assert.equal(validateRetryIf(undefined), 'any', 'an absent value is the documented default, not an error');
+  assert.equal(validateRetryIf('transient'), 'transient');
+  assert.throws(
+    () => executePlan({
+      schema: 'ultra-plan/v1',
+      defaults: { retry_if: 'strict-ish' },
+      tasks: [{ id: 'T1', depends_on: [], skip_if: 'false' }],
+    }, { execute: true, log: () => {} }),
+    /defaults\.retry_if must be one of/,
+    'the throw must happen on the execution path, not only in the unit test',
+  );
+});
+
+test('the plan template ships the strict policy commented, and defaults to any', () => {
+  const text = fs.readFileSync(path.join(ROOT, 'templates', 'implementation-plan-template.md'), 'utf8');
+  const { frontmatter } = extractFrontmatter(text);
+  const plan = parseUltraPlanYaml(frontmatter);
+  assert.match(text, /retry_if: any/, 'the documented default must be the weaker, current behaviour');
+  assert.equal(plan.defaults.retry_if, 'any');
+  assert.deepEqual(validatePlan(plan, text).errors, []);
 });

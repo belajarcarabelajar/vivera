@@ -21,6 +21,8 @@ import path from 'node:path';
 import {
   loadRegistry,
   saveRegistry,
+  readRegistryRaw,
+  mutateRegistry,
   claimSlot,
   setPr,
   setState,
@@ -442,4 +444,126 @@ test('twenty sessions get twenty distinct branches and worktrees', () => {
   assert.equal(order.length, 20);
   assert.equal(order[0], 'w1');
   assert.equal(order[19], 'w20');
+});
+
+/** The temp-registry helper the mutual-exclusion tests below use. */
+function tempRegistry(contents = null) {
+  const f = registryFile('cas', contents === null ? { version: 1, sessions: [] } : contents);
+  return { registryPath: f.file, dir: f.dir, cleanup: f.cleanup };
+}
+
+// ---------- mutual exclusion ----------
+//
+// The failure this closes. `saveRegistry` used to write unconditionally, and
+// every command was a bare read-modify-write:
+//
+//   const registry = loadRegistry(path);   // read
+//   const next = claimSlot(registry, …);  // compute
+//   saveRegistry(next, path);              // write
+//
+// Two sessions claiming in the same window read the same bytes, and the second
+// rename silently discarded the first claim. That is worse than a duplicate
+// branch, because the branch and worktree of the lost session remain on disk
+// while the registry has no record of them: `assertNoCollisions` is built to
+// catch exactly that, and it arrives too late to catch it.
+//
+// There is no lock file, and that is the design rather than an omission. A lock
+// needs a stale-lock policy, and a stale lock needs a decision about what a
+// crashed holder does to the next one. Those are their own failure modes, and
+// they would trade a silent lost write for a refused legitimate claim. Compare
+// and swap has neither: it needs no state to survive a crash, because the state
+// it reads IS the state.
+
+test('saveRegistry refuses to overwrite bytes the caller did not read', () => {
+  const { registryPath } = tempRegistry();
+  saveRegistry({ version: 1, sessions: [] }, registryPath);
+  const read = readRegistryRaw(registryPath);
+
+  // Somebody else writes between the read and the save.
+  saveRegistry({ version: 1, sessions: [{ session: 'other', plan: 'p', branch: 'b', worktree: 'w', state: 'isolated' }] }, registryPath);
+
+  assert.throws(
+    () => saveRegistry({ version: 1, sessions: [] }, registryPath, { expectedRaw: read }),
+    /changed since it was read/,
+  );
+  // The other writer's session survived, which is the whole point.
+  assert.equal(loadRegistry(registryPath).sessions.length, 1);
+});
+
+test('saveRegistry without expectedRaw still writes, so a solo caller is unaffected', () => {
+  const { registryPath } = tempRegistry();
+  saveRegistry({ version: 1, sessions: [] }, registryPath);
+  const first = claimSlot(loadRegistry(registryPath), { plan: 'p', session: 'a', repoRoot: '/tmp' });
+  saveRegistry(first.registry, registryPath);
+  const second = claimSlot(loadRegistry(registryPath), { plan: 'p', session: 'b', repoRoot: '/tmp' });
+  assert.doesNotThrow(() => saveRegistry(second.registry, registryPath));
+  assert.equal(loadRegistry(registryPath).sessions.length, 2);
+});
+
+test('mutateRegistry re-applies on a fresh read instead of losing the write', () => {
+  const { registryPath } = tempRegistry();
+  saveRegistry({ version: 1, sessions: [] }, registryPath);
+
+  let calls = 0;
+  const { result, attempts } = mutateRegistry((registry) => {
+    calls++;
+    // A competing writer lands between this read and this save, exactly once.
+    if (calls === 1) {
+      saveRegistry({
+        version: 1,
+        sessions: [{ session: 'competitor', plan: 'p', branch: 'b0', worktree: 'w0', state: 'isolated' }],
+      }, registryPath);
+    }
+    const claimed = claimSlot(registry, { plan: 'mine', session: 'mine', repoRoot: '/tmp' });
+    return claimed.registry;
+  }, { registryPath });
+
+  assert.equal(calls, 2, 'the mutation must be re-applied on a fresh read');
+  assert.equal(attempts, 2);
+  const ids = loadRegistry(registryPath).sessions.map((s) => s.session).sort();
+  assert.deepEqual(ids, ['competitor', 'mine'], 'the competing write must survive, not be discarded');
+  assert.ok(result.sessions);
+});
+
+test('mutateRegistry gives up loudly rather than spinning forever', () => {
+  const { registryPath } = tempRegistry();
+  saveRegistry({ version: 1, sessions: [] }, registryPath);
+
+  let calls = 0;
+  assert.throws(() => mutateRegistry(() => {
+    calls++;
+    // Always racing, so no retry can win.
+    saveRegistry({
+      version: 1,
+      sessions: [{ session: `racer-${calls}`, plan: 'p', branch: `b${calls}`, worktree: `w${calls}`, state: 'isolated' }],
+    }, registryPath);
+    return loadRegistry(registryPath);
+  }, { registryPath, retries: 2 }), /written by another process 3 times in a row/);
+
+  assert.equal(calls, 3, 'retries: 2 means three attempts in total, not two and not four');
+});
+
+test('two sequential claims of DIFFERENT sessions both land, through the CLI path', () => {
+  // The regression that matters operationally: the claim path must still work
+  // normally for the common case. A conflict check that refuses ordinary claims
+  // would be worse than the defect it fixes.
+  const { registryPath } = tempRegistry();
+  for (const session of ['alpha', 'beta', 'gamma']) {
+    mutateRegistry((registry) => claimSlot(registry, { plan: 'p', session, repoRoot: '/tmp' }).registry, { registryPath });
+  }
+  assert.deepEqual(loadRegistry(registryPath).sessions.map((s) => s.session), ['alpha', 'beta', 'gamma']);
+});
+
+test('re-claiming the same session stays idempotent under the CAS path', () => {
+  // `claim` after a crashed session must return the same slot, not allocate a
+  // second one. The CAS wrapper calls the mutation more than once under
+  // contention, and idempotence is what makes that safe.
+  const { registryPath } = tempRegistry();
+  const once = mutateRegistry((r) => claimSlot(r, { plan: 'p', session: 'x', repoRoot: '/tmp' }).registry, { registryPath });
+  const twice = mutateRegistry((r) => claimSlot(r, { plan: 'p', session: 'x', repoRoot: '/tmp' }).registry, { registryPath });
+  assert.equal(loadRegistry(registryPath).sessions.length, 1);
+  // `mutateRegistry` returns the mutation's own value under `result`, not the
+  // registry: the two differ, because the registry the caller passed in was the
+  // pre-mutation read.
+  assert.equal(once.result.sessions[0].branch, twice.result.sessions[0].branch);
 });

@@ -183,11 +183,19 @@ export function checkCommits(count = 20) {
     return [{ where: 'git log', rule: 'git-failed', detail: r.error ? r.error.message : String(r.status), line: '' }];
   }
   const violations = [];
-  for (const chunk of r.stdout.split('\u0000')) {
-    const text = chunk.trim();
-    if (!text) continue;
-    const hash = text.slice(0, 40);
-    const message = text.slice(41);
+  // `%H%x00%B%x00%x00` per commit, so splitting on NUL and dropping the empties
+  // leaves hash/body pairs. Reading them as PAIRS is the whole fix: an earlier
+  // version treated each chunk as a single "hash and body" string and sliced 41
+  // characters off the front of it, which ate the first character of every body
+  // and made a real violation look like it sat beside unrelated text. The commit
+  // subject "feat: forbid invented attribution footers" lost its leading `f`, so
+  // the rule vocabulary it carried stopped qualifying the line below it and the
+  // footer example underneath was reported as a violation of a rule that was
+  // never near it.
+  const chunks = r.stdout.split('\u0000').filter((t) => t.trim() !== '');
+  for (let i = 0; i < chunks.length; i += 2) {
+    const hash = chunks[i].trim();
+    const message = chunks[i + 1] ?? '';
     // The em dash rule targets USER-VISIBLE copy. A commit message is one, and a
     // subject line is read first by every reviewer, so both are checked in full.
     violations.push(...checkText(message, { where: `commit ${hash.slice(0, 8)}` }));

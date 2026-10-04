@@ -15,7 +15,7 @@
 | Session slot | `[session slug from pr-registry claim]` |
 | Plan | `[docs/code-plan/plans/YYYY-MM-DD-<name>.md]` |
 | Base branch | `main` |
-| Head branch | `ai/<plan-id>/<session-slug>` |
+| Head branch | `<plan-id>/<session-slug>` |
 | Worktree | `[path printed by pr-registry claim]` |
 | Type of change | feature / bug fix / breaking / refactor / docs / test / chore |
 | Reviewer | `[who, or "none requested"]` |
@@ -104,11 +104,12 @@ each carries a ceiling and a trigger.
 - [ ] No em dash in this body, the commit messages, or any user-visible string
       in the diff.
 - [ ] No attribution footer, watermark, badge, or co-author line anywhere in the
-      body or the commits: no `Generated with <tool>`, no `🤖`, no `Co-Authored-By`,
-      no `Signed-off-by`, no vendor or model name. An artifact ends where its
-      content ends. If a credit is genuinely wanted, the user named the exact
-      text; an invented one is a defect even when the name is correct, and one
-      already published a false authorship claim on PR #15.
+      body, the commits, or the branch name: no `Generated with <tool>`, no `🤖`,
+      no `Co-Authored-By`, no `Signed-off-by`, no vendor or model name, and no
+      `ai/` prefix on the branch. An artifact ends where its content ends. If a
+      credit is genuinely wanted, the user named the exact text; an invented one
+      is a defect even when the name is correct, and one already published a
+      false authorship claim on PR #15.
 - [ ] No secrets, tokens, `.env` content, or unrelated cleanup in the diff.
 - [ ] Every acceptance criterion maps to a check and to evidence.
 - [ ] No reference to this conversation, to the session that produced the

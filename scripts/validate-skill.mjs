@@ -386,6 +386,10 @@ for (const snip of requiredSnippets) {
     { label: 'master skill requires a body file', file: masterPath, needle: '--body-file' },
     { label: 'master skill computes merge order', file: masterPath, needle: 'pr-registry.mjs order' },
     { label: 'master skill requires per-merge verification', file: masterPath, needle: 'pr-registry.mjs surface' },
+    // The branch shape, stated once in the skill. Prose naming it is what stops an
+    // agent from re-deriving a prefixed name by hand when the printed shape looks
+    // too plain, and `branchFor` plus its test are the deterministic half.
+    { label: 'master skill states the unprefixed branch shape', file: masterPath, needle: '`<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**' },
   ];
   if (!fs.existsSync(masterPath)) {
     console.error('❌ PR delivery contract cannot be checked: the master file is missing (see section 1).');
@@ -421,8 +425,9 @@ for (const snip of requiredSnippets) {
   const registryPath = path.join(rootDir, 'scripts', 'pr-registry.mjs');
   if (fs.existsSync(registryPath) && fs.existsSync(masterPath)) {
     let states = null;
+    let branchFor = null;
     try {
-      states = (await import(registryPath)).SESSION_STATES;
+      ({ SESSION_STATES: states, branchFor } = await import(registryPath));
     } catch (e) {
       console.error(`❌ Cannot load scripts/pr-registry.mjs to read SESSION_STATES: ${e.message}`);
       errors++;
@@ -434,6 +439,24 @@ for (const snip of requiredSnippets) {
         console.log(`✅ Session state names agree: all ${states.length} states appear in the master skill.`);
       } else {
         console.error(`❌ pr-registry.mjs exports states the master skill never names: ${missing.map((s) => `\`${s}\``).join(', ')}. The skill would instruct an agent to run a transition the tool refuses.`);
+        errors++;
+      }
+    }
+
+    // The derived branch shape is a contract with the prose the same way the state
+    // names are. It is checked by CALLING branchFor rather than by grepping the
+    // source, because the failure this exists to catch is a prefix reintroduced by
+    // editing one template literal, and a grep for the absence of `ai/` would pass
+    // just as happily over `ai-`, `agent/`, or `bot/`.
+    //
+    // Revert: delete this block, and the prose in the master skill it checks.
+    if (typeof branchFor === 'function') {
+      const derived = branchFor('plan-check', 's1');
+      const expected = 'plan-check/s1';
+      if (derived === expected) {
+        console.log(`✅ Derived branch shape agrees with the skill: ${derived} (no tool prefix).`);
+      } else {
+        console.error(`❌ branchFor derives "${derived}" but the skill states "${expected}". The printed branch and the documented branch disagree, so every PR header names a ref that does not exist.`);
         errors++;
       }
     }

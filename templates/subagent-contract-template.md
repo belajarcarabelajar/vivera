@@ -10,7 +10,7 @@
 - **Delegation Mode:** `share` | `branch` | `isolated-files`
 - **Session slot:** [from `bun scripts/pr-registry.mjs claim`]
 - **Working directory:** [the session worktree path. Every relative path in this contract resolves inside it.]
-- **Head branch:** `ai/<plan-id>/<session-slug>`
+- **Head branch:** `<plan-id>/<session-slug>`
 
 ## 1a. Git Boundary (read before dispatch)
 You edit files and run tests. You do **not** touch git state.

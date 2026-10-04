@@ -80,6 +80,14 @@ export const SNIPPET_CONTRACTS = {
     'BATCH BEHAVIOUR',
     'One verdict per PR, never one verdict for the batch',
     'Merges stay strictly sequential even when reviews were parallel',
+    // The `--admin` exception. These terms are pinned because the exception is
+    // the one part of this snippet that grants itself permission, and a later
+    // edit that trimmed the four measurements would re-create a silent
+    // authority to skip a review. Pinning the heading keeps the rule and its
+    // conditions from being separable.
+    'THE ADMIN\'S OWN APPROVAL ALWAYS PASSES',
+    'gh api repos/<o>/<r>/collaborators --jq length',
+    'Review Can not approve your own pull request',
   ],
   'orkestrasi-brainstorm.md': [
     'todowrite',

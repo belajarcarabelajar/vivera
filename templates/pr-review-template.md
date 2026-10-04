@@ -15,7 +15,7 @@
 | Field | Value |
 |---|---|
 | PR | `[owner/repo#<number>]` |
-| Base → head | `main` ← `ai/<plan-id>/<session-slug>` |
+| Base → head | `main` ← `<plan-id>/<session-slug>` |
 | Author | `[login]` |
 | Linked plan | `[docs/code-plan/plans/....md]` or `none` |
 | Linked issue | `[#<n>]` or `none` |

@@ -775,6 +775,14 @@ bun scripts/pr-registry.mjs status
 
 `claim` prints the exact `git worktree add` command to run, and is idempotent: a retried
 claim after a crashed session returns the same slot rather than allocating a second one.
+
+The derived branch is `<plan-id>/<session-slug>`, with no tool or workflow prefix. There
+used to be an `ai/` prefix, and it was removed on the same reasoning as the
+attribution-footer rule below: a branch name is permanent, publicly readable
+history, so a prefix asserts an authorship in the one artifact nobody can redact
+afterwards. The plan id already dates and describes the work. A slot claimed
+before the change keeps the branch it claimed, so there is no migration and no
+rename to undo.
 `pr.registry.json` is **gitignored** on purpose. It is per-machine live state recording
 which branch each running session holds right now; committing it would merge twenty
 machines' in-flight sessions into one file and guarantee a conflict on the next claim.
@@ -862,6 +870,7 @@ bun run copy:check --commits [N]    # check the last N commit messages
 |---|---|
 | No em dash | U+2014 in user-visible prose |
 | No attribution footer | `Generated with <tool>`, a `🤖` credit badge, `Co-Authored-By:`, `Signed-off-by:` |
+| No tool prefix on a branch name (the same attribution rule, on generated text) | `pr-registry.mjs claim` derives `<plan-id>/<session-slug>` |
 
 The second rule exists because of PR #15 on 2026-10-04, where a
 `Generated with [Claude Code]` footer was appended to a PR body that no
@@ -887,6 +896,17 @@ commit messages and failed on two commits from a previous session, which is not
 CI's to fix and would leave the gate red forever on history nobody will rewrite.
 Run `bun run copy:check --commits` on your own commits before pushing, where a
 hit is a hit on work you just produced.
+
+**The branch-name rule needs a different gate, because the name is generated.**
+The pattern list above can only catch text someone typed, and a branch name is
+printed by `pr-registry.mjs claim` rather than written by hand. So the gate is
+`bun run validate`: it calls `branchFor` and compares the result against the
+shape the master skill documents, which fails the moment a prefix is put back.
+`pr-registry.mjs` once derived `ai/<plan-id>/<session-slug>`. A branch name is
+permanent, publicly readable repository history, so that prefix was an
+authorship claim in the one artifact nobody can redact afterwards, and it was
+removed on that basis. Slots claimed before the change keep the branch they
+claimed, so there is no migration and no rename to undo.
 
 A line that states the rule is exempt from it, with a two-line lookback so a
 wrapped markdown checklist item can quote the trigger phrase it forbids. The

@@ -93,8 +93,20 @@ function slugify(input, label) {
   return slug;
 }
 
+// No tool prefix. A branch name is part of the repository's permanent history, so
+// it is written to look like a branch a person would have written. A leading
+// `ai/` (or any vendor, agent, or workflow marker) asserts an authorship nobody
+// asked to assert, and it is the same defect as the `Generated with <tool>`
+// footer this repository already forbids: an unrequested claim about who made
+// the change, in an artifact nobody can redact afterwards. The plan id already
+// dates and describes the work, so the prefix carried no information either.
+//
+// Revert: put `ai/` back in the template literal and update the two assertions in
+// pr-registry.test.mjs that name the shape. Slots already recorded in
+// pr.registry.json keep whatever branch they claimed, so the change is
+// forward-only and needs no migration.
 export function branchFor(planId, sessionId) {
-  return `ai/${slugify(planId, 'plan id')}/${slugify(sessionId, 'session id')}`;
+  return `${slugify(planId, 'plan id')}/${slugify(sessionId, 'session id')}`;
 }
 
 // The worktree lives beside the repository, never inside it. A worktree nested

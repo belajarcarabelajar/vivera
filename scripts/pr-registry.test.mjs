@@ -45,7 +45,14 @@ function registryFile(tag, contents = null) {
 const REPO = '/home/u/Proyek/snippet';
 
 test('branch name is derived, not chosen, and is scoped by plan', () => {
-  assert.equal(branchFor('2026-10-01-add-pr', 'w1'), 'ai/2026-10-01-add-pr/w1');
+  assert.equal(branchFor('2026-10-01-add-pr', 'w1'), '2026-10-01-add-pr/w1');
+  // No tool, vendor, or workflow prefix. The name lands in permanent repository
+  // history, so it has to read like something a person would have written, and
+  // an unrequested authorship marker is the same defect as a `Generated with`
+  // footer. Asserted literally because the prefix is exactly the kind of thing
+  // that gets added back as a "harmless" nicety.
+  assert.ok(!branchFor('p', 'w1').startsWith('ai/'), 'the branch must not announce a tool');
+  assert.equal(branchFor('p', 'w1').split('/').length, 2, 'exactly <plan-id>/<session-slug>, nothing wrapped around it');
   // Two sessions in the same plan still get different branches, which is the
   // only reason twenty panes can push at once without fighting.
   assert.notEqual(branchFor('p', 'w1'), branchFor('p', 'w2'));
@@ -83,7 +90,7 @@ test('claim records a slot with derived names and an isolated starting state', (
   });
   assert.equal(created, true);
   assert.equal(session.state, 'isolated');
-  assert.equal(session.branch, 'ai/2026-10-01-x/w1');
+  assert.equal(session.branch, '2026-10-01-x/w1');
   assert.equal(session.worktree, '/home/u/Proyek/snippet-wt/w1');
   assert.equal(session.pr, null);
   assert.deepEqual(session.depends_on, []);
@@ -249,8 +256,8 @@ test('a dependency cycle is refused with the cycle named', () => {
   const reg = {
     version: 1,
     sessions: [
-      { session: 'a', plan: 'p', branch: 'ai/p/a', worktree: '/w/a', state: 'open', pr: 1, depends_on: ['b'] },
-      { session: 'b', plan: 'p', branch: 'ai/p/b', worktree: '/w/b', state: 'open', pr: 2, depends_on: ['a'] },
+      { session: 'a', plan: 'p', branch: 'p/a', worktree: '/w/a', state: 'open', pr: 1, depends_on: ['b'] },
+      { session: 'b', plan: 'p', branch: 'p/b', worktree: '/w/b', state: 'open', pr: 2, depends_on: ['a'] },
     ],
   };
   assert.throws(() => mergeOrder(reg), /dependency cycle among sessions: a -> b -> a/,
@@ -322,12 +329,12 @@ test('a duplicate branch in the file is refused on load, not tolerated', () => {
   const f = registryFile('dup', {
     version: 1,
     sessions: [
-      { session: 'a', plan: 'p', branch: 'ai/p/x', worktree: '/w/a', state: 'isolated' },
-      { session: 'b', plan: 'p', branch: 'ai/p/x', worktree: '/w/b', state: 'isolated' },
+      { session: 'a', plan: 'p', branch: 'p/x', worktree: '/w/a', state: 'isolated' },
+      { session: 'b', plan: 'p', branch: 'p/x', worktree: '/w/b', state: 'isolated' },
     ],
   });
   try {
-    assert.throws(() => loadRegistry(f.file), /share branch ai\/p\/x/);
+    assert.throws(() => loadRegistry(f.file), /share branch p\/x/);
   } finally {
     f.cleanup();
   }
@@ -337,8 +344,8 @@ test('a duplicate worktree in the file is refused on load', () => {
   const f = registryFile('dupwt', {
     version: 1,
     sessions: [
-      { session: 'a', plan: 'p', branch: 'ai/p/a', worktree: '/w/same', state: 'isolated' },
-      { session: 'b', plan: 'p', branch: 'ai/p/b', worktree: '/w/same', state: 'isolated' },
+      { session: 'a', plan: 'p', branch: 'p/a', worktree: '/w/same', state: 'isolated' },
+      { session: 'b', plan: 'p', branch: 'p/b', worktree: '/w/same', state: 'isolated' },
     ],
   });
   try {
@@ -354,8 +361,8 @@ test('save refuses to persist a collision', () => {
     assert.throws(() => saveRegistry({
       version: 1,
       sessions: [
-        { session: 'a', plan: 'p', branch: 'ai/p/x', worktree: '/w/a', state: 'isolated' },
-        { session: 'b', plan: 'p', branch: 'ai/p/x', worktree: '/w/b', state: 'isolated' },
+        { session: 'a', plan: 'p', branch: 'p/x', worktree: '/w/a', state: 'isolated' },
+        { session: 'b', plan: 'p', branch: 'p/x', worktree: '/w/b', state: 'isolated' },
       ],
     }, f.file), /share branch/);
   } finally {

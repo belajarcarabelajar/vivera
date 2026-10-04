@@ -152,12 +152,19 @@ The report follows the structure defined in `templates/deep-research-report-temp
 
 ### 🕸️ Codebase Graph Preflight — graphify (optional)
 
-<!-- Added 2026-10-01. Scoped to Deep Research only; deliberately NOT wired
-     into TDD, systematic debugging, verification, or the debt sweep.
+<!-- Added 2026-10-01. Re-wired 2026-10-04: originally scoped to Deep Research
+     only and explicitly NOT wired into TDD, systematic debugging, verification,
+     or the debt sweep. That exclusion is what left the moment of highest
+     context-thickness — implementation — with no "who else consumes this?"
+     query, which is exactly the gap `tasks[].impacts` now closes mechanically.
+     The graph is now consulted at the Affected-Surface Audit (before Step 1) and
+     at the evidence gate (before the completion claim). It stays optional: the
+     file may not exist and the CLI may not be installed, and file reading is
+     always the correct fallback.
      Revert: delete this subsection. Nothing else references it — no template,
      example, script, or validator check depends on it. -->
 
-When a research question is about the active project's own code — how a subsystem works, what calls what, why two modules are coupled — check for a knowledge graph before re-reading raw files:
+Two moments use it. **Research**: the question is about the active project's own code — how a subsystem works, what calls what, why two modules are coupled — and re-reading raw files to answer it is wasteful. **Implementation and verification**: a task's `impacts` claim needs enumerating, which is the same question asked of the current tree rather than of a design. Check for a knowledge graph before either:
 
 ```bash
 test -f graphify-out/graph.json && graphify query "<question>"
@@ -256,6 +263,7 @@ These rules apply to every path and support the four skill components without re
 ### 🔎 Initialization, Investigation & Continuity
 - Begin with the current working directory and project state. Inspect relevant files, documentation, existing tests, recent commits, and available progress artifacts before making claims.
 - Read fully, then be lazy: Comprehension precedes reduction. Trace the full flow end-to-end and inspect all callers of touched functions before picking a minimal solution. A small diff in the wrong place is a bug, not efficiency. Fix bugs at the shared root cause so sibling callers are not left broken.
+- **Affected-Surface Audit (the mechanical form of the rule above):** comprehension is a promise the agent makes to itself, and a promise is not a gate. Every task therefore declares `impacts` — the surfaces it can break, each with the command or graph query that shows the impact — and `ultra-plan-runner.mjs` refuses a plan whose tasks declare none. `files` is not a substitute: it names what a task touches, never what consumes it. When a task changes a shared interface, a public export shape, a CLI flag, a config key, or a documented rule, the audit enumerates sibling callers, the later task or plan that reads it, the README or template that documents it, and the other repository that consumes it, then either updates each one or records it as a named follow-up with a finish line. A surface noticed and left untouched is a debt entry, never a silent omission.
 - Use only artifacts that exist; do not assume files such as progress logs or test manifests are present.
 - Before a new feature, run a relevant baseline check when one exists. For a bug, reproduce the symptom before proposing a fix.
 - When a task spans context windows, persist decisions, progress, blockers, and verification evidence in the plan or an appropriate project artifact, then resume from the last verified state.
@@ -696,6 +704,9 @@ Apply the gates relevant to the approved scope. Record `N/A` with a reason when 
 - When a test is flaky, classify the cause, capture evidence, and report the affected scope. Do not hide flakiness with unbounded retries or weaken assertions.
 - Classify failed checks as code failure, test failure, contract failure, environment failure, infrastructure failure, or unrelated pre-existing failure. The classification must be supported by evidence.
 - Retry only transient failures with a bounded policy. A retry is additional evidence, not proof that the original failure was irrelevant.
+- **The runner classifies what the exit code proves, and reports the rest as unknown.** `scripts/ultra-plan-runner.mjs` resolves a failed step into `timeout` (124 or ETIMEDOUT), `environment` (127 absent, 126 not executable), `interrupted` (130), `terminated` (143), or `code`, with `contract` reserved for the runner's own pre/postcondition failures. `transient` is a separate axis: `true` only for a timeout, `false` only where a re-run provably cannot help (so a 127 fails once instead of twice, visibly), and `unknown` for the ordinary exit 1, because a flaky test and a deterministic failure are indistinguishable from an exit code. **Classify from evidence; never guess, and never report a guess as a class.** A missing binary filed as a code failure sends triage to the wrong place, which is the whole cost of the guess.
+- **A failure row carries its own evidence.** The Error Ledger records the command's stderr tail (stdout when stderr is empty), bounded to the last few lines, plus the expectation the step actually carried. A row that states only "exit 1" cannot be acted on without re-running the command — and re-running a stateful step is not the same command twice. When the ledger says `_no output captured_`, that is itself the finding: the failing command produced nothing to diagnose with.
+- **A timed-out step is terminated with its children.** `spawnSync` signals only the shell it spawned; measured on `sh -c "sleep N & wait"`, the backgrounded process outlived the reported ETIMEDOUT. The runner therefore runs steps in their own process group and signals the group, so a step that overruns `step_timeout_s` leaves no build or test worker holding a lock. This is the machine form of the Stalled Subagent & Stale-Writer Guardrail below, which the agent follows by hand.
 
 ### 🚀 Rollout, Observability & Recovery
 - Deployment method default: deploy through the active repository's direct deployment script (e.g. `scripts/deploy-website.sh`) unless the user explicitly asks for CI, a workflow, or a pipeline to perform the deployment. Do not route a deployment through CI/CI-triggered jobs by default; treat CI-driven deployment as an explicit user choice.
@@ -820,6 +831,7 @@ Declared Fields Are Enforced, Not Described: every other frontmatter field the r
 - `verify_exit: 0` — the expected exit code for any `run[]` step that does not declare its own `expect_exit`. A step that is expected to fail must say so explicitly, so a RED step reads as the deliberate exception it is.
 - `idempotency_key: "T1:unit-of-work"` — must begin with this task's own id. The right-hand side names the task's unit of work and is free-form: in practice it is a behaviour (`T3:two-stage-trigger`, `T5:lifecycle-audit`) rather than a path, because a behaviour has no filename. A key whose prefix names a different task is an error — that is a copy-paste or a plan edited in the wrong place, and it is the part that actually goes stale.
 - `on_precondition_fail: stop-task-continue-independent` — the permissive default, which keeps independent tasks running. `halt-plan` stops the whole plan, reported as `HALTED-PLAN`. An unrecognised value throws rather than silently falling back to the permissive one, because a typo should not quietly grant the weaker semantics.
+- `impacts: ["<surface> - <evidence command>", ...]` — **what the task can break, which `files` never asked.** `files` names the paths a task touches; `impacts` names the surfaces that consume them: sibling callers, the later task that reads this export, the README that documents the flag, the template that mirrors the schema. This is the key that closes the gap `depends_on` structurally cannot: the DAG orders tasks *inside one plan*, so a consumer in another module, another plan, or another repository is not a node and cannot be an edge. With `defaults.require_impacts: true` a task declaring no `impacts` is a validation error, and an empty list is an error as well, because an empty list claims nothing and proves nothing. "Checked, nothing downstream" is a real answer, written as the sentinel `"none: <the command that checked>"` — the same discipline as `skip_if: "false"`, for the same reason: a claim that cannot fail is a false pass. A task is exempted with `defaults.allow_no_impacts: [T3]`, and naming a task that does declare its own impacts is itself an error, so the list cannot decay into a permanent blanket. **Flow-style only** (`impacts: ["a", "b"]`): the block form `- "text"` parses as an object rather than a scalar, so a block-style list reaches the validator as objects where strings were written, and is refused rather than counted. Plans that do not opt into `require_impacts` earn one aggregated warning naming every undeclared task, never an error — the same reasoning that made an unclassifiable `skip_if` a warning: several plans in the registry belong to repositories this one does not own, and erroring there would be one commit in this repository deciding that someone else's plan cannot run.
 Plan header template:
 ```
 ---
@@ -833,9 +845,12 @@ defaults:
   step_timeout_s: 120               # per-step hang guardrail
   on_precondition_fail: stop-task-continue-independent   # or: halt-plan
   allow_loose_skip_if: []            # task ids grandfathered from the skip_if probe ban
+  require_impacts: true              # every task must declare the surfaces it can break
+  allow_no_impacts: []               # task ids exempted from impacts; a stale name is an error
 tasks:
   - id: T1
     depends_on: []                  # DAG edges — `A --> B` means B depends_on A; must match Mermaid
+    impacts: ["<surface> - <the command or graph query that shows the impact>"]   # flow-style only
     files: { create: [exact/path.ext], modify: [], test: [exact/path.test.ext] }
     idempotency_key: "T1:exact/path.ext"
     skip_if: "<verification command>"  # exit 0 = already done → SKIPPED-IDEMPOTENT
@@ -1140,7 +1155,7 @@ Verification matrix — run only the rows relevant to the approved scope and rec
 | Change surface | Minimum evidence |
 |---|---|
 | Behavior | Focused test or reproducible check for each acceptance criterion |
-| Regression | Relevant neighboring tests and unchanged contracts |
+| Regression | Relevant neighboring tests and unchanged contracts, plus every surface the tasks' `impacts` declared — each one either re-verified or recorded as a follow-up |
 | UI/accessibility | Rendered behavior, interaction states, keyboard/accessibility checks where applicable |
 | API/data/migration | Contract/schema validation, migration or rollback check, affected consumer check |
 | Security/permissions | Allowed and denied paths, boundary validation, secret-handling review |
@@ -1336,7 +1351,7 @@ A SESSION ENDS WITH ZERO UNEXAMINED CODING DEBT
 Sweep the session record, not just the last command, for anything that was noticed but not closed. Candidate sources, in priority order:
 1. Recorded `defer:` deliberate shortcuts whose `<ceiling>` has actually been hit, so the debt the plan promised to revisit is now due.
 2. Findings deferred to follow-up by the code review, the Zero-Tolerance Clean Pass pre-existing warnings, or the Simplicity Ladder pruning pass.
-3. Adjacent code, sibling callers, or sibling files the fix touched only partially. Comprehension-before-reduction exposes these; leaving them unlisted is choosing debt.
+3. Adjacent code, sibling callers, or sibling files the fix touched only partially. Comprehension-before-reduction exposes these; leaving them unlisted is choosing debt. **Anything already named in a task's `impacts` and still open at sweep time is a debt item by definition** — the impact was declared, so failing to close it is a decision, not an oversight.
 4. Missing test layers on the changed surface (no unit test, no contract test, no e2e for a user-facing flow), missing accessibility/localization/empty/error states, missing docs or changelog or runbook entries.
 5. TODO/FIXME/XXX/HACK comments, skipped or quarantined tests, `@ts-ignore`/`eslint-disable`/`.skip`/`.only` markers, dead code, stale feature flags, duplicate helpers, and orphaned files that the diff revealed.
 6. Pre-existing lint/type/build warnings, flaky tests, unmeasured performance risk, unverified dependency or license assumptions, and security or compatibility observations that were out of scope for the plan.
@@ -1461,6 +1476,9 @@ flowchart TD
 | "The user wrote in Chinese, so the plan/report goes out in Chinese" | Prompt language is an input-layer fact, never an output instruction. Artifacts follow the codebase language, and the vault mirror is byte-identical to the plan, so a translation is stale on arrival |
 | "I'll optimize/refactor this later" (unmarked shortcut) | Deliberate shortcuts require `defer: <ceiling>, <upgrade-trigger>`. Without ceiling and trigger, later means never |
 | "Small diff without checking callers" | Comprehension before reduction. Patching symptoms leaves sibling callers broken |
+| "Part A is green, so I'm done" | Affected-Surface Audit: `tasks[].impacts` names what the task can break, and the runner refuses a plan that declares none. A green task proves the task, never its consumers |
+| "I'll list the affected files later" | An impact noticed and left untouched is a named follow-up with a finish line, not a silent omission. The debt sweep finds it at the end of the session; `impacts` makes it findable at the moment it is created |
+| "The subagent reported a file outside its chunk, so I'll note it mentally" | A name in a report that reaches no task and no backlog is a dropped impact. Every out-of-scope report becomes a task or a `defer:` line in the same session |
 | "Factory/interface for future extensibility" | Speculative abstraction is debt. YAGNI: 1 implementation = 0 interfaces |
 | "New dependency for a simple utility" | Climb the Simplicity Ladder: stdlib and platform features come before dependencies |
 | "Comment restating code or workflow narration" | Comments explain non-obvious "why", invariants, or deliberate shortcuts; delete banners, echoes, and step narrations |

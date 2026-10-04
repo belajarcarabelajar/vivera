@@ -30,6 +30,19 @@ pr.registry.json
 # committed, because it is configuration rather than state.
 plan.issues.local.json
 
+# One-generation backups written by scripts/lib/atomic-write.mjs, immediately
+# before the atomic rename of the file above. They exist for exactly one moment
+# — the moment after a bad write — and a `.bak` that outlives that is a stale
+# copy nobody reads. A global gitignore may cover *.bak on this machine; a clone
+# somewhere else has no such guarantee, so the rule is stated here too.
+*.json.bak
+*.md.bak
+
+# Temp files from an interrupted atomic write. Same reasoning: the write either
+# renamed (temp gone) or threw (temp unlinked), so one surviving on disk means
+# something died between the two, and it is debris rather than state.
+.*.tmp-*
+
 # -------------------------------------------------------
 # graphify build output (knowledge graph artifacts)
 # -------------------------------------------------------

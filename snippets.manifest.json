@@ -29,7 +29,7 @@
       "uuid": "70fe751b-7e98-4b9d-bedc-0271363cc958",
       "keyword": "prr",
       "name": "PR Review Standalone",
-      "description": "Review-only by default; merges to main only when pre-authorized and every safe gate passes (correct verdict, green checks, mergeable), graphify sync. Source: vivera/snippets/orkestrasi-pr-review.md"
+      "description": "Review-only by default; merges to main only when pre-authorized and every safe gate passes (correct verdict, green checks, mergeable), graphify sync. Target comes from #{clipboard}: copy one PR URL, or several for a batch of any size. Source: vivera/snippets/orkestrasi-pr-review.md"
     },
     {
       "source": "snippets/orkestrasi-brainstorm.md",

@@ -68,6 +68,18 @@ export const SNIPPET_CONTRACTS = {
     'gh pr diff',
     'gh pr checks',
     'graphify:sync',
+    // The review target arrives by clipboard substitution, so the contract has to
+    // pin the resolver and its stop rule. Without these terms a later edit could
+    // quietly drop TARGET RESOLUTION and leave `#{clipboard}` unhandled in the
+    // snippet an agent actually receives.
+    '#{clipboard}',
+    'TARGET RESOLUTION RUNS FIRST',
+    'Never guess a nearby PR number',
+    // Single AND batch are both required paths; the batch terms are what stop a
+    // multi-PR expansion from collapsing into "review them all, merge them all".
+    'BATCH BEHAVIOUR',
+    'One verdict per PR, never one verdict for the batch',
+    'Merges stay strictly sequential even when reviews were parallel',
   ],
   'orkestrasi-brainstorm.md': [
     'todowrite',

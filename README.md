@@ -374,7 +374,51 @@ bun run contract:check                              # fast structural check for 
 bun run audit:skipif                                # tally & audit skip_if predicates across registry
 ```
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 18 keys the runner reads (`tasks[].run[].cmd`, `tasks[].skip_if`, etc.) using pure AST/frontmatter comparison in ~1 second, bypassing the expensive headless Mermaid browser rendering.
+### Regex performance: two scans that were quadratic
+
+Two regex-based scanners were quadratic on this repository's own input, and both
+have been rewritten to a single pass. Both fixes keep the quadratic original in
+the test file as a **control**, so the claim stays falsifiable — a performance
+claim with nothing to compare against is a comment, not a test.
+
+| Site | Old shape | Measured old | New |
+|---|---|---|---|
+| `check-anchors.mjs` `parseAnchors` | forward walk from every `[` | 250 KB → **3.0 s** | 1.4 ms |
+| `vault-index-structural.mjs` `stripFrontmatter` | `/^([\s\S]*?)^---[ \t]*(?:\r?\n\|$)/m` | 781 KB → **3.8 s**; 3 MB → 30 s | ~2 ms |
+
+Both had the same underlying cause: **an unbounded lazy prefix with no literal for
+the engine to jump to**. `[\s\S]*?` matches the empty string at every position, so
+the engine retries from each one, roughly 4x per doubling of input size. The
+`--all` corpus is OpenCode session notes, which routinely run to hundreds of KB, so
+this was minutes of wall clock per audit rather than a theoretical concern.
+
+The property that predicts the problem is **not** "contains a lazy quantifier".
+Two sibling regexes with the same shape were measured and deliberately left alone:
+`redact.mjs`'s PEM pattern and `ultra-plan-runner.mjs`'s mermaid-fence matcher both
+open with a **literal** (`-----BEGIN `, ` ```mermaid `), so the engine's prefix
+search jumps straight to the candidate — 0.1 ms on an 800 KB input. Re-measure
+before touching either.
+
+Replacements, both linear and both verified against the original over a corpus that
+includes the nasty cases (`----` is not a fence, `k: ---` is not a fence, a fence at
+EOF with no newline, a BOM, CRLF, and an unterminated block):
+
+- `parseAnchors` → a bracket stack. Equivalent by construction: the `]` that brings
+  depth to 0 from position `i` is exactly the bracket matching `i` under standard
+  matching, since everything between them is balanced.
+- `stripFrontmatter` → a **sticky** regex (`y`) walked over line starts found with
+  `indexOf('\n')`. The sticky flag is what makes "must match exactly here"
+  expressible, which is what lets the caller walk line starts by hand.
+
+One timing lesson is recorded in both test files, because it cost two wrong
+assertions: a wall-clock ratio between two separately-timed runs measures the
+scheduler as much as the algorithm. One assertion read 3.28x per doubling on a
+provably linear function, and a best-of-N retry still went flaky once the suite ran
+55 files concurrently. The assertions that hold are **comparative and interleaved** —
+both implementations timed back to back on the same input, alternating order, so a
+GC pause lands on both and cancels in the quotient.
+
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 21 keys the runner reads (`tasks[].run[].cmd`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using pure AST/frontmatter comparison in ~1 second, bypassing the expensive headless Mermaid browser rendering.
 
 The visual map check is the part that catches a lying plan. Every task heading must have a
 matching node in the Mermaid block, and every `depends_on` edge must match a Mermaid edge
@@ -396,6 +440,66 @@ step is expected to fail, so it passes with `expect_exit: 1`.
 | `skip_if` only | `NEEDS-AGENT` plus a warning. Correct for prose, layouts, design calls. |
 | Neither | **Validation error.** Invisible to the runner and exempt from every gate. |
 
+### How a failure is reported
+
+Three things make a failure actionable instead of merely recorded, and all three
+were defects before 2026-10-04.
+
+**1. The row carries its own evidence.** `run()` always captured stderr and stdout;
+no caller read either, so a `FAILED-ISOLATED` row said `exit 1` and stopped. Diagnosing
+it meant re-running the command by hand — and for a stateful step a re-run is not the
+same command twice. The ledger now records the stderr tail (stdout when stderr is
+empty), bounded to the last few lines, plus the expectation the step actually carried
+(`exited 1, expected 0` is a fact; `exited 1` is half of one). `_no output captured_` is
+itself the finding: the failing command produced nothing to diagnose with.
+
+**2. Classification comes from the exit code, and only from the exit code.**
+
+| Exit | Class | Transient | Why |
+|---|---|---|---|
+| 124 / ETIMEDOUT | `timeout` | `true` | the step outlived `step_timeout_s` |
+| 127 | `environment` | `false` | the command is not on this machine; a re-run cannot change it |
+| 126 | `environment` | `false` | found, but not executable |
+| 130 | `interrupted` | `false` | SIGINT reached the step |
+| 143 | `terminated` | `false` | SIGTERM reached the step |
+| anything else | `code` | `unknown` | the command ran and disagreed with `expect_exit` |
+
+`transient` is a second axis, not a synonym for the class: it answers "is re-running
+worth anything". A flaky test and a deterministic failure both exit 1, so `unknown` is
+reported rather than guessed — the same rule `classifySkipIf` already follows. A
+`transient: false` row **skips its retry and says so in the run log**, which is why a
+typo'd command now fails once instead of `retry: 3` times.
+
+**3. A timed-out step dies with its children.** Measured: `spawnSync(..., { shell: true,
+timeout })` signals only the shell, so on `sh -c "sleep N & wait"` the backgrounded
+process was still running after the runner had already reported ETIMEDOUT. Steps now run
+in their own process group (`detached: true`) and the group is signalled on timeout, so a
+step that overruns leaves no build or test worker holding a lock. This is the machine
+form of the Stalled Subagent & Stale-Writer Guardrail the agent follows by hand.
+
+The ledger's column order is a contract, not a preference: `plan-mark-done.mjs` reads a
+row back by **shape** (id-shaped first cell, backticked status last), which is what makes
+widening the table safe, and the trace escapes `|` so a compiler's output can never
+manufacture a phantom row. A test asserts the widened ledger still parses through
+`plan-mark-done`'s own parser.
+
+### State files are written atomically
+
+`pr.registry.json`, `plan.issues.json`, and the plan `.md` that `plan-mark-done.mjs`
+rewrites are all written through `scripts/lib/atomic-write.mjs`: temp file in the
+target's own directory (same filesystem, so `rename(2)` is atomic), `fsync` before the
+rename, then rename, with one generation of `.bak`.
+
+The reason is recovery cost, not theory. All three are gitignored *because* they are
+machine-local, so `git checkout` has nothing to restore and a truncated write has no
+recovery path outside that machine. A bare `writeFileSync` opens with `O_TRUNC` first, so
+a crash mid-write has already destroyed the old bytes by the time it fails.
+
+Atomicity is not a lock, and the module does not pretend otherwise: two concurrent writers
+can still interleave, because making that impossible needs a lock file and a stale-lock
+policy with its own failure modes. `pr-registry.mjs` guards that case separately with
+`assertNoCollisions`, which refuses a duplicate branch or worktree on both load and save.
+
 A `skip_if` that only proves a string is present (`grep -q 'Marker' src/x.md`) is a
 false-pass channel: it survives the behaviour being reverted, and `plan-mark-done.mjs`
 ticks the task on that claim alone. The runner **rejects it as a validation error**. Use
@@ -412,6 +516,44 @@ belonging to repositories this one does not own and an error here would be one c
 changing someone else's repository. Run `bun scripts/skipif-registry-audit.mjs` for the
 current per-plan tally, or `--compare-to-frozen` to see what the live rule changed since
 the 2026-09-30 freeze.
+
+### `impacts` — what the task can break, which `files` never asked
+
+`files: { create, modify, test }` names the paths a task **touches**. Nothing in the
+contract asked what it **breaks**, so a task could change a shared interface, a public
+export shape, a CLI flag, or a documented rule, declare only its own file, and pass every
+gate while its consumers stayed broken. `depends_on` cannot close that gap: it orders
+tasks *inside one plan*, so a consumer in another module, another plan, or another
+repository is not a node and cannot be an edge.
+
+`tasks[].impacts` closes it. Each entry is a surface plus the command or graph query that
+shows the impact, so the claim carries its own evidence:
+
+```yaml
+- id: T1
+  impacts: ["scripts/check-runner-contract.mjs - structural key compare: bun scripts/check-runner-contract.mjs",
+            "README.md §Runner contract — bun scripts/check-runner-contract.mjs"]
+```
+
+| Plan declares | Runner does |
+|---|---|
+| `require_impacts: true` + a task with no `impacts` | **Validation error**, naming the task. |
+| `impacts: []` | **Validation error.** An empty list claims nothing and proves nothing. |
+| `impacts: ["none: <command>"]` | Passes. "Checked, nothing downstream" is a real answer, and it names the check — the same discipline as `skip_if: "false"`. |
+| `require_impacts` absent | One aggregated **warning** naming every undeclared task, never an error. |
+| `allow_no_impacts: [T3]` | Exempts one task. Naming a task that *does* declare impacts is itself an error, so the list cannot become a permanent blanket. |
+
+Flow-style only (`impacts: ["a", "b"]`). The block form `- "text"` parses as an object
+rather than a scalar, so a block-style list reaches the validator as objects where
+strings were written — and the validator reports that, naming the form that works,
+instead of counting it as a claim.
+
+The prose mirror is §2b of the plan template, an **Affected Surfaces** table with an
+evidence column, and the audit is re-run before Step 1 and again at Step 4 of every task.
+Where the subagent contract forbids a child from editing outside its chunk, an
+`IMPACT: <surface> - <what breaks> - <evidence>` line in the report is the handoff, and the
+parent's gather checkpoint requires every such line to have an owner: a task or a `defer:`
+backlog line, never a name that reaches no queue.
 
 `validate-skill.mjs` asserts that the plan template and the master skill's plan header both
 declare every key the runner reads, comparing the **parsed frontmatter structure** rather
@@ -679,7 +821,34 @@ Copy-paste prompts for the five workflow entry points. They live in
 - **[`orkestrasi-ngoding-plan.md`](snippets/orkestrasi-ngoding-plan.md)** (keyword: `;`): plan generation, TDD execution, and the mandatory subagent pipeline.
 - **[`orkestrasi-debugging.md`](snippets/orkestrasi-debugging.md)** (keyword: `;,`): root cause analysis with hypothesis-parallel investigation, and the mandatory subagent pipeline.
 - **[`orkestrasi-pr.md`](snippets/orkestrasi-pr.md)** (keyword: `;;,`): PR delivery from a finished session, PR review, and the ordered batch merge.
-- **[`orkestrasi-pr-review.md`](snippets/orkestrasi-pr-review.md)** (keyword: `prr`): standalone remote PR review, line-anchored findings, coverage table, and binary verdict; merges to main only when pre-authorized and all gates pass.
+- **[`orkestrasi-pr-review.md`](snippets/orkestrasi-pr-review.md)** (keyword: `prr`): standalone remote PR review, line-anchored findings, coverage table, and binary verdict; merges to main only when pre-authorized and all gates pass. Its target comes from `#{clipboard}`: copy one PR URL for a single review, or several (one per line) for a batch of any size.
+
+### Clipboard-driven review targets
+
+`orkestrasi-pr-review.md` takes its target from `#{clipboard}`, substituted by Snipset at
+expansion time. One URL reviews one PR; several (one per line) review a batch:
+
+```bash
+snipset snippet expand --by-keyword prr \
+  --clipboard "https://github.com/owner/repo/pull/42"
+
+# a batch
+snipset snippet expand --by-keyword prr --clipboard "$(gh pr list --json url --jq '.[].url' | tr '\n' ' ')"
+```
+
+Accepted shapes: a full PR URL, `#123`, or `owner/repo#123`. A value with no
+recognizable target is a **stop**, never a guess at a nearby number and never a
+fallback to whatever `gh pr list` shows first.
+
+Batch behaviour is defined rather than left to the agent reading a bigger number. One
+verdict per PR, never one for the batch. Fan-out chunks per `(PR, coverage category)`
+so no two subagents share a cell. Merges stay strictly sequential even though the
+reviews ran in parallel, with a fetch and a local check after every individual merge.
+Pre-authorization covers each PR in the list individually, so merging the first does
+not authorize the second. One unreachable PR is recorded as `not reviewed` and the
+batch continues.
+
+### All five share the subagent and evidence rules
 
 All five carry the same subagent and evidence rules, because the most common failure is an agent
 that reads a trigger prompt, never sees a subagent requirement in it, and quietly
@@ -1086,6 +1255,27 @@ bun scripts/check-anchors.mjs rem-154          # one chunk, exit 1 on any failur
 bun scripts/check-anchors.mjs --all            # full corpus, report only
 bun scripts/check-anchors.mjs --all --quiet    # only chunks with failures
 ```
+
+The anchor scan tracks `[` `]` depth, because a path's own trailing `[ses_…]`
+group has to close before the anchor does. That tracking used to walk forward from
+every `[` to find its closer, which is correct and **quadratic**: an unbalanced
+`[` sends the walk to the end of the string and the next `[` repeats the trip.
+Measured on `text [more words here and there\n` repeated — ordinary prose with a
+bracket and no closer, which is what a session note full of markdown links looks
+like when the closing bracket is outside the quoted span:
+
+| Input | Old | New |
+|---|---|---|
+| 63 KB | 123 ms | 2.3 ms |
+| 125 KB | 759 ms | 8.1 ms |
+| 250 KB | **3032 ms** | 1.4 ms |
+| 200 KB, fully unbalanced | **96 s** | — |
+
+A bracket stack answers the same question in one pass, and is equivalent by
+construction: the `]` that brings depth to 0 from position `i` is exactly the
+bracket matching `i` under standard matching. `scripts/check-anchors-perf.test.mjs`
+asserts the equivalence over a 22-case corpus **and** re-measures the quadratic
+control, so the claim stays falsifiable instead of becoming a comment.
 
 ### Anchor Repair (`scripts/repair-anchors.mjs`)
 

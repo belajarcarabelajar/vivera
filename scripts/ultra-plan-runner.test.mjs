@@ -13,8 +13,15 @@ import {
   validatePlan,
   executePlan,
   classifySkipIf,
+  classifyFailure,
+  ledgerTrace,
+  renderLedger,
   RUNNER_CONTRACT_KEYS,
 } from './ultra-plan-runner.mjs';
+// Imported, not reimplemented. The cross-module test at the end of this file
+// asserts that the WIDENED ledger is still readable by the tool that consumes it,
+// and it can only be honest if it uses that tool's own parser.
+import { parseRunnerLog, classifyStatus } from './plan-mark-done.mjs';
 // T1's frozen snapshot, imported here so one test can assert the two classifiers
 // have genuinely diverged. It is a historical record, not a second source of
 // truth: nothing in production depends on it.
@@ -1477,4 +1484,350 @@ test('an unresolvable plan fails the gate closed, not open', () => {
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }
+});
+
+// ---------- tasks[].impacts ----------
+//
+// The regression these lock. `files` names what a task touches and `depends_on`
+// orders tasks inside one plan, so nothing in the contract ever asked what a task
+// BREAKS. A task could change a shared interface, declare only its own file, and
+// pass every gate while every consumer stayed broken. The prose rules that were
+// supposed to cover it ("inspect all callers", "fix at the shared root cause")
+// cannot fail, so nothing exited non-zero when an agent forgot.
+
+test('a task declaring no impacts is an error when the plan requires them', () => {
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], skip_if: 'bun test a.test.ts' }],
+  };
+  const { errors } = validatePlan(plan, null);
+  assert.ok(errors.some((e) => /task T1 declares no impacts/.test(e)), errors.join(' | '));
+});
+
+test('without require_impacts the same plan warns instead of erroring', () => {
+  // The same reasoning that made an unclassifiable `skip_if` a warning: several
+  // plans in the registry belong to repositories this one does not own, and
+  // erroring there would be one commit here deciding someone else's plan cannot
+  // run. One aggregated warning, not one per task.
+  const plan = {
+    schema: 'ultra-plan/v1',
+    tasks: [
+      { id: 'T1', depends_on: [], skip_if: 'bun test a.test.ts' },
+      { id: 'T2', depends_on: ['T1'], skip_if: 'bun test b.test.ts' },
+    ],
+  };
+  const { errors, warnings } = validatePlan(plan, null);
+  assert.deepEqual(errors, []);
+  const hits = warnings.filter((w) => /declare no impacts/.test(w));
+  assert.equal(hits.length, 1, `expected one aggregated warning, got ${hits.length}: ${warnings.join(' | ')}`);
+  assert.match(hits[0], /T1, T2/);
+});
+
+test('an empty impacts list is an error, because it claims nothing', () => {
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], impacts: [], skip_if: 'bun test a.test.ts' }],
+  };
+  const { errors } = validatePlan(plan, null);
+  assert.ok(errors.some((e) => /T1 impacts is an empty list/.test(e)), errors.join(' | '));
+});
+
+test('the "none:" sentinel passes, and only when it names the check that ran', () => {
+  const good = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], impacts: ['none: bun test a.test.ts'], skip_if: 'bun test a.test.ts' }],
+  };
+  assert.deepEqual(validatePlan(good, null).errors, []);
+
+  // "No downstream exists" is exactly as easy to fabricate as a check that was
+  // never run, so the sentinel without its command is refused.
+  const bare = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], impacts: ['none:'], skip_if: 'bun test a.test.ts' }],
+  };
+  const { errors } = validatePlan(bare, null);
+  assert.ok(errors.some((e) => /"none:" sentinel with no command/.test(e)), errors.join(' | '));
+});
+
+test('a non-string impact entry is reported as the parser defect it is', () => {
+  // `impacts:` written block-style parses to [{}], because parseBlockSeq drops a
+  // `- item` line with no `:` to split on. Silently vanishing is the failure
+  // mode; the message has to name the flow-style form that works.
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], impacts: [{}], skip_if: 'bun test a.test.ts' }],
+  };
+  const { errors } = validatePlan(plan, null);
+  assert.ok(errors.some((e) => /non-string or blank entry/.test(e) && /flow-style only/.test(e)), errors.join(' | '));
+});
+
+test('block-style impacts really do misparse, so the error is not hypothetical', () => {
+  // Two block-style shapes, and both are refused. The parser cannot tell a bare
+  // scalar `- "text"` from a step map `- cmd: "text"`, so it builds an object
+  // either way: with no `:` inside the entry arrives empty, and with a `:` inside
+  // it arrives as a one-key map. Neither is a string, so neither can pass as an
+  // impact claim. The evidence has to be that the misparse is real, because the
+  // alternative is a plan that looks guarded and is not.
+  const plain = parseUltraPlanYaml([
+    'tasks:',
+    '  - id: T1',
+    '    impacts:',
+    '      - "scripts/x.mjs - bun test x"',
+  ].join('\n'));
+  assert.deepEqual(plain.tasks[0].impacts, [{}]);
+
+  const colonIn = parseUltraPlanYaml([
+    'tasks:',
+    '  - id: T1',
+    '    impacts:',
+    '      - "scripts/x.mjs - evidence: bun test x"',
+  ].join('\n'));
+  assert.equal(typeof colonIn.tasks[0].impacts[0], 'object');
+
+  // Flow-style is the form that works, and it survives the same round trip.
+  const flow = parseUltraPlanYaml([
+    'tasks:',
+    '  - id: T1',
+    '    impacts: ["scripts/x.mjs - bun test x"]',
+  ].join('\n'));
+  assert.deepEqual(flow.tasks[0].impacts, ['scripts/x.mjs - bun test x']);
+
+  const mk = (impacts) => ({
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true },
+    tasks: [{ id: 'T1', depends_on: [], impacts, skip_if: 'bun test a' }],
+  });
+  for (const shape of [plain.tasks[0].impacts, colonIn.tasks[0].impacts]) {
+    const { errors } = validatePlan(mk(shape), null);
+    assert.ok(errors.some((e) => /non-string or blank entry/.test(e)), errors.join(' | '));
+  }
+  assert.deepEqual(validatePlan(mk(flow.tasks[0].impacts), null).errors, []);
+});
+
+test('allow_no_impacts exempts a task, and a stale exemption is itself an error', () => {
+  // Same anti-decay rule as allow_loose_skip_if: an exemption outliving its
+  // reason is dead weight that hides the next regression.
+  const exempt = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true, allow_no_impacts: ['T2'] },
+    tasks: [
+      { id: 'T1', depends_on: [], impacts: ['a - bun test a'], skip_if: 'bun test a' },
+      { id: 'T2', depends_on: ['T1'], skip_if: 'bun test b' },
+    ],
+  };
+  assert.deepEqual(validatePlan(exempt, null).errors, []);
+
+  const stale = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true, allow_no_impacts: ['T9'] },
+    tasks: [{ id: 'T1', depends_on: [], impacts: ['a - bun test a'], skip_if: 'bun test a' }],
+  };
+  assert.ok(validatePlan(stale, null).errors.some((e) => /allow_no_impacts names "T9"/.test(e)));
+
+  // And the exemption cannot be left behind once the task declares its own.
+  const needless = {
+    schema: 'ultra-plan/v1',
+    defaults: { require_impacts: true, allow_no_impacts: ['T1'] },
+    tasks: [{ id: 'T1', depends_on: [], impacts: ['a - bun test a'], skip_if: 'bun test a' }],
+  };
+  assert.ok(validatePlan(needless, null).errors.some((e) => /remove the exemption/.test(e)));
+});
+
+test('impacts is a flow-style list of strings, end to end through the parser', () => {
+  const { tasks } = parseUltraPlanYaml([
+    'tasks:',
+    '  - id: T1',
+    '    impacts: ["scripts/a.mjs - bun test a", "none: bun test b"]',
+  ].join('\n'));
+  assert.deepEqual(tasks[0].impacts, ['scripts/a.mjs - bun test a', 'none: bun test b']);
+});
+
+test('the shipped plan template opts into the gate and validates clean', () => {
+  // A key the runner reads but the template does not demonstrate is a key every
+  // plan author copies without it. This is the same failure
+  // check-runner-contract.mjs guards, seen from the other side: the template has
+  // to not merely DECLARE the key, it has to PASS with it.
+  const text = fs.readFileSync(path.join(ROOT, 'templates', 'implementation-plan-template.md'), 'utf8');
+  const { frontmatter } = extractFrontmatter(text);
+  const plan = parseUltraPlanYaml(frontmatter);
+  assert.equal(plan.defaults.require_impacts, true, 'the template must turn the gate on');
+  const { errors } = validatePlan(plan, text);
+  assert.deepEqual(errors, [], errors.join(' | '));
+  for (const t of plan.tasks) {
+    assert.ok(Array.isArray(t.impacts) && t.impacts.length > 0, `task ${t.id} declares no impacts`);
+  }
+});
+
+// ---------- failure classification, evidence, and orphan reaping ----------
+//
+// The regression these lock, in the shape it actually had. Every step failure
+// reached the Error Ledger as `klass: 'code'` with no log output at all, because
+// `run()` captured stderr and stdout and no caller ever read either. A row said
+// "exit 1" and stopped. So a missing binary and a failing assertion were the same
+// row, and diagnosing a failure meant re-running the command by hand — which for
+// a stateful step is not the same command twice.
+
+test('classifyFailure separates what the exit code PROVES from what it cannot', () => {
+  // Facts first: these are the codes a POSIX shell defines.
+  assert.deepEqual(classifyFailure({ exit: 127 }), {
+    klass: 'environment', transient: false, basis: 'exit 127 (command not found)',
+  });
+  assert.equal(classifyFailure({ exit: 126 }).klass, 'environment');
+  assert.equal(classifyFailure({ exit: 130 }).klass, 'interrupted');
+  assert.equal(classifyFailure({ exit: 143 }).klass, 'terminated');
+  assert.deepEqual(classifyFailure({ exit: 124, timedOut: true }), {
+    klass: 'timeout', transient: true, basis: 'ETIMEDOUT from spawnSync',
+  });
+
+  // And the honest remainder. A flaky test and a deterministic failure both
+  // exit 1, so `transient` is `unknown`, not `false`. Guessing either way would
+  // be wrong, and reporting `unknown` is the same rule classifySkipIf follows.
+  const generic = classifyFailure({ exit: 1 });
+  assert.equal(generic.klass, 'code');
+  assert.equal(generic.transient, 'unknown');
+  assert.match(generic.basis, /cannot separate/);
+});
+
+test('a provably deterministic failure skips the retry, and says why', async () => {
+  // Before this, exit 127 meant the command ran twice. A missing binary does not
+  // appear between attempt one and attempt two.
+  const plan = {
+    schema: 'ultra-plan/v1',
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd: 'definitely-not-a-real-binary-xyz', expect_exit: 0, retry: 3 }] }],
+  };
+  const lines = [];
+  const { ledger } = executePlan(plan, { execute: true, log: (l) => lines.push(l) });
+  assert.equal(ledger.length, 1);
+  const row = ledger[0];
+  assert.equal(row.klass, 'environment');
+  assert.equal(row.transient, false);
+  assert.equal(row.retry, '0/3', 'no attempt may be spent on a retry that cannot help');
+  assert.match(row.note, /retry skipped/);
+  assert.ok(lines.some((l) => /retry skipped/.test(l)), 'the skip must be visible in the run, not only in the ledger');
+});
+
+test('an unknown-transient failure still retries, so a flaky step is not broken by this', () => {
+  // The regression guard for the change above: making retries smarter must not
+  // make them rarer. `unknown` keeps the pre-existing behaviour.
+  const marker = path.join(tmpdir(), `vivera-flaky-${process.pid}`);
+  const cmd = `sh -c 'if [ -f ${marker} ]; then exit 0; else touch ${marker}; exit 1; fi'`;
+  const plan = {
+    schema: 'ultra-plan/v1',
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd, expect_exit: 0, retry: 1 }] }],
+  };
+  try {
+    const { status } = executePlan(plan, { execute: true, log: () => {} });
+    assert.equal(status.get('T1'), 'PASSED', 'a first-attempt failure classified `unknown` must be retried');
+  } finally {
+    if (existsSync(marker)) rmSync(marker, { force: true });
+  }
+});
+
+test('the ledger carries the command output that explains the failure', () => {
+  const plan = {
+    schema: 'ultra-plan/v1',
+    tasks: [{
+      id: 'T1', depends_on: [], verify_exit: 0,
+      run: [{ cmd: 'sh -c "echo boom: expected 3 got 7 1>&2; exit 1"', expect_exit: 0, retry: 0 }],
+    }],
+  };
+  const { ledger } = executePlan(plan, { execute: true, log: () => {} });
+  assert.equal(ledger[0].klass, 'code');
+  assert.match(ledger[0].trace, /boom: expected 3 got 7/, 'the log tail is the diagnosis');
+  assert.equal(ledger[0].expected, 0, 'the row states the expectation, not only the actual exit');
+  assert.match(ledger[0].cause, /exited 1, expected 0/);
+});
+
+test('a trace cannot break the ledger row it lives in', () => {
+  // plan-mark-done.mjs parses these rows back out of the rendered table and
+  // takes the LAST `|`-split cell as the status, so an unescaped pipe is not a
+  // cosmetic defect: it changes which cell that is. `ledgerTrace` escapes it,
+  // backticks included, because a `code` span in the middle of a cell would
+  // otherwise render as broken markdown.
+  const nasty = 'a | b `code` c';
+  assert.equal(ledgerTrace({ stderr: nasty }), "a \\| b 'code' c");
+  const rendered = renderLedger([{
+    task: 'T1', step: 1, klass: 'code', exit: 1, transient: 'unknown', basis: 'b',
+    cause: 'c', expected: 0, retry: '0/0', status: 'FAILED-ISOLATED', trace: ledgerTrace({ stderr: nasty }),
+  }]);
+  const row = rendered.split('\n').find((l) => l.startsWith('| T1'));
+  const cells = row.split('|').slice(1, -1);
+  // A naive split cannot distinguish an escaped pipe from a separator, which is
+  // exactly why the assertion is on the invariant that matters: the status is
+  // still the last cell, so plan-mark-done still reads the row correctly.
+  assert.equal(cells[cells.length - 1].trim(), '`FAILED-ISOLATED`', 'the status must remain the LAST cell');
+  assert.equal(cells[0].trim(), 'T1', 'the task id must remain the FIRST cell');
+  const { ledger } = parseRunnerLog(rendered);
+  assert.equal(ledger.size, 1, 'one pipe in a log line must not manufacture a second row');
+  assert.ok(ledger.get('T1')[0].includes('a \\| b'), 'the escaped pipe must survive into the parsed row');
+});
+
+test('the trace is a bounded tail, and says how much it hid', () => {
+  const many = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\n');
+  const t = ledgerTrace({ stderr: many });
+  assert.match(t, /earlier line\(s\) hidden/, 'a hidden head must be declared, not silently dropped');
+  assert.match(t, /line 39$/, 'the tail is the end, which is where the error is');
+  assert.ok(t.length < 900, `the cell must stay small enough to read, got ${t.length} chars`);
+});
+
+test('stderr wins over stdout, and an empty capture says so instead of lying', () => {
+  assert.match(ledgerTrace({ stderr: 'from stderr', stdout: 'from stdout' }), /from stderr/);
+  const rendered = renderLedger([{
+    task: 'T1', step: 1, klass: 'code', exit: 1, transient: 'unknown', basis: 'b',
+    cause: 'c', expected: 0, retry: '0/0', status: 'FAILED-ISOLATED', trace: '',
+  }]);
+  assert.match(rendered, /_no output captured_/);
+});
+
+test('a timed-out step takes its background children with it', () => {
+  // Measured, and the reason `detached: true` plus a negated-pid signal exists.
+  // Without it, `spawnSync(..., { shell: true, timeout })` signals only the
+  // shell: on `sh -c "sleep N & wait"` the backgrounded sleep was still running
+  // after the runner had already reported ETIMEDOUT. The master skill has a whole
+  // guardrail section about dangling workers — aimed at the agent, never at the
+  // runner acting on its behalf.
+  const pidFile = path.join(tmpdir(), `vivera-orphan-${process.pid}.pid`);
+  rmSync(pidFile, { force: true });
+  const cmd = `sh -c "sleep 30 & echo \\$! > ${pidFile}; wait"`;
+  const plan = {
+    schema: 'ultra-plan/v1',
+    defaults: { step_timeout_s: 1 },
+    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd, expect_exit: 0, retry: 0 }] }],
+  };
+  try {
+    const { status, ledger } = executePlan(plan, { execute: true, log: () => {} });
+    assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+    assert.equal(ledger[0].klass, 'timeout');
+    assert.equal(ledger[0].exit, 124, 'a timeout reports 124, the code the rest of POSIX reserves for it');
+    assert.ok(existsSync(pidFile), 'the inner shell must have recorded the pid it spawned');
+    const orphan = Number(readFileSync(pidFile, 'utf8').trim());
+    assert.ok(orphan > 0, `expected a real pid, got ${orphan}`);
+    let alive = true;
+    try { process.kill(orphan, 0); } catch { alive = false; }
+    assert.equal(alive, false, `the grandchild ${orphan} outlived the step and is still running`);
+  } finally {
+    rmSync(pidFile, { force: true });
+  }
+});
+
+test('the widened ledger is still parsed by plan-mark-done', () => {
+  // The cross-module contract that adding columns could have broken silently.
+  // plan-mark-done identifies a ledger row BY SHAPE (id-shaped first cell,
+  // backticked status last), which is what makes widening safe — and this is
+  // the test that keeps that property true instead of merely documented.
+  const rendered = renderLedger([
+    { task: 'T1', step: 2, klass: 'environment', exit: 127, transient: false, basis: 'exit 127 (command not found)', cause: 'step 2 exited 127, expected 0', expected: 0, retry: '0/1', status: 'FAILED-ISOLATED', trace: 'bash: nope: command not found' },
+    { task: 'T2', step: 1, klass: 'timeout', exit: 124, transient: true, basis: 'ETIMEDOUT from spawnSync', cause: 'step 1 exited 124, expected 0', expected: 0, retry: '0/0', status: 'HALTED-UPSTREAM', trace: '' },
+  ]);
+  const { ledger } = parseRunnerLog(rendered);
+  assert.deepEqual([...ledger.keys()], ['T1', 'T2']);
+  assert.equal(ledger.get('T1').length, 1, 'one row per failure, not one per pipe in the trace');
+  assert.equal(ledger.has('Task'), false, 'the header is not a task id');
+  assert.equal(ledger.has('---'), false, 'the separator is not a task id');
+  assert.equal(classifyStatus('FAILED-ISOLATED'), 'failed');
 });

@@ -14,7 +14,16 @@
 // `withFakeGh`, a real executable on disk, so the argv and stdin that would
 // reach GitHub are asserted rather than assumed. A purely stubbed runner cannot
 // see `--body-file -` at all, which is exactly the thing most likely to be
-// wrong.
+// wrong. The live-state READ goes through that same runner, so a fake gh here
+// has to answer `issue view --json state` the way real gh does.
+//
+// The consequence worth knowing before reading the assertions: `current` is no
+// longer free. It costs one `gh issue view`. Before the live read, the state
+// compared in `deriveAction` was `entry.state`, a row this script wrote itself,
+// so `current` was a claim the script could never fail on: once the sidecar said
+// "closed", every later run agreed with itself and a human reopening the issue
+// was invisible forever. That is the drift this mirror exists to catch, created
+// by the mirror itself.
 //
 // Every fixture is inline. These tests never touch the network, never require
 // gh, and never read the developer's real plan.issues.json.
@@ -23,6 +32,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
   ghRunner,
@@ -35,12 +46,15 @@ import {
   hashOf,
   issueBody,
   parseTrailer,
+  readLiveState,
   deriveAction,
   applyAction,
   syncOne,
   OPEN_STATUSES,
   CLOSED_STATUS,
 } from './plan-issue-sync.mjs';
+
+const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-issue-sync.mjs');
 
 const PLAN_REL = 'docs/code-plan/plans/2026-10-01-add-pr.md';
 
@@ -128,8 +142,27 @@ function withFakeGh(script, fn) {
   }
 }
 
+// Records argv and stdin, then answers the way the real gh it stands in for
+// answers: JSON for `issue view --json state`, a bare URL for create and edit.
+// A fake that printed the URL to every subcommand would fail the live-state read
+// for a reason that has nothing to do with the behaviour under test, and a test
+// that fails for the wrong reason is worse than no test.
+function fakeGh({ state = 'OPEN', viewOk = true } = {}) {
+  const view = viewOk
+    ? `  echo '{"state":"${state}"}'`
+    : '  echo "gh: could not resolve to an issue with the number 7" >&2; exit 1';
+  return `echo "$@" >> "$CAPTURE_ARGV"; cat >> "$CAPTURE_STDIN"; if [ "$1 $2" = "issue view" ]; then
+${view}
+else
+echo "$FAKE_ISSUE_URL"
+fi`;
+}
+
 // Records argv and stdin, then prints the URL a real `gh issue create` prints.
-const RECORD_AND_ECHO_URL = 'echo "$@" >> "$CAPTURE_ARGV"; cat >> "$CAPTURE_STDIN"; echo "$FAKE_ISSUE_URL"';
+const RECORD_AND_ECHO_URL = fakeGh();
+const GH_HOLDING_OPEN = fakeGh({ state: 'OPEN' });
+const GH_HOLDING_CLOSED = fakeGh({ state: 'CLOSED' });
+const GH_VIEW_UNREADABLE = fakeGh({ viewOk: false });
 
 // ---------- reading the plan ----------
 
@@ -214,12 +247,52 @@ test('the trailer does not disturb a plan that itself contains an HTML comment',
   assert.equal(parseTrailer(body).key, 'k');
 });
 
+// ---------- readLiveState: the one read that makes `current` falsifiable ----------
+
+test('the live state is read from the issue itself, with an explicit --json state', () => {
+  const calls = [];
+  const run = (args) => {
+    calls.push(args.join(' '));
+    return { ok: true, status: 0, out: '{"state":"CLOSED"}', data: { state: 'CLOSED' } };
+  };
+  assert.equal(readLiveState(run, { number: 7, repo: 'u/r' }), 'closed');
+  assert.equal(calls[0], 'issue view 7 --repo u/r --json state');
+});
+
+test('a state gh cannot report is an explicit error, never a fallback to the sidecar', () => {
+  // The fallback IS the defect: a sidecar that says "closed" while the issue is
+  // open is exactly how this mirror went stale while reporting success.
+  const run = () => ({ ok: false, status: 1, out: '', err: 'HTTP 401: Bad credentials' });
+  assert.throws(
+    () => readLiveState(run, { number: 7, repo: 'u/r' }),
+    (e) => /issue view 7 --repo u\/r --json state/.test(e.message)
+      && /401/.test(e.message)
+      && /refuses to fall back/.test(e.message),
+  );
+});
+
+test('a state that is neither OPEN nor CLOSED is refused rather than read as a guess', () => {
+  // `gh issue view` answers {"state":"MERGED"} for a merged pull request. An entry
+  // pointing at a PR is a mapping bug, and reading MERGED as anything else would
+  // decide a write on an assumption.
+  const run = () => ({ ok: true, status: 0, out: '{"state":"MERGED"}', data: { state: 'MERGED' } });
+  assert.throws(() => readLiveState(run, { number: 7, repo: 'u/r' }), /neither OPEN nor CLOSED/);
+});
+
+test('output with no state field is refused rather than treated as an unreadable state', () => {
+  const run = () => ({ ok: true, status: 0, out: 'https://github.com/u/r/issues/7', data: null });
+  assert.throws(() => readLiveState(run, { number: 7, repo: 'u/r' }), /no "state" field/);
+});
+
 // ---------- deriveAction: the whole matrix ----------
 
+// `liveState` is what GitHub reported, resolved by the caller. It is an INPUT and
+// not a lookup, so the matrix below stays network-free, and every existing case
+// feeds the value its recorded entry used to supply for itself.
 const base = { key: PLAN_REL, id: '2026-10-01-add-pr', repo: 'u/snippet' };
 
 test('an unrecorded plan is created, never updated', () => {
-  const a = deriveAction({ entry: null, planText: plan('Draft'), status: 'Draft', ...base });
+  const a = deriveAction({ entry: null, liveState: null, planText: plan('Draft'), status: 'Draft', ...base });
   assert.equal(a.kind, 'create');
   assert.equal(a.number, undefined, 'a create has no issue number yet');
 });
@@ -227,14 +300,14 @@ test('an unrecorded plan is created, never updated', () => {
 test('an unchanged plan is current, which is the real no-op', () => {
   const text = plan('Draft');
   const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
-  const a = deriveAction({ entry, planText: text, status: 'Draft', ...base });
+  const a = deriveAction({ entry, liveState: 'open', planText: text, status: 'Draft', ...base });
   assert.equal(a.kind, 'current');
   assert.equal(a.number, 7);
 });
 
 test('an edited plan updates the body and nothing else', () => {
   const entry = { number: 7, url: 'u', hash: hashOf(plan('Draft')), state: 'open' };
-  const a = deriveAction({ entry, planText: plan('Draft', '\nnew line'), status: 'Draft', ...base });
+  const a = deriveAction({ entry, liveState: 'open', planText: plan('Draft', '\nnew line'), status: 'Draft', ...base });
   assert.equal(a.kind, 'update-body');
   assert.equal(a.close, undefined, 'a body edit must not silently close or reopen the issue');
 });
@@ -242,7 +315,7 @@ test('an edited plan updates the body and nothing else', () => {
 test('a plan that reached Complete closes its issue', () => {
   const text = plan(CLOSED_STATUS);
   const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
-  const a = deriveAction({ entry, planText: text, status: CLOSED_STATUS, ...base });
+  const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
   assert.equal(a.kind, 'update-state');
   assert.equal(a.close, true);
 });
@@ -252,7 +325,7 @@ test('an in-progress plan reopens an issue somebody closed by hand', () => {
   // tidy the board must not permanently detach the plan from its mirror.
   const text = plan('InProgress');
   const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
-  const a = deriveAction({ entry, planText: text, status: 'InProgress', ...base });
+  const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'InProgress', ...base });
   assert.equal(a.kind, 'update-state');
   assert.equal(a.close, false);
 });
@@ -260,7 +333,7 @@ test('an in-progress plan reopens an issue somebody closed by hand', () => {
 test('a plan edited and completed in one step does both', () => {
   const text = plan(CLOSED_STATUS, '\nedited too');
   const entry = { number: 7, url: 'u', hash: hashOf(plan(CLOSED_STATUS)), state: 'open' };
-  const a = deriveAction({ entry, planText: text, status: CLOSED_STATUS, ...base });
+  const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
   assert.equal(a.kind, 'update-and-state');
   assert.equal(a.close, true);
 });
@@ -269,7 +342,7 @@ test('every non-Complete status in the open set leaves the issue open', () => {
   for (const status of OPEN_STATUSES) {
     const text = plan(status);
     const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
-    const a = deriveAction({ entry, planText: text, status, ...base });
+    const a = deriveAction({ entry, liveState: 'closed', planText: text, status, ...base });
     assert.equal(a.kind, 'update-state', `${status} must resolve to a state change`);
     assert.equal(a.close, false, `${status} must not close its issue`);
   }
@@ -279,8 +352,55 @@ test('a Blocked plan keeps its issue open', () => {
   // Blocked means work is unfinished, so closing the issue would report done.
   const text = plan('Blocked');
   const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
-  const a = deriveAction({ entry, planText: text, status: 'Blocked', ...base });
+  const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'Blocked', ...base });
   assert.equal(a.close, false);
+});
+
+// ---------- deriveAction: the sidecar does not get a vote ----------
+
+test('a sidecar that says closed does not outvote an issue GitHub holds open', () => {
+  // Measured 2026-10-05: a plan at Complete whose sidecar row said "closed"
+  // while the issue was OPEN produced kind "current", printed CURRENT, and made
+  // zero gh calls. The claim could not fail, so it was a false pass.
+  const text = plan(CLOSED_STATUS);
+  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
+  const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
+  assert.notEqual(a.kind, 'current', 'the sidecar agreeing with itself is not evidence');
+  assert.equal(a.kind, 'update-state', 'a state transition is the only honest outcome here');
+  // The plan is the source of truth for intent, so Complete means the issue ends
+  // up closed. What must not happen is deciding there was nothing to do.
+  assert.equal(a.close, true);
+});
+
+test('a sidecar that says open does not outvote an issue GitHub holds closed', () => {
+  const text = plan('InProgress');
+  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'InProgress', ...base });
+  assert.notEqual(a.kind, 'current');
+  assert.equal(a.kind, 'update-state');
+  assert.equal(a.close, false, 'an in-progress plan reopens its issue');
+});
+
+test('current requires the sidecar, GitHub and the plan to agree', () => {
+  const text = plan('InProgress');
+  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const a = deriveAction({ entry, liveState: 'open', planText: text, status: 'InProgress', ...base });
+  assert.equal(a.kind, 'current');
+});
+
+test('deriveAction refuses to decide the state when no live read was supplied', () => {
+  // Without the read there is no third opinion to compare, so the function
+  // errors instead of quietly reading entry.state again.
+  const text = plan(CLOSED_STATUS);
+  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  assert.throws(
+    () => deriveAction({ entry, planText: text, status: CLOSED_STATUS, ...base }),
+    /Refusing to fall back to the recorded state/,
+  );
+  assert.throws(
+    () => deriveAction({ entry, liveState: null, planText: text, status: CLOSED_STATUS, ...base }),
+    /Refusing to fall back to the recorded state/,
+  );
 });
 
 // ---------- applyAction, through a real executable ----------
@@ -408,13 +528,15 @@ test('running the sync twice performs no second write', () => {
     });
     assert.equal(cfgNow.issues[PLAN_REL].number, 11);
 
-    // A second run over an unchanged plan must not touch the network at all. A
-    // duplicate issue in a real repository is the failure this prevents.
+    // A second run over an unchanged plan must not WRITE anything. A duplicate
+    // issue in a real repository is the failure this prevents. One read is
+    // expected, though: `current` is only a statement after GitHub was asked.
     withFakeGh(RECORD_AND_ECHO_URL, (g) => {
       const res = syncOne(cfgNow, { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
       assert.equal(res.action, 'current');
       assert.equal(res.written, false);
-      assert.equal(g.argv(), '', 'a re-sync of an unchanged plan must not call gh');
+      const argv = g.argv();
+      assert.doesNotMatch(argv, /issue edit|issue close|issue reopen/, 'a re-sync of an unchanged plan must not write');
     });
   } finally {
     f.cleanup();
@@ -513,6 +635,120 @@ test('the recorded state follows the plan, not the previous entry', () => {
       assert.doesNotMatch(g.argv(), /--state/);
     });
   } finally {
+    f.cleanup();
+  }
+});
+
+// ---------- syncOne: the recorded state is checked, not believed ----------
+
+// Every case below is the same fixture with two opinions in it: the sidecar row
+// this script wrote earlier, and what GitHub reports now. Only the second one is
+// evidence, so only the second one decides.
+
+test('a sidecar that says closed cannot make an open issue look current', () => {
+  const text = plan(CLOSED_STATUS);
+  const f = tmpPlan(text);
+  try {
+    withFakeGh(GH_HOLDING_OPEN, (g) => {
+      const res = syncOne(cfgFor(f.repoRoot, {
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+      }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
+      assert.notEqual(res.action, 'current', 'the sidecar agreeing with itself is not evidence');
+      assert.equal(res.action, 'update-state');
+      const argv = g.argv();
+      assert.match(argv, /issue view 9 --repo u\/snippet --json state/, 'the state is read before it is used');
+      assert.match(argv, /issue close 9/, 'the plan says Complete, so the open issue is closed');
+      // What gets recorded is what GitHub acknowledged, never what the sidecar
+      // claimed before this run.
+      assert.equal(res.cfg.issues[PLAN_REL].state, 'closed');
+    });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an issue GitHub holds closed is reopened even when the sidecar says open', () => {
+  const text = plan('InProgress');
+  const f = tmpPlan(text);
+  try {
+    withFakeGh(GH_HOLDING_CLOSED, (g) => {
+      const res = syncOne(cfgFor(f.repoRoot, {
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+      }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
+      assert.notEqual(res.action, 'current');
+      assert.equal(res.action, 'update-state');
+      assert.match(g.argv(), /issue reopen 9/);
+      assert.equal(res.cfg.issues[PLAN_REL].state, 'open');
+    });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('current means all three agree: sidecar, GitHub and the plan', () => {
+  const text = plan('InProgress');
+  const f = tmpPlan(text);
+  try {
+    withFakeGh(GH_HOLDING_OPEN, (g) => {
+      const res = syncOne(cfgFor(f.repoRoot, {
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+      }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
+      assert.equal(res.action, 'current');
+      assert.equal(res.written, false);
+      const argv = g.argv();
+      assert.match(argv, /issue view 9/, 'the no-op is only a no-op after GitHub was asked');
+      assert.doesNotMatch(argv, /issue edit|issue close|issue reopen/, 'and it writes nothing');
+    });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an unreadable live state stops the plan at the read, before any write', () => {
+  const text = plan(CLOSED_STATUS);
+  const f = tmpPlan(text);
+  try {
+    withFakeGh(GH_VIEW_UNREADABLE, (g) => {
+      assert.throws(
+        () => syncOne(cfgFor(f.repoRoot, {
+          issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+        }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() }),
+        (e) => /issue view 9 --repo u\/snippet --json state/.test(e.message)
+          && /refuses to fall back/.test(e.message),
+      );
+      assert.doesNotMatch(g.argv(), /issue edit|issue close|issue reopen/, 'an unreadable state must not be followed by a write');
+    });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a check whose live state cannot be read exits non-zero and never prints the green line', () => {
+  // The CLI is where a refusal turns into a verdict. A plan that could not be
+  // checked is not a plan that matches, and `--check` returning 0 here would put
+  // the green line on a run that proved nothing.
+  const text = plan(CLOSED_STATUS);
+  const f = tmpPlan(text);
+  const dir = mkdtempSync(path.join(tmpdir(), 'plan-issue-cli-'));
+  const cfgPath = path.join(dir, 'plan.issues.json');
+  try {
+    writeFileSync(cfgPath, JSON.stringify({
+      version: 1,
+      projects: { [path.basename(f.repoRoot)]: 'u/snippet' },
+      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+    }), 'utf8');
+    withFakeGh(GH_VIEW_UNREADABLE, () => {
+      const r = spawnSync(process.execPath, [
+        SCRIPT, '--check', f.full, '--config', cfgPath,
+        '--repo-root', f.repoRoot, '--project', path.basename(f.repoRoot),
+      ], { encoding: 'utf8' });
+      const out = `${r.stdout}${r.stderr}`;
+      assert.equal(r.status, 1, `expected exit 1, got ${r.status}: ${out}`);
+      assert.doesNotMatch(out, /Every plan issue matches/, 'an unchecked plan must not be reported as a match');
+      assert.match(out, /refuses to fall back/);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
     f.cleanup();
   }
 });

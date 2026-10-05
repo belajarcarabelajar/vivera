@@ -2,7 +2,7 @@
 
 Comprehensive, production-grade, all-in-one skill pipeline for AI coding agents. Designed to guide agents through the entire software engineering lifecycle: **Idea -> Design -> Plan -> Human Approval Gate -> TDD -> Systematic Debugging -> Subagent Orchestration -> Verification -> Finishing -> Session-Close Debt Sweep**.
 
-**Vivera** is the name of this farm. The vocabulary around the pipeline borrows from *Harvest Moon: Back to Nature*: skills are crops, pull requests are Blue Feather proposals, subagents are the seven Harvest Sprites, and the PR registry is the shipping bin. The flavor is cosmetic; every command, path, and behavior in this document is literal. See [The Vivera Farm Glossary](docs/vivera-glossary.md).
+**Vivera** is the name of this farm. The vocabulary around the pipeline borrows from *Harvest Moon: Back to Nature*: skills are crops, pull requests are Blue Feather proposals, subagents are the seven Harvest Sprites (watering/menyiram is keep-alive, animal care/merawat is long-lived assets, harvesting/memanen is shipping), and the PR registry is the shipping bin. The flavor is cosmetic; every command, path, and behavior in this document is literal. See [The Vivera Farm Glossary](docs/vivera-glossary.md).
 
 Verification is the last gate, not the last step. Once the plan is `Done 100%` and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them as a single multi-select question through the harness's own prompt widget. The user taps checkboxes instead of retyping, selected items run as real work, and the session ends with zero unexamined coding debt.
 

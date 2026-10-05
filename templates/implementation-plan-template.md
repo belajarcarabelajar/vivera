@@ -2,7 +2,7 @@
 schema: ultra-plan/v1
 plan_id: YYYY-MM-DD-<feature-name>
 status: Draft            # Draft|Approved|InProgress|Verification|Complete|Blocked
-version: 1
+version: 1              # schema stamp for the plan FORMAT. No runner reads it; `schema:` above is what the runner enforces. `bun run contract:check` reports it on purpose.
 runner_contract: true
 defaults:
   retry_transient_max: 1            # explicit integer, never the word "bounded"

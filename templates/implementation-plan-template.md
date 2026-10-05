@@ -42,6 +42,7 @@ tasks:
       - cmd: "bun test path/to/file2.test.ts"
         expect_exit: 0
         retry: 1
+        loop_until: "bun test path/to/file2.test.ts"   # optional; exit 0 = converged, non-zero = re-run inside `retry`
 ---
 
 # [Feature Name] Implementation Plan
@@ -118,7 +119,7 @@ flowchart TD
   - [ ] Each affected surface outside this task's file scope is either updated by this task or recorded as a follow-up with a finish line. A file this task noticed but did not fix is a named outcome, never a silent omission.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file1.test.ts` | expect: exit non-zero for the right reason | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass the test
-- [ ] **Step 3 — Verify:** cmd: `bun test path/to/file1.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt only downstream (`depends_on` includes T1), keep independent tasks running
+- [ ] **Step 3 (Verify):** cmd: `bun test path/to/file1.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | loop_until: `bun test path/to/file1.test.ts` (optional; exit 0 = converged) | on_fail: mark FAILED, write §6, halt only downstream (`depends_on` includes T1), keep independent tasks running
 - [ ] **Step 4 — Commit:** `git add <files> && git commit -m "feat: ..."`
 
 > Steps 1 and 3 are the same commands as T1's `run[]` in the frontmatter. The frontmatter is the copy the runner executes; this checklist is the copy a human reads. When they disagree, the frontmatter wins and the checklist is the defect.
@@ -137,7 +138,7 @@ flowchart TD
   - [ ] Each affected surface outside this task's file scope is either updated here or recorded as a follow-up with a finish line.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file2.test.ts` | expect: exit non-zero | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass
-- [ ] **Step 3 — Verify:** cmd: `bun test path/to/file2.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt downstream, keep independent running
+- [ ] **Step 3 (Verify):** cmd: `bun test path/to/file2.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | loop_until: `bun test path/to/file2.test.ts` (optional; exit 0 = converged) | on_fail: mark FAILED, write §6, halt downstream, keep independent running
 - [ ] **Step 4 — Commit:** `git add <files> && git commit -m "feat: ..."`
 
 ## 5. Verification Matrix Before Completion

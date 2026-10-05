@@ -20,6 +20,40 @@ const rootDir = path.resolve(__dirname, '..');
 
 console.log('==> Validating the Vivera farm (Ultimate All-in-One AI Skills Repository)...');
 let errors = 0;
+let skipped = 0;
+
+// A third outcome, distinct from pass and from fail: SKIPPED.
+//
+// The three conditions that can skip are machine-local state, and every one of
+// them is listed in .gitignore: plans.publish.json (.gitignore:62),
+// plan.issues.json (.gitignore:63), and the node_modules/ tree holding mmdc
+// (.gitignore:6). A fresh clone and a fresh git worktree have none of them, so
+// the gate could not tell "the skill is broken" from "this machine has not
+// installed the machine-local state yet", and it reported a false alarm on a
+// healthy tree.
+//
+// Why a skip does NOT change the exit code. The alternative, a non-zero exit,
+// leaves every fresh clone, every fresh worktree, and every CI run permanently
+// red for a condition no commit can fix, and a permanently red gate is a gate
+// people learn to skip, which is the outcome this file exists to prevent. So the
+// exit code does prove: every check that ran found nothing. The exit code does
+// NOT prove: that the skill validated end to end. Those three checks did not run,
+// and only a checkout holding the machine-local state can say anything about
+// them.
+//
+// Why the skip is loud instead of silent. The same rule that forbids a gate
+// reporting success while proving nothing forbids hiding the parts that did not
+// run. Each skip names the absent file or tool and states what it left
+// unchecked, the count is carried into the summary line, and the summary stops
+// claiming a clean pass while any skip is outstanding. Nobody reaches the last
+// line without having been told which checks did not run.
+//
+// `warn` rather than `log`, so the skip line is visible when a caller captures
+// only one stream.
+const skip = (what, why) => {
+  skipped++;
+  console.warn(`⏭️  SKIPPED: ${what} (did not run). ${why}`);
+};
 
 // 0b. The runner contract must match what the plan template documents.
 //
@@ -512,8 +546,10 @@ for (const snip of requiredSnippets) {
   // to owner/repo has to be checked in rather than assumed at runtime.
   const issuesConfigPath = path.join(rootDir, 'plan.issues.json');
   if (!fs.existsSync(issuesConfigPath)) {
-    console.error('❌ Missing plan.issues.json (project to owner/repo mapping; the issue sync cannot resolve a repository without it).');
-    errors++;
+    skip(
+      'plan.issues.json (the project to owner/repo mapping) is absent, so its JSON was NOT parsed and the project-to-repository mapping was NOT validated',
+      'It is gitignored machine-local state (.gitignore:63), so no clone or worktree has it. The publisher and the issue sync cannot resolve a vault or a repository until it is created; this run says nothing about either.',
+    );
   } else {
     try {
       const parsed = JSON.parse(fs.readFileSync(issuesConfigPath, 'utf8'));
@@ -783,8 +819,10 @@ for (const scr of scripts) {
 
   const publishConfigPath = path.join(rootDir, 'plans.publish.json');
   if (!fs.existsSync(publishConfigPath)) {
-    console.error('❌ Missing plans.publish.json (publish registry; the publisher cannot resolve a vault without it).');
-    errors++;
+    skip(
+      'plans.publish.json (the publish registry) is absent, so its JSON was NOT parsed and the publish registry was NOT validated',
+      'It is gitignored machine-local state (.gitignore:62), so no clone or worktree has it. The publisher cannot resolve a vault until it is created; this run says nothing about it.',
+    );
   } else {
     try {
       JSON.parse(fs.readFileSync(publishConfigPath, 'utf8'));
@@ -837,12 +875,18 @@ const mmdcAvailable = fs.existsSync(mmdcPath) ||
   (() => { try { execSync('mmdc --version', { stdio: 'ignore' }); return true; } catch { return false; } })();
 
 if (!mmdcAvailable) {
-  // Hard error, not a warning. A silently skipped render gate is worse than no
-  // gate: it reports success while proving nothing. See the Zero-Tolerance
-  // Clean Pass rule in the master skill.
-  console.error('❌ mmdc not found — mermaid validation cannot run, so the gate would prove nothing.');
-  console.error('   Install the pinned toolchain first: bun install');
-  errors++;
+  // A counted SKIP, and not a warning, because a silent one is exactly what the
+  // Zero-Tolerance Clean Pass rule forbids: the render gate is the only thing
+  // here that reads the rendered SVG, so if it does not run, this output proves
+  // nothing about Mermaid syntax, syntax-level accessibility metadata, or the
+  // a11y wiring in the output. The skip line names the tool, the summary line
+  // carries the count, and the exit code stays clean so a fresh clone is not
+  // permanently red for a gitignored toolchain.
+  skip(
+    'mmdc not found, so the entire Mermaid render gate did NOT run: no block was parsed by the renderer, no diagram was rendered, and neither the source accTitle/accDescr check nor the rendered-SVG <title>/<desc> + aria-labelledby wiring check was performed',
+    'mmdc comes from the gitignored node_modules/ tree (.gitignore:6). Install the pinned toolchain with `bun install` and re-run to actually validate Mermaid; until then every diagram in this repository is unrendered and unproven.',
+  );
+  console.warn('   Install the pinned toolchain first: bun install');
 } else {
   const mmdc = fs.existsSync(mmdcPath) ? mmdcPath : 'mmdc';
   const mdFiles = [];
@@ -998,7 +1042,19 @@ for (const hero of ['lifecycle.svg', 'lifecycle-dark.svg']) {
 
 if (errors > 0) {
   console.error(`\n❌ Validation failed with ${errors} error(s).`);
+  if (skipped > 0) {
+    // A failure with outstanding skips has to say both, or the error count reads
+    // as the whole result and the unrun checks disappear from the summary.
+    console.error(`   ${skipped} further check(s) did not run: this run proves neither that the skill is clean nor that it is complete.`);
+  }
   process.exit(1);
+} else if (skipped > 0) {
+  // Deliberately NOT "All validations passed successfully". Nothing failed, but
+  // something did not run, and a clean-pass line printed over skipped checks is
+  // the exact claim the Zero-Tolerance Clean Pass rule forbids. Exit stays 0: see
+  // the skip helper for what that does and does not prove.
+  console.log(`\n⚠️  No failures in the checks that ran, but ${skipped} check(s) were SKIPPED, so this is NOT a clean pass.`);
+  console.log('   This run does NOT prove the skill is correct end to end. Each ⏭️ line above names the missing input and the check it did not perform.');
 } else {
   console.log('\n✅ All validations passed successfully!');
 }

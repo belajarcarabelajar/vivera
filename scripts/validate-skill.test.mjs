@@ -160,3 +160,42 @@ test('findMissingTerms is substring-exact and order-stable', () => {
   assert.deepEqual(findMissingTerms('aaa bbb', ['aaa', 'missing']), ['missing']);
   assert.deepEqual(findMissingTerms('', ['x']), ['x']);
 });
+
+// --- A skip must stay visible: a gate that proves nothing says so ------------
+
+// The three gitignored machine-local inputs (plans.publish.json,
+// plan.issues.json, and node_modules for mmdc) fail in every fresh worktree,
+// because no clone has them. They now report as skipped rather than as errors.
+// Pinned here on the same source-shape basis as the tests above, because
+// running the real gate costs minutes and these are string conditions.
+
+test('a gitignored missing input is reported as a skip, never as an error', () => {
+  assert.match(VALIDATOR, /const skip = \(/);
+  assert.match(VALIDATOR, /let skipped = 0/);
+  // The clean-pass summary must not be reachable while a check was skipped,
+  // or the gate reports a pass it never earned.
+  assert.match(VALIDATOR, /SKIPPED, so this is NOT a clean pass/);
+  assert.match(VALIDATOR, /does NOT prove the skill is correct end to end/);
+});
+
+test('every skip names the missing input and the check it did not perform', () => {
+  // The wording lives in the shared helper, so it is asserted once there, and
+  // the call sites are then required to pass both a subject and a reason.
+  assert.match(VALIDATOR, /SKIPPED: \$\{what\} \(did not run\)/);
+  const calls = VALIDATOR.match(/^\s*skip\(/gm) || [];
+  assert.ok(calls.length >= 3, `expected the three gitignored inputs to skip, found ${calls.length}`);
+  // The three reasons are written per input rather than shared, so what is
+  // pinned is that each names the absent input and states the consequence.
+  for (const input of ['plans.publish.json', 'plan.issues.json', 'mmdc']) {
+    assert.match(VALIDATOR, new RegExp(`skip\\([\\s\\S]{0,400}?${input.replace('.', '\\.')}`),
+      `the skip for ${input} must name it`);
+  }
+  assert.match(VALIDATOR, /so its JSON was NOT parsed/);
+  assert.match(VALIDATOR, /the entire Mermaid render gate did NOT run/);
+});
+
+test('the skip counter is reported in the summary, not just incremented', () => {
+  assert.match(VALIDATOR, /skipped/);
+  // Counting without printing would reintroduce the silent-skip failure.
+  assert.match(VALIDATOR, /check\(s\) were SKIPPED/);
+});

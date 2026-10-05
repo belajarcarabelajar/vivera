@@ -2160,3 +2160,59 @@ tasks:
   assert.equal(plan.tasks[0].run[0].loop_until, 'bun test a.test.ts');
   assert.deepEqual(validatePlan(plan, null).errors, []);
 });
+
+// ---------- Test-reversal proof for the RED-step iteration gap ----------
+//
+// A loop declared on an expect_exit:1 step is the case the key exists for: the
+// step's own command is expected to fail, and the question "has the iteration
+// finished" is separate from that expected failure. This test exists because the
+// suite had no RED step carrying a loop_until, and the gap it left was invisible.
+//
+// THE DEFECT THIS PINS. The runner assigned the probe result into `r` and then
+// compared `r.exit` against the step's `want` to decide the step had passed. A
+// RED step declares expect_exit 1 and an unconverged probe exits 1, so that
+// comparison was true, the retry loop broke after one pass, and zero of the
+// declared budget was spent. Reverting the guard on this line makes this test
+// fail with status FAILED-ISOLATED, retry '0/2', and a single probe invocation,
+// where it asserts PASSED, '2/2', and two.
+test('a loop_until on a RED step iterates inside its retry budget and can converge', () => {
+  const marker = path.join(tmpdir(), `vivera-red-loop-${process.pid}`);
+  rmSync(marker, { force: true });
+  // The probe converges only on its second invocation, so the step genuinely has
+  // to iterate. Its exit codes are 1 before convergence and 0 after, which is
+  // also what makes this a RED-step case: 1 is the step's declared success.
+  const probe = `sh -c 'n=$(cat ${marker} 2>/dev/null || echo 0); echo $((n+1)) > ${marker}; [ "$n" -ge 1 ]'`;
+  const { status, ledger } = runPlan([
+    { id: 'T1', depends_on: [], run: [{ cmd: 'exit 1', expect_exit: 1, loop_until: probe, retry: 2 }] },
+  ]);
+  try {
+    assert.equal(status.get('T1'), 'PASSED', JSON.stringify(ledger));
+    assert.deepEqual(ledger, []);
+    assert.equal(readFileSync(marker, 'utf8').trim(), '2',
+      'the probe ran twice: once unconverged, once converged, so the budget was spent');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+// The counterpart that keeps the fix honest in the other direction: a RED step
+// whose loop NEVER converges must still fail, and must report the exhausted
+// budget rather than passing on the step's own expected exit. Before the fix
+// this failed with retry '0/2', which is the accounting this asserts.
+test('a RED step whose loop never converges fails with the exhausted budget', () => {
+  const marker = path.join(tmpdir(), `vivera-red-loop-fail-${process.pid}`);
+  rmSync(marker, { force: true });
+  const probe = `sh -c 'n=$(cat ${marker} 2>/dev/null || echo 0); echo $((n+1)) > ${marker}; exit 1'`;
+  const { status, ledger } = runPlan([
+    { id: 'T1', depends_on: [], run: [{ cmd: 'exit 1', expect_exit: 1, loop_until: probe, retry: 2 }] },
+  ]);
+  try {
+    assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+    assert.equal(ledger[0].retry, '2/2', 'the whole declared budget was spent on the loop');
+    assert.match(ledger[0].cause, /loop_until/);
+    assert.match(ledger[0].cause, /exited 1/, 'the probe exit, not the step\'s own expected 1');
+    assert.equal(readFileSync(marker, 'utf8').trim(), '3', 'one probe per pass: initial plus two retries');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});

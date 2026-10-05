@@ -1187,7 +1187,17 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
           r = probe;
           loopConverged = false;
         }
-        if (r.exit === want) break;
+        // Step success is decided by the STEP's own exit, never by `r` once the
+        // probe has been assigned into it. Comparing the probe against `want`
+        // here made an unconverged loop indistinguishable from a step that
+        // passed: a RED step declares expect_exit 1 and its probe exits 1, so
+        // `r.exit === want` was true and the do/while broke after a single pass,
+        // spending zero of the retry budget the step declared. A loop declared on
+        // an expect_exit:1 step could therefore never iterate, which is the exact
+        // case the key exists for. `loopConverged` is the guard: the probe exit
+        // is only ever compared against LOOP_EXPECTED_EXIT, and this break is
+        // reachable only when no unconverged probe was assigned.
+        if (r.exit === want && loopConverged) break;
         // A retry is only worth spending on something that could pass next time.
         // `transient: false` is reserved for the classes where the exit code
         // PROVES a re-run cannot help — 127 means the binary is not on this

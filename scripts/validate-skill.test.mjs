@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   SUBAGENT_CONTRACT_TERMS,
@@ -198,4 +199,40 @@ test('the skip counter is reported in the summary, not just incremented', () => 
   assert.match(VALIDATOR, /skipped/);
   // Counting without printing would reintroduce the silent-skip failure.
   assert.match(VALIDATOR, /check\(s\) were SKIPPED/);
+});
+
+// ---------- Behaviour layer for the SKIPPED outcome ----------
+//
+// WHY THIS EXISTS, and it is a review finding rather than an addition.
+//
+// The tests above pin the skip mechanism by matching source strings, which is a
+// real limitation: they prove the wording and the call sites are present, and
+// they prove nothing about what the gate actually does. Measured, on this
+// branch: changing one line inside `skip()` from `skipped++` to `errors++`
+// flips the real validator from exit 0 to exit 1 on a fresh checkout, and all
+// 15 tests in this file still pass. That is the mutation this file exists to
+// catch, because the behaviour it changes is the entire point of the SKIPPED
+// outcome: absent gitignored machine-local state must not fail a clean clone,
+// and must still refuse to call that run clean.
+//
+// So this test runs the real gate and asserts on the two things that matter at
+// once. Both are asserted because either alone is insufficient: exit 0 alone is
+// satisfied by deleting the checks outright, and the NOT-a-clean-pass line alone
+// is satisfied by printing it and still exiting 1.
+//
+// COST. Running the validator costs about a second, so it is one test rather
+// than a per-case sweep, and it is asserted against the tree the suite runs in
+// rather than a fixture, which is the condition under test.
+test('a tree missing gitignored state exits 0 and still refuses a clean pass', () => {
+  const r = spawnSync('bun', [path.join(ROOT, 'scripts', 'validate-skill.mjs')], {
+    cwd: ROOT,
+    encoding: 'utf8',
+  });
+  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+  assert.equal(r.status, 0,
+    `absent gitignored state must not fail the gate; got ${r.status}\n${out.slice(0, 500)}`);
+  assert.match(out, /SKIPPED/,
+    'the skip must be reported, not silent');
+  assert.match(out, /NOT a clean pass/,
+    'exit 0 must not be reported as a clean pass while checks did not run');
 });

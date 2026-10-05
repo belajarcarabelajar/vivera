@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import {
   SUBAGENT_CONTRACT_TERMS,
   SNIPPET_CONTRACTS,
@@ -221,18 +222,72 @@ test('the skip counter is reported in the summary, not just incremented', () => 
 // is satisfied by printing it and still exiting 1.
 //
 // COST. Running the validator costs about a second, so it is one test rather
-// than a per-case sweep, and it is asserted against the tree the suite runs in
-// rather than a fixture, which is the condition under test.
+// than a per-case sweep.
+//
+// IT RUNS IN ITS OWN TREE, not against ROOT. The condition under test is a tree
+// MISSING the gitignored machine-local state, and the checkout the suite runs in
+// normally HAS all three, so asserting against it measured the wrong tree: the
+// gate exited 0 with no SKIPPED line at all, because nothing skipped. Measured
+// 2026-10-05 on main, where that test failed with `null !== 0` while the gate
+// itself exited 0 in 58s. A test whose fixture does not reproduce the condition
+// is worse than no test, because it is green or red for an unrelated reason.
+//
+// The tree is built by copying the validator and its inputs into a temp
+// directory and deleting the three gitignored paths, so the assertion runs
+// against the condition rather than against whatever the developer happens to
+// have installed. `timeout` is set because the full render gate takes about a
+// minute when mermaid IS present, and spawnSync returns status null with a
+// signal when it is killed, which reads as a failure of the gate.
+// IT RUNS AGAINST A FRESH-CLONE TREE, built from `git ls-files`. The condition
+// under test is a tree MISSING the gitignored machine-local state, and the
+// checkout the suite runs in normally HAS all three, so asserting against it
+// measured the wrong tree: the gate exited 0 with no SKIPPED line at all,
+// because nothing skipped. Measured 2026-10-05 on main, where this test failed
+// with `null !== 0` while the gate itself exited 0 in 58s. A test whose fixture
+// does not reproduce the condition is worse than no test, because it is green
+// or red for an unrelated reason.
+//
+// Copying TRACKED files is what makes the fixture correct by construction: the
+// three gitignored paths are absent because `git ls-files` never lists them,
+// not because the test remembered to delete them. An earlier attempt copied
+// `scripts/` by hand and the gate reported 15 errors instead of 3 skips,
+// because the validator also reads the templates, snippets, diagrams and the
+// master skill. `timeout` is set because the run takes about a minute and
+// spawnSync returns status null when it kills the child, which reads as a
+// failure of the gate rather than of the test.
 test('a tree missing gitignored state exits 0 and still refuses a clean pass', () => {
-  const r = spawnSync('bun', [path.join(ROOT, 'scripts', 'validate-skill.mjs')], {
-    cwd: ROOT,
-    encoding: 'utf8',
-  });
-  const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
-  assert.equal(r.status, 0,
-    `absent gitignored state must not fail the gate; got ${r.status}\n${out.slice(0, 500)}`);
-  assert.match(out, /SKIPPED/,
-    'the skip must be reported, not silent');
-  assert.match(out, /NOT a clean pass/,
-    'exit 0 must not be reported as a clean pass while checks did not run');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-freshclone-'));
+  try {
+    const ls = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
+    const files = ls.stdout.split('\0').filter(Boolean);
+    assert.ok(files.length > 50, `expected a real tree, listed ${files.length} tracked files`);
+    const tar = spawnSync('tar', ['-C', ROOT, '--null', '-T', '-', '-cf', '-'], {
+      input: files.join('\0') + '\0', encoding: null, maxBuffer: 256 * 1024 * 1024,
+    });
+    assert.equal(tar.status, 0, `tar of tracked files failed: ${tar.stderr?.toString().slice(0, 300)}`);
+    const untar = spawnSync('tar', ['-C', tmp, '-xf', '-'], { input: tar.stdout, encoding: null });
+    assert.equal(untar.status, 0, `untar into the fixture failed: ${untar.stderr?.toString().slice(0, 300)}`);
+
+    // The fixture must genuinely lack the three gitignored inputs, or this test
+    // silently degrades into the wrong-tree assertion it replaced.
+    for (const absent of ['plans.publish.json', 'plan.issues.json', 'node_modules']) {
+      assert.ok(!fs.existsSync(path.join(tmp, absent)), `fixture unexpectedly has ${absent}`);
+    }
+
+    const r = spawnSync('bun', [path.join(tmp, 'scripts', 'validate-skill.mjs')], {
+      cwd: tmp,
+      encoding: 'utf8',
+      timeout: 180_000,
+    });
+    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+    assert.equal(r.status, 0,
+      `absent gitignored state must not fail the gate; got ${r.status} signal=${r.signal}\n${out.slice(-600)}`);
+    assert.match(out, /SKIPPED/,
+      'the skip must be reported, not silent');
+    assert.match(out, /NOT a clean pass/,
+      'exit 0 must not be reported as a clean pass while checks did not run');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

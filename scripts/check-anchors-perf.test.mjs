@@ -98,7 +98,13 @@ test('the corpus covers unbalanced brackets, since that is the slow path', () =>
     'at least one case must have an opener with no closer at all');
 });
 
-test('an unbalanced corpus is linear, and the control proves it was not', () => {
+test('an unbalanced corpus is linear, and the control proves it was not',
+  // Explicit timeout, because the quadratic CONTROL is the slow half: on a
+  // loaded machine it alone can exceed the default 5s budget (measured 9.9s
+  // with 7 busy cores), which fails the test without failing any assertion.
+  // The assertions themselves are load-independent (a back-to-back ratio and a
+  // linear-only absolute budget), so only the timeout needs headroom.
+  { timeout: 120_000 }, () => {
   const corpus = (kb) => 'text [more words here and there\n'.repeat(kb * 20);
   const small = corpus(50);   // ~63KB
   const large = corpus(200);  // ~250KB

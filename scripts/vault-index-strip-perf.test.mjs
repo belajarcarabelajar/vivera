@@ -142,7 +142,13 @@ test('the corpus actually exercises the shapes it claims to', () => {
   assert.equal(fourDashes.offset, 0);
 });
 
-test('a 3MB body with no closing fence is linear, and the control proves it was not', () => {
+test('a 3MB body with no closing fence is linear, and the control proves it was not',
+  // Explicit timeout, because the quadratic CONTROL is the slow half: on a
+  // loaded machine it alone can exceed the default 5s budget (measured 6.7s
+  // with 7 busy cores), which fails the test without failing any assertion.
+  // The assertions themselves are load-independent (a back-to-back ratio and a
+  // linear-only absolute budget), so only the timeout needs headroom.
+  { timeout: 120_000 }, () => {
   // The measured claim, with the measurement in the test. Sizes are doubled so
   // the quadratic form's growth is unmistakable, and the assertion is on RATIO
   // rather than an absolute time, because absolute timings on shared CI are

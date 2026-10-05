@@ -39,6 +39,16 @@ const SCHEMA_ID = 'ultra-plan/v1';
 // `on_precondition_fail` chooses between halting one task and halting the plan.
 // A documented key that nothing reads is worse than an undocumented one, so a
 // key belongs here only if the runner acts on it.
+//
+// ONE DIRECTION ONLY, and the asymmetry is measured, not theoretical. Both
+// artifacts `check-runner-contract.mjs` inspect already declared `loop_until`
+// while the runner did not read it, and the check still printed "both artifacts
+// declare all 22 keys the runner reads" and exited 0. It walks `want` (this list)
+// and asks whether each entry is present in the artifact, so an artifact-only key
+// is never visited. A key landing in the template is therefore not evidence that
+// the runner acts on it, and this list alone catches only the other half of the
+// drift. What covers the artifact-only half is the contract-key test asserting
+// membership AND a plan that exercises the enforcement, never membership alone.
 export const RUNNER_CONTRACT_KEYS = [
   'schema', 'plan_id', 'status', 'runner_contract',
   'defaults.retry_transient_max', 'defaults.step_timeout_s', 'defaults.on_precondition_fail',
@@ -46,6 +56,7 @@ export const RUNNER_CONTRACT_KEYS = [
   'defaults.retry_if',
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
+  'tasks[].run[].loop_until',
   'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
 ];
 
@@ -566,6 +577,71 @@ function impactsShape(t, errors) {
   return 'ok';
 }
 
+// ---------- What proves an iteration finished ----------
+//
+// WHY THIS IS A SEPARATE KEY, and not a wider `retry`.
+//
+// `retry`, `defaults.retry_transient_max`, and `defaults.retry_if` all answer one
+// question: how many times may this step re-RUN. None of them answers the
+// question an iterative step actually has, which is what proves an ITERATION is
+// finished. "Loop until nothing new is found" writes that condition as prose, and
+// prose cannot fail, so the runner cannot tell converged from still-going and a
+// later round re-pays to rediscover work an earlier round already rejected.
+//
+//   loop_until: "<command>"   # exit 0 = converged
+//
+// Absence is legal and means the step does not iterate, so no existing plan
+// changes. This is why there is no `require_loop_until` counterpart to
+// `require_impacts`: a gate every plan must survive is a gate every plan written
+// before the key has to be edited to mean anything, and the plans in this
+// repository's registry largely belong to repositories this one does not own.
+//
+// THE TEXT-PROBE BAN, inherited whole from `classifySkipIf`. `grep -q 'Done'
+// src/x.ts` stays true after the behaviour it names is reverted, so it reports
+// convergence that never happened, and an unconverged step that reports converged
+// is the same false pass `skip_if` is banned for. The two keys share the
+// classifier on purpose: they cannot disagree about the same command.
+//
+// Unlike `skip_if` there is no sentinel, because "this step does not iterate" is
+// already said by omitting the key, and a sentinel for it would be a second
+// spelling of absence. So `loop_until: "false"` is not a valid no-op: it is a
+// shell command, it exits 1, and the step can never converge.
+function loopUntilShape(step, taskId, index, errors, warnings) {
+  if (step.loop_until === undefined) return null; // absence stays legal
+  const v = step.loop_until;
+  if (typeof v !== 'string' || v.trim() === '') {
+    errors.push(`task ${taskId} run[${index}] loop_until is ${JSON.stringify(v)}, which is not a command. `
+      + 'A convergence condition the runner cannot execute is worse than none at all: '
+      + 'write the command that exits 0 once the iteration is finished, or omit the key');
+    return null;
+  }
+  const cls = classifySkipIf(v);
+  if (cls === 'loose') {
+    errors.push(`task ${taskId} run[${index}] loop_until is a file-content probe: "${v}". `
+      + 'It proves a string is present, not that the iteration converged: it survives the behaviour '
+      + 'being reverted, so it reports convergence that did not happen. Use a command that has to succeed.');
+    return null;
+  }
+  if (cls === 'sentinel') {
+    errors.push(`task ${taskId} run[${index}] loop_until is "${v}", the no-command sentinel. `
+      + 'It has no sentinel meaning here: omitting the key is how a step says it does not iterate. '
+      + `"${v}" is a shell command, it exits non-zero, and the step can never converge.`);
+    return null;
+  }
+  if (cls === 'unknown') {
+    // Warned, not refused, for exactly the reason `skip_if` warns here: the
+    // classifier cannot tell whether the command fails on behaviour, and a plan
+    // in a repository this one does not own must not become unrunnable because a
+    // token-level regex could not adjudicate its command. Reported with the
+    // remediation, so the row is actionable.
+    warnings.push(`task ${taskId} run[${index}] loop_until matches neither the evidence rule nor the `
+      + `file-probe rule, so the runner cannot tell whether it fails on behaviour: "${v}". `
+      + 'Name the tool in a form the rule recognises, or write the command that decides convergence.');
+    return null;
+  }
+  return v;
+}
+
 function validateImpacts(plan, errors, warnings) {
   const requireImpacts = plan.defaults?.require_impacts === true;
   const exempted = new Set(plan.defaults?.allow_no_impacts || []);
@@ -646,7 +722,12 @@ export function validatePlan(plan, body) {
       t.run.forEach((step, i) => {
         if (!step || typeof step.cmd !== 'string' || step.cmd.trim() === '') {
           errors.push(`task ${t.id} run[${i}] has no cmd; every step is one runnable command`);
+          return;
         }
+        // Shape-checked here so a blank or non-executable convergence condition is
+        // a validation error naming the task and step, not a runtime surprise
+        // discovered once the step's own work is already done.
+        loopUntilShape(step, t.id, i, errors, warnings);
       });
       continue;
     }
@@ -992,6 +1073,13 @@ function expectedExitOf(t, stepIndex) {
   return step && typeof step.expect_exit === 'number' ? step.expect_exit : verifyExit;
 }
 
+// `loop_until` has exactly one expectation: 0, meaning converged. It is NOT the
+// step's `expect_exit`, and borrowing that one would make a RED step's
+// unconverged loop read as the expectation it declared: "exited 1, expected 1"
+// is a pass sentence attached to a failure. So the ledger reports the
+// disagreement the loop actually had.
+const LOOP_EXPECTED_EXIT = 0;
+
 export function executePlan(plan, { execute = false, log = () => {}, dir = process.cwd() } = {}) {
   const order = topoSort(plan.tasks);
   const byId = new Map(plan.tasks.map((t) => [t.id, t]));
@@ -1059,16 +1147,57 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
     }
 
     let ok = true, failStep = null, lastExit = 0, usedRetry = 0, failDetail = null, skippedRetry = null, failStepRetry = retryMax;
+    // Which key produced the failure that ends the task. `loop_until` is named
+    // separately because its expectation is 0 (converged) and not the step's
+    // `expect_exit`, so the ledger row has to state the disagreement the loop
+    // actually had rather than the step's.
+    let failSource = null;
     for (let s = 0; s < t.run.length; s++) {
       const step = t.run[s];
       const want = typeof step.expect_exit === 'number' ? step.expect_exit : verifyExit;
       const stepRetry = step.retry ?? retryMax;
       failStepRetry = stepRetry;
+      // Only a well-formed command gates anything. Validation already refuses
+      // blank, non-string, and file-probe values, and `executePlan` is reachable
+      // directly (every test in the suite goes through it without validating
+      // first), so an unusable value must not be able to quietly gate a step
+      // here: it is treated as no convergence condition at all, which is what a
+      // step that never declared one behaves like.
+      const loopCmd = typeof step.loop_until === 'string' && step.loop_until.trim() !== ''
+        ? step.loop_until : null;
+      // The probe is re-checked against its own value every attempt, because the
+      // step re-runs on the SAME budget and each pass is a fresh iteration whose
+      // convergence has to be decided again.
+      let loopConverged = true;
       let attempt = 0, r;
       do {
         r = run(step.cmd, timeoutMs, { log });
         attempt++;
-        if (r.exit === want) break;
+        loopConverged = true;
+        if (r.exit === want && loopCmd !== null) {
+          // Through the same run() helper and the same timeout as any step, so a
+          // probe that overruns step_timeout_s is killed with its process group
+          // and cannot leak the children a step command can spawn.
+          const probe = run(loopCmd, timeoutMs, { log });
+          if (probe.exit === 0) break; // converged: the step passes
+          // Not converged. The step runs again inside the retry budget it already
+          // declared, and the probe's own result is what the failure is reported
+          // from, so the ledger cannot blame the step for the loop's state.
+          log(`      (loop_until exited ${probe.exit}, not converged; re-running step ${s + 1})`);
+          r = probe;
+          loopConverged = false;
+        }
+        // Step success is decided by the STEP's own exit, never by `r` once the
+        // probe has been assigned into it. Comparing the probe against `want`
+        // here made an unconverged loop indistinguishable from a step that
+        // passed: a RED step declares expect_exit 1 and its probe exits 1, so
+        // `r.exit === want` was true and the do/while broke after a single pass,
+        // spending zero of the retry budget the step declared. A loop declared on
+        // an expect_exit:1 step could therefore never iterate, which is the exact
+        // case the key exists for. `loopConverged` is the guard: the probe exit
+        // is only ever compared against LOOP_EXPECTED_EXIT, and this break is
+        // reachable only when no unconverged probe was assigned.
+        if (r.exit === want && loopConverged) break;
         // A retry is only worth spending on something that could pass next time.
         // `transient: false` is reserved for the classes where the exit code
         // PROVES a re-run cannot help — 127 means the binary is not on this
@@ -1095,7 +1224,19 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
         }
       } while (attempt <= stepRetry);
       usedRetry += attempt - 1;
-      if (r.exit !== want) { ok = false; failStep = s + 1; lastExit = r.exit; failDetail = { ...r, cls: classifyFailure(r) }; break; }
+      // `loopConverged` and not `r.exit !== want` alone: a RED step declares
+      // expect_exit 1, so an unconverged loop whose probe exits 1 would otherwise
+      // be indistinguishable from the step's own expected failure. The probe's
+      // exit is deliberately NOT compared against `want` anywhere: it has exactly
+      // one expectation, 0, which is what LOOP_EXPECTED_EXIT carries.
+      if (r.exit !== want || !loopConverged) {
+        ok = false;
+        failStep = s + 1;
+        lastExit = r.exit;
+        failDetail = { ...r, cls: classifyFailure(r) };
+        failSource = loopConverged ? 'cmd' : 'loop_until';
+        break;
+      }
     }
 
     if (ok) {
@@ -1120,7 +1261,16 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
     // The expected exit for the step that failed, so the row states the
     // disagreement rather than only its own side of it. "exited 1" is half a
     // fact; "exited 1, expected 0" is the fact a reader can act on.
-    const expected = expectedExitOf(t, failStep - 1);
+    //
+    // An unconverged loop states ITS disagreement instead. It has to: the step's
+    // own command exited as declared, so quoting the step's expectation would
+    // produce "exited 1, expected 1" on a row that is a failure, and the key that
+    // actually failed would not appear in the ledger at all.
+    const loopFailed = failSource === 'loop_until';
+    const expected = loopFailed ? LOOP_EXPECTED_EXIT : expectedExitOf(t, failStep - 1);
+    const cause = loopFailed
+      ? `step ${failStep} loop_until did not converge: exited ${lastExit}, expected ${LOOP_EXPECTED_EXIT}`
+      : `step ${failStep} exited ${lastExit}, expected ${expected}`;
     const cls = failDetail?.cls ?? { klass: 'code', transient: 'unknown', basis: 'no step detail recorded' };
     ledger.push({
       task: id,
@@ -1129,14 +1279,14 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
       exit: lastExit,
       transient: cls.transient,
       basis: cls.basis,
-      cause: `step ${failStep} exited ${lastExit}, expected ${expected}`,
+      cause,
       expected,
       retry: `${usedRetry}/${failStepRetry}`,
       status: st,
       trace: ledgerTrace(failDetail ?? {}),
       note: skippedRetry,
     });
-    log(`  ${id}: ${st} at step ${failStep} (exit ${lastExit}, expected ${expected}, ${cls.klass})`);
+    log(`  ${id}: ${st} at step ${failStep} (${loopFailed ? 'loop_until did not converge' : `exit ${lastExit}, expected ${expected}`}, ${cls.klass})`);
   }
   return { order, status, ledger };
 }

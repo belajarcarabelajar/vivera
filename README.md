@@ -418,7 +418,7 @@ provably linear function, and a best-of-N retry still went flaky once the suite 
 both implementations timed back to back on the same input, alternating order, so a
 GC pause lands on both and cancels in the quotient.
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 21 keys the runner reads (`tasks[].run[].cmd`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using pure AST/frontmatter comparison in ~1 second, bypassing the expensive headless Mermaid browser rendering.
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 23 keys the runner reads (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using pure AST/frontmatter comparison in ~1 second, bypassing the expensive headless Mermaid browser rendering.
 
 The visual map check is the part that catches a lying plan. Every task heading must have a
 matching node in the Mermaid block, and every `depends_on` edge must match a Mermaid edge
@@ -542,6 +542,9 @@ shows the impact, so the claim carries its own evidence:
 | `impacts: ["none: <command>"]` | Passes. "Checked, nothing downstream" is a real answer, and it names the check — the same discipline as `skip_if: "false"`. |
 | `require_impacts` absent | One aggregated **warning** naming every undeclared task, never an error. |
 | `allow_no_impacts: [T3]` | Exempts one task. Naming a task that *does* declare impacts is itself an error, so the list cannot become a permanent blanket. |
+| `loop_until: "<command>"` on an iterative step | The runner executes it after that step's own `cmd` succeeds. Exit 0 is converged and the step passes; non-zero re-runs the step inside the `retry` budget it already declares, and exhausting that budget is a failure naming `loop_until`. It is a command, never a string match: `grep -q 'Done' src/x.ts` survives the behaviour being reverted, so it reports convergence for work that is not converged. |
+| `loop_until` absent | Legal, and the default. A step that does not iterate never runs a convergence check, so every plan that predates the key behaves exactly as before. |
+| `loop_until` present but blank or not a string | **Validation error**, naming the task and the step. A condition the runner cannot execute is worse than no condition, because it reads as a claim and enforces nothing. |
 
 Flow-style only (`impacts: ["a", "b"]`). The block form `- "text"` parses as an object
 rather than a scalar, so a block-style list reaches the validator as objects where

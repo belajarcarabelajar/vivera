@@ -2,7 +2,7 @@
 schema: ultra-plan/v1
 plan_id: YYYY-MM-DD-<feature-name>
 status: Draft            # Draft|Approved|InProgress|Verification|Complete|Blocked
-version: 1
+version: 1              # schema stamp for the plan FORMAT. No runner reads it; `schema:` above is what the runner enforces. `bun run contract:check` reports it on purpose.
 runner_contract: true
 defaults:
   retry_transient_max: 1            # explicit integer, never the word "bounded"
@@ -27,6 +27,7 @@ tasks:
       - cmd: "bun test path/to/file1.test.ts"
         expect_exit: 0               # GREEN: passes, 0 failures
         retry: 1
+        loop_until: "bun test path/to/file1.test.ts"   # optional; exit 0 = converged, non-zero = re-run inside `retry`
   - id: T2
     depends_on: [T1]
     impacts: ["path/to/file2.ts consumers - rg 'from .*file1' src/ ; none: bun test path/to/file2.test.ts"]
@@ -41,6 +42,7 @@ tasks:
       - cmd: "bun test path/to/file2.test.ts"
         expect_exit: 0
         retry: 1
+        loop_until: "bun test path/to/file2.test.ts"   # optional; exit 0 = converged, non-zero = re-run inside `retry`
 ---
 
 # [Feature Name] Implementation Plan
@@ -54,6 +56,8 @@ tasks:
 > **A `skip_if` the rules cannot classify gets a warning, not an error.** `classifySkipIf` returns `empty`, `sentinel` (the literal `false` — the documented "this task has no command"), `behavioural`, `loose`, or `unknown`. An `unknown` command — one that is neither a tool invocation nor a file probe, such as `bash scripts/x.sh --verify out.txt` or `pacman -Q rtkit` — draws a `WARN` naming the task and the command, and the plan still runs. That is deliberate: 14 such tasks live in plans belonging to repositories this one does not own. If the command genuinely has no exit status worth asserting, write `skip_if: "false"`; that is a deliberate no-op, not an exemption, and such a task still reports `NEEDS-AGENT` because it declares no `run[]`. There is no `allow_unknown_skip_if` — a second allowlist would decay into a permanent blanket. Run `bun scripts/skipif-registry-audit.mjs` for the current tally.
 >
 > **The other declared fields are enforced too, so keep them honest.** Every `files.modify` and `files.test` path must exist before the steps run, and every `files.create` path must exist after they finish. A `run[]` step with no `expect_exit` inherits `verify_exit`. `idempotency_key` must begin with this task's own id; its right-hand side names the unit of work and is free-form, because a behaviour like `T3:two-stage-trigger` has no filename. `on_precondition_fail` is either `stop-task-continue-independent` or `halt-plan`; anything else throws.
+>
+> **`loop_until` is the convergence condition, which `retry` is not.** `retry` bounds how many times a step may re-run; it says nothing about what proves one iteration finished. `loop_until` holds the command the runner executes after that step's own `cmd` succeeds, and its exit code is the answer: 0 means this iteration has converged and the step passes, non-zero means it has not and the step re-runs inside the `retry` budget already declared. It is optional and its absence stays legal, so a plan that never mentions it behaves exactly as before. **Write it as a command, never a grep-style string match**: `grep -q 'Marker' src/x.ts` stays true after the behaviour it names is reverted, so it reports convergence that did not happen, and a probe that cannot fail is the same false pass `skip_if` is banned for. A present-but-blank or non-string value is a validation error naming the task and the step, because a condition the runner cannot execute is worse than no condition at all.
 >
 > **`impacts` is what the task can BREAK, which `files` does not ask.** `files` names the paths a task touches; `impacts` names the surfaces that consume them — sibling callers, the other task that reads this export, the README that documents the flag, the template that mirrors the schema. `depends_on` cannot cover this: it orders tasks inside one plan, so a consumer in another module or another repository is not a node and cannot be an edge. With `defaults.require_impacts: true` a task that declares no `impacts` is a validation error, and an empty list is an error too, because an empty list claims nothing and proves nothing. "Checked, nothing downstream" is a real answer and is written as the sentinel `"none: <the command that checked>"`. Grandfather a task with `defaults.allow_no_impacts: [T3]`; naming a task that does declare impacts is itself an error, so the list cannot become a permanent blanket. **Flow-style only** (`impacts: ["a", "b"]`): the block form `- "text"` parses as an object rather than a scalar, so a block-style list reaches the validator as objects where strings were written and is refused.
 
@@ -115,7 +119,7 @@ flowchart TD
   - [ ] Each affected surface outside this task's file scope is either updated by this task or recorded as a follow-up with a finish line. A file this task noticed but did not fix is a named outcome, never a silent omission.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file1.test.ts` | expect: exit non-zero for the right reason | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass the test
-- [ ] **Step 3 — Verify:** cmd: `bun test path/to/file1.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt only downstream (`depends_on` includes T1), keep independent tasks running
+- [ ] **Step 3 (Verify):** cmd: `bun test path/to/file1.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | loop_until: `bun test path/to/file1.test.ts` (optional; exit 0 = converged) | on_fail: mark FAILED, write §6, halt only downstream (`depends_on` includes T1), keep independent tasks running
 - [ ] **Step 4 — Commit:** `git add <files> && git commit -m "feat: ..."`
 
 > Steps 1 and 3 are the same commands as T1's `run[]` in the frontmatter. The frontmatter is the copy the runner executes; this checklist is the copy a human reads. When they disagree, the frontmatter wins and the checklist is the defect.
@@ -134,7 +138,7 @@ flowchart TD
   - [ ] Each affected surface outside this task's file scope is either updated here or recorded as a follow-up with a finish line.
 - [ ] **Step 1 — Failing Test (RED):** cmd: `bun test path/to/file2.test.ts` | expect: exit non-zero | retry: 0
 - [ ] **Step 2 — Implementation (GREEN):** minimal code to pass
-- [ ] **Step 3 — Verify:** cmd: `bun test path/to/file2.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark FAILED, write §6, halt downstream, keep independent running
+- [ ] **Step 3 (Verify):** cmd: `bun test path/to/file2.test.ts` | expect: exit 0, 0 failures | retry: 1 (transient only) | loop_until: `bun test path/to/file2.test.ts` (optional; exit 0 = converged) | on_fail: mark FAILED, write §6, halt downstream, keep independent running
 - [ ] **Step 4 — Commit:** `git add <files> && git commit -m "feat: ..."`
 
 ## 5. Verification Matrix Before Completion

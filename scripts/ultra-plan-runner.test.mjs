@@ -1916,3 +1916,303 @@ test('the plan template ships the strict policy commented, and defaults to any',
   assert.equal(plan.defaults.retry_if, 'any');
   assert.deepEqual(validatePlan(plan, text).errors, []);
 });
+
+// ---------- tasks[].run[].loop_until ----------
+//
+// What this key is for, and what it is not.
+//
+// The runner already bounds how many times a step may RE-RUN: `retry`,
+// `retry_transient_max`, `retry_if`. None of them answers the question an
+// iterative step actually has, which is what proves an ITERATION has finished.
+// "Keep fixing until the test goes green" writes its convergence condition as
+// prose, and prose cannot fail, so the runner cannot tell "converged" from
+// "still going" and a later round re-pays to rediscover work an earlier round
+// already rejected.
+//
+// `loop_until` is that convergence condition, as a COMMAND. Exit 0 means
+// converged and the step passes. Non-zero means the iteration has not finished:
+// the step re-runs inside the retry budget it already had, and when the budget is
+// spent the step FAILS with the cause naming `loop_until` and the exit code it
+// returned. Absence stays legal, because most steps are not iterative.
+
+// (b) Converged. The probe runs AFTER the step's own command succeeds, and a
+// zero exit from it is what makes the step pass.
+test('loop_until that exits 0 lets the step pass', () => {
+  const probe = abs('converged.sh');
+  writeFileSync(probe, '#!/bin/sh\nexit 0\n');
+  chmodSync(probe, 0o755);
+  const { status, ledger } = runPlan([{
+    id: 'T1', depends_on: [],
+    run: [{ cmd: 'true', loop_until: probe }],
+  }]);
+  assert.equal(status.get('T1'), 'PASSED', JSON.stringify(ledger));
+  assert.deepEqual(ledger, []);
+});
+
+// The probe is not a second opinion, it is a gate: it runs only after the step's
+// own command exits as expected, and a command that never runs never converges.
+test('loop_until does not run when the step itself fails', () => {
+  const probeMarker = abs('probe-ran.txt');
+  rmSync(probeMarker, { force: true });
+  const probe = abs('touch-and-pass.sh');
+  writeFileSync(probe, `#!/bin/sh\ntouch ${probeMarker}\nexit 0\n`);
+  chmodSync(probe, 0o755);
+  const { status, ledger } = runPlan([{
+    id: 'T1', depends_on: [],
+    run: [{ cmd: 'exit 3', expect_exit: 0, loop_until: probe, retry: 0 }],
+  }]);
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+  assert.equal(existsSync(probeMarker), false, 'a probe may not launder a step that did not pass');
+  assert.match(ledger[0].cause, /exited 3, expected 0/);
+});
+
+// (c) Never converged, no budget. The failure must name `loop_until` and carry
+// its exit code, or a reader cannot tell an unconverged loop from a bad step.
+test('loop_until that never converges with retry 0 fails, and the row names loop_until', () => {
+  const { status, ledger } = runPlan([{
+    id: 'T1', depends_on: [],
+    run: [{ cmd: 'true', loop_until: 'exit 1', retry: 0 }],
+  }]);
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+  assert.equal(ledger.length, 1);
+  assert.match(ledger[0].cause, /loop_until/);
+  assert.match(ledger[0].cause, /exited 1/, 'the row carries the probe exit code, not the step\'s');
+  assert.equal(ledger[0].exit, 1);
+  // Classified by the existing classifyFailure, not a new class of its own.
+  assert.equal(ledger[0].klass, 'code');
+  assert.equal(ledger[0].transient, 'unknown');
+});
+
+// The iteration, not the step: re-running spends the SAME budget the step already
+// had. A loop that converges on its second pass passes, and pays one retry for it.
+test('an unconverged loop re-runs the step inside the existing retry budget', () => {
+  const marker = path.join(tmpdir(), `vivera-loop-${process.pid}`);
+  rmSync(marker, { force: true });
+  // The probe converges only once it has been run twice, so the step genuinely
+  // has to iterate.
+  const probe = `sh -c 'n=$(cat ${marker} 2>/dev/null || echo 0); n=$((n+1)); echo $n > ${marker}; [ "$n" -ge 2 ]'`;
+  const { status, ledger } = runPlan(
+    [{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: probe, retry: 2 }] }],
+  );
+  try {
+    assert.equal(status.get('T1'), 'PASSED', JSON.stringify(ledger));
+    assert.deepEqual(ledger, []);
+    assert.equal(readFileSync(marker, 'utf8').trim(), '2', 'the probe ran twice: once unconverged, once converged');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+// Budget exhausted while still unconverged. The retry accounting must report the
+// loop, not hide it behind the step's own exit.
+test('a loop that outruns its retry budget fails with the exhausted count', () => {
+  const { status, ledger } = runPlan(
+    [{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: 'exit 1', retry: 1 }] }],
+  );
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+  assert.equal(ledger[0].retry, '1/1');
+  assert.match(ledger[0].cause, /loop_until/);
+});
+
+// A probe that is not even executable on this machine. classifyFailure already
+// has a class for 127, and the loop must reuse it rather than inventing one.
+test('an unrunnable loop_until is classified as environment by the existing taxonomy', () => {
+  const { status, ledger } = runPlan([{
+    id: 'T1', depends_on: [],
+    run: [{ cmd: 'true', loop_until: 'definitely-not-a-real-binary-xyz', retry: 3 }],
+  }]);
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+  assert.equal(ledger[0].klass, 'environment');
+  assert.equal(ledger[0].exit, 127);
+  assert.match(ledger[0].cause, /loop_until/);
+});
+
+// A probe that outlives step_timeout_s must be reaped like any other step, or
+// the loop is the one place a child can escape the process-group kill.
+test('a loop_until that overruns step_timeout_s is reported as 124', () => {
+  const { status, ledger } = runPlan(
+    [{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: 'sleep 5', retry: 0 }] }],
+    { step_timeout_s: 1 },
+  );
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+  assert.equal(ledger[0].exit, 124);
+  assert.equal(ledger[0].klass, 'timeout');
+  assert.match(ledger[0].cause, /loop_until/);
+});
+
+// (d) A convergence condition that is not a command is a validation error, not
+// a runtime surprise discovered half-way through an execution.
+test('a blank or non-string loop_until is a validation error naming the task and step', () => {
+  for (const bad of ['', '   ', 42, true, null, ['bun test a'], { cmd: 'true' }]) {
+    const plan = {
+      schema: 'ultra-plan/v1',
+      tasks: [{ id: 'T7', depends_on: [], run: [{ cmd: 'true', loop_until: bad }] }],
+    };
+    const { errors } = validatePlan(plan, null);
+    assert.ok(
+      errors.some((e) => /T7/.test(e) && /run\[0\]/.test(e) && /loop_until/.test(e)),
+      `expected a loop_until validation error for ${JSON.stringify(bad)}, got: ${JSON.stringify(errors)}`,
+    );
+  }
+});
+
+// The text-probe ban. A convergence condition satisfied by reading a file and
+// finding a string survives the behaviour being reverted, which is the exact
+// false pass `skip_if` already refuses. Enforced with the SAME classifiers, so
+// the two keys cannot disagree about the same command.
+test('a loop_until that only reads a file is refused as a false pass', () => {
+  for (const probe of ["grep -q 'done' out.txt", 'test -f out.txt', 'ls dist/', 'rg -q marker src/x.ts']) {
+    const plan = {
+      schema: 'ultra-plan/v1',
+      tasks: [{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: probe }] }],
+    };
+    const { errors } = validatePlan(plan, null);
+    assert.ok(
+      errors.some((e) => /loop_until/.test(e) && /probe|file/i.test(e)),
+      `${probe} reads a file and asserts a string; it must not count as convergence`,
+    );
+  }
+});
+
+// And the ban must not refuse the honest form: a tool invocation that has to
+// succeed first, even when a grep filters its output.
+test('a loop_until that runs a tool stays legal, grep filter included', () => {
+  for (const probe of ['bun test a.test.ts', "bun test a.test.ts 2>&1 | grep -q 'passes'", 'git diff --quiet -- path']) {
+    const plan = {
+      schema: 'ultra-plan/v1',
+      tasks: [{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: probe }] }],
+    };
+    assert.deepEqual(validatePlan(plan, null).errors, [], `${probe} runs a tool that has to succeed first`);
+  }
+});
+
+// (a) The absence case, and the most important one: a plan that declares no
+// loop_until validates and executes exactly as before. Asserted as whole
+// objects, so a new field on a ledger row or a changed status fails here.
+test('NEGATIVE CONTROL: a plan with no loop_until is untouched by any of this', () => {
+  const plan = {
+    schema: 'ultra-plan/v1',
+    runner_contract: true,
+    tasks: [
+      { id: 'T1', depends_on: [], skip_if: 'bun test a.test.ts' },
+      { id: 'T2', depends_on: ['T1'], skip_if: 'false', verify_exit: 0, run: [{ cmd: 'exit 4', expect_exit: 0, retry: 0 }] },
+      { id: 'T3', depends_on: ['T2'], skip_if: 'bun test c.test.ts' },
+    ],
+  };
+  const { errors, warnings } = validatePlan(plan, null);
+  assert.deepEqual(errors, [], 'absence must stay legal');
+  // The plan is not warning-free by construction (NEEDS-AGENT and impacts both
+  // speak on it), so the assertion is that NONE of the existing warnings is
+  // about the key that was never declared.
+  assert.ok(!warnings.some((w) => /loop_until/.test(w)), warnings.join(' | '));
+
+  const { order, status, ledger } = executePlan(
+    { ...plan, defaults: { retry_transient_max: 0, step_timeout_s: 30 } },
+    { execute: true, log: () => {} },
+  );
+  assert.deepEqual(order, ['T1', 'T2', 'T3']);
+  assert.equal(status.get('T1'), 'NEEDS-AGENT');
+  assert.equal(status.get('T2'), 'FAILED-BLOCKING');
+  assert.equal(status.get('T3'), 'HALTED-UPSTREAM');
+  assert.deepEqual(
+    ledger.map((e) => [e.task, e.step, e.klass, e.exit, e.expected, e.retry, e.status]),
+    [
+      ['T2', 1, 'code', 4, 0, '0/0', 'FAILED-BLOCKING'],
+      ['T3', '-', 'contract', '-', undefined, '0/0', 'HALTED-UPSTREAM'],
+    ],
+  );
+  // No row anywhere may mention the key that was never declared.
+  assert.ok(!ledger.some((e) => JSON.stringify(e).includes('loop_until')),
+    'an absent loop_until must not appear in the ledger');
+});
+
+// One more absence guard, at the parser level: an unknown key on a step is
+// carried through untouched and must not be mistaken for a convergence claim.
+test('loop_until is declared by the contract, so CI can tell the template is behind', () => {
+  assert.ok(RUNNER_CONTRACT_KEYS.includes('tasks[].run[].loop_until'),
+    'a key the runner acts on but does not declare here cannot be checked against the template');
+  // Present in the list, and read by the enforcement the tests above exercise.
+  // Asserting only the membership would pass against a key nothing enforces.
+  const { status } = runPlan([{ id: 'T1', depends_on: [], run: [{ cmd: 'true', loop_until: 'exit 1', retry: 0 }] }]);
+  assert.equal(status.get('T1'), 'FAILED-ISOLATED', 'membership plus a working enforcement');
+});
+
+// End to end through the parser, because a key that cannot be written in the
+// template is a key every plan author copies without it.
+test('loop_until parses from block-style run[] the way a plan writes it', () => {
+  const { frontmatter } = extractFrontmatter(`---
+schema: ultra-plan/v1
+plan_id: 2026-10-05-loop
+status: Approved
+runner_contract: true
+tasks:
+  - id: T1
+    depends_on: []
+    run:
+      - cmd: "bun test a.test.ts"
+        expect_exit: 0
+        retry: 2
+        loop_until: "bun test a.test.ts"
+---
+# p
+`);
+  const plan = parseUltraPlanYaml(frontmatter);
+  assert.equal(plan.tasks[0].run[0].loop_until, 'bun test a.test.ts');
+  assert.deepEqual(validatePlan(plan, null).errors, []);
+});
+
+// ---------- Test-reversal proof for the RED-step iteration gap ----------
+//
+// A loop declared on an expect_exit:1 step is the case the key exists for: the
+// step's own command is expected to fail, and the question "has the iteration
+// finished" is separate from that expected failure. This test exists because the
+// suite had no RED step carrying a loop_until, and the gap it left was invisible.
+//
+// THE DEFECT THIS PINS. The runner assigned the probe result into `r` and then
+// compared `r.exit` against the step's `want` to decide the step had passed. A
+// RED step declares expect_exit 1 and an unconverged probe exits 1, so that
+// comparison was true, the retry loop broke after one pass, and zero of the
+// declared budget was spent. Reverting the guard on this line makes this test
+// fail with status FAILED-ISOLATED, retry '0/2', and a single probe invocation,
+// where it asserts PASSED, '2/2', and two.
+test('a loop_until on a RED step iterates inside its retry budget and can converge', () => {
+  const marker = path.join(tmpdir(), `vivera-red-loop-${process.pid}`);
+  rmSync(marker, { force: true });
+  // The probe converges only on its second invocation, so the step genuinely has
+  // to iterate. Its exit codes are 1 before convergence and 0 after, which is
+  // also what makes this a RED-step case: 1 is the step's declared success.
+  const probe = `sh -c 'n=$(cat ${marker} 2>/dev/null || echo 0); echo $((n+1)) > ${marker}; [ "$n" -ge 1 ]'`;
+  const { status, ledger } = runPlan([
+    { id: 'T1', depends_on: [], run: [{ cmd: 'exit 1', expect_exit: 1, loop_until: probe, retry: 2 }] },
+  ]);
+  try {
+    assert.equal(status.get('T1'), 'PASSED', JSON.stringify(ledger));
+    assert.deepEqual(ledger, []);
+    assert.equal(readFileSync(marker, 'utf8').trim(), '2',
+      'the probe ran twice: once unconverged, once converged, so the budget was spent');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});
+
+// The counterpart that keeps the fix honest in the other direction: a RED step
+// whose loop NEVER converges must still fail, and must report the exhausted
+// budget rather than passing on the step's own expected exit. Before the fix
+// this failed with retry '0/2', which is the accounting this asserts.
+test('a RED step whose loop never converges fails with the exhausted budget', () => {
+  const marker = path.join(tmpdir(), `vivera-red-loop-fail-${process.pid}`);
+  rmSync(marker, { force: true });
+  const probe = `sh -c 'n=$(cat ${marker} 2>/dev/null || echo 0); echo $((n+1)) > ${marker}; exit 1'`;
+  const { status, ledger } = runPlan([
+    { id: 'T1', depends_on: [], run: [{ cmd: 'exit 1', expect_exit: 1, loop_until: probe, retry: 2 }] },
+  ]);
+  try {
+    assert.equal(status.get('T1'), 'FAILED-ISOLATED');
+    assert.equal(ledger[0].retry, '2/2', 'the whole declared budget was spent on the loop');
+    assert.match(ledger[0].cause, /loop_until/);
+    assert.match(ledger[0].cause, /exited 1/, 'the probe exit, not the step\'s own expected 1');
+    assert.equal(readFileSync(marker, 'utf8').trim(), '3', 'one probe per pass: initial plus two retries');
+  } finally {
+    rmSync(marker, { force: true });
+  }
+});

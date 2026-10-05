@@ -16,6 +16,15 @@
 // surrounding prose. Text presence is not structure, which is the same mistake
 // the Mermaid contract already forbids.
 //
+// TWO DIRECTIONS, with different severities, and the asymmetry is the point.
+// Forward: a key the runner reads that an artifact omits is an ERROR, because
+// the plan cannot run. Reverse: a key an artifact declares that the runner does
+// not read is a WARN, because the plan runs fine and carries a field nobody
+// acts on, and this repository does not own the verdict on fields like that.
+// Both artifacts declared `loop_until` while the runner read nothing under that
+// name and this check still exited 0, because it only walked `want`. See
+// `unreadKeys` for the measured noise floor that shaped its rule.
+//
 // Revert: delete this file, and drop the `checkRunnerContract()` call from
 // validate-skill.mjs in favour of the inline block it was extracted from.
 
@@ -39,14 +48,97 @@ export function keyPaths(obj, prefix = '', out = new Set()) {
   return out;
 }
 
+// Every key path in `RUNNER_CONTRACT_KEYS`, bracketed away the same way
+// `keyPaths` drops indices, so `tasks[].run[].cmd` and `tasks.run.cmd` are one
+// string on both sides of either comparison.
+export function contractPaths() {
+  return RUNNER_CONTRACT_KEYS.map((k) => k.replace(/\[\]\./g, '.').replace(/\[\]/g, ''));
+}
+
+// The forward half: a key the runner READS that an artifact does not declare.
+// This is the direction that was always checked, and it stays an error.
+export function missingKeys(planLike) {
+  const present = keyPaths(planLike);
+  return contractPaths().filter((k) => !present.has(k));
+}
+
+// The reverse half, and it is a WARNING, never an error.
+//
+// A key an artifact declares that `RUNNER_CONTRACT_KEYS` does not name is the
+// drift the header above calls "worse than an undocumented one": the template
+// taught a key to every agent that wrote a plan, and nothing read it. That is
+// exactly what happened with `loop_until`, and the first draft of this reverse
+// check did not notice because it only walked `want`.
+//
+// Why not an error. The errors above are about a plan that cannot RUN: the
+// runner reaches for `tasks.run.cmd` and finds nothing, so the step is skipped
+// or the plan aborts. This direction is about a plan that runs fine and carries
+// a field the runner ignores. Several of those fields are not runner business
+// at all and this repository cannot own a verdict on them: `version: 1` in both
+// artifacts is a schema stamp for the plan format, not an execution knob, and
+// the runner never reads it. Failing the gate over it would mean refusing a
+// template field whose correct home (the runner's list, or the schema prose) is
+// a decision for whoever owns those, exactly the reasoning that already made an
+// unclassifiable `skip_if` a warning rather than a verdict this repository
+// cannot own. So it is reported, named, and printed on every run, and it does
+// not move the exit code.
+//
+// NARROWED, and the narrowing is measured rather than guessed. Raw keying over
+// both real artifacts produced six extra paths each:
+//
+//   defaults             container, an ancestor of keys the contract names
+//   tasks                container, same
+//   tasks.files.create   read, through the `tasks[].files` already named
+//   tasks.files.modify   read, through the same parent
+//   tasks.files.test     read, through the same parent
+//   version              genuinely unread
+//
+// Five of the six are false positives, and a rule that flagged them would have
+// failed both artifacts of this repository on keys the runner demonstrably
+// reads. `version` is the one real finding, and it is left in the output on
+// purpose: see above for why it is reported rather than fixed here.
+//
+// The rule has three clauses, each closing one of those false positives:
+//   exact      the contract names the declared path
+//   container  the declared path is an ANCESTOR of a contract key, so it is a
+//              group name (`tasks`, `defaults`) rather than a field
+//   opaque     the declared path sits under a parent the contract names
+//              deliberately. `tasks[].files` is that parent and it is the only
+//              one: the runner does not dispatch on its three children, it
+//              iterates `modify` and `test` in `filePrecondition` and `create`
+//              in `filePostcondition`, all grouped path lists. Everywhere else
+//              the contract names a child exactly when the runner dispatches on
+//              it, which is why `tasks[].run` carries `cmd`, `expect_exit`,
+//              `retry` and `loop_until` as four separate entries. So
+//              `tasks.files.create` is covered while `tasks.run.mystery` is
+//              not, and that difference is the whole test of the rule.
+//
+// The one-entry opaque list is a judgement about the runner's internals, so it
+// stays a list with the function names that justify it rather than becoming a
+// "skip anything nested" escape hatch.
+const OPAQUE_CONTRACT_PATHS = ['tasks.files'];
+
+export function unreadKeys(planLike) {
+  const contract = contractPaths();
+  const opaque = contract.filter((k) => OPAQUE_CONTRACT_PATHS.includes(k));
+  const covered = (p) => contract.includes(p)
+    || contract.some((c) => c.startsWith(`${p}.`))
+    || opaque.some((c) => p.startsWith(`${c}.`));
+  return [...keyPaths(planLike)].filter((p) => !covered(p)).sort();
+}
+
 export function checkRunnerContract() {
-  const want = RUNNER_CONTRACT_KEYS.map((k) => k.replace(/\[\]\./g, '.').replace(/\[\]/g, ''));
+  const want = contractPaths();
   const problems = [];
+  const warnings = [];
 
   const check = (artifact, planLike) => {
-    const present = keyPaths(planLike);
-    for (const k of want) {
-      if (!present.has(k)) problems.push(`the runner reads \`${k}\` but ${artifact} does not declare it`);
+    for (const k of missingKeys(planLike)) {
+      problems.push(`the runner reads \`${k}\` but ${artifact} does not declare it`);
+    }
+    for (const k of unreadKeys(planLike)) {
+      warnings.push(`\`${k}\` is declared but no runner contract key reads it (in ${artifact}); `
+        + 'the runner ignores it, so a plan that relies on it is not doing what it says');
     }
   };
 
@@ -78,17 +170,28 @@ export function checkRunnerContract() {
     problems.push(`the master skill plan header template is unusable: ${e.message}`);
   }
 
-  return { problems, total: want.length };
+  return { problems, warnings, total: want.length };
 }
 
 const isMain = process.argv[1] && process.argv[1].endsWith('check-runner-contract.mjs');
 if (isMain) {
-  const { problems, total } = checkRunnerContract();
+  const { problems, warnings, total } = checkRunnerContract();
   if (problems.length === 0) {
     console.log(`✅ Runner contract: both artifacts declare all ${total} keys the runner reads.`);
+    // Printed BEFORE the problem loop and independently of the exit code, so a
+    // green run that carries an unread key still says so. Silently swallowing
+    // it would put back the exact blind spot this second direction exists to
+    // cover, and `grep -q 'all N keys present'` in a skip_if would then treat a
+    // warning run as a clean one.
+    for (const w of warnings) console.log(`⚠️  WARN: ${w}`);
+    if (warnings.length > 0) {
+      console.log(`\n   ${warnings.length} declared key(s) the runner does not read. Reported, not refused: `
+        + 'whether each belongs to the runner or to the schema is not this check\'s call to make.');
+    }
     process.exit(0);
   }
   for (const p of problems) console.error(`❌ ${p}`);
+  for (const w of warnings) console.error(`⚠️  WARN: ${w}`);
   console.error(`\n   ${problems.length} contract key(s) undocumented.`);
   process.exit(1);
 }

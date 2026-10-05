@@ -29,6 +29,13 @@
 // every vault mirror stale. Deriving the link from a sidecar keeps the plan byte
 // stable, which is the same reason a review verdict belongs in the plan and
 // never in the mirror.
+//
+// Syncing a plan that is already recorded READS the issue first
+// (`gh issue view <n> --json state`). The recorded state is this script's own
+// past opinion, and a decision made from it cannot fail, so it is checked rather
+// than believed. That read is what turns CURRENT from an assumption into a
+// statement, and it costs one call per recorded plan and no call at all for a
+// create.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
@@ -220,28 +227,94 @@ export function parseTrailer(body) {
   };
 }
 
+// ---------- the live state, read from GitHub ----------
+
+// The `state` in plan.issues.json is this script's own past opinion, not evidence
+// of what GitHub holds. Believing it is how the drift this mirror exists to catch
+// was created: on 2026-10-05 a plan at Complete whose sidecar row said "closed"
+// while the issue sat OPEN produced `current`, printed CURRENT, and made zero gh
+// calls. The claim could not fail. It cannot self-correct either, because once
+// the sidecar says closed every later run agrees with itself, so a human
+// reopening the issue stays invisible forever.
+//
+// So the state is READ. `gh issue view <n> --repo <repo> --json state` answers
+// `{"state":"OPEN"|"CLOSED"}`, and this goes through the same `run` seam as every
+// other call, so its failure is handled the same way as theirs: reported, not
+// swallowed.
+//
+// A state that cannot be read is a hard error. Falling back to the sidecar is the
+// defect, and a fallback that still prints CURRENT is worse than a loud failure,
+// because it converts "I could not check" into "it is fine".
+//
+// MERGED is refused rather than read as anything. `gh issue view` answers MERGED
+// for a merged pull request, so a value outside OPEN/CLOSED means this entry
+// points at something that is not an issue, and deciding a write on an assumption
+// about what that is would be the same class of bug.
+export function readLiveState(run, { number, repo }) {
+  const argv = ['issue', 'view', String(number), '--repo', repo, '--json', 'state'];
+  const boundary = `gh ${argv.join(' ')}`;
+  const refuse = (why) => new Error(
+    `${boundary} could not report the state of ${repo}#${number}: ${why}. `
+    + `The state recorded in ${DEFAULT_CONFIG} is this script's own past opinion, not evidence of what GitHub holds, `
+    + 'so the sync refuses to fall back to it. Fix the read (auth, network, wrong repository) and re-run.',
+  );
+
+  const r = run(argv);
+  if (!r.ok) throw refuse(r.err || 'gh exited non-zero');
+  // The answer is parsed here rather than taken from `r.data`, because this call
+  // carries its own `--json state`, and the runner only parses when it supplied
+  // the flag itself. That also makes the expected shape explicit: `--json state`
+  // promises one object with one field, so anything else is a refusal rather than
+  // a missing field to be worked around.
+  let raw;
+  try { raw = JSON.parse(r.out).state; } catch { raw = undefined; }
+  if (typeof raw !== 'string' || raw === '') {
+    throw refuse(`gh returned no "state" field (output: ${r.out || 'nothing'})`);
+  }
+  if (raw !== 'OPEN' && raw !== 'CLOSED') {
+    throw refuse(`gh reported state ${JSON.stringify(raw)}, which is neither OPEN nor CLOSED`);
+  }
+  return raw.toLowerCase();
+}
+
 // ---------- the action decision ----------
 
 // This is the deterministic half. Everything above reads state; everything below
 // decides; only the executor talks to GitHub. The decision is a pure function of
-// (recorded entry, plan text, plan status), which is what makes "run it twice"
-// safe and what makes a test able to assert the whole matrix without a network.
-export function deriveAction({ entry, planText, status, key, id, repo }) {
+// (recorded entry, LIVE state, plan text, plan status), which is what makes "run
+// it twice" safe and what makes a test able to assert the whole matrix without a
+// network. That is also why the live state arrives as a parameter: reading it here
+// would put a network call inside the one function the matrix tests, and the
+// matrix is the only place the whole decision surface is checked at once.
+export function deriveAction({ entry, liveState, planText, status, key, id, repo }) {
   const wanted = issueBody(planText, { planId: id, key, sourcePath: entry?.source ?? null, status, generatedBy: repo });
 
   if (!entry || !entry.number) {
     return { kind: 'create', title: id, body: wanted, hash: hashOf(planText), repo };
   }
 
+  // Without the read there is nothing to compare, and `entry.state` is exactly the
+  // claim that cannot fail. So a missing observation is an error here, not a
+  // default: any caller that forgets the read gets a loud failure instead of the
+  // old behaviour back.
+  if (liveState !== 'open' && liveState !== 'closed') {
+    throw new Error(
+      `deriveAction needs the state read from GitHub for ${repo}#${entry.number} (got liveState: ${JSON.stringify(liveState)}). `
+      + `Refusing to fall back to the recorded state in ${DEFAULT_CONFIG}, which is this script's own past opinion.`,
+    );
+  }
+
   const changed = [];
   if (entry.hash !== hashOf(planText)) changed.push('body');
   const shouldClose = status === CLOSED_STATUS;
-  const isClosed = entry.state === 'closed';
+  const isClosed = liveState === 'closed';
   if (shouldClose !== isClosed) changed.push('state');
 
   if (changed.length === 0) {
-    // The real no-op. Reported as its own kind so `--status` and `--check` can
-    // tell "already current" apart from "dry run wrote nothing", which is the
+    // The real no-op, and now a statement with three independent sources behind
+    // it: the recorded entry, the state just read from GitHub, and the plan all
+    // say the same thing. Reported as its own kind so `--status` and `--check`
+    // can tell "already current" apart from "dry run wrote nothing", which is the
     // same distinction plan-publish.mjs draws with `skipped`.
     return { kind: 'current', number: entry.number, url: entry.url, repo };
   }
@@ -340,7 +413,14 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   }
 
   const entry = cfg.issues[key] ?? null;
-  const action = deriveAction({ entry, planText, status, key, id, repo });
+  // Read GitHub BEFORE deciding. A dry run reads too, because `--check` is
+  // exactly the question "does the sidecar still describe the issue", and that can
+  // only be answered against the issue. An unreadable state throws here, the same
+  // way the missing repository mapping above does, and no write follows it.
+  const liveState = entry && entry.number
+    ? readLiveState(run, { number: entry.number, repo })
+    : null;
+  const action = deriveAction({ entry, liveState, planText, status, key, id, repo });
 
   if (action.kind === 'current') {
     return { key, action: 'current', number: action.number, url: action.url, repo, status, written: false };
@@ -352,13 +432,23 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   const result = applyAction(action, run);
   if (!result.ok) throw new Error(`${key}: ${action.kind} failed: ${result.error}`);
 
+  // What gets recorded must be something GitHub said. Two admissible sources, and
+  // no third: the state read from GitHub before the write, for a write that did
+  // not touch the state, and the close/reopen that gh just acknowledged, for a
+  // write that did (exit 0 from `issue close`/`issue reopen` is GitHub's own
+  // answer, not a local intention). `status` is a wish and `entry.state` is an old
+  // opinion; neither may be written back as if it were an observation.
+  // A create has no issue to read beforehand, and `gh issue create` only ever
+  // creates an open issue, so the acknowledged create is that row's evidence.
+  const closedNow = action.close === undefined ? liveState === 'closed' : action.close;
+
   const next = {
     ...cfg.issues,
     [key]: {
       number: result.number ?? action.number ?? null,
       url: result.url ?? action.url ?? null,
       hash: action.hash ?? entry?.hash ?? null,
-      state: result.closed ? 'closed' : (status === CLOSED_STATUS ? 'closed' : 'open'),
+      state: closedNow ? 'closed' : 'open',
       status,
       repo,
       synced_at: new Date().toISOString(),
@@ -493,6 +583,13 @@ function main(argv) {
     saveConfig(next, configPath);
   }
   if (opts.check) {
+    // A plan that could not be checked is NOT a passing plan. The green line
+    // printed after a refusal would turn "I could not read the live state" into
+    // "every plan issue matches", which is the same false pass one level down.
+    if (failed > 0) {
+      console.error(`\n❌ ${failed} plan(s) could not be checked against GitHub. A plan that could not be read is not a plan that matches.`);
+      return 1;
+    }
     if (drifted > 0) {
       console.error(`\n❌ ${drifted} plan(s) drifted from their GitHub issue. Fix: bun scripts/plan-issue-sync.mjs <plan.md>`);
       return 1;

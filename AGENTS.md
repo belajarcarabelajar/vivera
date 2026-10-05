@@ -14,3 +14,7 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## upgrade-hygiene
+
+Set by user 2026-10-06: every successful upgrade ends with the old version removed, so nothing exists twice. Delete session backup copies, auto-created `*.bak` files, and uninstalled packages once the new version is verified. Revert paths must not depend on the deleted copies — re-download the old release, reinstall via the package manager, or `git checkout` the repo file instead.

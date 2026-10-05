@@ -42,20 +42,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # mermaid-cli 12 requires Node >= 22.13 and puppeteer ^25.
+      # Pinned to the active LTS (Krypton), matching the local toolchain.
+      # v7 enables automatic package-manager caching when package.json carries
+      # a packageManager field. This repo installs with Bun, not npm, so the
+      # npm cache would be pure overhead: disable it explicitly.
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager-cache: false
 
       # The skill mandates Bun as the only sanctioned runtime, and CI is the
       # loudest place that rule can be demonstrated rather than just asserted.
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.0'
+          bun-version: '1.4.2'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -79,7 +84,7 @@ jobs:
           fi
 
       - name: Upload Diagram Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mermaid-diagrams
           path: diagrams/

@@ -1412,13 +1412,25 @@ RUN `graphify update .` FIRST, THEN `bun run graphify:sync` — IN THAT ORDER
 - **It also runs automatically at commit time, in the right order, but ONLY inside the vivera repository.** `install.sh` sets `core.hooksPath=.githooks`, and vivera's `.githooks/pre-commit` runs the pair without anyone remembering: when the commit touched code it runs `graphify update .` first, then `bun run graphify:sync`, so the structural document layer is the last writer and survives. A Markdown-only commit skips the code rebuild and runs the sync alone. The hook is non-blocking — every path exits 0, because a failed refresh of derived state must never block a commit — and `GRAPHIFY_SYNC_SKIP=1 git commit ...` disables it for one commit.
   **This automation does NOT extend to other repositories.** Two measured reasons, both silent: the hook resolves the sync script as `$REPO_DIR/scripts/graphify-sync.mjs`, which does not exist outside vivera, so its `[ -f "$SYNC" ]` guard does nothing without a warning; and it exits 0 early when `graphify-out/graph.json` is absent, so a repo that never built a graph skips the hook forever. A project repository using its own hook directory (for example `.husky`) has no graphify step at all. **Therefore: in any repository other than vivera, run the manual pair above explicitly at session close.** Do not assume the commit hook covered it, and do not treat the absence of a graph as permission to skip.
 - **A missing graph is not a reason to skip. Build it.** If `graphify-out/graph.json` does not exist, that is a repo where the graph has never been built, not a repo where the sync is blocked: run `graphify update .` first, then the sync. Skipping here is the single most common way this step silently never happens, and it looks exactly like compliance because the skip prints a line and exits 0. Only two things are genuinely "record one line and move on": `graphify` not installed at all, or an *existing* graph whose refresh **failed**. In both cases never hand-write a `graph.json` to make the step look done; the graph is derived state and a hand-authored one is a second source of truth.
-- **In a repo that is not vivera, pass `--root`.** The sync script lives in vivera and defaults to vivera's own root, so running it bare from another repository syncs the wrong tree and reports success. Always target the session's repository explicitly:
+- **In a repo that is not vivera, pass `--root`.** The sync script lives beside this file and defaults to vivera's own root, so running it bare from another repository syncs the wrong tree and reports success. Resolve the script relative to wherever vivera is checked out, and run the pair from the session repository so `$(pwd)` is that repository:
   ```bash
-  graphify update .                                                  # in the session repo
-  bun ~/vivera/scripts/graphify-sync.mjs --root "$(pwd)"            # in the session repo
-  bun ~/vivera/scripts/graphify-sync.mjs --check --root "$(pwd)"    # verify
+  # run from the session repository; VIVERA is wherever vivera is checked out
+  VIVERA="${VIVERA:-../vivera}"          # or an absolute path on this machine
+  graphify update .                                                    # in the session repo
+  bun "$VIVERA/scripts/graphify-sync.mjs" --root "$(pwd)"               # in the session repo
+  bun "$VIVERA/scripts/graphify-sync.mjs" --check --root "$(pwd)"       # verify
   ```
   A bare `bun run graphify:sync` is only correct when the current repository IS vivera.
+
+- **A green `--check` is not evidence that your documents are in the graph.** `--check` asserts the node count did not fall, so it reports `CURRENT` just as happily when nothing was indexed as when everything was. A sync pointed at the wrong root can therefore leave the count completely unchanged and still print `CURRENT, exit 0`, while the session's documents sit untouched in a different tree. The node delta is the signal, not the exit code. Preview before writing and read the two numbers that matter:
+  ```bash
+  # run from the session repository; VIVERA is wherever vivera is checked out
+  VIVERA="${VIVERA:-../vivera}"
+  bun "$VIVERA/scripts/graphify-sync.mjs" --root "$(pwd)" --dry-run    # read "eligible docs" and the "nodes:" line
+  bun "$VIVERA/scripts/graphify-sync.mjs" --root "$(pwd)"               # write
+  bun "$VIVERA/scripts/graphify-sync.mjs" --check --root "$(pwd)"       # confirm the delta you previewed
+  ```
+  `eligible docs: 0`, or a `nodes: X -> X` delta on a session that produced Markdown, means the sync ran against the wrong tree regardless of what it printed. The same shape of failure appears elsewhere: an empty `git status` proves nothing about gitignored artifacts, and a green guard proves only what it measures.
 
 ### 🚫 Anti-Patterns
 - Closing the session with a report and no question. A debt sweep that produces prose instead of a selectable question has not run.

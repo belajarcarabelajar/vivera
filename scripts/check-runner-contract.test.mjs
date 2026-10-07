@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { checkRunnerContract, keyPaths, missingKeys, unreadKeys, contractPaths } from './check-runner-contract.mjs';
 import { extractFrontmatter, parseUltraPlanYaml } from './ultra-plan-runner.mjs';
+import { readSkillCorpus } from './skill-corpus.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(ROOT, 'scripts', 'check-runner-contract.mjs');
@@ -27,7 +28,7 @@ const NARROWED_FLOOR = ['version'];
 
 function realArtifacts() {
   const tpl = fs.readFileSync(path.join(ROOT, 'templates', 'implementation-plan-template.md'), 'utf8');
-  const master = fs.readFileSync(path.join(ROOT, 'Super Ultra Code Plan Implementation.md'), 'utf8');
+  const master = readSkillCorpus(ROOT);
   const fenced = master.match(/```\n---\nschema: ultra-plan\/v1[\s\S]*?\n---\n/);
   assert.ok(fenced, 'the master skill lost its fenced plan header, the negative control cannot run');
   return [

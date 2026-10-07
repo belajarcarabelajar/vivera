@@ -91,9 +91,20 @@ function ctx({ exists = false, vaultRoot = VAULT_ROOT, ...over } = {}) {
 }
 
 // Read a scalar out of the published frontmatter, unquoting when needed.
+// Returns the RAW scalar, quotes included, because several tests assert on the
+// emitted SPELLING (that a value is quoted) rather than on its value. Use
+// `fmScalar` below when the value itself is what matters.
 function fmValue(doc, key) {
   const m = new RegExp(`^${key}:[ \\t]*(.*)$`, 'm').exec(doc);
   return m ? m[1] : undefined;
+}
+
+// Mirrors the production reader (`readFrontmatterScalar` in plan-publish.mjs):
+// it strips one layer of surrounding quotes before returning the value, so a
+// quoted scalar reads the same here as it does where freshness is decided.
+function fmScalar(doc, key) {
+  const raw = fmValue(doc, key);
+  return raw === undefined ? undefined : raw.replace(/^["'](.*)["']$/, '$1').trim();
 }
 
 function hasKey(doc, key) {
@@ -354,23 +365,54 @@ test('source_hash is 12 hex characters and hashes the input, not the output', ()
   const text = plan();
   const out = mergeFrontmatter(text, ctx());
   const expected = createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12);
-  const got = fmValue(out, 'source_hash');
+  const got = fmScalar(out, 'source_hash');
   assert.match(got, /^[0-9a-f]{12}$/);
   assert.equal(got, expected);
   assert.notEqual(got, createHash('sha256').update(out, 'utf8').digest('hex').slice(0, 12));
+});
+
+// The quoting is the fix, so it is asserted as SPELLING rather than inferred
+// from the value. Asserting the value cannot catch it: `plan()` hashes to a
+// digest containing letters, which no YAML reader would coerce even unquoted.
+// The hazard only appears on the roughly one digest in a few hundred that is
+// all digits or contains a digit-`e`-digit run, and that is exactly why the
+// mirror looked healthy right up until it did not.
+//
+// No YAML parser is needed, and deliberately none is added: this repository has
+// no YAML dependency, which is the same reason the defect survived — every
+// reader here, production included, matches frontmatter with a regex and so
+// never sees a coerced value.
+test('source_hash is emitted quoted, so a YAML reader cannot coerce it to a number', () => {
+  const out = mergeFrontmatter(plan(), ctx());
+  const raw = fmValue(out, 'source_hash');
+  assert.ok(raw.startsWith('"') && raw.endsWith('"'), `source_hash must be quoted, got: ${raw}`);
+  assert.match(fmScalar(out, 'source_hash'), /^[0-9a-f]{12}$/);
+});
+
+test('a bare numeric-shaped hash is what makes the quoting load-bearing', () => {
+  // The shape that broke the real mirror: 12 characters, no YAML indicator, but
+  // a leading digit run followed by `e` and more digits, so a plain scalar
+  // matches the float grammar. `174e45826234` is the digest that shipped.
+  const hazardous = '174e45826234';
+  assert.match(hazardous, /^[0-9a-f]{12}$/, 'still a valid hash shape');
+  // Quoted it is a string; bare it is not. Number.isFinite is false for
+  // Infinity, which is what a reader produced and what Obsidian then showed as
+  // an empty property.
+  assert.equal(Number(hazardous), Infinity);
+  assert.ok(!Number.isFinite(Number(hazardous)));
 });
 
 test('source_hash is stable across two calls on identical input', () => {
   const text = plan();
   const a = mergeFrontmatter(text, ctx());
   const b = mergeFrontmatter(text, ctx());
-  assert.equal(fmValue(a, 'source_hash'), fmValue(b, 'source_hash'));
+  assert.equal(fmScalar(a, 'source_hash'), fmScalar(b, 'source_hash'));
 });
 
 test('source_hash changes when one character of the plan changes', () => {
   const a = mergeFrontmatter(plan(), ctx());
   const b = mergeFrontmatter(plan({ body: '# Plan Publishing to Obsidian - Implementation Plan\n' }), ctx());
-  assert.notEqual(fmValue(a, 'source_hash'), fmValue(b, 'source_hash'));
+  assert.notEqual(fmScalar(a, 'source_hash'), fmScalar(b, 'source_hash'));
 });
 
 // ---------- pass-through: the runner contract ----------

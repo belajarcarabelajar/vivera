@@ -297,9 +297,34 @@ export function mergeFrontmatter(planText, ctx) {
     emitted.push(`related: ["[[${link}]]"]`);
   }
 
+  // `source_hash` is quoted UNCONDITIONALLY, unlike the `yamlString()` fields
+  // above, and the reason is a shape the quoting helper cannot see.
+  //
+  // `yamlString()` only quotes a string that starts with a YAML indicator
+  // character, which is the right rule for a path or a project name. A hash has
+  // no indicator, so it passes through bare — and a bare 12-character hex
+  // string is not always a string to a YAML reader. When the digest happens to
+  // be all digits, or contains a digit-`e`-digit run, the plain scalar matches
+  // YAML's float grammar and is read as a NUMBER:
+  //
+  //   source_hash: 174e45826234   ->  174e45826234 as a float  ->  Infinity
+  //   source_hash: c1cce479d706   ->  a string (the `c` disqualifies it)
+  //
+  // This was observed in the real vault, not reasoned about: the mirror for
+  // 2026-10-06-coverage-gap-closure.md was published with hash `174e45826234`,
+  // and Obsidian rendered its `source_hash` property as "no value" because the
+  // coerced value was Infinity. The digest is not uniform — roughly one hash in
+  // a few hundred trips the float grammar — so the mirror looked fine until the
+  // one time it mattered, and nothing in `--check` noticed: staleness reads
+  // `source_hash` with a regex (see plan-publish.mjs, `readFrontmatterScalar`)
+  // rather than a YAML parse, so a coerced value never registers as drift.
+  //
+  // Quoting is therefore not cosmetic here, it is what makes the field a string
+  // to every reader. It stays compatible with the regex reader, which unquotes
+  // before matching, so freshness detection is unaffected.
   emitted.push(
     `source_path: ${yamlString(planPath)}`,
-    `source_hash: ${createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12)}`,
+    `source_hash: "${createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 12)}"`,
     `project: ${yamlString(projectName)}`,
     `publisher_version: ${PUBLISHER_VERSION}`,
   );

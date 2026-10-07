@@ -414,7 +414,11 @@ test('a mirror stamped with a DIFFERENT publisher_version is stale and is rewrit
   f.patchMirror(PLAN, (t) => t.replace(/^publisher_version: .*$/m, 'publisher_version: 0'));
   assert.match(
     f.mirror(PLAN),
-    new RegExp(`^source_hash: ${hash}$`, 'm'),
+    // Quotes are optional in the pattern because the hash is emitted quoted:
+    // a bare 12-hex digest can look like a YAML float (`174e45826234` parses as
+    // Infinity), so it is written as a quoted string. What matters here is the
+    // VALUE, which is unchanged either way.
+    new RegExp(`^source_hash: "?${hash}"?$`, 'm'),
     'precondition: the source_hash must still match, so only the version can be the reason',
   );
 
@@ -919,7 +923,7 @@ test('--all publishes every enumerated plan in one run', () => {
     const text = readFileSync(dest, 'utf8');
     assert.ok(text.startsWith('---\n'), `${name} mirror must carry PARA frontmatter`);
     assert.equal(
-      new RegExp(`^source_hash: ${sha12(readFileSync(f.planPath(name)))}$`, 'm').test(text),
+      new RegExp(`^source_hash: "?${sha12(readFileSync(f.planPath(name)))}"?$`, 'm').test(text),
       true,
       `${name} mirror must carry the source hash`,
     );

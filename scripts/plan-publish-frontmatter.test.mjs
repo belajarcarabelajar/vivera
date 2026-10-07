@@ -569,10 +569,13 @@ test('emits published alongside the contract-required updated', () => {
   // something else would invent a second meaning nobody can verify.
   assert.equal(fmValue(out, 'published'), fmValue(out, 'updated'));
 
-  // The version stamp must move, or every one of the 271 existing mirrors keeps
-  // looking current and none of them ever gains the property.
-  assert.equal(PUBLISHER_VERSION, 2,
-    'PUBLISHER_VERSION must be 2: the emitted document changed, and the bump is what '
-    + 'forces the existing mirrors to re-publish. Asserted as a literal on purpose — '
-    + 'this one test exists to fail the day someone forgets to bump it.');
+  // The version stamp must move whenever the emitted document changes, or every
+  // mirror already on disk keeps reporting current and never gains the change.
+  // Last bumped for the quoted `source_hash`, which altered the emitted document
+  // without touching the plan text — and therefore without moving any hash.
+  assert.equal(PUBLISHER_VERSION, 3,
+    'PUBLISHER_VERSION must be 3: the emitted document changed (source_hash is now '
+    + 'quoted), and the bump is what forces the existing mirrors to re-publish. '
+    + 'Asserted as a literal on purpose — this one test exists to fail the day '
+    + 'someone changes the emitted document and forgets to bump it.');
 });

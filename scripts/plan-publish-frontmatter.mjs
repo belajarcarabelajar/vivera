@@ -92,7 +92,15 @@ import path from 'node:path';
 // and `source_hash` is a hash of the PLAN TEXT, which this change does not
 // touch. Without the bump, all 271 existing mirrors would keep reporting
 // current and none would ever gain the new property.
-export const PUBLISHER_VERSION = 2;
+// 3 — quoted `source_hash`. Same mechanism as the bump to 2, for the same
+// reason: `source_hash` is a hash of the PLAN TEXT, and quoting changes neither
+// the plan nor its hash. Without this bump every mirror already on disk would
+// report current and keep its bare hash forever, which is the defect itself —
+// the idempotence guard skips on `source_hash` alone, so republishing an
+// unchanged plan writes nothing and the fix would never reach a real mirror.
+// Healing the existing mirrors requires republishing them; the bump is what
+// makes the publisher willing to.
+export const PUBLISHER_VERSION = 3;
 
 // Column-0 keys this module owns. Any other line, at any indentation, is
 // copied through untouched. `published` is owned for the same reason `updated`

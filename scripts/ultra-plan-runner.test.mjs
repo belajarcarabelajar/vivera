@@ -548,7 +548,7 @@ test('classifySkipIf separates a behavioural check from a file-content probe', (
 
 test('the documented false sentinel is its own class, not an accident of matching nothing', () => {
   // `skip_if: "false"` is how a task says it has no command at all
-  // (`Super Ultra Code Plan Implementation.md:665`, Idempotency Honesty:
+  // (`skills/sucp-plan/SKILL.md`, Idempotency Honesty:
   // "When a task genuinely has no command, say so with `skip_if: "false"`
   // rather than inventing a probe that passes"). 77 tasks across 22 plans in
   // the registry write exactly that.

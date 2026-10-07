@@ -116,9 +116,17 @@ link_skill_package() {
     echo "[DRY-RUN]   - examples -> $REPO_DIR/examples"
     echo "[DRY-RUN]   - mermaid.config.json -> $REPO_DIR/mermaid.config.json"
     echo "[DRY-RUN]   - mermaid.dark.config.json -> $REPO_DIR/mermaid.dark.config.json"
+    echo "[DRY-RUN]   - phase skills -> $(dirname "$target_skill_dir")/sucp-*/SKILL.md"
   else
     mkdir -p "$target_skill_dir"
     ln -sf "$MASTER_FILE" "$target_skill_dir/SKILL.md"
+    # Phase skills are siblings of the orchestrator, so each harness discovers
+    # them by name and the orchestrator can load them with the skill tool.
+    for phase_dir in "$REPO_DIR"/skills/sucp-*; do
+      phase_name="$(basename "$phase_dir")"
+      mkdir -p "$(dirname "$target_skill_dir")/$phase_name"
+      ln -sf "$phase_dir/SKILL.md" "$(dirname "$target_skill_dir")/$phase_name/SKILL.md"
+    done
     ln -sfn "$REPO_DIR/templates" "$target_skill_dir/templates"
     ln -sfn "$REPO_DIR/examples" "$target_skill_dir/examples"
     # Theming config ships with the skill so an installed harness can reproduce

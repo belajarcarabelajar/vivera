@@ -5,6 +5,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { checkRunnerContract } from './check-runner-contract.mjs';
+import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
 import {
   SUBAGENT_CONTRACT_TERMS as subagentContractTerms,
   SNIPPET_CONTRACTS as snippetContracts,
@@ -90,8 +91,7 @@ const skip = (what, why) => {
 // people to ignore the scan.
 {
   const { checkFile, checkCommits } = await import('./check-copy-rules.mjs');
-  const masterPath = path.join(rootDir, 'Super Ultra Code Plan Implementation.md');
-  const masterText = fs.readFileSync(masterPath, 'utf8');
+  const masterText = readSkillCorpus(rootDir);
 
   // Are the rules still WRITTEN DOWN? A rule nobody can find is not a rule, and
   // this is the half that costs nothing to assert.
@@ -225,14 +225,43 @@ if (!fs.existsSync(masterPath)) {
     { label: 'harness multi-select question injection', re: /multi-select checkboxes/ },
     { label: 'debt sweep template reference', re: /templates\/follow-up-injection-template\.md/ },
   ];
+  const corpus = readSkillCorpus(rootDir);
   for (const contract of sweepContract) {
-    if (contract.re.test(content)) {
+    if (contract.re.test(corpus)) {
       console.log(`✅ Debt sweep contract present: ${contract.label}`);
     } else {
       console.error(`❌ Master file missing debt sweep contract: ${contract.label}`);
       errors++;
     }
   }
+}
+
+// 1c. Every phase skill must exist, carry its directory name, and be routed
+// from the orchestrator. An unrouted phase is a rule nothing loads.
+let phasesOk = 0;
+for (const name of PHASE_SKILLS) {
+  const skillPath = path.join(rootDir, 'skills', name, 'SKILL.md');
+  if (!fs.existsSync(skillPath)) {
+    console.error(`❌ Phase skill missing: skills/${name}/SKILL.md`);
+    errors++;
+    continue;
+  }
+  const nameMatch = fs.readFileSync(skillPath, 'utf8').match(/^---\nname:\s*(\S+)/);
+  if (!nameMatch || nameMatch[1] !== name) {
+    console.error(`❌ skills/${name}/SKILL.md frontmatter name must be "${name}"`);
+    errors++;
+    continue;
+  }
+  const orchestrator = fs.readFileSync(path.join(rootDir, 'Super Ultra Code Plan Implementation.md'), 'utf8');
+  if (!orchestrator.includes(`\`${name}\``)) {
+    console.error(`❌ Orchestrator never routes to \`${name}\`: no phase would load it.`);
+    errors++;
+    continue;
+  }
+  phasesOk++;
+}
+if (phasesOk === PHASE_SKILLS.length) {
+  console.log(`✅ Phase skills present, named, and routed: ${phasesOk}/${PHASE_SKILLS.length}.`);
 }
 
 // 2. Check Symlinks in skills/super-ultra-code-plan/
@@ -429,7 +458,7 @@ for (const snip of requiredSnippets) {
     console.error('❌ PR delivery contract cannot be checked: the master file is missing (see section 1).');
   } else {
     for (const c of prContract) {
-      const body = fs.readFileSync(c.file, 'utf8');
+      const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
       const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
       if (present) {
         console.log(`✅ PR delivery contract present: ${c.label}`);
@@ -466,7 +495,7 @@ for (const snip of requiredSnippets) {
       console.error(`❌ Cannot load scripts/pr-registry.mjs to read SESSION_STATES: ${e.message}`);
       errors++;
     }
-    const masterBody = fs.readFileSync(masterPath, 'utf8');
+    const masterBody = readSkillCorpus(rootDir);
     if (Array.isArray(states)) {
       const missing = states.filter((s) => !masterBody.includes(`\`${s}\``));
       if (missing.length === 0) {
@@ -521,7 +550,7 @@ for (const snip of requiredSnippets) {
     console.error('❌ Plan-issue contract cannot be checked: the master file is missing (see section 1).');
   } else {
     for (const c of issueContract) {
-      const body = fs.readFileSync(c.file, 'utf8');
+      const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
       const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
       if (present) {
         console.log(`✅ Plan-issue contract present: ${c.label}`);
@@ -602,7 +631,7 @@ for (const snip of requiredSnippets) {
   if (!fs.existsSync(masterPath)) {
     console.error('❌ Todo contract cannot be checked: the master file is missing (see section 1).');
   } else {
-    const masterBody = fs.readFileSync(masterPath, 'utf8');
+    const masterBody = readSkillCorpus(rootDir);
     for (const c of todoContract) {
       const present = c.multiline ? new RegExp(c.needle, 'm').test(masterBody) : masterBody.includes(c.needle);
       if (present) {
@@ -729,7 +758,7 @@ for (const snip of requiredSnippets) {
     { label: 'deep-research template defers to master section', file: path.join(rootDir, 'templates', 'deep-research-report-template.md'), needle: 'Web Evidence & Retrieval' },
   ];
   for (const c of evidenceContract) {
-    const body = fs.readFileSync(c.file, 'utf8');
+    const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
     const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
     if (present) {
       console.log(`✅ Deep-research evidence contract present: ${c.label}`);
@@ -745,7 +774,7 @@ for (const snip of requiredSnippets) {
     { label: 'master skill', file: masterPath },
     { label: 'deep-research template', file: path.join(rootDir, 'templates', 'deep-research-report-template.md') },
   ]) {
-    const body = fs.readFileSync(c.file, 'utf8');
+    const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
     if (body.includes('use-tinyfish')) {
       console.error(`❌ Stale separate-skill pointer: ${c.label} still references "use-tinyfish"; the evidence rules are now inline in the master skill.`);
       errors++;
@@ -798,7 +827,7 @@ for (const scr of scripts) {
     // the filesystem checks below still run.
     console.error('❌ Plan publishing contract cannot be checked: the master file is missing (see section 1).');
   } else {
-    const masterBody = fs.readFileSync(masterPath, 'utf8');
+    const masterBody = readSkillCorpus(rootDir);
     for (const c of planPublishContract) {
       if (masterBody.includes(c.needle)) {
         console.log(`✅ Plan publishing contract present: ${c.label}`);

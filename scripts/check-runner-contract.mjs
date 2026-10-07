@@ -32,6 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RUNNER_CONTRACT_KEYS, extractFrontmatter, parseUltraPlanYaml } from './ultra-plan-runner.mjs';
+import { readSkillCorpus } from './skill-corpus.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -158,7 +159,7 @@ export function checkRunnerContract() {
   // the plan an agent is told to write from the skill and the plan it is told to
   // write from the template cannot diverge silently.
   try {
-    const masterText = fs.readFileSync(path.join(rootDir, 'Super Ultra Code Plan Implementation.md'), 'utf8');
+    const masterText = readSkillCorpus(rootDir);
     const fenced = masterText.match(/```\n---\nschema: ultra-plan\/v1[\s\S]*?\n---\n/);
     if (!fenced) {
       problems.push('the master skill has no fenced `ultra-plan/v1` plan header template to check');

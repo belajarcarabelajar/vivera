@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkText, checkFile, EM_DASH, WATERMARK_PATTERNS } from './check-copy-rules.mjs';
+import { readSkillCorpus } from './skill-corpus.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -112,7 +113,7 @@ test('catches the em dash in shipped copy', () => {
 
 test('the master skill still states both rules', () => {
   // The half that costs nothing: a rule nobody can find is not a rule.
-  const text = fs.readFileSync(path.join(ROOT, 'Super Ultra Code Plan Implementation.md'), 'utf8');
+  const text = readSkillCorpus(ROOT);
   assert.match(text, /never use em dashes/i);
   assert.match(text, /No Attribution Footer, Watermark, or Co-Author Line/i);
 });

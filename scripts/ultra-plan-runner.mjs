@@ -113,7 +113,7 @@ const FILE_PROBE = /(^|[\s;&|(/])(grep|egrep|rg|tgrep|cat|head|tail|ls|find|wc|t
 export function classifySkipIf(cmd) {
   if (typeof cmd !== 'string' || cmd.trim() === '') return 'empty';
   // `"false"` is the documented no-command marker, from the Idempotency Honesty
-  // paragraph of `Super Ultra Code Plan Implementation.md:665`:
+  // paragraph of `skills/sucp-plan/SKILL.md` (Idempotency Honesty):
   //   "When a task genuinely has no command, say so with `skip_if: "false"`
   //    rather than inventing a probe that passes."
   // 77 tasks across 22 plans in the registry write exactly this. It is its own

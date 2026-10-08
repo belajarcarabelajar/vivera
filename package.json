@@ -30,6 +30,8 @@
     "mirror:check": "bun scripts/plan-publish.mjs --check --all",
     "mirror:status": "bun scripts/plan-publish.mjs --status",
     "graphify:sync": "bun scripts/graphify-sync.mjs",
+    "skills:link": "bun scripts/install-skill-links.mjs",
+    "skills:check": "bun scripts/install-skill-links.mjs --check",
     "graphify:check": "bun scripts/graphify-sync.mjs --check",
     "math:bayes": "bun scripts/bayesian-confidence.mjs",
     "math:invariants": "bun scripts/formal-invariants.mjs",

@@ -33,21 +33,21 @@ export const BANNED_RUNTIME_SNIPPETS = ['node scripts/', 'npm install', 'npm tes
 // it was tracked in snippets.manifest.json but bypassed every content check.
 export const SNIPPET_CONTRACTS = {
   'orkestrasi-ngoding-plan.md': [
-    'todowrite',
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'plan-issue-sync.mjs',
     'session-learning-ledger-template.md',
     'MEMORY.md',
     'graphify:sync',
   ],
   'orkestrasi-debugging.md': [
-    'todowrite',
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'plan-issue-sync.mjs',
     'session-learning-ledger-template.md',
     'MEMORY.md',
     'graphify:sync',
   ],
   'orkestrasi-pr.md': [
-    'todowrite',
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'pr-registry.mjs claim',
     'worktree add',
     'GIT WRITES ARE PARENT-ONLY',
@@ -62,7 +62,7 @@ export const SNIPPET_CONTRACTS = {
     'merged | closed',
   ],
   'orkestrasi-pr-review.md': [
-    'todowrite',
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'pr-review-template.md',
     'code-review-template.md',
     'gh pr diff',
@@ -90,7 +90,7 @@ export const SNIPPET_CONTRACTS = {
     'Review Can not approve your own pull request',
   ],
   'orkestrasi-brainstorm.md': [
-    'todowrite',
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'brainstorm-intent-template.md',
     'question',
     'graphify:sync',

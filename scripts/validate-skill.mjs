@@ -605,28 +605,22 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3i. Mandatory harness todo list contract.
+// 3i. Plan checklist contract.
 //
-// The measured failure this guards against: the skill mandates an itemized
-// checklist, an agent reads that, and produces `[ ]` lines in a file while the
-// harness's own todo tool is never called. The user watching a pane sees no
-// progress at all, and nothing in the repository notices, because a checklist in
-// prose looks exactly like a fulfilled contract from the outside.
+// The to-do list lives in the plan file as a `[ ]` / `[x]` checklist. The harness
+// todo tool is deliberately not used: it duplicates the list, is lost on
+// compaction or a harness switch, and differs in name across harnesses. This
+// block pins the master skill's section, its ownership rule, and its resume
+// rule, so a later edit cannot quietly restore a mandate on the harness tool.
 //
-// The tool name is asserted because it is the thing most likely to rot: a wrong
-// name is a tool-not-found error mid-task, not a clean degradation. It was
-// verified against opencode.ai/docs on 2026-10-01, not recalled.
-//
-// Revert: delete this block and the `📋 Harness Todo List` section in the master
-// skill, and drop the third bullet of Mandatory Pre-Execution Todo Breakdown.
+// Revert: restore the previous `📋 Harness Todo List` section in the master skill
+// and this block's needles together.
 {
   const todoContract = [
-    { label: 'master skill todo section heading', needle: '^## 📋 Harness Todo List$', multiline: true },
-    { label: 'OpenCode todo tool name', needle: 'todowrite' },
-    { label: 'tool discovery before assuming', needle: 'Discover before assuming' },
-    { label: 'degradation when no tool exists', needle: 'Degradation when there is no todo tool' },
-    { label: 'both artifacts kept deliberately', needle: 'Both artifacts, deliberately' },
-    { label: 'the subagent-has-no-todo constraint', needle: 'except todo' },
+    { label: 'master skill checklist section heading', needle: '^## 📋 Plan Checklist$', multiline: true },
+    { label: 'harness todo tool is not used', needle: "Do not use the harness's own todo tool" },
+    { label: 'parent owns the checklist', needle: 'The parent owns the checklist' },
+    { label: 'blocker when the plan file cannot be written', needle: 'If the plan file cannot be written' },
   ];
   if (!fs.existsSync(masterPath)) {
     console.error('❌ Todo contract cannot be checked: the master file is missing (see section 1).');
@@ -635,9 +629,9 @@ for (const snip of requiredSnippets) {
     for (const c of todoContract) {
       const present = c.multiline ? new RegExp(c.needle, 'm').test(masterBody) : masterBody.includes(c.needle);
       if (present) {
-        console.log(`✅ Harness todo contract present: ${c.label}`);
+        console.log(`✅ Plan checklist contract present: ${c.label}`);
       } else {
-        console.error(`❌ Harness todo contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in the master skill.`);
+        console.error(`❌ Plan checklist contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in the master skill.`);
         errors++;
       }
     }

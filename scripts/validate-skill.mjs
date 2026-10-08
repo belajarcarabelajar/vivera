@@ -631,7 +631,7 @@ for (const snip of requiredSnippets) {
       if (present) {
         console.log(`✅ Plan checklist contract present: ${c.label}`);
       } else {
-        console.error(`❌ Plan checklist contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in the master skill.`);
+        console.error(`❌ Plan checklist contract missing: ${c.label}: ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in the master skill.`);
         errors++;
       }
     }

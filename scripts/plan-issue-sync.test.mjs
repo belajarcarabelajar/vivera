@@ -753,6 +753,40 @@ test('a check whose live state cannot be read exits non-zero and never prints th
   }
 });
 
+test('a run over several plans records every plan, not only the last', () => {
+  // Each plan's sync must start from the config the previous plan returned. Fed
+  // the config as loaded instead, every plan but the last loses its row while its
+  // issue still exists on GitHub, so the next run creates that issue a second time.
+  const f = tmpPlan(plan('Draft'));
+  const secondRel = 'docs/code-plan/plans/2026-10-02-add-sync.md';
+  const second = path.join(f.repoRoot, secondRel);
+  writeFileSync(second, plan('Draft').replace('2026-10-01-add-pr', '2026-10-02-add-sync'), 'utf8');
+  const dir = mkdtempSync(path.join(tmpdir(), 'plan-issue-multi-'));
+  const cfgPath = path.join(dir, 'plan.issues.json');
+  const cli = (...flags) => spawnSync(process.execPath, [
+    SCRIPT, ...flags, f.full, second, '--config', cfgPath,
+    '--repo-root', f.repoRoot, '--project', path.basename(f.repoRoot),
+  ], { encoding: 'utf8' });
+  try {
+    writeFileSync(cfgPath, JSON.stringify(cfgFor(f.repoRoot)), 'utf8');
+    withFakeGh(RECORD_AND_ECHO_URL, () => {
+      const r = cli();
+      assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+    });
+    const saved = loadConfig(cfgPath);
+    assert.deepEqual(Object.keys(saved.issues).sort(), [PLAN_REL, secondRel]);
+
+    withFakeGh(RECORD_AND_ECHO_URL, (g) => {
+      const r = cli('--check');
+      assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+      assert.doesNotMatch(g.argv(), /issue create/, 'a plan synced once must not be created again');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    f.cleanup();
+  }
+});
+
 // ---------- config persistence ----------
 
 test('config round-trips and a missing file is an explicit error', () => {

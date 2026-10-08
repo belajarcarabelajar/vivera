@@ -555,7 +555,9 @@ function main(argv) {
 
   for (const plan of opts.plans) {
     try {
-      const res = syncOne(cfg, {
+      // `next`, not `cfg`: each plan builds on the rows the plans before it wrote,
+      // or only the last plan's row survives the save below.
+      const res = syncOne(next, {
         planPath: plan,
         repoRoot,
         run,

@@ -64,7 +64,7 @@ tasks:
 ## 1. Intent & Scope
 - **Goal:** [Concise description of target capability or fix]
 - **Non-Goals:** [Explicit boundaries of what is out of scope]
-- **Harness todo list:** [populated via `todowrite` before this plan was written. This checklist in the file is the backup, not the replacement: the tool list is the live one a user watches in a pane, and this file is the one that survives a compaction or a harness switch. Both are required and neither replaces the other. When they disagree, this file wins.]
+- **To-do list:** the checklist in this file is the only to-do list. Do not use the harness todo tool.
 - **Acceptance Criteria:**
   - [ ] AC-1: [Criterion 1 — observable, testable]
   - [ ] AC-2: [Criterion 2]

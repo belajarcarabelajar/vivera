@@ -52,62 +52,32 @@ These rules apply to every path and support the four skill components without re
 - Mandatory Pre-Execution Todo Breakdown:
   - Before writing the first line of code or running stateful mutation commands, the agent MUST explicitly output an itemized to-do list / checklist (`[ ] Task 1: ...`, `[ ] Task 2: ...`) mapping out each sequential phase (reproduction/failing test, implementation, verification test, review).
   - Real-Time Todo State Transition: Each item must be visibly updated (`[x]`) immediately upon completion with fresh verification evidence cited before proceeding to check off or start the next item. Never execute multiple tasks in an opaque block without itemized checklist progression.
-  - **The harness's own todo tool is mandatory, in every mode, and the file checklist is the backup, not the replacement.** See `📋 Harness Todo List` for the tool names, the discovery step, the degradation rule, and why both artifacts exist.
+  - **The to-do list lives in the plan file, as a `[ ]` / `[x]` checklist.** Do not use the harness's own todo tool. See `📋 Plan Checklist` for the ownership and completion rules.
 
-## 📋 Harness Todo List
-> The plan file is the durable record. The harness todo list is the live one. A session that keeps only the file has no visible progress; a session that keeps only the tool has nothing that survives a compaction or a harness switch.
+## 📋 Plan Checklist
+> The plan file holds the to-do list. Each item is a `[ ]` line, and it is checked off only with the evidence that proves it. The harness todo tool is not used: it duplicates the list, is lost on compaction or a harness switch, and differs in name and permissions across harnesses.
 
-### The measured constraint that shapes this
-OpenCode's `general` subagent has **full tool access except todo** (verified against `opencode.ai/docs/agents/`, retrieved 2026-10-01). So a subagent dispatched for a chunk **cannot** hold a todo list, and asking it to maintain one produces a fabricated list in its report rather than a real one. Consequences, all mandatory:
+### Ownership
+- **The parent owns the checklist.** A subagent gets a chunk and returns a report; asking it to maintain a list produces a fabricated one in its report.
+- **The checklist is per session, not per subagent.** One checklist covers the session's chunks, mirroring the one-PR-per-session rule.
 
-- **The parent owns the todo list, always.** Subagents receive a chunk and return a report. They never get a todo list to maintain.
-- **The list is per session, not per subagent.** One list covering the session's chunks, mirroring the one-PR-per-session rule. Ten subagents updating ten lists is ten lists nobody reconciles.
-- **Not seeing a dispatched subagent's progress is by design.** Its progress arrives as its report at the gather checkpoint. Look at the parent's own list, not for a subagent's.
-
-### Tool names, verified 2026-10-01
-Do not guess a tool name. Check the connected tool catalog first, then fall back to this table.
-
-| Harness | Todo tool | Notes |
-|---|---|---|
-| OpenCode | `todowrite` | Permission key `"todowrite": "allow"`. The primary harness for this repository. |
-| Claude Code | `TodoWrite` | Same shape: a list of items with a status. |
-| Gemini / Antigravity | `update_plan` | Named differently, behaves the same. |
-| Anything else | discover it | Enumerate the tool catalog. If there is genuinely none, apply the degradation rule below. |
-
-- **Discover before assuming.** A tool in another harness's catalog does not exist in this one, and a wrong name is a tool-not-found error mid-task rather than a clean fallback. The Unrecognized Entity Rule applies to tool names exactly as it applies to libraries.
-- **`todowrite` is available in the Plan agent.** OpenCode's Plan agent restricts `file edits` and `bash` to `ask`; the todo tool is not on that restricted list. A planning session gets a todo list too, which is the point: the plan phase is where the phases get enumerated.
-- **If the tool is denied by a permission or a sandbox, report the denial** naming the specific rule that caused it (see Automated Review Rejection Protocol), then apply the degradation rule. Never retry a denied tool and never silently drop the list.
-
-### What goes in the list
-The list mirrors the approved scope, one item per independently verifiable unit, at the same granularity as the chunking. An item that cannot fail on its own cannot be checked on its own.
+### Rules
+- One item per independently verifiable unit, at chunking granularity. Each item names a finish line, not a topic.
+- Exactly one item is `in progress` at a time.
+- An item is checked `[x]` only in the same update that cites its evidence: command, exit code, result.
+- A newly discovered item is **added**, never substituted for the current one.
+- If the plan file cannot be written, report it as a blocker. Do not move the list into a harness tool.
 
 ```
-[ ] Reproduce: failing test proving the bug            (expect_exit 1)
-[ ] Implement: minimal fix in <path>
-[ ] Verify: targeted suite green, 0 regressions
-[ ] Review: parent diff audit, independent reviewer
-[ ] Deliver: commit on the session branch, open the PR
-[ ] Sweep: session-close debt sweep
+- [ ] Reproduce: failing test proving the bug            (expect_exit 1)
+- [ ] Implement: minimal fix in <path>
+- [ ] Verify: targeted suite green, 0 regressions
+- [ ] Review: parent diff audit, independent reviewer
+- [ ] Deliver: commit on the session branch, open the PR
+- [ ] Sweep: session-close debt sweep
 ```
 
-- Every item names a **finish line**, not a topic. "Fix the auth module" is not an item. "Add `session.test.ts` covering token refresh and make it pass" is.
-- Items are `pending` to `in_progress` to `completed`, and **exactly one is `in_progress` at a time**. Two in progress is two threads, and neither gets the parent's attention.
-- An item is marked completed **with its evidence cited in the same update**: command, exit code, result. Marking complete and citing later is the same false pass the runner's `skip_if` rules exist to prevent.
-- A newly discovered item is **added**, never substituted for the current one. Silent substitution is how a session ends with a green list that does not match the work done.
-
-### Both artifacts, deliberately
-
-| Artifact | Lifetime | Purpose |
-|---|---|---|
-| Harness todo list | The session; lost on compaction or harness switch | Live progress the user watches. Makes a long silent run legible. |
-| Plan file checklist | Permanent, in version control | The durable record. Survives compaction, a handoff, and the next session. |
-
-- **The file checklist is never removed because the tool exists.** A compaction, a crash, or a switch to a harness without a todo tool takes the live list with it, and the plan file is what a resumed session reads.
-- **The tool list is never removed because the file exists.** The plan file is not rendered as progress, and someone watching a pane cannot see a checkbox in a file they do not have open. The tool exists precisely so the list is visible without asking.
-- When they disagree, **the plan file wins** and the tool list is corrected to match. The file is the source of truth; the tool is a view of it.
-
-### Degradation when there is no todo tool
-If the runtime genuinely has none, or it is denied: render the list as an explicit `[ ]` / `[x]` block in the reply, update it visibly at each checkpoint, and say in one plain line that the runtime has no todo tool. **Never skip the list because the widget is missing.** The list is the contract; the tool is only how it is displayed. This is the same rule the debt sweep already follows for its multi-select question.
+### Resuming
 - Update the state at task start, after each meaningful checkpoint, before compaction, and before handoff. Keep completed work and evidence separate from assumptions and planned work.
 - A resumed task must read the latest state, inspect the current files and diff, and continue from the last verified checkpoint rather than replaying already completed work.
 - Unattended Continuation Rule: when the user is not watching (scheduled run, "check back later", unanswered question), take the most reasonable reading, state it in one line, and continue. Stop only for decisions that are irreversible and could reasonably go either way; do the preparatory work, state the decision, and wait. A question never stalls cheap reversible progress.

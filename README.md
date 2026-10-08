@@ -660,70 +660,38 @@ trailer and so reads as permanent drift.
 
 ---
 
-## Harness Todo List
+## Plan Checklist (the to-do list)
 
-The skill mandates an itemized checklist. That alone is not enough, and the gap is
-specific: an agent reads "output a checklist", writes `[ ]` lines into a plan file,
-and **never calls the harness's own todo tool**. Someone watching the pane sees no
-progress at all, and nothing in the repository notices, because a checklist in prose
-looks exactly like a fulfilled contract from the outside.
+The to-do list lives in the plan file, as a `- [ ]` checklist. Every completed item
+cites its evidence (command, exit code, result) in the same update that checks it
+off. Agents do not use the harness's own todo tool for this.
 
-So both artifacts are required, deliberately:
+Why not the harness tool: it is a second copy of the list. It is lost on compaction
+or a harness switch, it can drift from the plan file, and its name and permission
+differ per harness (`todowrite`, `TodoWrite`, `update_plan`). A checklist in the
+plan file survives all of those, and a resumed session reads it directly.
 
-| Artifact | Lifetime | Purpose |
-|---|---|---|
-| Harness todo list | The session; lost on compaction or harness switch | Live progress the user watches |
-| Plan file checklist | Permanent, in version control | The durable record a resumed session reads |
+### Ownership
 
-| Harness | Todo tool |
-|---|---|
-| OpenCode | `todowrite` (permission key `"todowrite": "allow"`) |
-| Claude Code | `TodoWrite` |
-| Gemini / Antigravity | `update_plan` |
-| Anything else | enumerate the tool catalog, then apply the degradation rule |
+- **The parent owns the checklist.** A subagent gets a chunk and returns a report.
+  Asking it to maintain a list produces a fabricated one in its report.
+- **The checklist is per session, not per subagent.** Ten subagents updating ten
+  lists is ten lists nobody reconciles. This mirrors the one-PR-per-session rule.
 
-Verified against `opencode.ai/docs` on 2026-10-01 rather than recalled. Discover
-the tool name in the connected catalog first: a tool that exists in another
-harness's catalog does not exist in this one, and a wrong name is a
-tool-not-found error mid-task rather than a clean fallback.
-
-**The list is required in every mode**, including a planning session that will not
-touch code. `todowrite` is not on OpenCode's Plan-agent restricted list (which
-covers `file edits` and `bash`), and the planning phase is exactly where the phases
-get enumerated.
-
-### The measured constraint that decides ownership
-
-OpenCode's `general` subagent has **full tool access except todo**. So:
-
-- **The parent owns the todo list, always.** A subagent gets a chunk and returns a
-  report. Asking it to maintain a list produces a fabricated one in its report.
-- **The list is per session, not per subagent.** Ten subagents updating ten lists is
-  ten lists nobody reconciles. This mirrors the one-PR-per-session rule.
-- **Not seeing a dispatched subagent's progress is by design.** It arrives as the
-  report at the gather checkpoint.
-
-### Rules that keep the list honest
+### Rules that keep the checklist honest
 
 - One item per independently verifiable unit, at chunking granularity. An item that
   cannot fail on its own cannot be checked on its own.
 - Every item names a **finish line**, not a topic. "Add `session.test.ts` covering
   token refresh and make it pass" is an item. "Fix the auth module" is not.
-- **Exactly one item `in_progress` at a time.** Two in progress is two threads, and
-  neither gets the parent's attention.
+- **Exactly one item is in progress at a time.** Two in progress is two threads.
 - Completion is recorded **with its evidence in the same update**: command, exit
-  code, result. Marking complete and citing later is the same false pass the
-  runner's `skip_if` rules exist to prevent.
+  code, result. Marking complete and citing later is the false pass the runner's
+  `skip_if` rules exist to prevent.
 - A newly discovered item is **added**, never substituted for the current one.
-  Silent substitution is how a session ends with a green list that does not match
-  the work done.
-- When the list and the plan file disagree, **the plan file wins** and the tool list
-  is corrected. The file is the source of truth; the tool is a view of it.
 
-**Degradation:** if the runtime has no todo tool, or it is denied, render the list
-as an explicit `[ ]` / `[x]` block in the reply, update it at every checkpoint, and
-say in one line that the runtime has no todo tool. Never skip the list because the
-widget is missing. The list is the contract; the tool is only how it is displayed.
+If the plan file cannot be written, that is a blocker to report. It is not a reason
+to move the list into a harness tool.
 
 ---
 

@@ -176,7 +176,8 @@ vivera/
 │   ├── orkestrasi-debugging.md                  # RCA + mandatory hypothesis-parallel subagents (keyword: ';)
 │   ├── orkestrasi-pr.md                         # PR delivery, review, and topological batch merge (keyword: ;;')
 │   ├── orkestrasi-pr-review.md                  # Standalone PR review & verification gate (keyword: prr)
-│   └── orkestrasi-overnight.md                  # Approved plan to verified PR while away, never merges (keyword: ovn)
+│   ├── orkestrasi-overnight.md                  # Approved plan to verified PR while away, never merges (keyword: ovn)
+│   └── cmd-*.md                                 # Ten short command snippets (mrg err apv dnn sts rsm cln aud prm fbk)
 ├── templates/                                   # Companion templates (blank scaffolds)
 │   ├── brainstorm-intent-template.md           # Brainstorm intent lock, task list A/B/C/D, & approval gate
 │   ├── implementation-plan-template.md          # Visual work breakdown & task mapping
@@ -857,6 +858,30 @@ Copy-paste prompts for the six workflow entry points. They live in
 - **[`orkestrasi-pr.md`](snippets/orkestrasi-pr.md)** (keyword: `;;,`): PR delivery from a finished session, PR review, and the ordered batch merge.
 - **[`orkestrasi-overnight.md`](snippets/orkestrasi-overnight.md)** (keyword: `ovn`): carry an approved plan to a verified PR while you are away. Its target comes from `#{clipboard}`: copy the approved plan's path. Entry gate, retry budget, never-merge, and a morning handoff file.
 - **[`orkestrasi-pr-review.md`](snippets/orkestrasi-pr-review.md)** (keyword: `prr`): standalone remote PR review, line-anchored findings, coverage table, and binary verdict; merges to main only when pre-authorized and all gates pass. Its target comes from `#{clipboard}`: copy one PR URL for a single review, or several (one per line) for a batch of any size.
+
+### Command snippets
+
+Short prompts for the moments between the six entry points: authorizing a merge,
+continuing past a failure, answering a check-in, resuming, cleaning up. Each is one
+paragraph, carries no subagent contract (they run inside a session that already
+has one), and is tracked in the manifest like the large ones.
+
+| Keyword | File | Use it to |
+|---|---|---|
+| `mrg` | [`cmd-merge.md`](snippets/cmd-merge.md) | authorize merging this session's PR(s) into main; gates re-measured, never `--admin` or `--force` |
+| `err` | [`cmd-error-continue.md`](snippets/cmd-error-continue.md) | keep going after a failure: 2 attempts per chunk, then park as `blocked` |
+| `apv` | [`cmd-approved.md`](snippets/cmd-approved.md) | answer a "shall I continue?" check-in inside the approved scope |
+| `dnn` | [`cmd-done-verify.md`](snippets/cmd-done-verify.md) | report a manual step done; the agent measures instead of trusting |
+| `sts` | [`cmd-status.md`](snippets/cmd-status.md) | read-only status table: plan, PRs, running job |
+| `rsm` | [`cmd-resume.md`](snippets/cmd-resume.md) | resume from the plan file after compaction, `/clear`, or an interrupted turn |
+| `cln` | [`cmd-cleanup.md`](snippets/cmd-cleanup.md) | remove this session's merged worktree and local branch, by PID, never `rm -rf` |
+| `aud` | [`cmd-audit.md`](snippets/cmd-audit.md) | read-only audit with ranked proposals and revert paths |
+| `prm` | [`cmd-review-merge.md`](snippets/cmd-review-merge.md) | type after `prr`: the pre-authorization that lets it merge safe PRs |
+| `fbk` | [`cmd-fallback.md`](snippets/cmd-fallback.md) | fallback ladder when a tool fails; never swap a remote run for a local one |
+
+`mrg` authorizes the merge and nothing else: no deploy, no cleanup. Cleanup is `cln`,
+a separate act. Undo any slot with `snipset snippet delete <uuid>` (the uuid is in
+`snippets.manifest.json`) and remove its manifest entry and source file.
 
 ### Clipboard-driven review targets
 

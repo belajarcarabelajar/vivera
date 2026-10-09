@@ -44,6 +44,76 @@
       "keyword": "ovn",
       "name": "Overnight Run to PR",
       "description": "Approved plan to a verified PR while you are away: entry gate, retry budget, never merges, morning handoff file. Target comes from #{clipboard}: copy the approved plan path. Source: vivera/snippets/orkestrasi-overnight.md"
+    },
+    {
+      "source": "snippets/cmd-merge.md",
+      "uuid": "c28023fb-e020-4123-ba64-c8d9259be2b3",
+      "keyword": "mrg",
+      "name": "Merge Now",
+      "description": "Authorizes merging this session PR(s) into main: re-measured gates, one at a time in registry order, never --admin or --force, no deploy or cleanup. Source: vivera/snippets/cmd-merge.md"
+    },
+    {
+      "source": "snippets/cmd-error-continue.md",
+      "uuid": "dd9b38d7-eff2-4a90-81f4-a51a28cdd287",
+      "keyword": "err",
+      "name": "Continue Past a Failure",
+      "description": "Keep going after an error without blind retries: classify the failure, 2 attempts per chunk, then park as blocked and continue independent chunks. Source: vivera/snippets/cmd-error-continue.md"
+    },
+    {
+      "source": "snippets/cmd-approved.md",
+      "uuid": "64e83226-ed77-458c-815c-2ed66dc64ee0",
+      "keyword": "apv",
+      "name": "Approved, Carry to Completion",
+      "description": "Answers a check-in: finish every reversible step inside the approved scope, stop only for destructive, external, or scope-changing actions. Source: vivera/snippets/cmd-approved.md"
+    },
+    {
+      "source": "snippets/cmd-done-verify.md",
+      "uuid": "7f63ca5b-5ca8-45a1-bd56-cc191e541963",
+      "keyword": "dnn",
+      "name": "Done on My Side, Verify",
+      "description": "After a manual step by the user: measure the real state read-only, with a positive control, and separate measured from inferred. Source: vivera/snippets/cmd-done-verify.md"
+    },
+    {
+      "source": "snippets/cmd-status.md",
+      "uuid": "e883a2a0-43dd-4e06-b4a9-b2a49d640596",
+      "keyword": "sts",
+      "name": "Status Check",
+      "description": "Read-only status table from the plan checklist, the PR registry, and the job log: done, running, blocked, waiting on the user. Source: vivera/snippets/cmd-status.md"
+    },
+    {
+      "source": "snippets/cmd-resume.md",
+      "uuid": "cb43ad00-460c-4143-866d-c79a39d1cc7e",
+      "keyword": "rsm",
+      "name": "Resume From the Plan File",
+      "description": "Rebuild state from the plan file, git status, the diff, and the PR registry; recover from an interrupted turn; continue at the last verified checkpoint. Source: vivera/snippets/cmd-resume.md"
+    },
+    {
+      "source": "snippets/cmd-cleanup.md",
+      "uuid": "e1e67a0e-484f-47b5-86db-8149bf563501",
+      "keyword": "cln",
+      "name": "Clean Up After the Merge",
+      "description": "Remove only this session worktree and local branch once the PR is merged and the branch is in origin/main; by PID, never rm -rf, remote branches untouched. Source: vivera/snippets/cmd-cleanup.md"
+    },
+    {
+      "source": "snippets/cmd-audit.md",
+      "uuid": "ba85f4f2-48ca-40a6-ac00-6ad40f7fcd3a",
+      "keyword": "aud",
+      "name": "Read-Only Audit",
+      "description": "Assess and recommend without changing anything: measured findings apart from guesses, ranked proposals with revert paths. Source: vivera/snippets/cmd-audit.md"
+    },
+    {
+      "source": "snippets/cmd-review-merge.md",
+      "uuid": "a31c7ebe-3aff-42be-a948-1415258d9a3b",
+      "keyword": "prm",
+      "name": "Review and Merge If Safe",
+      "description": "Type after prr: the explicit pre-authorization that lets prr merge each PR that passes every AUTO-MERGE gate. Source: vivera/snippets/cmd-review-merge.md"
+    },
+    {
+      "source": "snippets/cmd-fallback.md",
+      "uuid": "9aeda949-bf8a-4fa3-9713-9e014c680118",
+      "keyword": "fbk",
+      "name": "Fallback When a Tool Fails",
+      "description": "Fallback ladder (skill, TinyFish, question tool) and the stop rule for environment boundaries; never substitute a local run for a remote one. Source: vivera/snippets/cmd-fallback.md"
     }
   ]
 }

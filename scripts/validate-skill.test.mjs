@@ -8,6 +8,7 @@ import os from 'node:os';
 import {
   SUBAGENT_CONTRACT_TERMS,
   SNIPPET_CONTRACTS,
+  COMMAND_SNIPPET_CONTRACTS,
   REQUIRED_SNIPPETS,
   TINYFISH_LADDER_NEED,
   BANNED_RUNTIME_SNIPPETS,
@@ -33,10 +34,40 @@ test('every manifest source has a snippet contract entry (no orphan snippets)', 
   const sources = manifest.snippets.map((e) => path.basename(e.source));
   for (const src of sources) {
     assert.ok(
-      SNIPPET_CONTRACTS[src],
-      `${src} is tracked in snippets.manifest.json but has no entry in SNIPPET_CONTRACTS — it bypasses all content checks`,
+      SNIPPET_CONTRACTS[src] || COMMAND_SNIPPET_CONTRACTS[src],
+      `${src} is tracked in snippets.manifest.json but has no entry in SNIPPET_CONTRACTS or COMMAND_SNIPPET_CONTRACTS, so it bypasses all content checks`,
     );
   }
+});
+
+// --- Short command snippets (cmd-*) carry their own contract table ----------
+//
+// SNIPPET_CONTRACTS entries are held to the fan-out terms and the TinyFish
+// ladder, which is right for the phase triggers and wrong for "Merge now" or
+// "Status check". Those ten get a table of their own, so no phase vocabulary is
+// imposed on them and none of them is left outside every content check.
+
+test('command snippet contracts name exactly the cmd-* snippets and never overlap the phase contracts', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'snippets.manifest.json'), 'utf8'));
+  const cmdInManifest = manifest.snippets.map((e) => path.basename(e.source)).filter((n) => n.startsWith('cmd-')).sort();
+  assert.deepEqual(Object.keys(COMMAND_SNIPPET_CONTRACTS).sort(), cmdInManifest);
+  for (const name of Object.keys(COMMAND_SNIPPET_CONTRACTS)) {
+    assert.equal(SNIPPET_CONTRACTS[name], undefined, `${name} is in both contract tables`);
+    assert.ok(COMMAND_SNIPPET_CONTRACTS[name].length > 0, `${name} has an empty contract`);
+  }
+});
+
+test('every command snippet carries its own terms and no prohibited runtime', () => {
+  for (const [name, terms] of Object.entries(COMMAND_SNIPPET_CONTRACTS)) {
+    const body = readSnip(name);
+    assert.deepEqual(findMissingTerms(body, terms), [], `${name} is missing contract terms`);
+    assert.deepEqual(checkBannedRuntime(body), [], `${name} uses a prohibited runtime`);
+  }
+});
+
+test('a command snippet contract can fail: removing a pinned term is detected', () => {
+  const body = readSnip('cmd-merge.md').replace('--admin', '');
+  assert.deepEqual(findMissingTerms(body, COMMAND_SNIPPET_CONTRACTS['cmd-merge.md']), ['--admin']);
 });
 
 test('every required snippet is tracked in the manifest (or it never reaches the DB)', () => {
@@ -151,6 +182,8 @@ test('every mermaid-required template passes the strict fence check', () => {
 
 test('validator imports contracts from the lib instead of redefining them', () => {
   assert.match(VALIDATOR, /SNIPPET_CONTRACTS as snippetContracts/);
+  assert.match(VALIDATOR, /COMMAND_SNIPPET_CONTRACTS as commandSnippetContracts/);
+  assert.doesNotMatch(VALIDATOR, /const commandSnippetContracts = \{/);
   assert.match(VALIDATOR, /SUBAGENT_CONTRACT_TERMS as subagentContractTerms/);
   assert.match(VALIDATOR, /TINYFISH_LADDER_NEED/);
   assert.match(VALIDATOR, /BANNED_RUNTIME_SNIPPETS/);

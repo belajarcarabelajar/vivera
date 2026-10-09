@@ -116,6 +116,22 @@ export const SNIPPET_CONTRACTS = {
   ],
 };
 
+// The short cmd-* command snippets. They are not phase triggers, so the fan-out
+// terms and the TinyFish ladder do not apply; each pins only the phrases that
+// make it what it is, taken from its own text.
+export const COMMAND_SNIPPET_CONTRACTS = {
+  'cmd-approved.md': ['Carry this to completion', 'without asking again', 'destructive or hard-to-reverse'],
+  'cmd-audit.md': ['Read-only audit', 'Do not edit, install, delete, commit', 'ranked list of proposed changes'],
+  'cmd-cleanup.md': ['git merge-base --is-ancestor', 'git branch -d', 'never `-D`', 'Never `rm -rf`', 'Leave remote branches alone'],
+  'cmd-done-verify.md': ['Verify it yourself, read-only', 'positive control', 'not verified'],
+  'cmd-error-continue.md': ['At most 2 attempts per chunk', '--no-verify', 'shared cause'],
+  'cmd-fallback.md': ['Do not loop on it', 'run_web_automation', 'do not substitute a local run'],
+  'cmd-merge.md': ['nothing else', '--admin', 'bun scripts/pr-registry.mjs state <session> merged', 'Do not deploy, publish, or delete branches or worktrees'],
+  'cmd-resume.md': ['Resume this session from its plan file', 'skip_if', 'where you resumed'],
+  'cmd-review-merge.md': ['Pre-authorized: review and merge if safe', 'AUTO-MERGE gate'],
+  'cmd-status.md': ['Status check, read-only', 'bun scripts/pr-registry.mjs status', 'do not poll in a loop'],
+};
+
 export const REQUIRED_SNIPPETS = Object.keys(SNIPPET_CONTRACTS);
 
 /** Terms from `terms` absent in `body` (substring match, same as validator). */

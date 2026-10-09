@@ -9,6 +9,7 @@ import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
 import {
   SUBAGENT_CONTRACT_TERMS as subagentContractTerms,
   SNIPPET_CONTRACTS as snippetContracts,
+  COMMAND_SNIPPET_CONTRACTS as commandSnippetContracts,
   TINYFISH_LADDER_NEED,
   BANNED_RUNTIME_SNIPPETS,
   hasStrictMermaidFence,
@@ -379,6 +380,28 @@ for (const [snip, extraTerms] of Object.entries(snippetContracts)) {
   }
 }
 
+// 3b-bis. The short cmd-* command snippets carry their own terms only. They are
+// not phase triggers, so the fan-out terms and the TinyFish ladder are not
+// required of them, but they still may not use a runtime the skill prohibits.
+for (const [snip, terms] of Object.entries(commandSnippetContracts)) {
+  const p = path.join(rootDir, 'snippets', snip);
+  if (!fs.existsSync(p)) {
+    console.error(`❌ Missing command snippet: snippets/${snip}`);
+    errors++;
+    continue;
+  }
+  const body = fs.readFileSync(p, 'utf8');
+  const missing = terms.filter((term) => !body.includes(term));
+  const banned = BANNED_RUNTIME_SNIPPETS.filter((needle) => body.includes(needle));
+  if (missing.length === 0 && banned.length === 0) {
+    console.log(`✅ Command snippet carries its contract: snippets/${snip} (${terms.length} terms)`);
+  } else {
+    if (missing.length) console.error(`❌ snippets/${snip} is missing required terms: ${missing.join(', ')}`);
+    if (banned.length) console.error(`❌ snippets/${snip} uses a prohibited runtime: ${banned.join(', ')} (use bun)`);
+    errors++;
+  }
+}
+
 // 3c-bis. Trigger snippets must name the evidence tool.
 // Both snippets gate a research phase (deep-research in the plan path, upstream
 // issue research in the debugging path), and the master skill routes that
@@ -689,9 +712,11 @@ for (const snip of requiredSnippets) {
         if (e.source && fs.existsSync(path.join(rootDir, e.source))) {
           const snip = path.basename(e.source);
           const extra = snippetContracts[snip];
-          if (!extra) continue;
+          const cmdTerms = commandSnippetContracts[snip];
+          if (!extra && !cmdTerms) continue;
           const body = fs.readFileSync(path.join(rootDir, e.source), 'utf8');
-          const missing = [...subagentContractTerms, ...extra].filter((term) => !body.includes(term));
+          const required = extra ? [...subagentContractTerms, ...extra] : cmdTerms;
+          const missing = required.filter((term) => !body.includes(term));
           if (missing.length > 0) {
             console.error(`❌ ${e.source} is tracked in the manifest but is missing: ${missing.join(', ')}`);
             errors++;
@@ -700,7 +725,7 @@ for (const snip of requiredSnippets) {
       }
       // Conversely, every required trigger snippet must be tracked, or it can
       // never be synced to the database.
-      for (const snip of requiredSnippets) {
+      for (const snip of [...requiredSnippets, ...Object.keys(commandSnippetContracts)]) {
         const rel = `snippets/${snip}`;
         if (!entries.some((e) => e.source === rel)) {
           console.error(`❌ ${rel} is not tracked in snippets.manifest.json; it can never reach the database`);

@@ -104,6 +104,9 @@ jobs:
           command -v tgrep >/dev/null 2>&1 || { echo "tgrep not available on this runner; skipping (local-only prerequisite)"; exit 0; }
           bun scripts/validate-skill.mjs
 
+      - name: Validate Claude Code agents
+        run: bun scripts/validate-agents.mjs
+
       - name: Run Unit Tests
         run: bun test scripts/
 

@@ -275,18 +275,35 @@ test('a tree missing gitignored state exits 0 and still refuses a clean pass', (
       assert.ok(!fs.existsSync(path.join(tmp, absent)), `fixture unexpectedly has ${absent}`);
     }
 
-    const r = spawnSync('bun', [path.join(tmp, 'scripts', 'validate-skill.mjs')], {
-      cwd: tmp,
-      encoding: 'utf8',
-      timeout: 180_000,
-    });
-    const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
-    assert.equal(r.status, 0,
-      `absent gitignored state must not fail the gate; got ${r.status} signal=${r.signal}\n${out.slice(-600)}`);
-    assert.match(out, /SKIPPED/,
-      'the skip must be reported, not silent');
-    assert.match(out, /NOT a clean pass/,
-      'exit 0 must not be reported as a clean pass while checks did not run');
+    // A fresh clone has no node_modules, so the validator looks for `mmdc` on PATH.
+    // A machine with a global mmdc then runs the whole render gate instead of the
+    // skip path under test: about a minute, and exit 1 when that mmdc's browser is
+    // not installed (measured 2026-10-09: 24 "Mermaid syntax error" lines from
+    // `Could not find chrome-headless-shell`, with the same fixture exiting 0 once
+    // mmdc was off PATH). A stub that exits 127 is what `mmdc --version` sees on a
+    // machine without mmdc, and it hides the global one without removing any other
+    // PATH entry the validator may need, `bun` included.
+    const noMmdc = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-nommdc-'));
+    try {
+      fs.writeFileSync(path.join(noMmdc, 'mmdc'), '#!/bin/sh\nexit 127\n', { mode: 0o755 });
+      const r = spawnSync('bun', [path.join(tmp, 'scripts', 'validate-skill.mjs')], {
+        cwd: tmp,
+        encoding: 'utf8',
+        timeout: 180_000,
+        env: { ...process.env, PATH: `${noMmdc}${path.delimiter}${process.env.PATH}` },
+      });
+      const out = `${r.stdout ?? ''}${r.stderr ?? ''}`;
+      assert.equal(r.status, 0,
+        `absent gitignored state must not fail the gate; got ${r.status} signal=${r.signal}\n${out.slice(-600)}`);
+      assert.match(out, /SKIPPED/,
+        'the skip must be reported, not silent');
+      assert.match(out, /SKIPPED: mmdc not found/,
+        'the fixture must lack mmdc too, or this test measures the developer\'s global install');
+      assert.match(out, /NOT a clean pass/,
+        'exit 0 must not be reported as a clean pass while checks did not run');
+    } finally {
+      fs.rmSync(noMmdc, { recursive: true, force: true });
+    }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

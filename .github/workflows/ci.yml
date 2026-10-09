@@ -13,7 +13,7 @@ name: CI Validation
 # instead, and locally they are strictly stronger because they can see the real
 # vault, the real Snipset database, and the real working tree:
 #
-#     bun run ci        # render-diagrams + validate-skill + tests + snippets
+#     bun run ci        # render-diagrams + validate-skill + agents + tests + snippets
 #
 # `workflow_dispatch` is retained deliberately. It costs nothing until someone
 # presses Run, which makes this file documentation of what CI would do plus a

@@ -268,16 +268,20 @@ delegated chunk starts with the rules of its phase instead of discovering them.
 
 | Agent | Tools | Preloaded skill | Use for |
 |---|---|---|---|
-| `sucp-researcher` | Read, Grep, Glob, Bash | `sucp-brainstorm` | One narrow question about the code, the history, or the web |
+| `sucp-researcher` | Read, Grep, Glob, Bash, TinyFish MCP | `sucp-brainstorm` | One narrow question about the code, the history, or the web |
 | `sucp-implementer` | inherited | `sucp-tdd-debug` | One chunk of an approved plan, test first, inside the permitted files |
 | `sucp-debugger` | inherited | `sucp-tdd-debug` | One failing test or reproducible bug, isolated by hypothesis and probe |
 | `sucp-reviewer` | Read, Grep, Glob, Bash | `sucp-verify-deliver` | Independent audit of a diff or a completion claim |
 
 All four carry a frontmatter `PreToolUse` hook, `.claude/hooks/block-git-writes.mjs`, that exits 2 on
-`git commit`, `add`, `push`, `checkout`, `switch`, `merge`, `rebase`, `stash`, `reset` and on any `gh`
-call, including inside `a && b` chains. It enforces the parent-only git rule from the subagent contract.
-It matches the first token of each segment, so `env git commit` or `sh -c "git commit"` get past it: it is a
-second line behind the contract text, not the only one.
+the git subcommands that write state (`commit`, `add`, `push`, `checkout`, `switch`, `merge`, `rebase`,
+`reset`, and more), on the writing forms of mixed commands such as `stash`, `branch`, `tag`, `remote` and
+`config`, and on any `gh` call, including inside `a && b` chains. Read forms such as `git stash list` and
+`git branch --show-current` pass. It enforces the parent-only git rule from the subagent contract.
+The hook looks at the command word of each segment, so `sh -c "git commit"`, an absolute path to `git`, an
+alias, or a command substitution get past it: it is a second line behind the contract text, not the
+only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
+rule of the researcher and the reviewer is a contract, not an enforced limit.
 
 Things that are easy to get wrong:
 

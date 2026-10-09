@@ -5,7 +5,7 @@
 // Exit 2 blocks the call and shows stderr to the model; exit 0 allows it.
 // Every parse failure exits 0, because a crashing guard would block all Bash calls.
 //
-// defer: first-token match only, upgrade when a bypass such as sh -c / bash -c, an absolute path to git, aliases and functions, or $( ) and backtick substitution is observed
+// defer: first-token match only, upgrade when a bypass such as aliases and functions, or $( ) and backtick substitution is observed
 
 const ALWAYS_WRITE = new Set([
   "add", "commit", "push", "checkout", "switch", "merge", "rebase", "reset",
@@ -25,6 +25,7 @@ const LEADING_WORDS = new Set([
   "time", "nohup", "exec", "command", "env", "sudo", "xargs",
 ]);
 const WRAPPERS = new Set(["time", "nohup", "exec", "command", "env", "sudo", "xargs"]);
+const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 // Splits a command line into commands (arrays of words). Handles quotes,
@@ -247,10 +248,24 @@ function gitWrites(sub, rest) {
   }
 }
 
-function blockedLabel(tokens) {
+function blockedLabel(tokens, depth = 0) {
   const t = stripLeading(tokens);
-  if (t[0] === "gh") return "gh";
-  if (t[0] !== "git") return null;
+  const word = t[0]?.split("/").pop();
+
+  // defer: one level of -c recursion, upgrade when nested -c strings are observed
+  if (SHELLS.has(word) && depth === 0) {
+    const flag = t.findIndex((x, k) => k > 0 && /^-[A-Za-z]*c$/.test(x));
+    const script = flag < 0 ? undefined : t[flag + 1];
+    if (script === undefined) return null;
+    for (const inner of tokenize(script)) {
+      const label = blockedLabel(inner, depth + 1);
+      if (label) return label;
+    }
+    return null;
+  }
+
+  if (word === "gh") return "gh";
+  if (word !== "git") return null;
 
   let i = 1;
   while (i < t.length && t[i].startsWith("-")) {

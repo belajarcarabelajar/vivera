@@ -278,9 +278,10 @@ the git subcommands that write state (`commit`, `add`, `push`, `checkout`, `swit
 `reset`, and more), on the writing forms of mixed commands such as `stash`, `branch`, `tag`, `remote` and
 `config`, and on any `gh` call, including inside `a && b` chains. Read forms such as `git stash list` and
 `git branch --show-current` pass. It enforces the parent-only git rule from the subagent contract.
-The hook looks at the command word of each segment, so `sh -c "git commit"`, an absolute path to `git`, an
-alias, or a command substitution get past it: it is a second line behind the contract text, not the
-only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
+The hook looks at the command word of each segment, matches `git` and `gh` by basename, and reads one level
+into `sh -c` strings, so `/usr/bin/git commit` and `sh -c "git commit"` are blocked. An alias, a command
+substitution, a nested `-c`, `eval`, or script text piped into a shell still get past it: it is a second
+line behind the contract text, not the only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
 rule of the researcher and the reviewer is a contract, not an enforced limit.
 
 Things that are easy to get wrong:
@@ -293,7 +294,9 @@ Things that are easy to get wrong:
 - **Frontmatter hooks of project agents run only after the workspace trust dialog is accepted** for this
   folder. Before that the agent still runs, without the guard.
 - **Claude Code ignores an unknown frontmatter field without any message**, so `maxTurn:` instead of
-  `maxTurns:` does nothing. `bun run agents:check` (also part of `bun run ci`) rejects it. The allowed
+  `maxTurns:` does nothing. `bun run agents:check` (also part of `bun run ci`) rejects it, and rejects a
+hook whose script path under `$CLAUDE_PROJECT_DIR` does not exist, since a typo there turns the guard off
+without any message. The allowed
   field list is pinned to the Claude Code documentation of 2026-10-10.
 
 ---

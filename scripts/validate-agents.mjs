@@ -115,7 +115,59 @@ function checkSkills(skills, label, skillsDir, errors) {
   }
 }
 
-function checkHooks(hooks, label, errors) {
+// $CLAUDE_PROJECT_DIR is the repository root, and the agents live in
+// <root>/.claude/agents. A caller may pass an agents dir that is not under a
+// .claude folder, so fall back to the parent of its parent instead of guessing.
+function repoRootFor(agentsDir) {
+  let dir = path.resolve(agentsDir);
+  while (path.dirname(dir) !== dir) {
+    if (path.basename(dir) === '.claude') return path.dirname(dir);
+    dir = path.dirname(dir);
+  }
+  return path.dirname(path.dirname(path.resolve(agentsDir)));
+}
+
+// defer: only $CLAUDE_PROJECT_DIR references are resolved, upgrade when agents use relative or absolute script paths
+function projectDirPaths(command) {
+  const found = [];
+  for (const m of command.matchAll(/\$(?:\{CLAUDE_PROJECT_DIR\}|CLAUDE_PROJECT_DIR\b)/g)) {
+    const before = command.slice(0, m.index);
+    let rest = command.slice(m.index + m[0].length);
+    // An odd number of quotes before the variable means it sits inside an open
+    // quote, so the path runs to the matching quote instead of to whitespace.
+    let quote = null;
+    if ((before.match(/["']/g) ?? []).length % 2 === 1) {
+      quote = before.match(/["'](?=[^"']*$)/)[0];
+      if (rest.startsWith(quote)) {
+        rest = rest.slice(1);
+        quote = null;
+      }
+    }
+    let end = 0;
+    while (end < rest.length) {
+      const c = rest[end];
+      if (quote ? c === quote : /[\s"']/.test(c)) break;
+      end++;
+    }
+    const rel = rest.slice(0, end);
+    if (rel !== '') found.push(rel);
+  }
+  return found;
+}
+
+function checkHookScript(command, at, label, root, errors) {
+  for (const rel of projectDirPaths(command)) {
+    const resolved = path.join(root, rel);
+    let stat = null;
+    try {
+      stat = fs.statSync(resolved);
+    } catch {}
+    if (!stat) errors.push(`${label}: ${at}.command runs ${resolved}, which does not exist`);
+    else if (!stat.isFile()) errors.push(`${label}: ${at}.command runs ${resolved}, which is not a regular file`);
+  }
+}
+
+function checkHooks(hooks, label, root, errors) {
   if (!isPlainObject(hooks)) return errors.push(`${label}: "hooks" must be a mapping of event name to a list`);
   for (const [event, entries] of Object.entries(hooks)) {
     const at = `hooks.${event}`;
@@ -141,6 +193,8 @@ function checkHooks(hooks, label, errors) {
         }
         if (hook.type === 'command' && (typeof hook.command !== 'string' || hook.command.trim() === '')) {
           errors.push(`${label}: ${hp}.command must be a non-empty string when type is "command"`);
+        } else if (hook.type === 'command') {
+          checkHookScript(hook.command, hp, label, root, errors);
         }
       });
     });
@@ -183,6 +237,7 @@ export function validateAgentsDir(agentsDir, skillsDir) {
     return { errors: [`${agentsDir}: no agent files found`], agents };
   }
 
+  const root = repoRootFor(agentsDir);
   const seen = new Map();
   for (const { file, dangling } of files) {
     const label = path.relative(agentsDir, file);
@@ -221,7 +276,7 @@ export function validateAgentsDir(agentsDir, skillsDir) {
       errors.push(`${label}: "description" is required and must be a non-empty string`);
     }
     if ('skills' in fm) checkSkills(fm.skills, label, skillsDir, errors);
-    if ('hooks' in fm) checkHooks(fm.hooks, label, errors);
+    if ('hooks' in fm) checkHooks(fm.hooks, label, root, errors);
     checkValueTypes(fm, label, errors);
     if ('maxTurns' in fm && !(Number.isInteger(fm.maxTurns) && fm.maxTurns > 0)) {
       errors.push(`${label}: "maxTurns" must be a positive integer`);

@@ -408,6 +408,114 @@ describe('README handling', () => {
   });
 });
 
+describe('hook script existence', () => {
+  // Repo layout fixture: <tmp>/repo/.claude/agents, so the repo root is <tmp>/repo.
+  let repo;
+  let repoAgents;
+
+  beforeEach(() => {
+    repo = path.join(tmp, 'repo');
+    repoAgents = path.join(repo, '.claude', 'agents');
+    fs.mkdirSync(repoAgents, { recursive: true });
+  });
+
+  function hookAgent(command) {
+    const yamlCommand = JSON.stringify(command);
+    fs.writeFileSync(
+      path.join(repoAgents, 'guarded.md'),
+      [
+        '---',
+        'name: guarded',
+        'description: Has a hook.',
+        'hooks:',
+        '  PreToolUse:',
+        '    - matcher: Bash',
+        '      hooks:',
+        '        - type: command',
+        `          command: ${yamlCommand}`,
+        '---',
+        'body',
+        '',
+      ].join('\n'),
+    );
+  }
+
+  function putScript(rel) {
+    const full = path.join(repo, rel);
+    fs.mkdirSync(path.dirname(full), { recursive: true });
+    fs.writeFileSync(full, '// guard\n');
+    return full;
+  }
+
+  const run = () => validateAgentsDir(repoAgents, skillsDir).errors;
+
+  test('a missing script is an error naming the file, the hook path and the resolved path', () => {
+    hookAgent('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.mjs');
+    const errors = run();
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain('guarded.md');
+    expect(errors[0]).toContain('hooks.PreToolUse[0].hooks[0].command');
+    expect(errors[0]).toContain(path.join(repo, '.claude', 'hooks', 'x.mjs'));
+  });
+
+  test('the same hook passes once the script exists', () => {
+    hookAgent('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.mjs');
+    putScript('.claude/hooks/x.mjs');
+    expect(run()).toEqual([]);
+  });
+
+  test.each([
+    ['quoted variable', 'bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.mjs'],
+    ['unquoted variable', 'bun $CLAUDE_PROJECT_DIR/.claude/hooks/x.mjs'],
+    ['braced variable', 'bun ${CLAUDE_PROJECT_DIR}/.claude/hooks/x.mjs'],
+    ['braced and quoted whole path', 'bun "${CLAUDE_PROJECT_DIR}/.claude/hooks/x.mjs" --flag'],
+    ['trailing arguments', 'bun $CLAUDE_PROJECT_DIR/.claude/hooks/x.mjs --strict'],
+  ])('%s resolves to the script and passes when present', (_label, command) => {
+    hookAgent(command);
+    putScript('.claude/hooks/x.mjs');
+    expect(run()).toEqual([]);
+  });
+
+  test.each([
+    ['quoted variable', 'bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/typo.mjs'],
+    ['unquoted variable', 'bun $CLAUDE_PROJECT_DIR/.claude/hooks/typo.mjs'],
+    ['braced variable', 'bun ${CLAUDE_PROJECT_DIR}/.claude/hooks/typo.mjs'],
+    ['braced and quoted whole path', 'bun "${CLAUDE_PROJECT_DIR}/.claude/hooks/typo.mjs" --flag'],
+  ])('%s resolves to the script and fails when missing', (_label, command) => {
+    hookAgent(command);
+    putScript('.claude/hooks/x.mjs');
+    const errors = run();
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain(path.join(repo, '.claude', 'hooks', 'typo.mjs'));
+  });
+
+  test('a command with no CLAUDE_PROJECT_DIR is not checked', () => {
+    hookAgent('echo hi');
+    expect(run()).toEqual([]);
+  });
+
+  test('a path that resolves to a directory is an error', () => {
+    hookAgent('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks');
+    fs.mkdirSync(path.join(repo, '.claude', 'hooks'), { recursive: true });
+    const errors = run();
+    expect(errors.length).toBe(1);
+    expect(errors[0]).toContain('guarded.md');
+    expect(errors[0]).toContain('regular file');
+  });
+
+  test('an agents dir outside a .claude folder resolves against the parent of its parent', () => {
+    const plain = path.join(tmp, 'proj', 'agents');
+    fs.mkdirSync(plain, { recursive: true });
+    fs.writeFileSync(
+      path.join(plain, 'g.md'),
+      '---\nname: g\ndescription: x\nhooks:\n  Stop:\n    - hooks:\n        - type: command\n          command: bun $CLAUDE_PROJECT_DIR/guard.mjs\n---\n',
+    );
+    expect(validateAgentsDir(plain, skillsDir).errors.some((e) => e.includes(path.join(tmp, 'guard.mjs')))).toBe(true);
+    fs.writeFileSync(path.join(tmp, 'guard.mjs'), '//\n');
+    expect(validateAgentsDir(plain, skillsDir).errors).toEqual([]);
+  });
+});
+
 describe('CLI', () => {
   function run() {
     return Bun.spawnSync(['bun', SCRIPT, agentsDir, skillsDir]);

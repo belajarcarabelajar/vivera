@@ -3,7 +3,8 @@
 // Guards for the close-out gap check behind `pr-registry state <session> merged`.
 // Local files only: no gh, no network. Every fixture lives in a temp directory.
 
-import { test, expect, afterEach } from 'bun:test';
+import { test, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -39,152 +40,152 @@ const cfgWith = (entry, projects = { vivera: 'o/r' }) => ({
 });
 
 test('Complete with no entry has no gaps', () => {
-  expect(closeoutGaps({ status: 'Complete', entry: null, planPath: PLAN, project: 'vivera' })).toEqual([]);
-  expect(closeoutGaps({ status: 'Complete', entry: undefined, planPath: PLAN, project: 'vivera' })).toEqual([]);
+  assert.deepEqual(closeoutGaps({ status: 'Complete', entry: null, planPath: PLAN, project: 'vivera' }), []);
+  assert.deepEqual(closeoutGaps({ status: 'Complete', entry: undefined, planPath: PLAN, project: 'vivera' }), []);
 });
 
 test('Complete with a closed, current entry has no gaps', () => {
-  expect(closeoutGaps({ status: 'Complete', entry: closedEntry, planPath: PLAN, project: 'vivera' })).toEqual([]);
+  assert.deepEqual(closeoutGaps({ status: 'Complete', entry: closedEntry, planPath: PLAN, project: 'vivera' }), []);
 });
 
 test('a trailing comment on the status line is not part of the status', () => {
   const commented = { ...closedEntry, status: 'Complete   # Draft|Approved|Complete' };
-  expect(closeoutGaps({ status: 'Complete   # done', entry: commented, planPath: PLAN, project: 'vivera' })).toEqual([]);
-  expect(codes(closeoutGaps({ status: 'Verification  # still open', entry: null, planPath: PLAN, project: 'vivera' }))).toEqual(['PLAN_NOT_COMPLETE']);
+  assert.deepEqual(closeoutGaps({ status: 'Complete   # done', entry: commented, planPath: PLAN, project: 'vivera' }), []);
+  assert.deepEqual(codes(closeoutGaps({ status: 'Verification  # still open', entry: null, planPath: PLAN, project: 'vivera' })), ['PLAN_NOT_COMPLETE']);
 });
 
 test('checkCloseout reads a Complete plan whose status line carries a comment', () => {
   const root = repo({ planText: plan('Complete            # Draft|Approved|Complete'), config: cfgWith(closedEntry) });
-  expect(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps).toEqual([]);
+  assert.deepEqual(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps, []);
 });
 
 test('Verification status raises PLAN_NOT_COMPLETE with the literal plan path in the fix', () => {
   const gaps = closeoutGaps({ status: 'Verification', entry: null, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['PLAN_NOT_COMPLETE']);
-  expect(gaps[0].message).toContain('Verification');
-  expect(gaps[0].fix).toBe(
+  assert.deepEqual(codes(gaps), ['PLAN_NOT_COMPLETE']);
+  assert.ok(gaps[0].message.includes('Verification'));
+  assert.equal(gaps[0].fix,
     `set "status: Complete" in ${PLAN}, then run: bun scripts/plan-publish.mjs ${PLAN} && bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`,
   );
 });
 
 test('null status raises PLAN_NOT_COMPLETE and says no status is declared', () => {
   const gaps = closeoutGaps({ status: null, entry: null, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['PLAN_NOT_COMPLETE']);
-  expect(gaps[0].message).toContain('no status');
+  assert.deepEqual(codes(gaps), ['PLAN_NOT_COMPLETE']);
+  assert.ok(gaps[0].message.includes('no status'));
 });
 
 test('an open issue raises ISSUE_NOT_CLOSED naming the number and url', () => {
   const entry = { ...closedEntry, state: 'open' };
   const gaps = closeoutGaps({ status: 'Complete', entry, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['ISSUE_NOT_CLOSED']);
-  expect(gaps[0].message).toContain('7');
-  expect(gaps[0].message).toContain(entry.url);
-  expect(gaps[0].fix).toBe(`bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`);
+  assert.deepEqual(codes(gaps), ['ISSUE_NOT_CLOSED']);
+  assert.ok(gaps[0].message.includes('7'));
+  assert.ok(gaps[0].message.includes(entry.url));
+  assert.equal(gaps[0].fix, `bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`);
 });
 
 test('a stale entry raises ISSUE_STALE when the recorded status differs', () => {
   const entry = { ...closedEntry, status: 'Verification' };
   const gaps = closeoutGaps({ status: 'Complete', entry, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['ISSUE_STALE']);
-  expect(gaps[0].fix).toContain(PLAN);
+  assert.deepEqual(codes(gaps), ['ISSUE_STALE']);
+  assert.ok(gaps[0].fix.includes(PLAN));
 });
 
 test('open entry at Verification reports all three gaps in fixed order', () => {
   const entry = { ...closedEntry, state: 'open', status: 'Verification' };
   const gaps = closeoutGaps({ status: 'InProgress', entry, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED', 'ISSUE_STALE']);
+  assert.deepEqual(codes(gaps), ['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED', 'ISSUE_STALE']);
 });
 
 test('open entry whose status matches a Verification plan skips ISSUE_STALE only', () => {
   const entry = { ...closedEntry, state: 'open', status: 'Verification' };
   const gaps = closeoutGaps({ status: 'Verification', entry, planPath: PLAN, project: 'vivera' });
-  expect(codes(gaps)).toEqual(['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED']);
+  assert.deepEqual(codes(gaps), ['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED']);
 });
 
 test('every gap carries code, message, and fix strings', () => {
   const entry = { ...closedEntry, state: 'open', status: 'Verification' };
   for (const g of closeoutGaps({ status: null, entry, planPath: PLAN, project: 'vivera' })) {
-    expect(typeof g.code).toBe('string');
-    expect(typeof g.message).toBe('string');
-    expect(typeof g.fix).toBe('string');
+    assert.equal(typeof g.code, 'string');
+    assert.equal(typeof g.message, 'string');
+    assert.equal(typeof g.fix, 'string');
   }
 });
 
 test('checkCloseout: missing plan file is skipped, no gaps', () => {
   const root = repo();
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(r.gaps).toEqual([]);
-  expect(r.skipped).toBe(
+  assert.deepEqual(r.gaps, []);
+  assert.equal(r.skipped,
     `no plan file at ${path.join(root, PLAN)} (a one-task change has no plan file)`,
   );
 });
 
 test('checkCloseout: Complete plan with a closed current entry is clean and not skipped', () => {
   const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
-  expect(checkCloseout({ repoRoot: root, planSlug: 'demo' })).toEqual({ skipped: null, gaps: [] });
+  assert.deepEqual(checkCloseout({ repoRoot: root, planSlug: 'demo' }), { skipped: null, gaps: [] });
 });
 
 test('checkCloseout: Verification plan with an open entry reports gaps and the project key', () => {
   const entry = { ...closedEntry, state: 'open', status: 'Verification' };
   const root = repo({ planText: plan('Verification'), config: cfgWith(entry) });
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(r.skipped).toBeNull();
-  expect(codes(r.gaps)).toEqual(['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED']);
-  expect(r.gaps[0].fix).toContain('--project vivera');
-  expect(r.gaps[0].fix).toContain(PLAN);
-  expect(r.gaps[1].fix).toBe(`bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`);
+  assert.equal(r.skipped, null);
+  assert.deepEqual(codes(r.gaps), ['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED']);
+  assert.ok(r.gaps[0].fix.includes('--project vivera'));
+  assert.ok(r.gaps[0].fix.includes(PLAN));
+  assert.equal(r.gaps[1].fix, `bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`);
 });
 
 test('checkCloseout: stale entry on a Complete plan reports ISSUE_STALE', () => {
   const entry = { ...closedEntry, status: 'Verification' };
   const root = repo({ planText: plan('Complete'), config: cfgWith(entry) });
-  expect(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps)).toEqual(['ISSUE_STALE']);
+  assert.deepEqual(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps), ['ISSUE_STALE']);
 });
 
 test('checkCloseout: plan without a status line reports PLAN_NOT_COMPLETE', () => {
   const root = repo({ planText: plan(null), config: cfgWith(null) });
-  expect(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps)).toEqual(['PLAN_NOT_COMPLETE']);
+  assert.deepEqual(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps), ['PLAN_NOT_COMPLETE']);
 });
 
 test('checkCloseout: missing config on a Complete plan is skipped, no gaps', () => {
   const root = repo({ planText: plan('Complete') });
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(r.gaps).toEqual([]);
-  expect(r.skipped).toBe(`plan.issues.json not found at ${path.join(root, 'plan.issues.json')}, issue not checked`);
+  assert.deepEqual(r.gaps, []);
+  assert.equal(r.skipped, `plan.issues.json not found at ${path.join(root, 'plan.issues.json')}, issue not checked`);
 });
 
 test('checkCloseout: missing config still returns the plan gap', () => {
   const root = repo({ planText: plan('Verification') });
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(codes(r.gaps)).toEqual(['PLAN_NOT_COMPLETE']);
-  expect(r.skipped).toContain('plan.issues.json');
-  expect(r.gaps[0].fix).toContain('--project <project>');
+  assert.deepEqual(codes(r.gaps), ['PLAN_NOT_COMPLETE']);
+  assert.ok(r.skipped.includes('plan.issues.json'));
+  assert.ok(r.gaps[0].fix.includes('--project <project>'));
 });
 
 test('checkCloseout: config present but no record for the plan is information, not a gap', () => {
   const root = repo({ planText: plan('Complete'), config: cfgWith(null) });
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(r.gaps).toEqual([]);
-  expect(r.skipped).toBe('plan has no issue record, nothing to close');
+  assert.deepEqual(r.gaps, []);
+  assert.equal(r.skipped, 'plan has no issue record, nothing to close');
 });
 
 test('checkCloseout: malformed config gives CONFIG_UNREADABLE and is not skipped', () => {
   const root = repo({ planText: plan('Complete'), config: '{not json' });
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
-  expect(r.skipped).toBeNull();
-  expect(codes(r.gaps)).toEqual(['CONFIG_UNREADABLE']);
-  expect(r.gaps[0].message).toContain('cannot parse');
-  expect(r.gaps[0].fix).toBe(`repair ${path.join(root, 'plan.issues.json')}`);
+  assert.equal(r.skipped, null);
+  assert.deepEqual(codes(r.gaps), ['CONFIG_UNREADABLE']);
+  assert.ok(r.gaps[0].message.includes('cannot parse'));
+  assert.equal(r.gaps[0].fix, `repair ${path.join(root, 'plan.issues.json')}`);
 });
 
 test('checkCloseout: a config that fails validation is also CONFIG_UNREADABLE', () => {
   const root = repo({ planText: plan('Complete'), config: { version: 2, projects: {} } });
-  expect(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps)).toEqual(['CONFIG_UNREADABLE']);
+  assert.deepEqual(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps), ['CONFIG_UNREADABLE']);
 });
 
 test('checkCloseout: unreadable config does not hide the plan gap', () => {
   const root = repo({ planText: plan('Verification'), config: '{not json' });
-  expect(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps)).toEqual(['PLAN_NOT_COMPLETE', 'CONFIG_UNREADABLE']);
+  assert.deepEqual(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps), ['PLAN_NOT_COMPLETE', 'CONFIG_UNREADABLE']);
 });
 
 test('checkCloseout: project key is looked up by entry.repo, with a placeholder fallback', () => {
@@ -193,10 +194,10 @@ test('checkCloseout: project key is looked up by entry.repo, with a placeholder 
     planText: plan('Complete'),
     config: cfgWith(entry, { vivera: 'o/r', other: 'o/other' }),
   });
-  expect(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps[0].fix).toContain('--project other');
+  assert.ok(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps[0].fix.includes('--project other'));
 
   const orphan = repo({ planText: plan('Complete'), config: cfgWith({ ...entry, repo: 'x/unknown' }) });
-  expect(checkCloseout({ repoRoot: orphan, planSlug: 'demo' }).gaps[0].fix).toContain('--project <project>');
+  assert.ok(checkCloseout({ repoRoot: orphan, planSlug: 'demo' }).gaps[0].fix.includes('--project <project>'));
 });
 
 test('checkCloseout: configPath override is honored', () => {
@@ -204,5 +205,5 @@ test('checkCloseout: configPath override is honored', () => {
   const alt = path.join(root, 'alt.json');
   writeFileSync(alt, JSON.stringify(cfgWith(null)));
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
-  expect(r).toEqual({ skipped: 'plan has no issue record, nothing to close', gaps: [] });
+  assert.deepEqual(r, { skipped: 'plan has no issue record, nothing to close', gaps: [] });
 });

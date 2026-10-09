@@ -22,6 +22,6 @@ How to audit:
 - Re-run the verification command yourself, with its exit code visible. Do not pipe it through a filter that hides a non-zero exit.
 - Derive each requirement from the plan and judge whether the evidence proves it. Partial or indirect proof is a finding, not a pass.
 - Every finding cites the exact rule it breaks or the observable defect. A style preference with no rule behind it is not a finding.
-- Scan changed user-visible files for em dashes and for attribution lines such as `Co-Authored-By` or `Generated with`.
+- Scan changed user-visible files and every commit message for em dashes and for attribution footers or co-author trailers. Run `bun scripts/check-copy-rules.mjs` for the exact patterns.
 
 Report every finding, deduplicated by location and defect, each with a path, a line, and the failing evidence. State separately what you verified and what you could not.

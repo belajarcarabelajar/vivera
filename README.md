@@ -168,7 +168,8 @@ vivera/
 │   ├── orkestrasi-ngoding-plan.md               # Plan + TDD + mandatory subagent fan-out (keyword: ;')
 │   ├── orkestrasi-debugging.md                  # RCA + mandatory hypothesis-parallel subagents (keyword: ';)
 │   ├── orkestrasi-pr.md                         # PR delivery, review, and topological batch merge (keyword: ;;')
-│   └── orkestrasi-pr-review.md                  # Standalone PR review & verification gate (keyword: prr)
+│   ├── orkestrasi-pr-review.md                  # Standalone PR review & verification gate (keyword: prr)
+│   └── orkestrasi-overnight.md                  # Approved plan to verified PR while away, never merges (keyword: ovn)
 ├── templates/                                   # Companion templates (blank scaffolds)
 │   ├── brainstorm-intent-template.md           # Brainstorm intent lock, task list A/B/C/D, & approval gate
 │   ├── implementation-plan-template.md          # Visual work breakdown & task mapping
@@ -201,7 +202,8 @@ vivera/
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
     ├── sucp-verify-deliver/SKILL.md             # Phase skill: Step 5 verification and PR delivery
-    └── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep and learning harvest
+    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep and learning harvest
+    └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
 
 TinyFish is documented inside the master skill itself, in the
@@ -799,13 +801,14 @@ for the coverage table, the line-anchoring rule, and the binary verdict.
 
 ## Trigger Snippets
 
-Copy-paste prompts for the five workflow entry points. They live in
+Copy-paste prompts for the six workflow entry points. They live in
 [`snippets/`](snippets/) and are the fastest way to activate the skill correctly.
 
 - **[`orkestrasi-brainstorm.md`](snippets/orkestrasi-brainstorm.md)** (keyword: `brn`): grill-until-locked brainstorm interview BEFORE any plan: grounds in the repository, surfaces trade-offs via the harness question tool, and locks tasks A/B/C/D into an approved intent artifact.
 - **[`orkestrasi-ngoding-plan.md`](snippets/orkestrasi-ngoding-plan.md)** (keyword: `;`): plan generation, TDD execution, and the mandatory subagent pipeline.
 - **[`orkestrasi-debugging.md`](snippets/orkestrasi-debugging.md)** (keyword: `;,`): root cause analysis with hypothesis-parallel investigation, and the mandatory subagent pipeline.
 - **[`orkestrasi-pr.md`](snippets/orkestrasi-pr.md)** (keyword: `;;,`): PR delivery from a finished session, PR review, and the ordered batch merge.
+- **[`orkestrasi-overnight.md`](snippets/orkestrasi-overnight.md)** (keyword: `ovn`): carry an approved plan to a verified PR while you are away. Its target comes from `#{clipboard}`: copy the approved plan's path. Entry gate, retry budget, never-merge, and a morning handoff file.
 - **[`orkestrasi-pr-review.md`](snippets/orkestrasi-pr-review.md)** (keyword: `prr`): standalone remote PR review, line-anchored findings, coverage table, and binary verdict; merges to main only when pre-authorized and all gates pass. Its target comes from `#{clipboard}`: copy one PR URL for a single review, or several (one per line) for a batch of any size.
 
 ### Clipboard-driven review targets

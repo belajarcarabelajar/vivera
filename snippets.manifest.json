@@ -37,6 +37,13 @@
       "keyword": "brn",
       "name": "Brainstorm Intent Lock",
       "description": "Grill-until-locked brainstorm BEFORE any plan: grounds in repo, asks via question tool, locks tasks A/B/C/D into approved intent, graphify sync. Source: vivera/snippets/orkestrasi-brainstorm.md"
+    },
+    {
+      "source": "snippets/orkestrasi-overnight.md",
+      "uuid": "2f6ff3e8-95a0-45d6-885f-5d42d6e98feb",
+      "keyword": "ovn",
+      "name": "Overnight Run to PR",
+      "description": "Approved plan to a verified PR while you are away: entry gate, retry budget, never merges, morning handoff file. Target comes from #{clipboard}: copy the approved plan path. Source: vivera/snippets/orkestrasi-overnight.md"
     }
   ]
 }

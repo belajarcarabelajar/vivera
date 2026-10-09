@@ -235,11 +235,12 @@ isolated → active → verified → open → merged
 | `active` | Subagents are writing inside the worktree | `state <s> active` |
 | `verified` | Local evidence is green, parent diff audit passed | `state <s> verified` |
 | `open` | The PR exists on the remote | `pr <s> --number <N>` |
-| `merged` | The PR reached the base branch | `state <s> merged` |
+| `merged` | The PR reached the base branch | `state <s> merged` (refused while the plan is not `Complete` or its issue is not closed) |
 | `closed` | The PR was closed without merging (superseded, abandoned, or its change landed by another path) | `state <s> closed` |
 
 - **A PR number cannot be recorded before `verified`.** `setPr` throws otherwise. Recording a PR implies the work is finished and checked, so `isolated → open` would skip the gate that makes a merge safe.
 - **Only an `open` session can merge**, and only if it has a PR number. A green local run is not a mergeable session; a mergeable session is a green local run *and* a PR.
+- **`state <s> merged` is also the close-out gate.** It reads the session's plan file (`docs/code-plan/plans/<plan>.md` in `--repo`, default this repository) and the `plan.issues.json` record, and exits 1 without touching the registry when the plan is not `Complete`, the issue is not closed, or the issue record was not re-synced after the status changed. Each gap is printed with the command that fixes it. The plan flips to `Complete` after the Step 6 debt sweep, before the merge, so reaching this gate with an open plan means a closing step was skipped. `--allow-open-plan` records the merge anyway and prints a warning. A missing plan file, a missing `plan.issues.json`, or a plan with no issue record is reported as skipped, not as a pass. The check reads the last sync's record, not live GitHub.
 - **`merged` and `closed` are terminal.** Reverting or redoing a session is a new session with a new branch, never a state edit. Letting the registry file "un-merge" would hide a revert from the merge order.
 - **A `closed` session is finished but did not move the base.** Unlike `merged` it is not a rebase reason, so `surface` never lists it as landed; unlike an unmerged `open` session it satisfies a dependency, so `order` does not make a dependent wait on a PR that will never land.
 - **Recording a PR moves `verified → open` automatically.** A PR that exists while the session is still `isolated` is a state contradiction, so the tool refuses to represent it.

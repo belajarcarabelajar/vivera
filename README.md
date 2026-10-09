@@ -112,6 +112,10 @@ vivera/
 ├── mermaid.config.json                          # Light theme: palette + embedded-font stack
 ├── mermaid.dark.config.json                     # Dark variant, same layout and font
 ├── puppeteer-config.json                        # Headless flags for mermaid-cli rendering
+├── .claude/
+│   ├── agents/                                  # Four Claude Code subagents mapped to the sucp phase skills
+│   └── hooks/
+│       └── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
 ├── .githooks/
 │   └── pre-commit                               # Non-blocking: refresh graphify graph when a commit includes Markdown
 ├── .github/
@@ -135,6 +139,9 @@ vivera/
 │   ├── render-diagrams.sh                       # Render all mermaid blocks to SVG
 │   ├── validate-skill.mjs                       # Frontmatter, link, token, mermaid & a11y lint
 │   ├── check-runner-contract.mjs                # Fast structural check for runner frontmatter keys
+│   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
+│   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
+│   ├── block-git-writes.test.mjs                # Blocked and allowed command tables for the git guard hook
 │   ├── skipif-registry-audit.mjs                # Tally and classify skip_if predicates across all plans
 │   ├── ultra-plan-runner.mjs                    # ultra-plan/v1 DAG runner + visual map contract
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
@@ -253,6 +260,44 @@ installer checks for the parent directory first (`~/.claude`, `~/.gemini/antigra
 and skips the target rather than fabricating an empty config tree. So a target that is absent after a
 successful `./install.sh` means the harness is not installed — it is not a failed install. Run
 `./install.sh --dry-run` to see exactly which targets your machine qualifies for.
+
+### Claude Code agents
+
+`.claude/agents/` holds four project subagents. Each preloads the phase skill it works under, so a
+delegated chunk starts with the rules of its phase instead of discovering them.
+
+| Agent | Tools | Preloaded skill | Use for |
+|---|---|---|---|
+| `sucp-researcher` | Read, Grep, Glob, Bash, TinyFish MCP | `sucp-brainstorm` | One narrow question about the code, the history, or the web |
+| `sucp-implementer` | inherited | `sucp-tdd-debug` | One chunk of an approved plan, test first, inside the permitted files |
+| `sucp-debugger` | inherited | `sucp-tdd-debug` | One failing test or reproducible bug, isolated by hypothesis and probe |
+| `sucp-reviewer` | Read, Grep, Glob, Bash | `sucp-verify-deliver` | Independent audit of a diff or a completion claim |
+
+All four carry a frontmatter `PreToolUse` hook, `.claude/hooks/block-git-writes.mjs`, that exits 2 on
+the git subcommands that write state (`commit`, `add`, `push`, `checkout`, `switch`, `merge`, `rebase`,
+`reset`, and more), on the writing forms of mixed commands such as `stash`, `branch`, `tag`, `remote` and
+`config`, and on any `gh` call, including inside `a && b` chains. Read forms such as `git stash list` and
+`git branch --show-current` pass. It enforces the parent-only git rule from the subagent contract.
+The hook looks at the command word of each segment, matches `git` and `gh` by basename, and reads one level
+into `sh -c` strings, so `/usr/bin/git commit` and `sh -c "git commit"` are blocked. An alias, a command
+substitution, a nested `-c`, `eval`, or script text piped into a shell still get past it: it is a second
+line behind the contract text, not the only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
+rule of the researcher and the reviewer is a contract, not an enforced limit.
+
+Things that are easy to get wrong:
+
+- **There is no `CLAUDE.md` on purpose.** Claude Code reads `AGENTS.md` itself only when no `CLAUDE.md`
+  exists in the working directory or any directory above it. Adding one here would stop `AGENTS.md`
+  from loading unless the new file imports it.
+- **The `skills:` names resolve from the skills Claude Code has installed**, not from this repository's
+  `skills/` folder. Run `./install.sh` first, or the preload is skipped with only a debug-log warning.
+- **Frontmatter hooks of project agents run only after the workspace trust dialog is accepted** for this
+  folder. Before that the agent still runs, without the guard.
+- **Claude Code ignores an unknown frontmatter field without any message**, so `maxTurn:` instead of
+  `maxTurns:` does nothing. `bun run agents:check` (also part of `bun run ci`) rejects it, and rejects a
+hook whose script path under `$CLAUDE_PROJECT_DIR` does not exist, since a typo there turns the guard off
+without any message. The allowed
+  field list is pinned to the Claude Code documentation of 2026-10-10.
 
 ---
 

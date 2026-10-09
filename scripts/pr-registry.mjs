@@ -39,6 +39,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkCloseout } from './plan-closeout.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -459,20 +460,28 @@ function usage(msg) {
   console.error('usage:');
   console.error('  bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> [--repo <path>] [--depends-on <slug,...>]');
   console.error('  bun scripts/pr-registry.mjs pr <session> --number <N>');
-  console.error('  bun scripts/pr-registry.mjs state <session> <' + SESSION_STATES.join('|') + '>');
+  console.error('  bun scripts/pr-registry.mjs state <session> <' + SESSION_STATES.join('|') + '> [--repo <path>] [--allow-open-plan]');
+  console.error('    (--repo and --allow-open-plan apply to `merged` only: it is refused while the plan is not closed out)');
   console.error('  bun scripts/pr-registry.mjs order');
   console.error('  bun scripts/pr-registry.mjs surface <session>');
   console.error('  bun scripts/pr-registry.mjs status');
   process.exit(2);
 }
 
-function parseFlags(argv) {
+// Flags that take no value. Every other flag still requires one.
+const BOOLEAN_FLAGS = new Set(['allow-open-plan']);
+
+export function parseFlags(argv) {
   const flags = {};
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const key = a.slice(2);
+      if (BOOLEAN_FLAGS.has(key)) {
+        flags[key] = true;
+        continue;
+      }
       const next = argv[i + 1];
       if (next === undefined || next.startsWith('--')) usage(`--${key} needs a value`);
       flags[key] = next;
@@ -482,6 +491,25 @@ function parseFlags(argv) {
     }
   }
   return { flags, positional };
+}
+
+// Decides whether `state <session> merged` may be recorded. The check is
+// injected so the line shapes are testable without a repository; the caller
+// prints `lines` and refuses when `proceed` is false.
+export function closeoutVerdict(session, { repoRoot, allowOpenPlan = false, check = checkCloseout }) {
+  const { skipped, gaps } = check({ repoRoot, planSlug: session.plan });
+  const lines = [];
+  if (skipped) lines.push(`note: close-out not fully checked: ${skipped}`);
+  if (gaps.length === 0) return { proceed: true, lines };
+
+  lines.push(allowOpenPlan
+    ? `warning: recording "${session.session}" as merged with an unclosed plan (--allow-open-plan)`
+    : `refusing to record "${session.session}" as merged: plan ${session.plan} is not closed out.`);
+  for (const g of gaps) {
+    lines.push(`  - [${g.code}] ${g.message}`, `    fix: ${g.fix}`);
+  }
+  if (!allowOpenPlan) lines.push('Override with --allow-open-plan to record it anyway.');
+  return { proceed: allowOpenPlan, lines };
 }
 
 function printSession(s) {
@@ -536,6 +564,20 @@ function main(argv) {
 
     if (command === 'state') {
       if (!positional[0] || !positional[1]) usage(`state needs <session> <${SESSION_STATES.join('|')}>`);
+      if (positional[1] === TERMINAL_STATE) {
+        // An unknown or already-terminal session is left to `setState`, which
+        // owns those errors; the gate only speaks for a session that could merge.
+        const target = slugify(positional[0], 'session id');
+        const session = loadRegistry(registryPath).sessions.find((s) => s.session === target);
+        if (session && !TERMINAL_STATES.includes(session.state)) {
+          const verdict = closeoutVerdict(session, {
+            repoRoot: flags.repo ? path.resolve(flags.repo) : rootDir,
+            allowOpenPlan: flags['allow-open-plan'] === true,
+          });
+          for (const line of verdict.lines) console.error(line);
+          if (!verdict.proceed) return 1;
+        }
+      }
       const { result } = mutateRegistry(
         (registry) => setState(registry, positional[0], positional[1]),
         { registryPath },

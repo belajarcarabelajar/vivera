@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -30,6 +30,8 @@ import {
   conflictSurface,
   branchFor,
   worktreeFor,
+  closeoutVerdict,
+  parseFlags,
   SESSION_STATES,
 } from './pr-registry.mjs';
 
@@ -573,4 +575,173 @@ test('re-claiming the same session stays idempotent under the CAS path', () => {
   // registry: the two differ, because the registry the caller passed in was the
   // pre-mutation read.
   assert.equal(once.result.sessions[0].branch, twice.result.sessions[0].branch);
+});
+
+// ---------- merge close-out gate ----------
+//
+// `state <session> merged` used to record the merge whatever the plan said, so a
+// plan could sit at Verification with its issue open after the PR landed. The
+// verdict is a pure function of an injected check, so the line shapes are pinned
+// here without touching a repository.
+
+const SESSION = { session: 'w1', plan: 'my-plan' };
+const GAP = { code: 'PLAN_NOT_COMPLETE', message: 'plan.md has status "Verification", not Complete', fix: 'set "status: Complete"' };
+const GAP2 = { code: 'ISSUE_NOT_CLOSED', message: 'issue #7 is recorded as "open", not closed', fix: 'bun scripts/plan-issue-sync.mjs plan.md' };
+
+test('closeoutVerdict proceeds silently when nothing is open and nothing was skipped', () => {
+  let seen;
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r',
+    check: (args) => { seen = args; return { skipped: null, gaps: [] }; },
+  });
+  assert.deepEqual(verdict, { proceed: true, lines: [] });
+  assert.deepEqual(seen, { repoRoot: '/r', planSlug: 'my-plan' });
+});
+
+test('closeoutVerdict proceeds with a note when the check was partial', () => {
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r',
+    check: () => ({ skipped: 'no plan file at /r/x.md', gaps: [] }),
+  });
+  assert.equal(verdict.proceed, true);
+  assert.deepEqual(verdict.lines, ['note: close-out not fully checked: no plan file at /r/x.md']);
+});
+
+test('closeoutVerdict refuses with exact lines, one message and one fix per gap', () => {
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r',
+    check: () => ({ skipped: null, gaps: [GAP, GAP2] }),
+  });
+  assert.equal(verdict.proceed, false);
+  assert.deepEqual(verdict.lines, [
+    'refusing to record "w1" as merged: plan my-plan is not closed out.',
+    `  - [PLAN_NOT_COMPLETE] ${GAP.message}`,
+    `    fix: ${GAP.fix}`,
+    `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
+    `    fix: ${GAP2.fix}`,
+    'Override with --allow-open-plan to record it anyway.',
+  ]);
+});
+
+test('closeoutVerdict puts the skipped note before the refusal when both apply', () => {
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r',
+    check: () => ({ skipped: 'plan.issues.json not found', gaps: [GAP] }),
+  });
+  assert.equal(verdict.proceed, false);
+  assert.equal(verdict.lines[0], 'note: close-out not fully checked: plan.issues.json not found');
+  assert.equal(verdict.lines[1], 'refusing to record "w1" as merged: plan my-plan is not closed out.');
+});
+
+test('closeoutVerdict with allowOpenPlan proceeds, warns, and still lists every gap', () => {
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r',
+    allowOpenPlan: true,
+    check: () => ({ skipped: null, gaps: [GAP, GAP2] }),
+  });
+  assert.equal(verdict.proceed, true);
+  assert.deepEqual(verdict.lines, [
+    'warning: recording "w1" as merged with an unclosed plan (--allow-open-plan)',
+    `  - [PLAN_NOT_COMPLETE] ${GAP.message}`,
+    `    fix: ${GAP.fix}`,
+    `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
+    `    fix: ${GAP2.fix}`,
+  ]);
+});
+
+test('closeoutVerdict does not print the override hint when the override is already on', () => {
+  const verdict = closeoutVerdict(SESSION, {
+    repoRoot: '/r', allowOpenPlan: true, check: () => ({ skipped: null, gaps: [GAP] }),
+  });
+  assert.ok(!verdict.lines.some((l) => l.includes('Override with')));
+});
+
+test('parseFlags stores --allow-open-plan as true without consuming a value, anywhere in argv', () => {
+  assert.deepEqual(parseFlags(['w1', 'merged', '--allow-open-plan']),
+    { flags: { 'allow-open-plan': true }, positional: ['w1', 'merged'] });
+  assert.deepEqual(parseFlags(['--allow-open-plan', 'w1', 'merged', '--registry', 'r.json']),
+    { flags: { 'allow-open-plan': true, registry: 'r.json' }, positional: ['w1', 'merged'] });
+  assert.deepEqual(parseFlags(['w1', '--allow-open-plan', '--repo', '/x', 'merged']),
+    { flags: { 'allow-open-plan': true, repo: '/x' }, positional: ['w1', 'merged'] });
+});
+
+const SCRIPT = path.join(path.dirname(new URL(import.meta.url).pathname), 'pr-registry.mjs');
+
+function runCli(...args) {
+  const r = Bun.spawnSync(['bun', SCRIPT, ...args], { stdout: 'pipe', stderr: 'pipe' });
+  return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
+}
+
+// An `open` session for plan `p`, and a repo whose plan file for `p` is at
+// `status`. No plan.issues.json, so only the status can produce a gap.
+function mergeFixture(planStatus) {
+  const reg = registryFile('gate', openSession('w1'));
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-gate-repo-'));
+  const plansDir = path.join(repo, 'docs', 'code-plan', 'plans');
+  mkdirSync(plansDir, { recursive: true });
+  writeFileSync(path.join(plansDir, 'p.md'), `---\nstatus: ${planStatus}\n---\n\n# p\n`, 'utf8');
+  return { reg, repo, cleanup: () => { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); } };
+}
+
+test('CLI: state merged is refused while the plan is at Verification, and the registry is untouched', () => {
+  const f = mergeFixture('Verification');
+  try {
+    const before = readFileSync(f.reg.file);
+    const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo);
+    assert.equal(r.code, 1, r.err);
+    assert.match(r.err, /refusing to record "w1" as merged: plan p is not closed out\./);
+    assert.match(r.err, /\[PLAN_NOT_COMPLETE\]/);
+    assert.match(r.err, /Override with --allow-open-plan/);
+    assert.ok(Buffer.compare(before, readFileSync(f.reg.file)) === 0, 'the registry bytes must not change on a refusal');
+  } finally { f.cleanup(); }
+});
+
+test('CLI: --allow-open-plan as the last token records the merge with a warning', () => {
+  const f = mergeFixture('Verification');
+  try {
+    const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo, '--allow-open-plan');
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.err, /warning: recording "w1" as merged with an unclosed plan/);
+    assert.equal(loadRegistry(f.reg.file).sessions[0].state, 'merged');
+  } finally { f.cleanup(); }
+});
+
+test('CLI: a Complete plan merges without being asked for the override', () => {
+  const f = mergeFixture('Complete');
+  try {
+    const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(loadRegistry(f.reg.file).sessions[0].state, 'merged');
+  } finally { f.cleanup(); }
+});
+
+test('CLI: merged on an unknown session still fails with the existing error', () => {
+  const f = mergeFixture('Verification');
+  try {
+    const r = runCli('state', 'nope', 'merged', '--registry', f.reg.file, '--repo', f.repo);
+    assert.equal(r.code, 1);
+    assert.match(r.err, /no slot for session "nope"; claim it first/);
+    assert.ok(!r.err.includes('refusing to record'));
+  } finally { f.cleanup(); }
+});
+
+test('CLI: merged on an already merged session keeps the existing error, not the gate', () => {
+  const f = mergeFixture('Verification');
+  try {
+    assert.equal(runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo, '--allow-open-plan').code, 0);
+    const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo);
+    assert.equal(r.code, 1);
+    assert.ok(!r.err.includes('refusing to record'), r.err);
+    assert.match(r.err, /only a session in open can merge/);
+  } finally { f.cleanup(); }
+});
+
+test('CLI: other target states ignore the plan status', () => {
+  const f = mergeFixture('Verification');
+  try {
+    const r = runCli('state', 'w1', 'active', '--registry', f.reg.file, '--repo', f.repo);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(loadRegistry(f.reg.file).sessions[0].state, 'active');
+    assert.ok(!r.err.includes('close-out'));
+  } finally { f.cleanup(); }
 });

@@ -13,7 +13,13 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { planStatus, loadConfig, issueKey } from './plan-issue-sync.mjs';
 
-export function closeoutGaps({ status, entry, planPath, project }) {
+// The plan template puts a `# Draft|Approved|...` comment after the status value,
+// and plan-issue-sync records that raw text, so both sides are compared without it.
+const bare = (s) => (typeof s === 'string' ? s.replace(/\s+#.*$/, '').trim() : s);
+
+export function closeoutGaps({ status: rawStatus, entry: rawEntry, planPath, project }) {
+  const status = bare(rawStatus);
+  const entry = rawEntry && typeof rawEntry === 'object' ? { ...rawEntry, status: bare(rawEntry.status) } : rawEntry;
   const gaps = [];
   const proj = project || '<project>';
   const sync = `bun scripts/plan-issue-sync.mjs --project ${proj} ${planPath}`;

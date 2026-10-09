@@ -47,6 +47,17 @@ test('Complete with a closed, current entry has no gaps', () => {
   expect(closeoutGaps({ status: 'Complete', entry: closedEntry, planPath: PLAN, project: 'vivera' })).toEqual([]);
 });
 
+test('a trailing comment on the status line is not part of the status', () => {
+  const commented = { ...closedEntry, status: 'Complete   # Draft|Approved|Complete' };
+  expect(closeoutGaps({ status: 'Complete   # done', entry: commented, planPath: PLAN, project: 'vivera' })).toEqual([]);
+  expect(codes(closeoutGaps({ status: 'Verification  # still open', entry: null, planPath: PLAN, project: 'vivera' }))).toEqual(['PLAN_NOT_COMPLETE']);
+});
+
+test('checkCloseout reads a Complete plan whose status line carries a comment', () => {
+  const root = repo({ planText: plan('Complete            # Draft|Approved|Complete'), config: cfgWith(closedEntry) });
+  expect(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps).toEqual([]);
+});
+
 test('Verification status raises PLAN_NOT_COMPLETE with the literal plan path in the fix', () => {
   const gaps = closeoutGaps({ status: 'Verification', entry: null, planPath: PLAN, project: 'vivera' });
   expect(codes(gaps)).toEqual(['PLAN_NOT_COMPLETE']);

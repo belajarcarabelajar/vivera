@@ -18,7 +18,9 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // defer: pinned field list, re-check against the docs when Claude Code adds a field the validator rejects
-// Pinned from the Claude Code docs of 2026-10-10. Names are camelCase and case-sensitive.
+// Pinned from the Claude Code docs of 2026-10-10: the field names, the enum values
+// (permissionMode, color, memory, effort, isolation) and the value types below.
+// Names are camelCase and case-sensitive.
 export const ALLOWED_FIELDS = [
   'name',
   'description',
@@ -42,14 +44,40 @@ export const ALLOWED_FIELDS = [
 
 const NAME_MAX = 256;
 
+const ENUMS = {
+  permissionMode: ['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan', 'manual'],
+  color: ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'],
+  memory: ['user', 'project', 'local'],
+  effort: ['low', 'medium', 'high', 'xhigh', 'max'],
+  isolation: ['worktree'],
+};
+
+// Returns [{ file, dangling }] sorted by path. A symlink to a file is scanned like
+// a file; a symlink to a directory is not followed, which also rules out cycles.
 function listMarkdown(dir) {
   const out = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...listMarkdown(full));
-    else if (entry.isFile() && entry.name.endsWith('.md')) out.push(full);
+    if (entry.isDirectory()) {
+      out.push(...listMarkdown(full));
+      continue;
+    }
+    // Claude Code treats README.md as documentation, not an agent.
+    if (!entry.name.endsWith('.md') || /^readme\.md$/i.test(entry.name)) continue;
+    if (entry.isFile()) {
+      out.push({ file: full, dangling: false });
+    } else if (entry.isSymbolicLink()) {
+      let stat;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        out.push({ file: full, dangling: true });
+        continue;
+      }
+      if (stat.isFile()) out.push({ file: full, dangling: false });
+    }
   }
-  return out.sort();
+  return out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0));
 }
 
 function extractFrontmatter(text) {
@@ -77,10 +105,69 @@ function checkSkills(skills, label, skillsDir, errors) {
     return errors.push(`${label}: "skills" must be a YAML list of strings`);
   }
   for (const skill of skills) {
-    if (!fs.existsSync(path.join(skillsDir, skill, 'SKILL.md'))) {
-      errors.push(`${label}: skill "${skill}" not found, expected ${path.join(skillsDir, skill, 'SKILL.md')}`);
+    if (skill === '' || skill.includes('/') || skill.includes('\\') || skill.includes('..')) {
+      errors.push(`${label}: "skills" entry "${skill}" must be a bare skill name and must not contain "/", "\\" or ".."`);
+    } else if (!fs.existsSync(path.join(skillsDir, skill, 'SKILL.md'))) {
+      errors.push(
+        `${label}: skill "${skill}" has no skills/${skill}/SKILL.md in this repository (Claude Code resolves skills from installed locations; run ./install.sh)`,
+      );
     }
   }
+}
+
+function checkHooks(hooks, label, errors) {
+  if (!isPlainObject(hooks)) return errors.push(`${label}: "hooks" must be a mapping of event name to a list`);
+  for (const [event, entries] of Object.entries(hooks)) {
+    const at = `hooks.${event}`;
+    if (!/^[A-Z][A-Za-z]+$/.test(event)) {
+      errors.push(`${label}: ${at} is not a valid event name (PascalCase, for example PreToolUse)`);
+    }
+    if (!Array.isArray(entries)) {
+      errors.push(`${label}: ${at} must be an array`);
+      continue;
+    }
+    entries.forEach((entry, i) => {
+      const ep = `${at}[${i}]`;
+      if (!isPlainObject(entry)) return errors.push(`${label}: ${ep} must be an object`);
+      if ('matcher' in entry && typeof entry.matcher !== 'string') {
+        errors.push(`${label}: ${ep}.matcher must be a string`);
+      }
+      if (!Array.isArray(entry.hooks)) return errors.push(`${label}: ${ep}.hooks must be an array`);
+      entry.hooks.forEach((hook, j) => {
+        const hp = `${ep}.hooks[${j}]`;
+        if (!isPlainObject(hook)) return errors.push(`${label}: ${hp} must be an object`);
+        if (typeof hook.type !== 'string' || hook.type === '') {
+          return errors.push(`${label}: ${hp}.type must be a string`);
+        }
+        if (hook.type === 'command' && (typeof hook.command !== 'string' || hook.command.trim() === '')) {
+          errors.push(`${label}: ${hp}.command must be a non-empty string when type is "command"`);
+        }
+      });
+    });
+  }
+}
+
+function checkValueTypes(fm, label, errors) {
+  const bad = (key, want) => errors.push(`${label}: "${key}" must be ${want}`);
+  for (const key of ['tools', 'disallowedTools']) {
+    if (!(key in fm)) continue;
+    const v = fm[key];
+    if (typeof v !== 'string' && !(Array.isArray(v) && v.every((s) => typeof s === 'string'))) {
+      bad(key, 'a string or a list of strings');
+    }
+  }
+  if ('model' in fm && (typeof fm.model !== 'string' || fm.model.trim() === '')) bad('model', 'a non-empty string');
+  for (const [key, allowed] of Object.entries(ENUMS)) {
+    if (key in fm && !allowed.includes(fm[key])) bad(key, `one of ${allowed.join(', ')}`);
+  }
+  for (const key of ['background', 'omitClaudeMd']) {
+    if (key in fm && typeof fm[key] !== 'boolean') bad(key, 'a boolean');
+  }
+  if ('initialPrompt' in fm && typeof fm.initialPrompt !== 'string') bad('initialPrompt', 'a string');
+  if ('mcpServers' in fm && !Array.isArray(fm.mcpServers) && !isPlainObject(fm.mcpServers)) {
+    bad('mcpServers', 'a list or a mapping');
+  }
+  if ('experimental' in fm && !isPlainObject(fm.experimental)) bad('experimental', 'a mapping');
 }
 
 export function validateAgentsDir(agentsDir, skillsDir) {
@@ -97,8 +184,12 @@ export function validateAgentsDir(agentsDir, skillsDir) {
   }
 
   const seen = new Map();
-  for (const file of files) {
+  for (const { file, dangling } of files) {
     const label = path.relative(agentsDir, file);
+    if (dangling) {
+      errors.push(`${label}: dangling symlink, its target does not exist`);
+      continue;
+    }
     const { yaml, problem } = extractFrontmatter(fs.readFileSync(file, 'utf8'));
     if (problem) {
       errors.push(`${label}: ${problem}`);
@@ -130,6 +221,8 @@ export function validateAgentsDir(agentsDir, skillsDir) {
       errors.push(`${label}: "description" is required and must be a non-empty string`);
     }
     if ('skills' in fm) checkSkills(fm.skills, label, skillsDir, errors);
+    if ('hooks' in fm) checkHooks(fm.hooks, label, errors);
+    checkValueTypes(fm, label, errors);
     if ('maxTurns' in fm && !(Number.isInteger(fm.maxTurns) && fm.maxTurns > 0)) {
       errors.push(`${label}: "maxTurns" must be a positive integer`);
     }

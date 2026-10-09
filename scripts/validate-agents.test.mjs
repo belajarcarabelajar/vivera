@@ -211,6 +211,203 @@ describe('validateAgentsDir', () => {
   });
 });
 
+describe('symlinks', () => {
+  test('a symlinked agent file is scanned like a regular file', () => {
+    const target = path.join(tmp, 'target.md');
+    fs.writeFileSync(target, '---\nname: linked\n---\nbody\n');
+    fs.symlinkSync(target, path.join(agentsDir, 'linked.md'));
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(errors.some((e) => e.includes('linked.md') && e.includes('description'))).toBe(true);
+  });
+
+  test('a valid symlinked agent file passes', () => {
+    const target = path.join(tmp, 'target.md');
+    fs.writeFileSync(target, `---\n${VALID}\n---\nbody\n`);
+    fs.symlinkSync(target, path.join(agentsDir, 'linked.md'));
+    const r = validateAgentsDir(agentsDir, skillsDir);
+    expect(r.errors).toEqual([]);
+    expect(r.agents).toEqual(['reviewer']);
+  });
+
+  test('a dangling symlink is an error naming the file', () => {
+    writeAgent('ok.md', VALID);
+    fs.symlinkSync(path.join(tmp, 'missing.md'), path.join(agentsDir, 'dangling.md'));
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(errors.some((e) => e.includes('dangling.md'))).toBe(true);
+  });
+
+  test('a symlinked directory is not followed', () => {
+    writeAgent('ok.md', VALID);
+    const other = path.join(tmp, 'other');
+    fs.mkdirSync(other);
+    fs.writeFileSync(path.join(other, 'bad.md'), 'no frontmatter\n');
+    fs.symlinkSync(other, path.join(agentsDir, 'linkdir'));
+    fs.symlinkSync(agentsDir, path.join(other, 'cycle'));
+    const r = validateAgentsDir(agentsDir, skillsDir);
+    expect(r.errors).toEqual([]);
+  });
+});
+
+describe('hooks structure', () => {
+  const withHooks = (hooksYaml) => writeAgent('reviewer.md', `${VALID}\nhooks:\n${hooksYaml}`);
+  const run = () => validateAgentsDir(agentsDir, skillsDir).errors;
+
+  test('a well-formed hooks block passes', () => {
+    withHooks(
+      [
+        '  PreToolUse:',
+        '    - matcher: Bash',
+        '      hooks:',
+        '        - type: command',
+        '          command: ./check.sh',
+      ].join('\n'),
+    );
+    expect(run()).toEqual([]);
+  });
+
+  test('hooks must be a mapping', () => {
+    writeAgent('reviewer.md', `${VALID}\nhooks:\n  - nope`);
+    expect(run().some((e) => e.includes('reviewer.md') && e.includes('hooks') && e.includes('mapping'))).toBe(true);
+  });
+
+  test('a lower-camel event name is rejected', () => {
+    withHooks(['  preToolUse:', '    - hooks:', '        - type: command', '          command: x'].join('\n'));
+    expect(run().some((e) => e.includes('preToolUse'))).toBe(true);
+  });
+
+  test('an event value must be an array', () => {
+    withHooks(['  PreToolUse:', '    matcher: Bash'].join('\n'));
+    expect(run().some((e) => e.includes('hooks.PreToolUse') && e.includes('array'))).toBe(true);
+  });
+
+  test('an entry must be an object with a hooks array', () => {
+    withHooks(['  PreToolUse:', '    - matcher: Bash'].join('\n'));
+    expect(run().some((e) => e.includes('hooks.PreToolUse[0].hooks'))).toBe(true);
+  });
+
+  test('matcher must be a string', () => {
+    withHooks(
+      ['  PreToolUse:', '    - matcher: 5', '      hooks:', '        - type: command', '          command: x'].join('\n'),
+    );
+    expect(run().some((e) => e.includes('hooks.PreToolUse[0].matcher'))).toBe(true);
+  });
+
+  test('a hook needs a string type', () => {
+    withHooks(['  PreToolUse:', '    - hooks:', '        - command: x'].join('\n'));
+    expect(run().some((e) => e.includes('hooks.PreToolUse[0].hooks[0].type'))).toBe(true);
+  });
+
+  test('a command hook needs a non-empty command', () => {
+    withHooks(['  PreToolUse:', '    - hooks:', '        - type: command', '          command: ""'].join('\n'));
+    expect(run().some((e) => e.includes('hooks.PreToolUse[0].hooks[0].command'))).toBe(true);
+  });
+
+  test('a non-command hook does not need a command', () => {
+    withHooks(['  PreToolUse:', '    - hooks:', '        - type: prompt'].join('\n'));
+    expect(run()).toEqual([]);
+  });
+});
+
+describe('field value types', () => {
+  const check = (line) => {
+    writeAgent('reviewer.md', `${VALID}\n${line}`);
+    return validateAgentsDir(agentsDir, skillsDir).errors;
+  };
+
+  test.each([
+    ['tools: 5', 'tools'],
+    ['tools:\n  - 1', 'tools'],
+    ['disallowedTools: true', 'disallowedTools'],
+    ['model: ""', 'model'],
+    ['model: 3', 'model'],
+    ['permissionMode: yolo', 'permissionMode'],
+    ['color: teal', 'color'],
+    ['memory: global', 'memory'],
+    ['background: "yes"', 'background'],
+    ['omitClaudeMd: 1', 'omitClaudeMd'],
+    ['effort: extreme', 'effort'],
+    ['isolation: container', 'isolation'],
+    ['initialPrompt: 7', 'initialPrompt'],
+    ['mcpServers: abc', 'mcpServers'],
+    ['experimental: [a]', 'experimental'],
+  ])('rejects %j', (line, field) => {
+    const errors = check(line);
+    expect(errors.some((e) => e.includes('reviewer.md') && e.includes(`"${field}"`))).toBe(true);
+  });
+
+  test.each([
+    'tools: Read, Grep',
+    'tools:\n  - Read\n  - Grep',
+    'disallowedTools: Bash',
+    'model: sonnet',
+    'permissionMode: acceptEdits',
+    'permissionMode: bypassPermissions',
+    'color: cyan',
+    'memory: project',
+    'background: true',
+    'omitClaudeMd: false',
+    'effort: xhigh',
+    'isolation: worktree',
+    'initialPrompt: start here',
+    'mcpServers:\n  - github',
+    'mcpServers:\n  github:\n    command: x',
+    'experimental:\n  flag: true',
+  ])('accepts %j', (line) => {
+    expect(check(line)).toEqual([]);
+  });
+});
+
+describe('skills path safety and wording', () => {
+  test.each(['../skills/s1', 'a/b', 'a\\b', '..', 'x..y'])('rejects entry %j', (entry) => {
+    writeSkill('s1');
+    writeAgent('reviewer.md', `${VALID}\nskills:\n  - "${entry.replace(/\\/g, '\\\\')}"`);
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(errors.some((e) => e.includes('reviewer.md') && e.includes('must not contain'))).toBe(true);
+    expect(errors.some((e) => e.includes('has no skills/'))).toBe(false);
+  });
+
+  test('the not-found message points at install.sh', () => {
+    writeAgent('reviewer.md', `${VALID}\nskills:\n  - ghost`);
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(
+      errors.some(
+        (e) =>
+          e.includes('skill "ghost" has no skills/ghost/SKILL.md in this repository') &&
+          e.includes('Claude Code resolves skills from installed locations; run ./install.sh'),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('README handling', () => {
+  test('README.md at the top is skipped, not an error', () => {
+    writeAgent('reviewer.md', VALID);
+    fs.writeFileSync(path.join(agentsDir, 'README.md'), '# Agents\n\nNo frontmatter here.\n');
+    const r = validateAgentsDir(agentsDir, skillsDir);
+    expect(r.errors).toEqual([]);
+    expect(r.agents).toEqual(['reviewer']);
+  });
+
+  test('a nested readme.MD is skipped case-insensitively', () => {
+    writeAgent('reviewer.md', VALID);
+    fs.mkdirSync(path.join(agentsDir, 'sub'));
+    fs.writeFileSync(path.join(agentsDir, 'sub', 'readme.MD'), 'docs only\n');
+    expect(validateAgentsDir(agentsDir, skillsDir).errors).toEqual([]);
+  });
+
+  test('a directory with only README.md has no agent files', () => {
+    fs.writeFileSync(path.join(agentsDir, 'README.md'), 'docs\n');
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(errors.some((e) => e.includes('no agent files found'))).toBe(true);
+  });
+
+  test('another file without a name key stays an error', () => {
+    writeAgent('notes.md', 'description: Something.');
+    const { errors } = validateAgentsDir(agentsDir, skillsDir);
+    expect(errors.some((e) => e.includes('notes.md') && e.includes('name'))).toBe(true);
+  });
+});
+
 describe('CLI', () => {
   function run() {
     return Bun.spawnSync(['bun', SCRIPT, agentsDir, skillsDir]);

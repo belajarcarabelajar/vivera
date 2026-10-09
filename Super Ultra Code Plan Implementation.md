@@ -87,6 +87,8 @@ flowchart LR
 
 > 📊 **Progress symbols:** 🔎 Explore · 🧬 Profile · 💬 Clarify · 🧠 Design · 🗺️ Plan · 🧪 Test · 🛠️ Implement · ✅ Verify · 🧹 Debt sweep · ⏸️ Await approval · 🛑 Stop
 
+> 📏 **Progress meter:** checkpoint reports open with a bar from the plan checklist (`▰▰▰▱▱▱▱▱▱▱ 30% · 3/10 · Test`), or stars during the debt sweep (`★★★☆☆ open`). Rules: `sucp-rules`, Output.
+
 ## Step 1 — Classify
 Before first question: classify task, state classification aloud.
 | Path | Definition | Trigger |

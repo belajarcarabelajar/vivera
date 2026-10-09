@@ -18,6 +18,7 @@
 - **Started:** [ISO timestamp]
 - **Last updated:** [ISO timestamp]
 - **Status:** `ACTIVE` | `PAUSED` | `BLOCKED` | `DONE`
+- **Meter (at last checkpoint):** [`▰▰▱▱▱▱▱▱▱▱ 20% · 2/10 · current item`, or `★★☆☆☆ open` during the debt sweep]
 
 ---
 

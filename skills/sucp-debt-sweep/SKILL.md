@@ -60,6 +60,7 @@ The same sweep that mines code debt also mines the session for the agent's **own
 - A selected follow-up is a task, not a favor. It enters the same pipeline as plan work: chunk it, fan out to subagents, TDD when behavior changes, verification with fresh evidence, diff audit, and commit. No reduced standard, no "quick fix" exemption.
 - Re-open the plan status to `In Progress` for the duration, add the item as a numbered follow-up task with its own acceptance criterion and `skip_if`, and return it to `Complete` when the evidence is green. The plan file, not the chat, is the record.
 - After the batch closes, run the sweep's own short pass once more: did executing item A create new debt in the surface it touched? Any new candidate goes to the same ranked list, and the user is asked again only for genuinely new items.
+- Count every pass for the progress stars (`sucp-rules`, Output): the first harvest is pass 1, this re-pass is the next one. The line ends `converged` only when a pass found no new candidate.
 - Batch the selections into one round. Sequentially asking about each follow-up's sub-steps reproduces the low-value prompting this stage exists to eliminate.
 
 ### 📇 6.6 Sync Session Artifacts to Graphify — local, no model (mandatory when the repo has a graph)

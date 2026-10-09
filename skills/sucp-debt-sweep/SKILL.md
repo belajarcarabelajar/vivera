@@ -60,7 +60,7 @@ The same sweep that mines code debt also mines the session for the agent's **own
 - A selected follow-up is a task, not a favor. It enters the same pipeline as plan work: chunk it, fan out to subagents, TDD when behavior changes, verification with fresh evidence, diff audit, and commit. No reduced standard, no "quick fix" exemption.
 - Re-open the plan status to `In Progress` for the duration, add the item as a numbered follow-up task with its own acceptance criterion and `skip_if`, and return it to `Complete` when the evidence is green. The plan file, not the chat, is the record.
 - After the batch closes, run the sweep's own short pass once more: did executing item A create new debt in the surface it touched? Any new candidate goes to the same ranked list, and the user is asked again only for genuinely new items.
-- Count every pass for the progress stars (`sucp-rules`, Output): the first harvest is pass 1, this re-pass is the next one. The line ends `converged` only when a pass found no new candidate.
+- A candidate the re-pass finds adds a star to the meter (see Progress stars below).
 - Batch the selections into one round. Sequentially asking about each follow-up's sub-steps reproduces the low-value prompting this stage exists to eliminate.
 
 ### 📇 6.6 Sync Session Artifacts to Graphify — local, no model (mandatory when the repo has a graph)
@@ -96,6 +96,14 @@ RUN `graphify update .` FIRST, THEN `bun run graphify:sync` — IN THAT ORDER
   bun "$VIVERA/scripts/graphify-sync.mjs" --check --root "$(pwd)"       # confirm the delta you previewed
   ```
   `eligible docs: 0`, or a `nodes: X -> X` delta on a session that produced Markdown, means the sync ran against the wrong tree regardless of what it printed. The same shape of failure appears elsewhere: an empty `git status` proves nothing about gitignored artifacts, and a green guard proves only what it measures.
+
+### ⭐ Progress stars
+The meter line during the sweep (`sucp-rules`, Output) is one star per debt the sweep found, so 7 debts are 7 stars and 5 debts are 5. The total follows the findings and is never fixed or padded. The stars appear in the chat reply only; the sweep record holds the evidence, never the stars.
+
+- **What counts as a debt:** every candidate in the ranked list from 6.2, `NOW` or `LATER`. Learning-harvest rules (6.2.8) are not debts and get no star.
+- **`★` closed, `☆` open, closed ones drawn first.** A debt is closed when its follow-up was executed and verified with fresh evidence. A debt the user declined, or one recorded as `LATER` with a `defer:` line, stays `☆`, and the line says how many are deferred, for example `★★★☆☆ · 3 closed · 2 deferred`.
+- **No stars before the ranked list exists.** Once it does, every star starts as `☆`. A sweep that finds no debt prints `0 debt found` instead of stars.
+- **The total can grow.** A candidate found by the re-pass after a follow-up batch (6.5) adds a star and the line says `+1 debt`. Existing stars keep their state.
 
 ### 🚫 Anti-Patterns
 - Closing the session with a report and no question. A debt sweep that produces prose instead of a selectable question has not run.

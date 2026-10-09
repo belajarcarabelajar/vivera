@@ -10,6 +10,7 @@ export const PHASE_SKILLS = [
   'sucp-tdd-debug',
   'sucp-verify-deliver',
   'sucp-debt-sweep',
+  'sucp-overnight',
 ];
 
 export const MASTER_NAME = 'Super Ultra Code Plan Implementation.md';

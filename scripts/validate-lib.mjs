@@ -95,6 +95,25 @@ export const SNIPPET_CONTRACTS = {
     'question',
     'graphify:sync',
   ],
+  // Unattended run. The plan arrives by clipboard substitution, so the resolver
+  // and its stop rule are pinned like the review target in orkestrasi-pr-review.md.
+  // The NEVER list and the retry budget are the parts that replace a human, so
+  // a later edit that trimmed them would leave nobody watching and nothing limiting.
+  'orkestrasi-overnight.md': [
+    'KEEP THE TO-DO LIST IN THE PLAN FILE',
+    'pr-registry.mjs claim',
+    'GIT WRITES ARE PARENT-ONLY',
+    'pull-request-template.md',
+    '--body-file',
+    'graphify:sync',
+    '#{clipboard}',
+    'ENTRY GATE RUNS FIRST',
+    'RETRY BUDGET',
+    'NEVER, WHATEVER HAPPENS DURING THE NIGHT',
+    'merge into the base branch',
+    'no follow-up executes unselected',
+    'overnight-handoff.md',
+  ],
 };
 
 export const REQUIRED_SNIPPETS = Object.keys(SNIPPET_CONTRACTS);

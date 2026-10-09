@@ -108,6 +108,7 @@ This file is the orchestrator. The phase rules live in separate skills, and each
 | Step 4 — 🧪 TDD and 🐞 systematic debugging | `sucp-tdd-debug` | Before the first RED test or bug reproduction |
 | Step 5 — ✅ Verification, professional engineering gates, 📤 PR delivery | `sucp-verify-deliver` | Before any completion claim or PR |
 | Step 6 — 🧹 Session-close debt sweep and learning harvest | `sucp-debt-sweep` | After the plan is Done 100% and the evidence gate is green |
+| Overnight run (user leaves, plan to verified PR) | `sucp-overnight` | After the plan is Approved and the user says they are leaving. Loaded in addition to the phase skills, never instead of them |
 
 - Load the phase skill before entering its phase. Do not reconstruct its rules from memory.
 - If a phase skill cannot be loaded, say so and stop before that phase. Do not continue from memory.

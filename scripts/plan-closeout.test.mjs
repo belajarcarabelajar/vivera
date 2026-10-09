@@ -276,3 +276,9 @@ test('mirror: a missing plan file skips everything, including the mirror check',
   assert.equal(called, false);
   assert.deepEqual(r.gaps, []);
 });
+
+test('mirror: a multi-line config error is reduced to its first line in the skipped note', () => {
+  const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('UNROUTABLE', 'cannot load: missing\n\nCopy the template\n  cp a b') });
+  assert.equal(r.skipped, 'vault mirror not checked: cannot load: missing');
+});

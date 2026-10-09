@@ -98,7 +98,7 @@ export function checkCloseout({
   if (m.state === 'NOT-APPLICABLE') {
     skipped.push(`vault mirror not checked: plan is not covered by a mirror${m.detail ? ` (${m.detail})` : ''}`);
   } else if (m.state === 'UNROUTABLE') {
-    skipped.push(`vault mirror not checked: ${m.detail}`);
+    skipped.push(`vault mirror not checked: ${String(m.detail).split('\n')[0]}`);
   } else if (m.state !== 'OK') {
     gaps.push({
       code: 'MIRROR_STALE',

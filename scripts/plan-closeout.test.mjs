@@ -8,7 +8,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { closeoutGaps, checkCloseout } from './plan-closeout.mjs';
+import { closeoutGaps, checkCloseout as checkCloseoutRaw } from './plan-closeout.mjs';
+
+// The mirror check reads the machine's publish config by default, so the issue
+// tests stub it as fresh and only the mirror tests below choose a verdict.
+const mirror = (state, detail = '') => () => ({ applicable: state !== 'NOT-APPLICABLE', state, detail });
+const checkCloseout = (opts) => checkCloseoutRaw({ freshness: mirror('OK'), ...opts });
 
 const PLAN = 'docs/code-plan/plans/demo.md';
 const closedEntry = { number: 7, url: 'https://github.com/o/r/issues/7', state: 'closed', status: 'Complete', repo: 'o/r' };
@@ -206,4 +211,68 @@ test('checkCloseout: configPath override is honored', () => {
   writeFileSync(alt, JSON.stringify(cfgWith(null)));
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
   assert.deepEqual(r, { skipped: 'plan has no issue record, nothing to close', gaps: [] });
+});
+
+test('mirror: a fresh mirror adds no gap and no skipped note', () => {
+  const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+  assert.deepEqual(checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('OK') }), { skipped: null, gaps: [] });
+});
+
+for (const state of ['DRIFT', 'MISSING', 'REFUSED', 'NO-SOURCE']) {
+  test(`mirror: ${state} raises MIRROR_STALE with the publish command as the fix`, () => {
+    const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+    const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror(state, 'why it is not current') });
+    assert.deepEqual(codes(r.gaps), ['MIRROR_STALE']);
+    assert.ok(r.gaps[0].message.includes(state));
+    assert.ok(r.gaps[0].message.includes('why it is not current'));
+    assert.equal(r.gaps[0].fix, `bun scripts/plan-publish.mjs ${PLAN}`);
+    assert.equal(r.skipped, null);
+  });
+}
+
+test('mirror: a plan outside any mirror is a skipped note, not a gap', () => {
+  const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('NOT-APPLICABLE', 'no project owns it') });
+  assert.deepEqual(r.gaps, []);
+  assert.equal(r.skipped, 'vault mirror not checked: plan is not covered by a mirror (no project owns it)');
+});
+
+test('mirror: an unloadable publish config is a skipped note carrying the reason, not a gap', () => {
+  const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('UNROUTABLE', 'cannot load plan publish config: missing') });
+  assert.deepEqual(r.gaps, []);
+  assert.equal(r.skipped, 'vault mirror not checked: cannot load plan publish config: missing');
+});
+
+test('mirror: the check receives the absolute plan path and the publish config', () => {
+  const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
+  const seen = [];
+  checkCloseoutRaw({
+    repoRoot: root,
+    planSlug: 'demo',
+    publishConfig: '/tmp/publish.json',
+    freshness: (p, opts) => { seen.push([p, opts]); return { applicable: true, state: 'OK', detail: '' }; },
+  });
+  assert.deepEqual(seen, [[path.join(root, PLAN), { config: '/tmp/publish.json' }]]);
+});
+
+test('mirror: it is also checked when plan.issues.json is missing, and the notes are joined', () => {
+  const root = repo({ planText: plan('Complete') });
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('DRIFT', 'hash differs') });
+  assert.deepEqual(codes(r.gaps), ['MIRROR_STALE']);
+  assert.ok(r.skipped.includes('plan.issues.json not found'));
+});
+
+test('mirror: it is also checked when plan.issues.json is unreadable', () => {
+  const root = repo({ planText: plan('Complete'), config: '{ not json' });
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('MISSING', 'no mirror') });
+  assert.deepEqual(codes(r.gaps), ['CONFIG_UNREADABLE', 'MIRROR_STALE']);
+});
+
+test('mirror: a missing plan file skips everything, including the mirror check', () => {
+  const root = repo();
+  let called = false;
+  const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: () => { called = true; return { state: 'OK' }; } });
+  assert.equal(called, false);
+  assert.deepEqual(r.gaps, []);
 });

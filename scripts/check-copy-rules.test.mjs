@@ -1,11 +1,11 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkText, checkFile, checkDiff, main, EM_DASH, WATERMARK_PATTERNS } from './check-copy-rules.mjs';
+import { checkText, checkFile, checkDiff, parseAddedLines, main, EM_DASH, WATERMARK_PATTERNS } from './check-copy-rules.mjs';
 import { readSkillCorpus } from './skill-corpus.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -166,8 +166,14 @@ function git(cwd, ...args) {
 
 const TRAILER = ['Co-Authored', 'By: x <x@example.invalid>'].join('-');
 
+const fixtureDirs = [];
+after(() => {
+  for (const d of fixtureDirs) fs.rmSync(d, { recursive: true, force: true });
+});
+
 function fixtureRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-rules-diff-'));
+  fixtureDirs.push(dir);
   git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'config', 'user.name', 'Fixture');
   git(dir, 'config', 'user.email', 'fixture@example.invalid');
@@ -217,6 +223,27 @@ test('--diff checks the commit messages of the branch range', () => {
   const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
   assert.ok(r.violations.some((v) => v.where.startsWith('commit ') && v.rule === 'co-author trailer'),
     JSON.stringify(r.violations));
+});
+
+test('parseAddedLines keeps an added line that starts with ++ inside its hunk', () => {
+  // With --unified=0 an added "++ note" prints as "+++ note"; it is not a file header.
+  const diff = [
+    'diff --git a/x.md b/x.md', 'index 1111111..2222222 100644', '--- a/x.md', '+++ b/x.md',
+    '@@ -1,0 +2 @@', '+++ note', '@@ -8,0 +10 @@', '+new line', '',
+  ].join('\n');
+  const added = parseAddedLines(diff);
+  assert.deepEqual([...added.keys()], ['x.md']);
+  assert.deepEqual([...added.get('x.md')].sort((a, b) => a - b), [2, 10]);
+});
+
+test('--diff skips untracked symlinks that dangle or point at a directory', () => {
+  const dir = fixtureRepo();
+  fs.symlinkSync(path.join(dir, 'missing-target.md'), path.join(dir, 'dangling.md'));
+  fs.mkdirSync(path.join(dir, 'realdir'));
+  fs.writeFileSync(path.join(dir, 'realdir', 'keep.txt'), 'plain\n');
+  fs.symlinkSync(path.join(dir, 'realdir'), path.join(dir, 'dirlink'));
+  const r = checkDiff({ base: 'main', cwd: dir });
+  assert.ok(!r.violations.some((v) => /dangling|dirlink/.test(v.where)), JSON.stringify(r.violations));
 });
 
 test('--diff scans a new untracked file, but not an ignored one', () => {

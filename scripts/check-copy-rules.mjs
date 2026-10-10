@@ -221,9 +221,13 @@ function checkCommitRange(revArgs, cwd) {
 export function parseAddedLines(diffText) {
   const added = new Map();
   let current = null;
+  // Only the block between "diff --git" and the first "@@" is header; inside a hunk,
+  // an added line "++ x" prints as "+++ x" and must not switch files.
+  let inHeader = false;
   for (const line of diffText.split('\n')) {
-    if (line.startsWith('diff --git ')) { current = null; continue; }
-    if (line.startsWith('+++ ')) {
+    if (line.startsWith('diff --git ')) { current = null; inHeader = true; continue; }
+    if (line.startsWith('@@ ')) inHeader = false;
+    if (inHeader && line.startsWith('+++ ')) {
       const target = unquoteGitPath(line.slice(4).replace(/\t$/, ''));
       current = target === '/dev/null' ? null : target.replace(/^b\//, '');
       if (current !== null && !added.has(current)) added.set(current, new Set());
@@ -299,6 +303,8 @@ export function checkDiff({ base, cwd = ROOT } = {}) {
     throw new Error(`git ls-files --others failed: ${(others.error?.message ?? others.stderr).trim()}`);
   }
   for (const rel of others.stdout.split('\u0000').filter(Boolean)) {
+    // A symlink (dangling or to a directory) has no text of its own to check.
+    if (!fs.lstatSync(path.resolve(cwd, rel)).isFile()) continue;
     const text = fs.readFileSync(path.resolve(cwd, rel), 'utf8');
     if (text.includes('\u0000')) continue;
     files += 1;

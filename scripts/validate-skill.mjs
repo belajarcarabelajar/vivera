@@ -706,6 +706,32 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3k. Automation-article amendments (2026-10-10, plan 2026-10-10-unread-sources-run-record).
+// Revert: `git revert` the commits that added this block with their skill, template, and snippet edits.
+{
+  const rules = 'skills/sucp-rules/SKILL.md';
+  const template = 'templates/subagent-contract-template.md';
+  const automationContract = [
+    { label: 'empty result needs a positive control', file: rules, needle: 'An Empty Result Is a Claim' },
+    { label: 'failed read is reported as unread', file: rules, needle: 'report it by name as unread' },
+    { label: 'list at its limit counts as unread', file: rules, needle: 'exactly at its `--limit`' },
+    { label: 'reports end with a Not read line', file: rules, needle: 'Not read: <source> (<reason>)' },
+    { label: 'anti-pattern row for an empty search', file: rules, needle: 'The search came back empty, so there is nothing' },
+    { label: 'subagent report carries NOT READ lines', file: template, needle: 'NOT READ: <source> (<reason>)' },
+    { label: 'gather checkpoint resolves NOT READ lines', file: template, needle: 'Every `NOT READ:` line' },
+  ];
+  for (const c of automationContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Automation-article amendment present: ${c.label}`);
+    } else {
+      console.error(`❌ Automation-article amendment missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

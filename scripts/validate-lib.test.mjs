@@ -9,7 +9,8 @@
 // 3. checkTinyFishLadder enforces the TinyFish requirement
 // 4. checkBannedRuntime catches banned patterns
 // 5. Mermaid fence extraction matches the renderer's awk patterns
-// 6. renderMermaidBatch maps batch output to blocks and falls back per block
+// 6. renderMermaidBatch maps batch output to blocks and bisects a failing batch
+// 7. scripts/mermaid-batch.mjs writes SVGs beside each .mmd and reports counts
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -32,6 +33,7 @@ import * as lib from './validate-lib.mjs';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { spawnSync } from 'child_process';
 
 // ---------- findMissingTerms ----------
 
@@ -263,6 +265,7 @@ fs.appendFileSync(path.join(import.meta.dirname, 'calls.log'), argv.join(' ') + 
 const text = fs.readFileSync(inp, 'utf8');
 if (inp.endsWith('.md')) {
   if (MODE === 'batch-fail' || MODE === 'partial-write') { process.stderr.write('Error: batch parse failed\\nstack\\n'); process.exit(1); }
+  if (MODE === 'content' && text.includes('BROKEN')) { process.stderr.write('Error: batch parse failed\\nstack\\n'); process.exit(1); }
   const blocks = [];
   let buf = null;
   for (const line of text.split('\\n')) {
@@ -273,6 +276,7 @@ if (inp.endsWith('.md')) {
   const base = out.replace(/\\.md$/, '');
   blocks.forEach((b, i) => {
     if (MODE === 'missing' && i === 1) return;
+    if (MODE === 'skip-broken' && b.includes('BROKEN')) return;
     fs.writeFileSync(base + '-' + (i + 1) + '.svg', '<svg>' + b + '</svg>');
   });
   process.exit(0);
@@ -309,13 +313,15 @@ test('renderMermaidBatch renders every block in one mmdc call and maps out-<n>.s
   }
 });
 
-test('renderMermaidBatch falls back per block when the batch exits non-zero and names the failing block', () => {
+// When every batch fails, bisection visits every node of a binary split tree:
+// 2n - 1 sets for n blocks.
+test('renderMermaidBatch bisects down to single blocks when every batch exits non-zero and names the failing block', () => {
   const fake = makeFakeMmdc('batch-fail');
   const blocks = [BLOCKS[0], 'flowchart TB\n  BROKEN -->', BLOCKS[2]];
   try {
     const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, args: ['-b', 'transparent'], tmpDir: fake.tmpDir });
-    assert.equal(calls, 1 + blocks.length);
-    assert.equal(fake.loggedCalls().length, 1 + blocks.length);
+    assert.equal(calls, 2 * blocks.length - 1);
+    assert.equal(fake.loggedCalls().length, 2 * blocks.length - 1);
     assert.deepEqual(results.map((r) => r.ok), [true, false, true]);
     assert.equal(results[1].error, 'Parse error on line 2: BROKEN');
     assert.equal(results[0].svg, `<svg>${blocks[0]}</svg>`);
@@ -325,11 +331,11 @@ test('renderMermaidBatch falls back per block when the batch exits non-zero and 
   }
 });
 
-test('renderMermaidBatch falls back per block when the batch exits 0 but an out-<n>.svg is missing', () => {
+test('renderMermaidBatch bisects when the batch exits 0 but an out-<n>.svg is missing', () => {
   const fake = makeFakeMmdc('missing');
   try {
     const { results, calls } = lib.renderMermaidBatch(BLOCKS, { mmdc: fake.bin, tmpDir: fake.tmpDir });
-    assert.equal(calls, 1 + BLOCKS.length);
+    assert.equal(calls, 2 * BLOCKS.length - 1);
     assert.deepEqual(results.map((r) => r.ok), [true, true, true]);
     results.forEach((r, i) => assert.equal(r.svg, `<svg>${BLOCKS[i]}</svg>`));
   } finally {
@@ -347,4 +353,162 @@ test('renderMermaidBatch fails a block whose single render exits non-zero even i
   } finally {
     fake.cleanup();
   }
+});
+
+// ---------- bisecting fallback (fake mmdc in 'content' mode) ----------
+//
+// In 'content' mode a .md batch fails only when it holds a BROKEN block, like
+// real mmdc, so the call count shows how many sets the bisection visited.
+
+const makeBlocks = (n, broken = []) =>
+  Array.from({ length: n }, (_, i) => (broken.includes(i) ? `flowchart TB\n  BROKEN${i} -->` : `flowchart TB\n  A${i}-->B${i}`));
+
+function assertPerBlock(results, blocks, broken) {
+  assert.equal(results.length, blocks.length);
+  results.forEach((r, i) => {
+    if (broken.includes(i)) {
+      assert.equal(r.ok, false, `block ${i} should fail`);
+      assert.equal(r.error, 'Parse error on line 2: BROKEN');
+    } else {
+      assert.equal(r.ok, true, `block ${i} should render`);
+      assert.equal(r.svg, `<svg>${blocks[i]}</svg>`);
+    }
+  });
+}
+
+test('renderMermaidBatch renders a clean batch of 8 in one call', () => {
+  const fake = makeFakeMmdc('content');
+  const blocks = makeBlocks(8);
+  try {
+    const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(calls, 1);
+    assertPerBlock(results, blocks, []);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch finds one broken block in 8 with 7 calls: 5 batches and 2 single renders', () => {
+  const fake = makeFakeMmdc('content');
+  const blocks = makeBlocks(8, [5]);
+  try {
+    const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(calls, 7);
+    const logged = fake.loggedCalls();
+    assert.equal(logged.length, 7);
+    assert.equal(logged.filter((l) => /-i \S+\.md /.test(l)).length, 5);
+    assert.equal(logged.filter((l) => /-i \S+\.mmd /.test(l)).length, 2);
+    assertPerBlock(results, blocks, [5]);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch finds one broken block in 16 with 9 calls', () => {
+  const fake = makeFakeMmdc('content');
+  const blocks = makeBlocks(16, [11]);
+  try {
+    const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(calls, 9);
+    assertPerBlock(results, blocks, [11]);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch reports two broken blocks in different halves of 8, each with its own error', () => {
+  const fake = makeFakeMmdc('content');
+  const blocks = makeBlocks(8, [1, 6]);
+  try {
+    const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(calls, 11);
+    assertPerBlock(results, blocks, [1, 6]);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+// A half that exits 0 but skips one SVG must not pick up a same-named
+// out-<n>.svg left by an earlier half.
+test('renderMermaidBatch never reads an SVG written by another half', () => {
+  const fake = makeFakeMmdc('skip-broken');
+  const blocks = makeBlocks(8, [5]);
+  try {
+    const { results } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(results[5].ok, false);
+    assertPerBlock(results, blocks, [5]);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+// ---------- scripts/mermaid-batch.mjs CLI ----------
+
+const CLI = path.join(import.meta.dirname, 'mermaid-batch.mjs');
+
+function runCli(args, stdin, env = {}) {
+  const res = spawnSync(process.execPath, [CLI, ...args], { input: stdin, encoding: 'utf8', env: { ...process.env, ...env } });
+  return { status: res.status, stdout: res.stdout, stderr: res.stderr };
+}
+
+function writeMmds(dir, blocks) {
+  return blocks.map((b, i) => {
+    const p = path.join(dir, `diag-${i + 1}.mmd`);
+    fs.writeFileSync(p, b);
+    return p;
+  });
+}
+
+test('mermaid-batch CLI writes each SVG beside its .mmd, names the failing file, prints counts, exits 1', () => {
+  const fake = makeFakeMmdc('content');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mermaid-cli-'));
+  const ownTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mermaid-cli-tmp-'));
+  const blocks = makeBlocks(4, [2]);
+  try {
+    const mmds = writeMmds(work, blocks);
+    const res = runCli(['--mmdc', fake.bin, '--', '-b', 'transparent'], mmds.join('\n') + '\n', { TMPDIR: ownTmp });
+    assert.equal(res.status, 1);
+    assert.equal(res.stdout, 'rendered=3 errors=1\n');
+    assert.match(res.stderr, new RegExp(`^  ❌ FAILED: ${mmds[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n\\s+Parse error on line 2: BROKEN\n`, 'm'));
+    assert.doesNotMatch(res.stderr, /diag-[124]\.mmd/);
+    mmds.forEach((p, i) => {
+      const svg = p.replace(/\.mmd$/, '.svg');
+      if (i === 2) assert.equal(fs.existsSync(svg), false);
+      else assert.equal(fs.readFileSync(svg, 'utf8'), `<svg>${blocks[i]}</svg>`);
+    });
+    assert.ok(fake.loggedCalls().every((l) => l.startsWith('-b transparent -i ')));
+    assert.deepEqual(fs.readdirSync(ownTmp), []);
+  } finally {
+    fake.cleanup();
+    fs.rmSync(work, { recursive: true, force: true });
+    fs.rmSync(ownTmp, { recursive: true, force: true });
+  }
+});
+
+test('mermaid-batch CLI exits 0 with one batch call when every block renders', () => {
+  const fake = makeFakeMmdc('content');
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'mermaid-cli-'));
+  try {
+    const mmds = writeMmds(work, makeBlocks(3));
+    const res = runCli(['--mmdc', fake.bin], mmds.join('\n') + '\n');
+    assert.equal(res.status, 0);
+    assert.equal(res.stdout, 'rendered=3 errors=0\n');
+    assert.equal(fake.loggedCalls().length, 1);
+    mmds.forEach((p) => assert.ok(fs.existsSync(p.replace(/\.mmd$/, '.svg'))));
+  } finally {
+    fake.cleanup();
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('mermaid-batch CLI exits 2 without --mmdc', () => {
+  const res = runCli([], '/nonexistent/a.mmd\n');
+  assert.equal(res.status, 2);
+  assert.equal(res.stdout, '');
+});
+
+test('mermaid-batch CLI exits 2 when stdin names no files', () => {
+  const res = runCli(['--mmdc', '/bin/false'], '\n');
+  assert.equal(res.status, 2);
+  assert.equal(res.stdout, '');
 });

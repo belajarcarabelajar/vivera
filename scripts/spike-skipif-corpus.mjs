@@ -25,7 +25,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { extractFrontmatter, parseUltraPlanYaml } from './ultra-plan-runner.mjs';
-import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
+import { classifySpikeSkipIf, SPIKE_CORPUS_PATH } from './spike-skipif-classifier.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_VAULT = path.join(process.env.HOME || '', 'Dokumen', 'Obsidian Vault');
@@ -224,6 +224,25 @@ export function checkPreconditions(corpus, minRows) {
   return balance;
 }
 
+// SPIKE_CORPUS_FROZEN_PATH lets tests add a fixture; it never replaces the real
+// record, so a bare run with the hook set still refuses to overwrite it.
+export function frozenCorpusPaths() {
+  return [SPIKE_CORPUS_PATH, process.env.SPIKE_CORPUS_FROZEN_PATH].filter(Boolean);
+}
+
+/**
+ * The default output is the frozen spike record (gitignored, so git cannot
+ * restore it); overwriting it would silently change the evidence the published
+ * verdict is reproduced from. Returns the refusal message, or null to proceed.
+ */
+export function frozenCorpusRefusal(out, frozen = frozenCorpusPaths()) {
+  const hit = [frozen].flat().find((f) => path.resolve(out) === path.resolve(f) && fs.existsSync(f));
+  if (!hit) return null;
+  return `refusing to overwrite the frozen corpus at ${hit}: it is the evidence the jev spike `
+    + 'verdict is reproduced from (see scripts/spike-skipif-classifier.mjs). Pass --out <other path> '
+    + 'for a fresh harvest; replacing the record means moving it by hand and re-running the probe.';
+}
+
 if (import.meta.main) {
   const args = process.argv.slice(2);
   const minIdx = args.indexOf('--min-rows');
@@ -236,6 +255,11 @@ if (import.meta.main) {
   }
   const outIdx = args.indexOf('--out');
   const out = outIdx === -1 ? path.join(ROOT, 'spike-out', 'corpus.json') : path.resolve(ROOT, args[outIdx + 1]);
+  const refusal = frozenCorpusRefusal(out);
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, `${JSON.stringify(corpus, null, 2)}\n`);
   const pct = (n) => `${((n / balance.total) * 100).toFixed(1)}%`;

@@ -5,10 +5,11 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import os from 'node:os';
+import * as corpusModule from './spike-skipif-corpus.mjs';
 import {
   normalizeCmd, stableId, buildCorpus, balanceOf, resolveVault, collect, planFiles,
 } from './spike-skipif-corpus.mjs';
-import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
+import { classifySpikeSkipIf, SPIKE_CORPUS_PATH } from './spike-skipif-classifier.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(ROOT, 'scripts', 'spike-skipif-corpus.mjs');
@@ -255,4 +256,61 @@ live('the CLI exits non-zero on a degenerate corpus rather than emitting it', ()
   const r = spawnSync('bun', [CLI, '--min-rows', '100000'], { cwd: ROOT, encoding: 'utf8' });
   assert.equal(r.status, 1, 'an unmeetable size precondition must fail closed');
   assert.match(r.stderr, /E_PRECOND/);
+});
+
+// The frozen record is gitignored evidence that git cannot restore, so every
+// test below points the guard at a fixture and never at spike-out/.
+function frozenFixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'frozen-corpus-'));
+  const frozen = path.join(dir, 'corpus.json');
+  fs.writeFileSync(frozen, '["frozen"]\n');
+  return { dir, frozen };
+}
+
+test('frozenCorpusRefusal refuses only an existing frozen target', () => {
+  const fx = frozenFixture();
+  try {
+    const refuse = corpusModule.frozenCorpusRefusal;
+    assert.equal(typeof refuse, 'function', 'frozenCorpusRefusal is exported');
+    assert.match(refuse(fx.frozen, fx.frozen), /frozen/);
+    assert.match(refuse(fx.frozen, fx.frozen), /--out/);
+    assert.equal(refuse(path.join(fx.dir, 'other.json'), fx.frozen), null);
+    assert.equal(refuse(path.join(fx.dir, 'gone.json'), path.join(fx.dir, 'gone.json')), null);
+    assert.match(refuse(fx.frozen, [path.join(fx.dir, 'gone.json'), fx.frozen]), /frozen/, 'any listed frozen path counts');
+  } finally {
+    fs.rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test('frozenCorpusPaths guards the real record even when the env adds a fixture', () => {
+  // A bare run with the test hook set must still refuse the real record, so the
+  // env path is added to the list and never replaces it.
+  const prev = process.env.SPIKE_CORPUS_FROZEN_PATH;
+  process.env.SPIKE_CORPUS_FROZEN_PATH = path.join(os.tmpdir(), 'fixture-frozen.json');
+  try {
+    assert.equal(typeof corpusModule.frozenCorpusPaths, 'function', 'frozenCorpusPaths is exported');
+    const paths = corpusModule.frozenCorpusPaths().map((p) => path.resolve(p));
+    assert.ok(paths.includes(path.resolve(SPIKE_CORPUS_PATH)), JSON.stringify(paths));
+    assert.ok(paths.includes(path.resolve(os.tmpdir(), 'fixture-frozen.json')), JSON.stringify(paths));
+  } finally {
+    if (prev === undefined) delete process.env.SPIKE_CORPUS_FROZEN_PATH;
+    else process.env.SPIKE_CORPUS_FROZEN_PATH = prev;
+  }
+});
+
+live('the CLI refuses to overwrite the frozen corpus and leaves it byte-identical', () => {
+  const fx = frozenFixture();
+  try {
+    const env = { ...process.env, SPIKE_CORPUS_FROZEN_PATH: fx.frozen };
+    const r = spawnSync('bun', [CLI, '--out', fx.frozen], { cwd: ROOT, encoding: 'utf8', env });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /frozen/);
+    assert.equal(fs.readFileSync(fx.frozen, 'utf8'), '["frozen"]\n');
+    const other = path.join(fx.dir, 'fresh.json');
+    const w = spawnSync('bun', [CLI, '--out', other], { cwd: ROOT, encoding: 'utf8', env });
+    assert.equal(w.status, 0, w.stdout + w.stderr);
+    assert.ok(JSON.parse(fs.readFileSync(other, 'utf8')).length >= 150);
+  } finally {
+    fs.rmSync(fx.dir, { recursive: true, force: true });
+  }
 });

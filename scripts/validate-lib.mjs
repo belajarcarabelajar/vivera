@@ -223,35 +223,54 @@ function firstStderrLine(res) {
 /**
  * Render every block with one mmdc call (one Chromium launch) by feeding mmdc a
  * markdown file; mmdc writes <out>-<n>.svg in block order. A failing batch does
- * not say which block broke, so on a non-zero exit or a missing SVG every block
- * is rendered alone to recover per-block results.
+ * not say which block broke, so on a non-zero exit or a missing SVG the set is
+ * split in two and each half rendered as its own batch, recursing until a set
+ * of one is rendered alone and reports its own error. One broken block in n
+ * costs about 1 + 2*log2(n) calls instead of 1 + n.
  * Returns { results: [{ ok: true, svg } | { ok: false, error }], calls }.
  */
 export function renderMermaidBatch(blocks, { mmdc, args = [], tmpDir }) {
   let calls = 0;
+  let sets = 0;
   const run = (input, output) => {
     calls++;
     return spawnSync(mmdc, [...args, '-i', input, '-o', output], { stdio: 'pipe' });
   };
+  // Every set gets its own directory: halves reuse the names out-1.svg and up,
+  // so a shared directory would let a half read an SVG left by another half.
+  const freshDir = () => {
+    const dir = path.join(tmpDir, `set-${++sets}`);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  };
 
-  const batchIn = path.join(tmpDir, 'batch.md');
-  const batchOut = path.join(tmpDir, 'out.md');
-  fs.writeFileSync(batchIn, blocks.map((b) => '```mermaid\n' + b + '\n```\n').join('\n'));
-  const batch = run(batchIn, batchOut);
-  if (batch.status === 0) {
-    const svgPaths = blocks.map((_, i) => path.join(tmpDir, `out-${i + 1}.svg`));
-    if (svgPaths.every((p) => fs.existsSync(p))) {
-      return { results: svgPaths.map((p) => ({ ok: true, svg: fs.readFileSync(p, 'utf8') })), calls };
-    }
-  }
-
-  const results = blocks.map((block, i) => {
-    const input = path.join(tmpDir, `block-${i + 1}.mmd`);
-    const output = path.join(tmpDir, `block-${i + 1}.svg`);
+  const renderOne = (block) => {
+    const dir = freshDir();
+    const input = path.join(dir, 'block.mmd');
+    const output = path.join(dir, 'block.svg');
     fs.writeFileSync(input, block);
     const res = run(input, output);
     if (res.status !== 0 || !fs.existsSync(output)) return { ok: false, error: firstStderrLine(res) };
     return { ok: true, svg: fs.readFileSync(output, 'utf8') };
-  });
+  };
+
+  const renderSet = (set) => {
+    if (set.length === 0) return [];
+    if (set.length === 1) return [renderOne(set[0])];
+    const dir = freshDir();
+    const batchIn = path.join(dir, 'batch.md');
+    fs.writeFileSync(batchIn, set.map((b) => '```mermaid\n' + b + '\n```\n').join('\n'));
+    const batch = run(batchIn, path.join(dir, 'out.md'));
+    if (batch.status === 0) {
+      const svgPaths = set.map((_, i) => path.join(dir, `out-${i + 1}.svg`));
+      if (svgPaths.every((p) => fs.existsSync(p))) {
+        return svgPaths.map((p) => ({ ok: true, svg: fs.readFileSync(p, 'utf8') }));
+      }
+    }
+    const mid = Math.ceil(set.length / 2);
+    return [...renderSet(set.slice(0, mid)), ...renderSet(set.slice(mid))];
+  };
+
+  const results = renderSet(blocks);
   return { results, calls };
 }

@@ -94,16 +94,42 @@ if [ "$block_count" -eq 0 ]; then
   exit 1
 fi
 
-while IFS= read -r mmd; do
-  svg="${mmd%.mmd}.svg"
-  if "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \
-       --input "$mmd" --output "$svg"; then
-    rendered=$((rendered + 1))
-  else
-    echo "  ❌ FAILED: ${mmd#$STAGE_DIR/}" >&2
-    errors=$((errors + 1))
-  fi
-done < <(find "$STAGE_DIR" -name "*.mmd" | sort)
+mapfile -t staged_mmds < <(find "$STAGE_DIR" -name "*.mmd" | sort)
+
+# One mmdc call renders every block (one Chromium launch instead of one per
+# block) and writes out-<n>.svg in order. A batch that fails cannot say which
+# block broke, so it falls back to the per-block loop, which names it.
+BATCH_DIR="$TEMP_DIR/batch"
+mkdir -p "$BATCH_DIR"
+for mmd in "${staged_mmds[@]}"; do
+  printf '```mermaid\n'; cat "$mmd"; printf '```\n\n'
+done > "$BATCH_DIR/all.md"
+batch_ok=0
+if "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \
+     --input "$BATCH_DIR/all.md" --output "$BATCH_DIR/out.md" 2>/dev/null; then
+  batch_ok=1
+  for i in "${!staged_mmds[@]}"; do
+    [ -f "$BATCH_DIR/out-$((i + 1)).svg" ] || batch_ok=0
+  done
+fi
+
+if [ "$batch_ok" -eq 1 ]; then
+  for i in "${!staged_mmds[@]}"; do
+    mv "$BATCH_DIR/out-$((i + 1)).svg" "${staged_mmds[$i]%.mmd}.svg"
+  done
+  rendered=$((rendered + ${#staged_mmds[@]}))
+else
+  for mmd in "${staged_mmds[@]}"; do
+    svg="${mmd%.mmd}.svg"
+    if "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \
+         --input "$mmd" --output "$svg"; then
+      rendered=$((rendered + 1))
+    else
+      echo "  ❌ FAILED: ${mmd#$STAGE_DIR/}" >&2
+      errors=$((errors + 1))
+    fi
+  done
+fi
 
 # ---- Hero: light + dark ----------------------------------------------------
 hero_mmd="$STAGE_DIR/hero-src/$(slugify "$REPO_DIR/$HERO_FILE")-block${HERO_BLOCK}.mmd"

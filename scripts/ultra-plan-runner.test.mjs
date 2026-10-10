@@ -2216,3 +2216,12 @@ test('a RED step whose loop never converges fails with the exhausted budget', ()
     rmSync(marker, { force: true });
   }
 });
+
+test('validatePlan reports a strict-YAML failure as an error when given the frontmatter', () => {
+  const plan = { schema: 'ultra-plan/v1', runner_contract: true, defaults: {}, tasks: [] };
+  const bad = 'files: { modify: [a/[x].astro] }\n';
+  const { errors } = validatePlan(plan, '', { frontmatter: bad });
+  assert.ok(errors.some((e) => /not valid YAML/.test(e)), errors.join('\n'));
+  const clean = validatePlan(plan, '', { frontmatter: 'schema: ultra-plan/v1\nplan_id: x\n' });
+  assert.ok(!clean.errors.some((e) => /not valid YAML/.test(e)));
+});

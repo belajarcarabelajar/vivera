@@ -27,6 +27,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { splitFrontmatter, mergeFrontmatter, PUBLISHER_VERSION } from './plan-publish-frontmatter.mjs';
+import { strictYamlError } from './frontmatter-strict.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PLAN_PATH = path.join(ROOT, 'docs', 'code-plan', 'plans', '2026-09-26-plan-publish-to-obsidian.md');
@@ -417,36 +418,43 @@ test('source_hash changes when one character of the plan changes', () => {
 
 // ---------- pass-through: the runner contract ----------
 
-test('the tasks array survives byte-identical', () => {
+test('runner-contract keys are pruned from the mirror: no tasks, no defaults', () => {
   const out = mergeFrontmatter(plan(), ctx());
-  assert.ok(out.includes(TASKS_BLOCK), 'tasks block must appear verbatim in the output');
-  // ...and no key of ours leaked into the middle of it.
-  assert.equal(out.match(/^  - id: T\d$/gm).length, 2);
-  assert.equal(out.match(/^tasks:$/gm).length, 1);
+  const published = splitFrontmatter(out).frontmatter;
+  for (const key of ['schema', 'version', 'runner_contract', 'defaults', 'tasks']) {
+    assert.equal(new RegExp(`^${key}[ \\t]*:`, 'm').test(published), false, `${key} must not reach the vault`);
+  }
+  // Continuation lines of a pruned block go with it, whatever their indentation.
+  assert.equal(/^[ \t]+(- id:|retry_transient_max|depends_on|files:)/m.test(published), false);
+  assert.equal(/^[ \t]*- /m.test(published), false, 'no orphan sequence item survives');
+  assert.ok(out.includes('Source: ' + PLAN_PATH), 'the runner-owned original stays reachable via source_path');
 });
 
-test('every other ultra-plan key survives untouched', () => {
-  const out = mergeFrontmatter(plan(), ctx());
-  for (const line of [
-    'schema: ultra-plan/v1',
-    'plan_id: 2026-09-26-plan-publish-to-obsidian',
-    'version: 1',
-    'runner_contract: true',
-    'defaults:',
-    '  retry_transient_max: 1',
-    '  on_precondition_fail: stop-task-continue-independent',
-  ]) {
-    assert.ok(out.includes(line + '\n'), `missing: ${line}`);
-  }
-  const published = splitFrontmatter(out).frontmatter;
-  assert.match(published, /^schema: ultra-plan\/v1$/m);
-  assert.match(published, /^runner_contract: true$/m);
+test('scalar plan metadata survives: plan_id, classification, spec', () => {
+  const text = plan().replace('version: 1\n', 'version: 1\nclassification: Bounded\nspec: docs/code-plan/specs/x.md\n');
+  const published = splitFrontmatter(mergeFrontmatter(text, ctx())).frontmatter;
+  assert.match(published, /^plan_id: 2026-09-26-plan-publish-to-obsidian$/m);
+  assert.match(published, /^classification: Bounded$/m);
+  assert.match(published, /^spec: docs\/code-plan\/specs\/x\.md$/m);
+});
+
+test('a block-style pruned key (sequence at column 0) is pruned with its items', () => {
+  const text = '---\nschema: ultra-plan/v1\nstatus: Draft\ntasks:\n- id: T1\n  depends_on: []\n# a comment\n- id: T2\nplan_id: x\n---\n\n# T\n';
+  const published = splitFrontmatter(mergeFrontmatter(text, ctx())).frontmatter;
+  assert.equal(/id: T[12]/.test(published), false);
+  assert.match(published, /^plan_id: x$/m);
+});
+
+test('the mirror is valid YAML even when the source plan is not', () => {
+  const text = plan().replace('modify: [], test: [scripts/plan-publish-registry.test.mjs]', 'modify: [pages/[token].astro], test: []');
+  assert.ok(strictYamlError(splitFrontmatter(text).frontmatter), 'precondition: the source is not valid YAML');
+  assert.equal(strictYamlError(splitFrontmatter(mergeFrontmatter(text, ctx())).frontmatter), null);
 });
 
 test('the output still opens and closes exactly one frontmatter fence', () => {
   const out = mergeFrontmatter(plan(), ctx());
   const { frontmatter, body } = splitFrontmatter(out);
-  assert.ok(frontmatter.includes('schema: ultra-plan/v1'));
+  assert.ok(frontmatter.includes('plan_id: 2026-09-26-plan-publish-to-obsidian'));
   assert.ok(body.startsWith('# Plan Publishing to Obsidian'));
 });
 
@@ -508,10 +516,11 @@ test('an empty string does not throw and still yields a parseable document', () 
   assert.ok(splitFrontmatter(out).frontmatter.includes('source_hash:'));
 });
 
-test('a plan whose status is missing but has other ultra-plan keys keeps them', () => {
+test('a plan whose status is missing still publishes, with the contract keys pruned', () => {
   const out = mergeFrontmatter(plan({ status: null }), ctx());
-  assert.ok(out.includes('schema: ultra-plan/v1'));
-  assert.ok(out.includes(TASKS_BLOCK));
+  assert.equal(fmValue(out, 'status'), 'Draft');
+  assert.equal(out.includes('schema: ultra-plan/v1'), false);
+  assert.equal(out.includes(TASKS_BLOCK), false);
 });
 
 // ---------- the Related section ----------
@@ -571,11 +580,13 @@ test('emits published alongside the contract-required updated', () => {
 
   // The version stamp must move whenever the emitted document changes, or every
   // mirror already on disk keeps reporting current and never gains the change.
-  // Last bumped for the quoted `source_hash`, which altered the emitted document
-  // without touching the plan text — and therefore without moving any hash.
-  assert.equal(PUBLISHER_VERSION, 3,
-    'PUBLISHER_VERSION must be 3: the emitted document changed (source_hash is now '
-    + 'quoted), and the bump is what forces the existing mirrors to re-publish. '
+  // Last bumped for pruning the runner contract (`schema`, `version`,
+  // `runner_contract`, `defaults`, `tasks`) from the mirror, which altered the
+  // emitted document without touching the plan text, and therefore without
+  // moving any hash.
+  assert.equal(PUBLISHER_VERSION, 4,
+    'PUBLISHER_VERSION must be 4: the emitted document changed (the runner contract '
+    + 'is pruned), and the bump is what forces the existing mirrors to re-publish. '
     + 'Asserted as a literal on purpose — this one test exists to fail the day '
     + 'someone changes the emitted document and forgets to bump it.');
 });

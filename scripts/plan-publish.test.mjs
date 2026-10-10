@@ -266,15 +266,16 @@ test('editing the source then re-publishing rewrites the mirror', () => {
   cleanup(f);
 });
 
-test('a plan with ultra-plan frontmatter keeps its tasks array in the mirror', () => {
+test('a plan with ultra-plan frontmatter reaches the mirror without its runner contract', () => {
   const f = fixture('ultra');
   const body = '---\nschema: ultra-plan/v1\nplan_id: x\nstatus: Approved\ntasks:\n  - id: T1\n    depends_on: []\n---\n\n# Ultra\n\ntext\n';
   const plan = f.writePlan(PLAN, body);
   assert.equal(run([plan], f).code, 0);
 
   const text = readFileSync(f.destPath(PLAN), 'utf8');
-  assert.ok(text.includes('schema: ultra-plan/v1'), 'runner contract keys must survive');
-  assert.ok(text.includes('  - id: T1'), 'the tasks array must survive byte-identical');
+  assert.ok(!text.includes('schema: ultra-plan/v1'), 'runner contract keys are pruned');
+  assert.ok(!text.includes('  - id: T1'), 'the tasks array is pruned');
+  assert.ok(/^plan_id: x$/m.test(text), 'scalar plan metadata survives');
   assert.ok(/^status: Approved$/m.test(text), "the plan's own status must be reused verbatim");
   cleanup(f);
 });

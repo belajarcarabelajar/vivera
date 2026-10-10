@@ -12,18 +12,25 @@
 // only 40 declare `schema: ultra-plan/v1` and 228 carry no frontmatter at all,
 // so "no frontmatter" is the common case rather than an edge case: the `---`
 // fence pair is emitted unconditionally and the body is copied through
-// verbatim. When a frontmatter block IS present, two contracts have to hold at
-// once, and they fight each other:
+// verbatim. When a frontmatter block IS present, two readers want different
+// things from it:
 //
 //   1. The vault needs `title`, `type`, `para`, `status`, `created`, ... to
-//      file, search and graph the note.
+//      file, search and graph the note, and Obsidian renders them as Properties.
 //   2. `ultra-plan-runner.mjs` needs the original document, including the
-//      nested `tasks:` array, unchanged. A YAML parse-and-redump would reflow
-//      and re-indent that array, and it would look like valid YAML while
-//      quietly breaking the runner contract. So this is a LINE-LEVEL merge:
-//      every line of the original frontmatter is copied verbatim, and only the
-//      column-0 lines of the keys this module owns are dropped and re-emitted.
-//      A real YAML round-trip was considered and rejected for that reason.
+//      nested `tasks:` array. It reads the SOURCE plan, never the mirror (the
+//      mirror gate only compares `source_hash` and `publisher_version`).
+//
+// Versions 1-3 copied every original line into the mirror so that (2) could be
+// served from either file. That was the wrong trade: the runner contract
+// (`schema`, `version`, `runner_contract`, `defaults`, `tasks`) landed in the
+// vault as Properties, up to 366 lines of nested YAML per note, and a lenient
+// source line such as an unquoted `[token].astro` made the whole block invalid
+// YAML, which Obsidian then shows as raw red text. So the mirror now DROPS those
+// five keys together with their continuation lines; `source_path` points at the
+// plan that still holds them. Other keys (`plan_id`, `classification`, `spec`,
+// anything unknown) pass through untouched, one line at a time. The merge stays
+// LINE-LEVEL, not a YAML parse-and-redump, so surviving lines are never reflowed.
 //
 // Why this module is pure: the only step that needs the outside world is
 // "does the project index exist?", and a `[[wikilink]]` must never be emitted
@@ -100,7 +107,12 @@ import path from 'node:path';
 // unchanged plan writes nothing and the fix would never reach a real mirror.
 // Healing the existing mirrors requires republishing them; the bump is what
 // makes the publisher willing to.
-export const PUBLISHER_VERSION = 3;
+//
+// 4 - pruned the runner contract (`schema`, `version`, `runner_contract`,
+// `defaults`, `tasks`) from the mirror. Same mechanism as 2 and 3: the plan text
+// does not change, so without the bump every mirror on disk would keep reporting
+// current and keep its 366 lines of Properties.
+export const PUBLISHER_VERSION = 4;
 
 // Column-0 keys this module owns. Any other line, at any indentation, is
 // copied through untouched. `published` is owned for the same reason `updated`
@@ -121,6 +133,14 @@ const OWNED_KEYS = [
   'publisher_version',
 ];
 
+// Column-0 keys of the runner contract. They stay in the plan, where the runner
+// reads them, and are dropped from the mirror together with every following line
+// up to the next column-0 key: indented lines, `- ` items at column 0, comments
+// and blank lines all belong to the block they follow.
+const PRUNED_KEYS = ['schema', 'version', 'runner_contract', 'defaults', 'tasks'];
+
+const PRUNED_RE = new RegExp(`^(${PRUNED_KEYS.join('|')})[ \\t]*:`);
+const TOP_KEY_RE = /^[A-Za-z_][\w-]*[ \t]*:/;
 const OWNED_RE = new RegExp(`^(${OWNED_KEYS.join('|')})[ \\t]*:`);
 const FENCE_RE = /^---[ \t]*$/;
 const HEADING1_RE = /^#[ \t]+(.*\S)[ \t]*$/m;
@@ -260,7 +280,8 @@ function withRelated(body, planPath) {
 //
 // Emitted properties: title, type, para, status, created, updated, related
 // (only when resolvable), source_path, source_hash, project, publisher_version.
-// Everything else in the source frontmatter is copied through untouched.
+// The runner-contract keys (see PRUNED_KEYS) are dropped; everything else in the
+// source frontmatter is copied through untouched.
 export function mergeFrontmatter(planText, ctx) {
   const text = typeof planText === 'string' ? planText : '';
   const { planPath = '', projectName = '', today = '', exists, indexPath, vaultRoot } = ctx ?? {};
@@ -271,7 +292,10 @@ export function mergeFrontmatter(planText, ctx) {
   // the value is not parsed, re-quoted, or mapped onto another enum.
   let verbatimStatus = null;
   const passthrough = [];
+  let pruning = false;
   for (const line of frontmatter.split('\n')) {
+    if (TOP_KEY_RE.test(line)) pruning = PRUNED_RE.test(line);
+    if (pruning) continue;
     const m = OWNED_RE.exec(line);
     if (!m) {
       passthrough.push(line);

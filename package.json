@@ -41,7 +41,8 @@
     "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun test scripts/ && bun scripts/sync-snippets.mjs --check"
   },
   "devDependencies": {
-    "@mermaid-js/mermaid-cli": "^12.0.0"
+    "@mermaid-js/mermaid-cli": "^12.0.0",
+    "yaml": "^2.9.1"
   },
   "engines": {
     "bun": ">=1.1.0",

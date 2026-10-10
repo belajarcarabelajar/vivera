@@ -32,13 +32,14 @@
     "graphify:sync": "bun scripts/graphify-sync.mjs",
     "skills:link": "bun scripts/install-skill-links.mjs",
     "skills:check": "bun scripts/install-skill-links.mjs --check",
-    "agents:check": "bun scripts/validate-agents.mjs",
+    "agents:check": "bun scripts/validate-agents.mjs && bun scripts/gen-sprite-agents.mjs --check",
+    "agents:gen": "bun scripts/gen-sprite-agents.mjs",
     "graphify:check": "bun scripts/graphify-sync.mjs --check",
     "math:bayes": "bun scripts/bayesian-confidence.mjs",
     "math:invariants": "bun scripts/formal-invariants.mjs",
     "math:batch": "bun scripts/queueing-batch.mjs",
     "export:history": "bun scripts/export-opencode-history.mjs",
-    "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun test scripts/ && bun scripts/sync-snippets.mjs --check"
+    "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun scripts/gen-sprite-agents.mjs --check && bun test scripts/ && bun scripts/sync-snippets.mjs --check"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^12.0.0",

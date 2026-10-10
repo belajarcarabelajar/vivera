@@ -9,7 +9,7 @@ import * as corpusModule from './spike-skipif-corpus.mjs';
 import {
   normalizeCmd, stableId, buildCorpus, balanceOf, resolveVault, collect, planFiles,
 } from './spike-skipif-corpus.mjs';
-import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
+import { classifySpikeSkipIf, SPIKE_CORPUS_PATH } from './spike-skipif-classifier.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = path.join(ROOT, 'scripts', 'spike-skipif-corpus.mjs');
@@ -276,8 +276,25 @@ test('frozenCorpusRefusal refuses only an existing frozen target', () => {
     assert.match(refuse(fx.frozen, fx.frozen), /--out/);
     assert.equal(refuse(path.join(fx.dir, 'other.json'), fx.frozen), null);
     assert.equal(refuse(path.join(fx.dir, 'gone.json'), path.join(fx.dir, 'gone.json')), null);
+    assert.match(refuse(fx.frozen, [path.join(fx.dir, 'gone.json'), fx.frozen]), /frozen/, 'any listed frozen path counts');
   } finally {
     fs.rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test('frozenCorpusPaths guards the real record even when the env adds a fixture', () => {
+  // A bare run with the test hook set must still refuse the real record, so the
+  // env path is added to the list and never replaces it.
+  const prev = process.env.SPIKE_CORPUS_FROZEN_PATH;
+  process.env.SPIKE_CORPUS_FROZEN_PATH = path.join(os.tmpdir(), 'fixture-frozen.json');
+  try {
+    assert.equal(typeof corpusModule.frozenCorpusPaths, 'function', 'frozenCorpusPaths is exported');
+    const paths = corpusModule.frozenCorpusPaths().map((p) => path.resolve(p));
+    assert.ok(paths.includes(path.resolve(SPIKE_CORPUS_PATH)), JSON.stringify(paths));
+    assert.ok(paths.includes(path.resolve(os.tmpdir(), 'fixture-frozen.json')), JSON.stringify(paths));
+  } finally {
+    if (prev === undefined) delete process.env.SPIKE_CORPUS_FROZEN_PATH;
+    else process.env.SPIKE_CORPUS_FROZEN_PATH = prev;
   }
 });
 

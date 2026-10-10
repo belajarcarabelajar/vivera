@@ -224,15 +224,21 @@ export function checkPreconditions(corpus, minRows) {
   return balance;
 }
 
+// SPIKE_CORPUS_FROZEN_PATH lets tests add a fixture; it never replaces the real
+// record, so a bare run with the hook set still refuses to overwrite it.
+export function frozenCorpusPaths() {
+  return [SPIKE_CORPUS_PATH, process.env.SPIKE_CORPUS_FROZEN_PATH].filter(Boolean);
+}
+
 /**
  * The default output is the frozen spike record (gitignored, so git cannot
  * restore it); overwriting it would silently change the evidence the published
  * verdict is reproduced from. Returns the refusal message, or null to proceed.
- * SPIKE_CORPUS_FROZEN_PATH exists so tests can point the guard at a fixture.
  */
-export function frozenCorpusRefusal(out, frozen = process.env.SPIKE_CORPUS_FROZEN_PATH || SPIKE_CORPUS_PATH) {
-  if (path.resolve(out) !== path.resolve(frozen) || !fs.existsSync(frozen)) return null;
-  return `refusing to overwrite the frozen corpus at ${frozen}: it is the evidence the jev spike `
+export function frozenCorpusRefusal(out, frozen = frozenCorpusPaths()) {
+  const hit = [frozen].flat().find((f) => path.resolve(out) === path.resolve(f) && fs.existsSync(f));
+  if (!hit) return null;
+  return `refusing to overwrite the frozen corpus at ${hit}: it is the evidence the jev spike `
     + 'verdict is reproduced from (see scripts/spike-skipif-classifier.mjs). Pass --out <other path> '
     + 'for a fresh harvest; replacing the record means moving it by hand and re-running the probe.';
 }

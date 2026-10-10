@@ -15,7 +15,8 @@
 // reach GitHub are asserted rather than assumed. A purely stubbed runner cannot
 // see `--body-file -` at all, which is exactly the thing most likely to be
 // wrong. The live-state READ goes through that same runner, so a fake gh here
-// has to answer `issue view --json state` the way real gh does.
+// has to answer `issue view --json state` the way real gh does, and `issue list`
+// (the lookup an unrecorded plan makes before it creates) with a JSON array.
 //
 // The consequence worth knowing before reading the assertions: `current` is no
 // longer free. It costs one `gh issue view`. Before the live read, the state
@@ -143,7 +144,8 @@ function withFakeGh(script, fn) {
 }
 
 // Records argv and stdin, then answers the way the real gh it stands in for
-// answers: JSON for `issue view --json state`, a bare URL for create and edit.
+// answers: JSON for `issue view --json state`, an empty JSON array for
+// `issue list`, a bare URL for create and edit.
 // A fake that printed the URL to every subcommand would fail the live-state read
 // for a reason that has nothing to do with the behaviour under test, and a test
 // that fails for the wrong reason is worse than no test.
@@ -153,6 +155,8 @@ function fakeGh({ state = 'OPEN', viewOk = true } = {}) {
     : '  echo "gh: could not resolve to an issue with the number 7" >&2; exit 1';
   return `echo "$@" >> "$CAPTURE_ARGV"; cat >> "$CAPTURE_STDIN"; if [ "$1 $2" = "issue view" ]; then
 ${view}
+elif [ "$1 $2" = "issue list" ]; then
+  echo '[]'
 else
 echo "$FAKE_ISSUE_URL"
 fi`;
@@ -587,7 +591,12 @@ test('a dry run reports the action and records nothing', () => {
       assert.equal(res.dryRun, true);
       assert.equal(res.written, false);
       assert.equal(res.cfg, undefined, 'a dry run must not hand back a config to persist');
-      assert.equal(g.argv(), '', 'a dry run must not call gh');
+      // AC4: the dry run still looks before it would create, so the list is its one call.
+      assert.equal(
+        g.argv(),
+        'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state\n',
+        'a dry run makes the issue-list read and no other gh call',
+      );
     });
   } finally {
     f.cleanup();
@@ -783,6 +792,200 @@ test('a run over several plans records every plan, not only the last', () => {
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
+    f.cleanup();
+  }
+});
+
+// Answers each subcommand in the shape real gh prints it, so a refusal below is
+// the lookup's own and not a fake that printed a URL where a list belongs.
+function ghAnswers({ list = [], listResult = null, bodies = {}, state = 'OPEN' } = {}) {
+  return stub((args) => {
+    const verb = args.slice(0, 2).join(' ');
+    const json = args[args.indexOf('--json') + 1];
+    if (verb === 'issue list') return listResult ?? { ok: true, status: 0, out: JSON.stringify(list) };
+    if (verb === 'issue view' && json === 'body') return { ok: true, status: 0, out: JSON.stringify({ body: bodies[args[2]] }) };
+    if (verb === 'issue view') return { ok: true, status: 0, out: JSON.stringify({ state }) };
+    const url = 'https://github.com/u/snippet/issues/11';
+    return { ok: true, status: 0, out: url, url };
+  });
+}
+
+const TITLE = '2026-10-01-add-pr';
+const LIST_ARGV = 'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state';
+const issueRow = (number, title = TITLE, state = 'OPEN') => ({ number, title, url: `https://github.com/u/snippet/issues/${number}`, state });
+const trailerBody = (text, key = PLAN_REL) => issueBody(text, { planId: TITLE, key, sourcePath: null, status: planStatus(text), generatedBy: 'u/snippet' });
+const verbs = (run) => run.calls.map((c) => c.args.slice(0, 2).join(' '));
+const refusal = (...needles) => (e) => e.message.includes('u/snippet')
+  && e.message.includes(TITLE)
+  && /Nothing was created and nothing was written/.test(e.message)
+  && needles.every((n) => n.test(e.message));
+
+test('an unrecorded plan with no same-title issue lists, then creates', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers({ list: [issueRow(3, `${TITLE}-followup`)] });
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.deepEqual(verbs(run), ['issue list', 'issue create']);
+    // No --search: the search index lags a fresh create, and that create is the one to find.
+    assert.equal(run.calls[0].args.join(' '), LIST_ARGV);
+    assert.equal(res.action, 'create');
+    assert.equal(res.written, true);
+    assert.equal(res.cfg.issues[PLAN_REL].number, 11);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an unrecorded plan whose issue exists with this trailer is adopted', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(text) } });
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.deepEqual(verbs(run), ['issue list', 'issue view'], 'an adopted issue is never filed a second time');
+    assert.equal(run.calls[1].args.join(' '), 'issue view 5 --repo u/snippet --json body');
+    assert.equal(res.action, 'adopt');
+    assert.equal(res.written, true, 'a current adopted issue is still recorded');
+    const row = res.cfg.issues[PLAN_REL];
+    assert.equal(row.number, 5);
+    assert.equal(row.url, 'https://github.com/u/snippet/issues/5');
+    assert.equal(row.hash, hashOf(text));
+    assert.equal(row.state, 'open');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('same title without a plan-sync trailer is refused', () => {
+  const f = tmpPlan(plan('Draft'));
+  const cfg = cfgFor(f.repoRoot);
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: 'a hand-written issue that happens to share the title' } });
+    assert.throws(() => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run }), refusal(/#5\b/));
+    assert.ok(!verbs(run).includes('issue create'));
+    assert.deepEqual(cfg.issues, {}, 'a refusal leaves the config as it was');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a same-title issue whose trailer names another key is refused', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  const cfg = cfgFor(f.repoRoot);
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(text, 'docs/code-plan/plans/moved.md') } });
+    assert.throws(() => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run }), refusal(/#5\b/, /moved\.md/));
+    assert.ok(!verbs(run).includes('issue create'));
+    assert.deepEqual(cfg.issues, {});
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('two same-title issues are refused', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers({
+      list: [issueRow(5), issueRow(6, TITLE, 'CLOSED')],
+      bodies: { 5: trailerBody(text), 6: trailerBody(text) },
+    });
+    assert.throws(
+      () => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }),
+      refusal(/#5\b/, /#6\b/),
+    );
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a failed issue list is refused', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers({ listResult: { ok: false, status: 1, out: '', err: 'HTTP 502: Bad Gateway' } });
+    assert.throws(
+      () => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }),
+      refusal(/502/, /absence unproven/),
+    );
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an unparsable issue list is refused', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers({ listResult: { ok: true, status: 0, out: 'https://github.com/u/snippet/issues/7' } });
+    assert.throws(
+      () => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }),
+      refusal(/absence unproven/),
+    );
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a list of LIST_LIMIT rows is refused', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const list = Array.from({ length: 1000 }, (_, i) => issueRow(i + 1, `unrelated plan ${i + 1}`));
+    const run = ghAnswers({ list });
+    assert.throws(
+      () => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }),
+      refusal(/absence unproven/),
+    );
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a recorded row makes no issue list call', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers();
+    const res = syncOne(cfgFor(f.repoRoot, {
+      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+    }), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.equal(res.action, 'current');
+    assert.deepEqual(verbs(run).filter((v) => v === 'issue list'), [], 'a recorded number is read, not looked up');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a dry run on an unrecorded plan reads and writes nothing', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(text) } });
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true });
+    assert.equal(res.written, false);
+    assert.equal(res.dryRun, true);
+    assert.equal(res.action, 'adopt');
+    assert.equal(res.cfg, undefined, 'a dry run must not hand back a config to persist');
+    assert.deepEqual(verbs(run), ['issue list', 'issue view']);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an adopted issue whose plan changed is edited and marked adopted', () => {
+  const f = tmpPlan(plan('Draft', '\nedited after the create'));
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(plan('Draft')) } });
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'issue edit']);
+    assert.equal(run.calls[2].args[2], '5', 'the edit goes to the adopted issue');
+    assert.equal(res.action, 'update-body');
+    assert.equal(res.adopted, true);
+    assert.equal(res.cfg.issues[PLAN_REL].number, 5);
+  } finally {
     f.cleanup();
   }
 });

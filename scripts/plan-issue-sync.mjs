@@ -34,8 +34,8 @@
 // (`gh issue view <n> --json state`). The recorded state is this script's own
 // past opinion, and a decision made from it cannot fail, so it is checked rather
 // than believed. That read is what turns CURRENT from an assumption into a
-// statement, and it costs one call per recorded plan and no call at all for a
-// create.
+// statement, and it costs one call per recorded plan. An unrecorded plan costs a
+// `gh issue list` before its create instead (see findExistingIssue).
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
@@ -277,6 +277,65 @@ export function readLiveState(run, { number, repo }) {
   return raw.toLowerCase();
 }
 
+// A create that gh acknowledged but whose row was never saved leaves no memory
+// here, so an unrecorded plan looks for its issue before filing another one.
+export const LIST_LIMIT = 1000;
+
+export function findExistingIssue(run, { repo, title, key }) {
+  // No --search: that reads the search index, which lags a fresh create. The plain
+  // list reads the repository's issues directly.
+  const argv = ['issue', 'list', '--repo', repo, '--state', 'all', '--limit', String(LIST_LIMIT), '--json', 'number,title,url,state'];
+  const refuse = (why) => new Error(
+    `the lookup for an existing issue titled "${title}" (key ${key}) in ${repo} refused: ${why}. `
+    + 'Nothing was created and nothing was written.',
+  );
+
+  const r = run(argv);
+  if (!r.ok) throw refuse(`gh ${argv.join(' ')} failed (${r.err || 'gh exited non-zero'}), so absence unproven`);
+  let rows;
+  try { rows = JSON.parse(r.out); } catch { rows = undefined; }
+  if (!Array.isArray(rows)) {
+    throw refuse(`gh ${argv.join(' ')} did not print a JSON array (output: ${r.out || 'nothing'}), so absence unproven`);
+  }
+  if (rows.length >= LIST_LIMIT) {
+    throw refuse(`gh returned ${rows.length} rows, the --limit of ${LIST_LIMIT}, so an issue past the limit cannot be ruled out: absence unproven`);
+  }
+
+  const same = rows.filter((i) => i && i.title === title);
+  if (same.length === 0) return null;
+
+  const numbers = same.map((i) => `#${i.number}`).join(', ');
+  const found = same.map((row) => {
+    const view = ['issue', 'view', String(row.number), '--repo', repo, '--json', 'body'];
+    const vr = run(view);
+    let body;
+    if (vr.ok) {
+      try { body = JSON.parse(vr.out).body; } catch { body = undefined; }
+    }
+    if (typeof body !== 'string') {
+      throw refuse(`${numbers} carry this exact title, and gh ${view.join(' ')} returned no body (${vr.ok ? `output: ${vr.out || 'nothing'}` : vr.err || 'gh exited non-zero'})`);
+    }
+    return { row, trailer: parseTrailer(body) };
+  });
+  const describe = ({ row, trailer }) => (trailer
+    ? `#${row.number} (plan-sync trailer for key ${trailer.key}, plan_id ${trailer.plan_id})`
+    : `#${row.number} (no plan-sync trailer)`);
+
+  if (found.length > 1) {
+    throw refuse(`${found.length} issues carry this exact title: ${found.map(describe).join(', ')}. Adopting one would leave the rest as duplicates, so record the right number in plan.issues.json by hand and re-run`);
+  }
+  const [{ row, trailer }] = found;
+  // Anyone can type a title; only this script writes a trailer with the plan's key,
+  // so the trailer is the proof the issue belongs to this plan.
+  if (!trailer || trailer.key !== key || trailer.plan_id !== title) {
+    throw refuse(`${describe(found[0])} has this exact title but its trailer does not name this plan, so it may be somebody else's issue. Retitle it or record its number in plan.issues.json by hand, then re-run`);
+  }
+  if (row.state !== 'OPEN' && row.state !== 'CLOSED') {
+    throw refuse(`#${row.number} is in state ${JSON.stringify(row.state)}, which is neither OPEN nor CLOSED`);
+  }
+  return { number: row.number, url: row.url, state: row.state.toLowerCase(), hash: trailer.hash };
+}
+
 // ---------- the action decision ----------
 
 // This is the deterministic half. Everything above reads state; everything below
@@ -412,21 +471,33 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
     throw new Error(`${full} has no "status:" in its frontmatter, so its issue state cannot be derived. Publish the plan through the runner first, or state the status explicitly.`);
   }
 
-  const entry = cfg.issues[key] ?? null;
+  let entry = cfg.issues[key] ?? null;
   // Read GitHub BEFORE deciding. A dry run reads too, because `--check` is
   // exactly the question "does the sidecar still describe the issue", and that can
   // only be answered against the issue. An unreadable state throws here, the same
   // way the missing repository mapping above does, and no write follows it.
-  const liveState = entry && entry.number
-    ? readLiveState(run, { number: entry.number, repo })
-    : null;
+  let liveState = null;
+  let adopted = null;
+  if (entry && entry.number) {
+    liveState = readLiveState(run, { number: entry.number, repo });
+  } else {
+    adopted = findExistingIssue(run, { repo, title: id, key });
+    if (adopted) {
+      entry = { ...(entry ?? {}), number: adopted.number, url: adopted.url, hash: adopted.hash };
+      liveState = adopted.state;
+    }
+  }
   const action = deriveAction({ entry, liveState, planText, status, key, id, repo });
+  // An adopted issue is recorded even when current: the row is what makes the next
+  // run read it by number instead of looking it up again.
+  const reported = adopted && action.kind === 'current' ? 'adopt' : action.kind;
+  const mark = adopted ? { adopted: true } : {};
 
-  if (action.kind === 'current') {
+  if (action.kind === 'current' && !adopted) {
     return { key, action: 'current', number: action.number, url: action.url, repo, status, written: false };
   }
   if (dryRun) {
-    return { key, action: action.kind, number: action.number ?? null, url: action.url ?? null, repo, status, written: false, dryRun: true };
+    return { key, action: reported, number: action.number ?? null, url: action.url ?? null, repo, status, written: false, dryRun: true, ...mark };
   }
 
   const result = applyAction(action, run);
@@ -454,7 +525,7 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
       synced_at: new Date().toISOString(),
     },
   };
-  return { key, action: action.kind, number: next[key].number, url: next[key].url, repo, status, written: true, cfg: { ...cfg, issues: next } };
+  return { key, action: reported, number: next[key].number, url: next[key].url, repo, status, written: true, cfg: { ...cfg, issues: next }, ...mark };
 }
 
 const USAGE = `usage:

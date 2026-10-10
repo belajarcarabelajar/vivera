@@ -84,6 +84,7 @@ sequenceDiagram
 - [Precondition 1: e.g. Base interfaces already committed on branch]
 - [Invariant 1: e.g. Do not change existing public function signatures]
 - **Impact reporting is mandatory, not optional.** If this chunk changes a shared interface, an exported shape, a config key, a CLI flag, or a documented rule, the report states it in one line, whether or not the subagent could fix it: `IMPACT: <surface> - <what breaks> - <evidence command>`. The parent then either assigns it to a chunk or records it in the follow-up backlog with a finish line. A subagent that keeps a discovered breakage to itself has not finished the task; it has moved the failure somewhere the parent cannot see it.
+- **Read-failure reporting is mandatory too.** Every source this chunk could not read (a tool missing from the catalog, an auth or network failure, a non-zero exit, a timeout, a list cut at its limit) is one `NOT READ: <source> (<reason>)` line in the report. A chunk that read everything writes `NOT READ: none`. An unread source folded into "no findings" is a false negative the parent cannot see.
 
 ## 5. Required Implementation & Tests
 - **Target Behavior:** [Describe the exact capability or fix to implement]
@@ -101,6 +102,7 @@ sequenceDiagram
 - [ ] Conflicting claims between overlapping reports resolved from the evidence, not by picking the newest report.
 - [ ] Each subagent's success claim re-verified by the parent (diff, log, exit status).
 - [ ] **Every `IMPACT:` line from every report is now either a task in the plan or a `defer:` line in the backlog — zero unassigned.** A name that reached the gather checkpoint and left with no owner is the exact failure this contract exists to prevent: the subagent was forbidden to edit the file, the parent never queued it, and the consumer stays broken while all chunks report green. Count the `IMPACT:` lines and the owners; the two numbers must match.
+- [ ] **Every `NOT READ:` line from every report is either re-read by the parent or carried into the synthesized result as unread.** A report with no `NOT READ:` line at all is incomplete and goes back to its owner.
 - [ ] Every surface named in the parent plan's `impacts` is either updated or verified unchanged, with the command that showed it.
 - [ ] Only new findings, blockers, and evidence merged into the parent task state.
 

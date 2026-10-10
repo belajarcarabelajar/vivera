@@ -20,6 +20,8 @@ Every line must hold. If one does not, STOP, name the line, and write nothing. A
 | 3 | `gh auth status` succeeds and `git fetch origin main` succeeds | 5.3: a token problem found after twenty commits is the worst place to find it. |
 | 4 | The user's limits are recorded in the plan | Optional deadline ("no new chunk after 06:00"), paid services allowed, paths that are off limits. Absent means none. |
 
+When every line holds, the first file the run writes is the handoff (path in section 5) with `Result: running`, the start time as ISO 8601 with its UTC offset, and `Last update: <time> <checklist item>`. A run that dies (usage limit, sleep, crash) then leaves a record on disk instead of nothing. A failed check still writes nothing.
+
 ## 2. What the run may and may not do
 
 | Runs without a human | Always waits for a human |
@@ -46,6 +48,7 @@ Every line must hold. If one does not, STOP, name the line, and write nothing. A
 - A deadline recorded at the entry gate stops new dispatch. Chunks already in flight finish.
 - **A text-only end of turn with open checklist items is a report.** Before ending a turn with no tool call, read the plan checklist. If an item is still `[ ]` and no blocker is written for it, the turn does not end: take the next item in the same message. Four endings are refused while work is owed: (1) a long summary that closes by announcing the next step, with no tool call, so the step never starts; (2) an offer to carry on unless the user would prefer otherwise, which waits for an answer nobody will give; (3) a list of decisions for the user when, by the run's own account, none of them blocks the remaining work (those go under `Waiting on a human`, section 3); (4) deciding this is a good place to report because the turn is long or a milestone is done. A status note goes in the same message as the next tool call. The stops that are valid are the ones where nothing can move without a human, a deadline recorded at the entry gate (above), a `budget_limited` wrap-up (`sucp-rules`, Goal Continuation), or a blocker deliberately protected from the run. This does not relax the table in section 2.
 - **Anything still running is not done.** A background command, a pending subagent, or a local job started in this run keeps its checklist item open. Wait for it and read its output before the item counts.
+- **The handoff is the run record.** After each checklist item turns `[x]` or a chunk is marked `blocked`, rewrite the handoff's `Last update` line and add the matching Evidence or Blocked row. Provenance: this follows the run record in "Building effective agent automations" (claude.dev, published 2026-10-08, read 2026-10-10). No overnight run here has died mid-run on record yet; tighten or delete this after the first handoff that shows one.
 - **Automatic continuations are capped.** When a harness or hook re-prompts the run on the same task with items still open, stop after the third re-prompt that adds no new evidence. Mark the task `blocked` in the handoff with what each attempt changed, so a run that is genuinely stuck ends where a human can review it.
 - Provenance: this rule comes from published prompting guidance for one model family (Opus 5.5, read 2026-10-10), reworded to hold for any model. No incident in this repository has measured it. Keep it, tighten it, or delete it after the first overnight handoff that shows an early stop or a clean run without one.
 - Work that never reaches `verified` gets **no pull request**. The registry refuses to record a PR before `verified`, and an unregistered PR is invisible to the merge order. Leave the committed branch and worktree intact and say so in the handoff.
@@ -54,11 +57,11 @@ Every line must hold. If one does not, STOP, name the line, and write nothing. A
 
 1. `verified`, then the PR from `templates/pull-request-template.md`, then `pr-registry pr <session> --number <N>`.
 2. Run the debt sweep (`sucp-debt-sweep`) as usual, with one change: **no follow-up executes unselected**. The multi-select question is the last act of the run. If no structured question tool exists or no answer arrives, every follow-up goes to the plan backlog with its `defer: <ceiling>, <upgrade-trigger>` marker. That is the sweep's own degrade path, so the session is complete either way.
-3. Write the handoff as a sibling of the plan (never inside it, plans stay small): `<plan-dir>/<plan-id>-overnight-handoff.md`.
+3. Finish the handoff started at the entry gate, as a sibling of the plan (never inside it, plans stay small): `<plan-dir>/<plan-id>-overnight-handoff.md`. Replace `Result: running` with the final result.
 
 | Handoff section | Content |
 |---|---|
-| Result | PR URL and number, session state, branch, worktree path. Or "no PR" with the reason |
+| Result | PR URL and number, session state, branch, worktree path. Or "no PR" with the reason. A handoff that still says `running` with no live process means the run died; its `Last update` names the last finished item |
 | Evidence | Each verification command and its exit code |
 | Decisions | One line each, from section 3 |
 | Blocked | Chunk, failing command, exit code, attempts used |

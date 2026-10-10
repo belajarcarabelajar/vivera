@@ -94,42 +94,22 @@ if [ "$block_count" -eq 0 ]; then
   exit 1
 fi
 
-mapfile -t staged_mmds < <(find "$STAGE_DIR" -name "*.mmd" | sort)
-
-# One mmdc call renders every block (one Chromium launch instead of one per
-# block) and writes out-<n>.svg in order. A batch that fails cannot say which
-# block broke, so it falls back to the per-block loop, which names it.
-BATCH_DIR="$TEMP_DIR/batch"
-mkdir -p "$BATCH_DIR"
-for mmd in "${staged_mmds[@]}"; do
-  printf '```mermaid\n'; cat "$mmd"; printf '```\n\n'
-done > "$BATCH_DIR/all.md"
-batch_ok=0
-if "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \
-     --input "$BATCH_DIR/all.md" --output "$BATCH_DIR/out.md" 2>/dev/null; then
-  batch_ok=1
-  for i in "${!staged_mmds[@]}"; do
-    [ -f "$BATCH_DIR/out-$((i + 1)).svg" ] || batch_ok=0
-  done
+# One mmdc call renders every block; a failing batch is bisected until each
+# broken block is named. That logic lives in mermaid-batch.mjs, shared with
+# validate-skill.mjs. Exit 1 means some block failed and is counted below, so
+# only another status or a malformed count line aborts here.
+batch_status=0
+# Run from the stage dir with relative paths so a FAILED line names the block,
+# not the absolute temp path.
+batch_counts=$(cd "$STAGE_DIR" && find . -name "*.mmd" | sed 's|^\./||' | sort |
+  bun "$REPO_DIR/scripts/mermaid-batch.mjs" --mmdc "$MMDC" -- \
+    $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet) || batch_status=$?
+if [ "$batch_status" -gt 1 ] || ! [[ "$batch_counts" =~ ^rendered=([0-9]+)\ errors=([0-9]+)$ ]]; then
+  echo "❌ mermaid-batch.mjs failed (exit $batch_status): $batch_counts" >&2
+  exit 1
 fi
-
-if [ "$batch_ok" -eq 1 ]; then
-  for i in "${!staged_mmds[@]}"; do
-    mv "$BATCH_DIR/out-$((i + 1)).svg" "${staged_mmds[$i]%.mmd}.svg"
-  done
-  rendered=$((rendered + ${#staged_mmds[@]}))
-else
-  for mmd in "${staged_mmds[@]}"; do
-    svg="${mmd%.mmd}.svg"
-    if "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \
-         --input "$mmd" --output "$svg"; then
-      rendered=$((rendered + 1))
-    else
-      echo "  ❌ FAILED: ${mmd#$STAGE_DIR/}" >&2
-      errors=$((errors + 1))
-    fi
-  done
-fi
+rendered=$((rendered + BASH_REMATCH[1]))
+errors=$((errors + BASH_REMATCH[2]))
 
 # ---- Hero: light + dark ----------------------------------------------------
 hero_mmd="$STAGE_DIR/hero-src/$(slugify "$REPO_DIR/$HERO_FILE")-block${HERO_BLOCK}.mmd"

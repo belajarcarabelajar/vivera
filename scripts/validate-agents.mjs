@@ -44,7 +44,7 @@ export const ALLOWED_FIELDS = [
 
 const NAME_MAX = 256;
 
-const ENUMS = {
+export const ENUMS = {
   permissionMode: ['default', 'acceptEdits', 'auto', 'dontAsk', 'bypassPermissions', 'plan', 'manual'],
   color: ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'],
   memory: ['user', 'project', 'local'],

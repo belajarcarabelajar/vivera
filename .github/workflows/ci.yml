@@ -107,6 +107,9 @@ jobs:
       - name: Validate Claude Code agents
         run: bun scripts/validate-agents.mjs
 
+      - name: Check the sprite agents match their role templates
+        run: bun scripts/gen-sprite-agents.mjs --check
+
       - name: Run Unit Tests
         run: bun test scripts/
 

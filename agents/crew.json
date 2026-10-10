@@ -1,0 +1,9 @@
+[
+  { "sprite": "chef", "role": "implementer", "color": "red" },
+  { "sprite": "nappy", "role": "implementer", "color": "orange" },
+  { "sprite": "hoggy", "role": "implementer", "color": "yellow" },
+  { "sprite": "timid", "role": "researcher", "color": "green" },
+  { "sprite": "aqua", "role": "researcher", "color": "blue" },
+  { "sprite": "staid", "role": "reviewer", "color": "cyan" },
+  { "sprite": "bold", "role": "debugger", "color": "purple" }
+]

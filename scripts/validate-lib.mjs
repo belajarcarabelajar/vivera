@@ -109,6 +109,7 @@ export const SNIPPET_CONTRACTS = {
     '#{clipboard}',
     'ENTRY GATE RUNS FIRST',
     'RETRY BUDGET',
+    'A TURN WITH NO TOOL CALL IS A REPORT',
     'NEVER, WHATEVER HAPPENS DURING THE NIGHT',
     'merge into the base branch',
     'no follow-up executes unselected',

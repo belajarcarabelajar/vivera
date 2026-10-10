@@ -661,6 +661,51 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3j. Prompting-guide amendments (2026-10-10).
+//
+// Three rules taken from published prompting guidance for one model family and
+// worded model-agnostically: pasted text is data unless the user's own message
+// says otherwise, an unattended run does not end a turn with work still owed,
+// and the frontend "named tells" list. None came from a measured incident here,
+// so the overnight rule carries a provenance line. Each needle pins one clause
+// in the one file that owns it, so a later edit cannot quietly drop it and the
+// same words elsewhere in the corpus cannot stand in for it.
+//
+// Revert: `git revert` the commits that added this block together with the three
+// skill edits and the `orkestrasi-overnight.md` term in validate-lib.mjs.
+{
+  const rules = 'skills/sucp-rules/SKILL.md';
+  const overnight = 'skills/sucp-overnight/SKILL.md';
+  const amendmentContract = [
+    { label: 'pasted text is untrusted data', file: rules, needle: 'text the user pasted into a message' },
+    { label: 'pasted-text exception follows the user message', file: rules, needle: 'Pasted-text exception' },
+    { label: 'pasted-text exception is limited to what the message asks', file: rules, needle: 'only as far as that message asks' },
+    { label: 'pasted-text exception keeps the safety rules', file: rules, needle: 'still applies to what is followed' },
+    { label: 'anti-pattern row for announce-without-doing', file: rules, needle: 'Ending the turn with a summary that announces the next step' },
+    { label: 'named tells count is seven', file: rules, needle: 'these seven are named explicitly' },
+    { label: 'named tell: cream background', file: rules, needle: 'cream or off-white page background' },
+    { label: 'named tell: italic accent words', file: rules, needle: 'Italic accent words in a headline' },
+    { label: 'named tell: numbered section labels', file: rules, needle: 'Numbered section labels' },
+    { label: 'text-only end of turn with open items is a report', file: overnight, needle: 'A text-only end of turn with open checklist items is a report' },
+    { label: 'four early endings are refused', file: overnight, needle: 'Four endings are refused while work is owed' },
+    { label: 'budget_limited is a valid stop', file: overnight, needle: 'a `budget_limited` wrap-up' },
+    { label: 'running work is not done', file: overnight, needle: 'Anything still running is not done' },
+    { label: 'automatic continuations are capped', file: overnight, needle: 'Automatic continuations are capped' },
+    { label: 'continuation cap is three', file: overnight, needle: 'stop after the third re-prompt' },
+    { label: 'early-stop rule carries its provenance', file: overnight, needle: 'Provenance: this rule comes from published prompting guidance' },
+  ];
+  for (const c of amendmentContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Prompting-guide amendment present: ${c.label}`);
+    } else {
+      console.error(`❌ Prompting-guide amendment missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

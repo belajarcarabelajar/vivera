@@ -92,32 +92,79 @@ export function balanceOf(corpus) {
   return { total, behavioural, loose, degenerate: behavioural === 0 || loose === 0 };
 }
 
-function planFiles(vault) {
+export const UNREAD_MISSING_SOURCE = 'source plan not on this host';
+export const UNREAD_NO_SOURCE_PATH = 'mirror has no tasks and no source_path';
+
+/**
+ * Where a vault mirror's runner contract lives.
+ *
+ * Since #45 the publisher drops `tasks` from the mirror, so the contract is
+ * only in the source plan named by `source_path`. A legacy mirror that still
+ * carries `tasks` is its own contract. A mirror that does not parse is passed
+ * through unchanged so `collect()` reports it the way it always has.
+ */
+function resolveMirror(mirror) {
+  let plan;
+  try {
+    plan = parseUltraPlanYaml(extractFrontmatter(fs.readFileSync(mirror, 'utf8')).frontmatter);
+  } catch {
+    return { file: mirror };
+  }
+  if (Array.isArray(plan.tasks) && plan.tasks.length > 0) return { file: mirror };
+  const sourcePath = typeof plan.source_path === 'string' ? plan.source_path : '';
+  if (sourcePath === '') return { unread: UNREAD_NO_SOURCE_PATH };
+  if (!fs.existsSync(sourcePath)) return { unread: UNREAD_MISSING_SOURCE, sourcePath };
+  return { file: sourcePath };
+}
+
+/**
+ * The files to harvest, each listed once by resolved path, plus the mirrors
+ * whose contract could not be reached. A source plan reached through several
+ * mirrors, or through a mirror and this checkout's own plans directory, keeps
+ * the attribution of the first mirror in sorted order.
+ */
+export function planFiles(vault, ownDir = path.join(ROOT, 'docs', 'code-plan', 'plans')) {
   const files = [];
+  const unread = [];
+  const seen = new Set();
+  const add = (file, project, label) => {
+    const key = path.resolve(file);
+    if (seen.has(key)) return;
+    seen.add(key);
+    files.push({ file, project, label });
+  };
   const projectsDir = path.join(vault, '01 - Projects');
   if (fs.existsSync(projectsDir)) {
     for (const project of fs.readdirSync(projectsDir).sort()) {
       const plansDir = path.join(projectsDir, project, 'plans');
       if (!fs.existsSync(plansDir)) continue;
-      for (const file of fs.readdirSync(plansDir).sort()) {
-        if (file.endsWith('.md')) files.push({ file: path.join(plansDir, file), project });
+      for (const name of fs.readdirSync(plansDir).sort()) {
+        if (!name.endsWith('.md')) continue;
+        const mirror = path.join(plansDir, name);
+        const resolved = resolveMirror(mirror);
+        // The label stays the mirror path so a row's source does not embed a
+        // host-specific absolute path when the contract came from source_path.
+        if (resolved.file) add(resolved.file, project, path.relative(vault, mirror));
+        else unread.push({ mirror, project, reason: resolved.unread, sourcePath: resolved.sourcePath });
       }
     }
   }
-  const ownDir = path.join(ROOT, 'docs', 'code-plan', 'plans');
   if (fs.existsSync(ownDir)) {
-    for (const file of fs.readdirSync(ownDir).sort()) {
-      if (file.endsWith('.md')) files.push({ file: path.join(ownDir, file), project: 'vivera' });
+    for (const name of fs.readdirSync(ownDir).sort()) {
+      const file = path.join(ownDir, name);
+      if (name.endsWith('.md')) add(file, 'vivera', path.relative(ROOT, file));
     }
   }
-  return files;
+  return { files, unread };
 }
 
-function rowsFromFile(file, project) {
+function rowsFromFile(file, project, rel) {
   const md = fs.readFileSync(file, 'utf8');
+  // Older source plans have no frontmatter at all: no runner contract to
+  // harvest, which is a different gap from a contract that fails to parse.
+  if (!md.startsWith('---')) return null;
   const { frontmatter } = extractFrontmatter(md);
   const plan = parseUltraPlanYaml(frontmatter);
-  const rel = path.relative(project === 'vivera' ? ROOT : resolveVault(), file);
   const rows = [];
   for (const task of plan.tasks || []) {
     for (const step of task.run || []) {
@@ -135,9 +182,13 @@ export function collect(vault = resolveVault()) {
   }
   const rows = [];
   let skipped = 0;
-  for (const { file, project } of planFiles(vault)) {
+  let noFrontmatter = 0;
+  const { files, unread } = planFiles(vault);
+  for (const { file, project, label } of files) {
     try {
-      rows.push(...rowsFromFile(file, project));
+      const fileRows = rowsFromFile(file, project, label);
+      if (fileRows === null) noFrontmatter++;
+      else rows.push(...fileRows);
     } catch (err) {
       // A plan that does not parse is itself a finding, but it must not abort
       // the harvest. The gap is reported rather than hidden.
@@ -146,6 +197,16 @@ export function collect(vault = resolveVault()) {
     }
   }
   if (skipped > 0) process.stderr.write(`skipped ${skipped} unparseable plan file(s)\n`);
+  if (noFrontmatter > 0) {
+    process.stderr.write(`${noFrontmatter} plan file(s) have no frontmatter, so no run commands\n`);
+  }
+  const byReason = new Map();
+  for (const u of unread) {
+    const where = u.sourcePath ? `: ${u.sourcePath}` : '';
+    process.stderr.write(`unread vault mirror: ${path.relative(vault, u.mirror)} (${u.reason}${where})\n`);
+    byReason.set(u.reason, (byReason.get(u.reason) || 0) + 1);
+  }
+  for (const [reason, n] of byReason) process.stderr.write(`${n} vault mirror(s) unread: ${reason}\n`);
   return buildCorpus(rows);
 }
 

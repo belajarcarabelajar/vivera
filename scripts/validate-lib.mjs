@@ -1,6 +1,7 @@
 // scripts/validate-lib.mjs
 //
-// Pure, importable subset of scripts/validate-skill.mjs.
+// Pure, importable subset of scripts/validate-skill.mjs, plus renderMermaidBatch,
+// which spawns the mmdc it is given so tests can inject a fake one.
 //
 // validate-skill.mjs is a 900-line gate script with top-level side effects
 // (execSync, process.exit, minutes-long mmdc render), so it cannot be imported
@@ -10,6 +11,10 @@
 // validate-skill.mjs must import from this module rather than redefining the
 // same constants. scripts/validate-skill.test.mjs asserts that wiring so the
 // two copies cannot drift apart.
+
+import fs from 'fs';
+import path from 'path';
+import { spawnSync } from 'child_process';
 
 export const SUBAGENT_CONTRACT_TERMS = [
   'SUBAGENT-FIRST',
@@ -207,4 +212,46 @@ export function extractMermaidBlocksStrict(content) {
     if (inside) buf.push(line);
   }
   return blocks;
+}
+
+// --- batched mermaid render ---------------------------------------------------
+
+function firstStderrLine(res) {
+  return res.stderr?.toString().trim().split('\n')[0] || res.error?.message || 'unknown error';
+}
+
+/**
+ * Render every block with one mmdc call (one Chromium launch) by feeding mmdc a
+ * markdown file; mmdc writes <out>-<n>.svg in block order. A failing batch does
+ * not say which block broke, so on a non-zero exit or a missing SVG every block
+ * is rendered alone to recover per-block results.
+ * Returns { results: [{ ok: true, svg } | { ok: false, error }], calls }.
+ */
+export function renderMermaidBatch(blocks, { mmdc, args = [], tmpDir }) {
+  let calls = 0;
+  const run = (input, output) => {
+    calls++;
+    return spawnSync(mmdc, [...args, '-i', input, '-o', output], { stdio: 'pipe' });
+  };
+
+  const batchIn = path.join(tmpDir, 'batch.md');
+  const batchOut = path.join(tmpDir, 'out.md');
+  fs.writeFileSync(batchIn, blocks.map((b) => '```mermaid\n' + b + '\n```\n').join('\n'));
+  const batch = run(batchIn, batchOut);
+  if (batch.status === 0) {
+    const svgPaths = blocks.map((_, i) => path.join(tmpDir, `out-${i + 1}.svg`));
+    if (svgPaths.every((p) => fs.existsSync(p))) {
+      return { results: svgPaths.map((p) => ({ ok: true, svg: fs.readFileSync(p, 'utf8') })), calls };
+    }
+  }
+
+  const results = blocks.map((block, i) => {
+    const input = path.join(tmpDir, `block-${i + 1}.mmd`);
+    const output = path.join(tmpDir, `block-${i + 1}.svg`);
+    fs.writeFileSync(input, block);
+    const res = run(input, output);
+    if (res.status !== 0 || !fs.existsSync(output)) return { ok: false, error: firstStderrLine(res) };
+    return { ok: true, svg: fs.readFileSync(output, 'utf8') };
+  });
+  return { results, calls };
 }

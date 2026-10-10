@@ -1,7 +1,7 @@
 // scripts/validate-lib.test.mjs
 //
-// Tests for the validation library. All functions are pure and can be
-// tested without touching the file system.
+// Tests for the validation library. All functions except renderMermaidBatch
+// are pure; that one is driven by a fake mmdc in a temp dir, so no Chromium runs.
 //
 // The key invariants being tested:
 // 1. findMissingTerms correctly identifies missing terms
@@ -9,6 +9,7 @@
 // 3. checkTinyFishLadder enforces the TinyFish requirement
 // 4. checkBannedRuntime catches banned patterns
 // 5. Mermaid fence extraction matches the renderer's awk patterns
+// 6. renderMermaidBatch maps batch output to blocks and falls back per block
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,6 +28,10 @@ import {
   hasStrictMermaidFence,
   extractMermaidBlocksStrict,
 } from './validate-lib.mjs';
+import * as lib from './validate-lib.mjs';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // ---------- findMissingTerms ----------
 
@@ -236,4 +241,110 @@ test('RENDERER_CLOSE_AWK matches mermaid close fence', () => {
   assert.equal(re.test('```'), true);
   assert.equal(re.test('``` '), true);
   assert.equal(re.test('```mermaid'), false);
+});
+
+// ---------- renderMermaidBatch (fake mmdc, no Chromium) ----------
+//
+// The fake mirrors the two mmdc modes the batch relies on: a .md input renders
+// each fenced block to <out>-<n>.svg, a .mmd input renders to <out>. Each SVG
+// embeds its source so the test can prove block n landed in result n.
+
+function makeFakeMmdc(mode) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-mmdc-'));
+  const bin = path.join(dir, 'fake-mmdc.mjs');
+  fs.writeFileSync(bin, `#!${process.execPath}
+import fs from 'fs';
+import path from 'path';
+const MODE = ${JSON.stringify(mode)};
+const argv = process.argv.slice(2);
+const inp = argv[argv.indexOf('-i') + 1];
+const out = argv[argv.indexOf('-o') + 1];
+fs.appendFileSync(path.join(import.meta.dirname, 'calls.log'), argv.join(' ') + '\\n');
+const text = fs.readFileSync(inp, 'utf8');
+if (inp.endsWith('.md')) {
+  if (MODE === 'batch-fail' || MODE === 'partial-write') { process.stderr.write('Error: batch parse failed\\nstack\\n'); process.exit(1); }
+  const blocks = [];
+  let buf = null;
+  for (const line of text.split('\\n')) {
+    if (buf === null && /^\`\`\`mermaid[ \\t]*$/.test(line)) { buf = []; continue; }
+    if (buf !== null && /^\`\`\`[ \\t]*$/.test(line)) { blocks.push(buf.join('\\n')); buf = null; continue; }
+    if (buf !== null) buf.push(line);
+  }
+  const base = out.replace(/\\.md$/, '');
+  blocks.forEach((b, i) => {
+    if (MODE === 'missing' && i === 1) return;
+    fs.writeFileSync(base + '-' + (i + 1) + '.svg', '<svg>' + b + '</svg>');
+  });
+  process.exit(0);
+}
+if (text.includes('BROKEN')) { if (MODE === 'partial-write') fs.writeFileSync(out, '<svg>partial</svg>'); process.stderr.write('Parse error on line 2: BROKEN\\nExpecting NODE\\n'); process.exit(1); }
+fs.writeFileSync(out, '<svg>' + text + '</svg>');
+`);
+  fs.chmodSync(bin, 0o755);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mermaid-batch-'));
+  const loggedCalls = () => fs.readFileSync(path.join(dir, 'calls.log'), 'utf8').trim().split('\n');
+  const cleanup = () => {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  };
+  return { bin, tmpDir, loggedCalls, cleanup };
+}
+
+const BLOCKS = ['flowchart TB\n  A1-->B1', 'flowchart TB\n  A2-->B2', 'flowchart TB\n  A3-->B3'];
+
+test('renderMermaidBatch renders every block in one mmdc call and maps out-<n>.svg to block n', () => {
+  const fake = makeFakeMmdc('ok');
+  try {
+    const { results, calls } = lib.renderMermaidBatch(BLOCKS, { mmdc: fake.bin, args: ['-b', 'transparent'], tmpDir: fake.tmpDir });
+    assert.equal(calls, 1);
+    assert.equal(fake.loggedCalls().length, 1);
+    assert.match(fake.loggedCalls()[0], /^-b transparent -i \S+\.md -o \S+out\.md$/);
+    assert.equal(results.length, BLOCKS.length);
+    results.forEach((r, i) => {
+      assert.equal(r.ok, true);
+      assert.equal(r.svg, `<svg>${BLOCKS[i]}</svg>`);
+    });
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch falls back per block when the batch exits non-zero and names the failing block', () => {
+  const fake = makeFakeMmdc('batch-fail');
+  const blocks = [BLOCKS[0], 'flowchart TB\n  BROKEN -->', BLOCKS[2]];
+  try {
+    const { results, calls } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, args: ['-b', 'transparent'], tmpDir: fake.tmpDir });
+    assert.equal(calls, 1 + blocks.length);
+    assert.equal(fake.loggedCalls().length, 1 + blocks.length);
+    assert.deepEqual(results.map((r) => r.ok), [true, false, true]);
+    assert.equal(results[1].error, 'Parse error on line 2: BROKEN');
+    assert.equal(results[0].svg, `<svg>${blocks[0]}</svg>`);
+    assert.equal(results[2].svg, `<svg>${blocks[2]}</svg>`);
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch falls back per block when the batch exits 0 but an out-<n>.svg is missing', () => {
+  const fake = makeFakeMmdc('missing');
+  try {
+    const { results, calls } = lib.renderMermaidBatch(BLOCKS, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.equal(calls, 1 + BLOCKS.length);
+    assert.deepEqual(results.map((r) => r.ok), [true, true, true]);
+    results.forEach((r, i) => assert.equal(r.svg, `<svg>${BLOCKS[i]}</svg>`));
+  } finally {
+    fake.cleanup();
+  }
+});
+
+test('renderMermaidBatch fails a block whose single render exits non-zero even if it wrote an SVG', () => {
+  const fake = makeFakeMmdc('partial-write');
+  const blocks = [BLOCKS[0], 'flowchart TB\n  BROKEN -->'];
+  try {
+    const { results } = lib.renderMermaidBatch(blocks, { mmdc: fake.bin, tmpDir: fake.tmpDir });
+    assert.deepEqual(results.map((r) => r.ok), [true, false]);
+    assert.equal(results[1].error, 'Parse error on line 2: BROKEN');
+  } finally {
+    fake.cleanup();
+  }
 });

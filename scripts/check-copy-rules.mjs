@@ -42,6 +42,8 @@
 //   bun scripts/check-copy-rules.mjs <file>...       # check artifacts
 //   bun scripts/check-copy-rules.mjs --commits [N]   # last N commit messages
 //   bun scripts/check-copy-rules.mjs --both <file>... # both
+//   bun scripts/check-copy-rules.mjs --diff <base>   # only lines and commits added
+//                                                     # since merge-base(<base>, HEAD)
 //
 // Exit: 0 clean, 1 violations found, 2 usage error.
 
@@ -172,15 +174,24 @@ export function checkFile(rel) {
  * `git log` is where a reviewer looks first.
  */
 export function checkCommits(count = 20) {
+  const r = checkCommitRange([`-${count}`], ROOT);
+  if (r.error) {
+    return [{ where: 'git log', rule: 'git-failed', detail: r.error, line: '' }];
+  }
+  return r.violations;
+}
+
+/** Shared by `--commits` and `--diff`: `revArgs` is what `git log` selects on. */
+function checkCommitRange(revArgs, cwd) {
   // The record separator is a literal NUL (%x00), so a multi-line commit message
   // cannot be confused with the next record. Built by concatenation because the
   // format string ends in a backtick, which would close a template literal.
   const format = '%H%x00%B%x00' + '%x00';
-  const r = spawnSync('git', ['log', `-${count}`, `--format=${format}`], {
-    cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+  const r = spawnSync('git', ['log', ...revArgs, `--format=${format}`], {
+    cwd, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
   });
   if (r.error || r.status !== 0) {
-    return [{ where: 'git log', rule: 'git-failed', detail: r.error ? r.error.message : String(r.status), line: '' }];
+    return { error: r.error ? r.error.message : String(r.status), violations: [], count: 0 };
   }
   const violations = [];
   // `%H%x00%B%x00%x00` per commit, so splitting on NUL and dropping the empties
@@ -200,10 +211,146 @@ export function checkCommits(count = 20) {
     // subject line is read first by every reviewer, so both are checked in full.
     violations.push(...checkText(message, { where: `commit ${hash.slice(0, 8)}` }));
   }
-  return violations;
+  return { error: null, violations, count: chunks.length / 2 };
 }
 
-function main(args) {
+/**
+ * Added line numbers per new path, from `git diff --unified=0` output. Deleted
+ * files (`+++ /dev/null`) and binary files (no `+++` line) yield nothing.
+ */
+export function parseAddedLines(diffText) {
+  const added = new Map();
+  let current = null;
+  // Only the block between "diff --git" and the first "@@" is header; inside a hunk,
+  // an added line "++ x" prints as "+++ x" and must not switch files.
+  let inHeader = false;
+  for (const line of diffText.split('\n')) {
+    if (line.startsWith('diff --git ')) { current = null; inHeader = true; continue; }
+    if (line.startsWith('@@ ')) inHeader = false;
+    if (inHeader && line.startsWith('+++ ')) {
+      const target = unquoteGitPath(line.slice(4).replace(/\t$/, ''));
+      current = target === '/dev/null' ? null : target.replace(/^b\//, '');
+      if (current !== null && !added.has(current)) added.set(current, new Set());
+      continue;
+    }
+    const h = current !== null && /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+    if (h) {
+      const start = Number(h[1]);
+      const n = h[2] === undefined ? 1 : Number(h[2]);
+      for (let k = 0; k < n; k++) added.get(current).add(start + k);
+    }
+  }
+  return added;
+}
+
+// git C-quotes a path with unusual bytes ("b/caf\303\251.md"); octal escapes are
+// UTF-8 bytes, so they are decoded as bytes rather than as code points.
+function unquoteGitPath(p) {
+  if (!p.startsWith('"')) return p;
+  const bytes = [];
+  const body = p.slice(1, -1);
+  const simple = { n: 10, t: 9, '"': 34, '\\': 92, a: 7, b: 8, f: 12, r: 13, v: 11 };
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== '\\') { bytes.push(...Buffer.from(body[i], 'utf8')); continue; }
+    const oct = /^[0-7]{3}/.exec(body.slice(i + 1));
+    if (oct) { bytes.push(Number.parseInt(oct[0], 8)); i += 3; continue; }
+    bytes.push(simple[body[i + 1]] ?? body.charCodeAt(i + 1));
+    i += 1;
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
+/**
+ * Check only what a branch adds since `git merge-base <base> HEAD`: added lines in
+ * the working tree diff, plus the commit messages of the range. Throws on an
+ * unresolvable base or a git failure, which the CLI reports as a usage error.
+ */
+export function checkDiff({ base, cwd = ROOT } = {}) {
+  const run = (args) => spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  // A leading dash would be parsed as a git option, not a revision.
+  if (typeof base !== 'string' || base === '' || base.startsWith('-')) {
+    throw new Error(`invalid --diff base: '${base}'`);
+  }
+  const mb = run(['merge-base', base, 'HEAD']);
+  if (mb.error || mb.status !== 0) {
+    throw new Error(`cannot resolve merge-base of '${base}' and HEAD: ${(mb.error?.message ?? mb.stderr).trim() || `exit ${mb.status}`}`);
+  }
+  const mergeBase = mb.stdout.trim();
+  const diff = run(['diff', '--unified=0', '--no-color', '--no-ext-diff', mergeBase]);
+  if (diff.error || diff.status !== 0) {
+    throw new Error(`git diff ${mergeBase.slice(0, 8)} failed: ${(diff.error?.message ?? diff.stderr).trim()}`);
+  }
+
+  const violations = [];
+  let addedLines = 0;
+  let files = 0;
+  for (const [rel, lines] of parseAddedLines(diff.stdout)) {
+    const abs = path.resolve(cwd, rel);
+    if (lines.size === 0 || !fs.existsSync(abs)) continue;
+    files += 1;
+    addedLines += lines.size;
+    // The whole file is checked so the rule-statement neighbour window still sees
+    // unchanged context; only hits on added lines are kept.
+    const emDashApplies = ARTIFACT_EXTENSIONS.has(path.extname(rel));
+    for (const v of checkText(fs.readFileSync(abs, 'utf8'), { where: rel, emDashApplies })) {
+      if (lines.has(Number(v.where.slice(rel.length + 1)))) violations.push(v);
+    }
+  }
+
+  // git diff never lists untracked files, so a new file not yet added would pass unread.
+  const others = run(['ls-files', '--others', '--exclude-standard', '-z']);
+  if (others.error || others.status !== 0) {
+    throw new Error(`git ls-files --others failed: ${(others.error?.message ?? others.stderr).trim()}`);
+  }
+  for (const rel of others.stdout.split('\u0000').filter(Boolean)) {
+    // A symlink (dangling or to a directory) has no text of its own to check.
+    if (!fs.lstatSync(path.resolve(cwd, rel)).isFile()) continue;
+    const text = fs.readFileSync(path.resolve(cwd, rel), 'utf8');
+    if (text.includes('\u0000')) continue;
+    files += 1;
+    addedLines += text.split(/\r?\n/).length - (text.endsWith('\n') ? 1 : 0);
+    violations.push(...checkText(text, { where: rel, emDashApplies: ARTIFACT_EXTENSIONS.has(path.extname(rel)) }));
+  }
+
+  const log = checkCommitRange([`${mergeBase}..HEAD`], cwd);
+  if (log.error) throw new Error(`git log ${mergeBase.slice(0, 8)}..HEAD failed: ${log.error}`);
+  violations.push(...log.violations);
+  return { violations, addedLines, files, commits: log.count, mergeBase };
+}
+
+const USAGE = 'usage: check-copy-rules.mjs <file>... | --commits [N] | --both <file>... | --diff <base>';
+
+function report(violations) {
+  console.error(`❌ ${violations.length} copy-rule violation(s):\n`);
+  for (const v of violations) {
+    console.error(`  ${v.where}  [${v.rule}]${v.detail ? ` ${v.detail}` : ''}`);
+    if (v.line) console.error(`      ${v.line}`);
+  }
+  console.error('\n   Both rules are in the master skill copy section and the PR template checklist.');
+  console.error('   An attribution line is only correct when the user named the exact text.');
+  return 1;
+}
+
+function mainDiff(args) {
+  const base = args[1];
+  if (args.length !== 2 || args[0] !== '--diff' || !base || base.startsWith('-')) {
+    console.error(USAGE);
+    return 2;
+  }
+  let r;
+  try {
+    r = checkDiff({ base });
+  } catch (err) {
+    console.error(`${err.message}\n${USAGE}`);
+    return 2;
+  }
+  if (r.violations.length > 0) return report(r.violations);
+  console.log(`✅ Copy rules clean: ${r.addedLines} added line(s) in ${r.files} file(s) and ${r.commits} commit message(s) since ${r.mergeBase.slice(0, 8)}.`);
+  return 0;
+}
+
+export function main(args) {
+  if (args.includes('--diff')) return mainDiff(args);
   // `args` arrives already sliced by the caller. Do not slice again: an earlier
   // version did, so every invocation reported a usage error while the tests, which
   // call the exported functions directly, passed throughout. The CLI was dead and
@@ -232,7 +379,7 @@ function main(args) {
   })();
 
   if (!wantCommits && files.length === 0) {
-    console.error('usage: check-copy-rules.mjs <file>... | --commits [N] | --both <file>...');
+    console.error(USAGE);
     return 2;
   }
 
@@ -250,14 +397,7 @@ function main(args) {
     console.log(`✅ Copy rules clean: ${files.length} file(s)` + (wantCommits ? ` and the last ${count} commit message(s)` : '') + '.');
     return 0;
   }
-  console.error(`❌ ${violations.length} copy-rule violation(s):\n`);
-  for (const v of violations) {
-    console.error(`  ${v.where}  [${v.rule}]${v.detail ? ` ${v.detail}` : ''}`);
-    if (v.line) console.error(`      ${v.line}`);
-  }
-  console.error('\n   Both rules are in the master skill copy section and the PR template checklist.');
-  console.error('   An attribution line is only correct when the user named the exact text.');
-  return 1;
+  return report(violations);
 }
 
 const isMain = process.argv[1] && process.argv[1].endsWith('check-copy-rules.mjs');

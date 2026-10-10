@@ -4,7 +4,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { normalizeCmd, stableId, buildCorpus, balanceOf, resolveVault } from './spike-skipif-corpus.mjs';
+import os from 'node:os';
+import {
+  normalizeCmd, stableId, buildCorpus, balanceOf, resolveVault, collect, planFiles,
+} from './spike-skipif-corpus.mjs';
 import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -93,6 +96,127 @@ test('balanceOf flags a degenerate corpus so the CLI can refuse it', () => {
     { cmd: 'git status', source: 'b' },
   ]);
   assert.equal(balanceOf(oneClass).degenerate, true, 'a single-class corpus cannot measure calibration');
+});
+
+// A fixture vault whose mirrors no longer carry the runner contract, the shape
+// the publisher has written since #45. `collect()` also reads this checkout's
+// own plans directory, so assertions check for fixture commands, not totals.
+function planMd(fields, cmds) {
+  const lines = ['---', 'schema: ultra-plan/v1', ...fields];
+  if (cmds.length > 0) {
+    lines.push('tasks:', '  - id: T1', '    run:');
+    for (const cmd of cmds) lines.push(`      - cmd: "${cmd}"`);
+  }
+  lines.push('---', '', '# fixture', '');
+  return lines.join('\n');
+}
+
+function fixtureVault() {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'skipif-corpus-'));
+  const vault = path.join(tmp, 'vault');
+  const src = path.join(tmp, 'src');
+  fs.mkdirSync(src, { recursive: true });
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, text);
+  };
+  const sourceA = path.join(src, 'plan-a.md');
+  write(sourceA, planMd([], ['bun test fixture/only-in-source-a.test.mjs']));
+  const legacySource = path.join(src, 'legacy-source.md');
+  write(legacySource, planMd([], ['bun test fixture/legacy-source-must-not-be-read.test.mjs']));
+  const missing = path.join(src, 'not-on-this-host.md');
+  const mirror = (project, name, fields, cmds = []) =>
+    write(path.join(vault, '01 - Projects', project, 'plans', name), planMd(fields, cmds));
+  mirror('fixproj', 'a.md', [`source_path: "${sourceA}"`]);
+  mirror('fixproj', 'legacy.md', [`source_path: "${legacySource}"`], ['bun test fixture/legacy-mirror.test.mjs']);
+  mirror('fixproj', 'missing.md', [`source_path: "${missing}"`]);
+  mirror('fixproj2', 'a-again.md', [`source_path: "${sourceA}"`]);
+  return { tmp, vault, sourceA };
+}
+
+function captureStderr(fn) {
+  const original = process.stderr.write;
+  let text = '';
+  process.stderr.write = (chunk) => {
+    text += String(chunk);
+    return true;
+  };
+  try {
+    return { value: fn(), stderr: text };
+  } finally {
+    process.stderr.write = original;
+  }
+}
+
+test('collect follows source_path when the mirror carries no tasks', () => {
+  const fx = fixtureVault();
+  try {
+    const { value: corpus } = captureStderr(() => collect(fx.vault));
+    const row = corpus.find((r) => r.cmd === 'bun test fixture/only-in-source-a.test.mjs');
+    assert.ok(row, 'the run command held only by the source plan must be harvested');
+    assert.equal(row.project, 'fixproj', 'attribution keeps the mirror project name');
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
+});
+
+test('collect reports a mirror whose source_path is missing and keeps harvesting', () => {
+  const fx = fixtureVault();
+  try {
+    const { value: corpus, stderr } = captureStderr(() => collect(fx.vault));
+    assert.match(stderr, /1 vault mirror\(s\) unread: source plan not on this host/);
+    assert.match(stderr, /missing\.md/, 'the unread mirror is named, not only counted');
+    assert.ok(corpus.some((r) => r.cmd === 'bun test fixture/only-in-source-a.test.mjs'));
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
+});
+
+test('collect still reads a legacy mirror that carries tasks itself', () => {
+  const fx = fixtureVault();
+  try {
+    const { value: corpus } = captureStderr(() => collect(fx.vault));
+    assert.ok(corpus.some((r) => r.cmd === 'bun test fixture/legacy-mirror.test.mjs'));
+    assert.ok(
+      !corpus.some((r) => r.cmd === 'bun test fixture/legacy-source-must-not-be-read.test.mjs'),
+      'a mirror with its own tasks is the contract; its source_path is not followed',
+    );
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
+});
+
+test('planFiles lists a source plan once when two mirrors point at it', () => {
+  const fx = fixtureVault();
+  try {
+    const { files, unread } = planFiles(fx.vault);
+    const hits = files.filter((f) => path.resolve(f.file) === path.resolve(fx.sourceA));
+    assert.equal(hits.length, 1, 'each resolved file is read once');
+    assert.equal(hits[0].project, 'fixproj', 'the first mirror in sorted order wins attribution');
+    assert.deepEqual(unread.map((u) => path.basename(u.mirror)), ['missing.md']);
+    const resolved = files.map((f) => path.resolve(f.file));
+    assert.equal(new Set(resolved).size, resolved.length, 'no file appears twice, own plans included');
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
+});
+
+test('planFiles reads a plan once when it is reached through a mirror and the own plans directory', () => {
+  const fx = fixtureVault();
+  const ownDir = path.dirname(fx.sourceA);
+  const onlyOwn = path.join(ownDir, 'only-own.md');
+  fs.writeFileSync(onlyOwn, planMd([], ['bun test fixture/only-own.test.mjs']));
+  try {
+    const { files } = planFiles(fx.vault, ownDir);
+    const hitsA = files.filter((f) => path.resolve(f.file) === path.resolve(fx.sourceA));
+    assert.equal(hitsA.length, 1, 'reached both ways, read once');
+    assert.equal(hitsA[0].project, 'fixproj', 'the mirror reaches it first and keeps attribution');
+    const own = files.filter((f) => path.resolve(f.file) === path.resolve(onlyOwn));
+    assert.equal(own.length, 1, 'a plan only in the own directory is still read');
+    assert.equal(own[0].project, 'vivera');
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
 });
 
 live('the CLI harvests the vault and reports a balanced corpus', () => {

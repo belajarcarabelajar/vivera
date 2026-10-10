@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkText, checkFile, EM_DASH, WATERMARK_PATTERNS } from './check-copy-rules.mjs';
+import { checkText, checkFile, checkDiff, main, EM_DASH, WATERMARK_PATTERNS } from './check-copy-rules.mjs';
 import { readSkillCorpus } from './skill-corpus.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -148,4 +150,106 @@ test('every watermark pattern names itself, so a hit is actionable', () => {
   const sources = WATERMARK_PATTERNS.map((p) => p.re.source).join(' ');
   assert.doesNotMatch(sources, /cursor|gemini|copilot|chatgpt/i,
     'no bare vendor-name pattern: README legitimately names these tools');
+});
+// --diff <base>: only what a branch adds. A temp repository stands in for a real
+// branch because the module resolves its own ROOT, which is this checkout.
+
+// Hooks and signing are disabled per call so a global git config cannot make the
+// fixture depend on this host.
+function git(cwd, ...args) {
+  const r = spawnSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args], {
+    cwd, encoding: 'utf8',
+  });
+  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+  return r.stdout.trim();
+}
+
+const TRAILER = ['Co-Authored', 'By: x <x@example.invalid>'].join('-');
+
+function fixtureRepo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-rules-diff-'));
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'config', 'user.name', 'Fixture');
+  git(dir, 'config', 'user.email', 'fixture@example.invalid');
+  const put = (rel, lines) => fs.writeFileSync(path.join(dir, rel), lines.join('\n') + '\n');
+  put('doc.md', ['# Doc', `old line${EM_DASH} at base`, 'plain']);
+  put('code.mjs', ['export const a = 1;']);
+  put('gone.md', [`deleted${EM_DASH} file`]);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'base');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  // Fillers keep the trailer more than three lines from the em dash, so the
+  // rule-statement neighbour window cannot exempt either line.
+  put('doc.md', ['# Doc', `old line${EM_DASH} at base`, 'plain',
+    `new line${EM_DASH} on branch`, 'a', 'b', 'c', 'd', TRAILER]);
+  put('code.mjs', ['export const a = 1;', `// a comment${EM_DASH} in code`]);
+  fs.rmSync(path.join(dir, 'gone.md'));
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', `feat: branch lines\n\n${TRAILER}`);
+  // Uncommitted on top: the working tree counts too.
+  fs.appendFileSync(path.join(dir, 'doc.md'), ['e', 'f', 'g', `uncommitted${EM_DASH} line`].join('\n') + '\n');
+  return dir;
+}
+
+test('--diff reports an em dash the branch adds in a .md file, with its line', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  const dashes = r.violations.filter((v) => v.rule === 'em-dash').map((v) => v.where);
+  assert.deepEqual(dashes.sort(), ['doc.md:13', 'doc.md:4']);
+});
+
+test('--diff does not report an em dash that existed at the base', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  assert.ok(!r.violations.some((v) => v.where === 'doc.md:2'), JSON.stringify(r.violations));
+});
+
+test('--diff applies the em dash rule to .md/.txt only', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  assert.ok(!r.violations.some((v) => v.where.startsWith('code.mjs')), JSON.stringify(r.violations));
+});
+
+test('--diff reports an added attribution line in any file', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  assert.ok(r.violations.some((v) => v.where === 'doc.md:9' && v.rule === 'co-author trailer'),
+    JSON.stringify(r.violations));
+});
+
+test('--diff checks the commit messages of the branch range', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  assert.ok(r.violations.some((v) => v.where.startsWith('commit ') && v.rule === 'co-author trailer'),
+    JSON.stringify(r.violations));
+});
+
+test('--diff scans a new untracked file, but not an ignored one', () => {
+  const dir = fixtureRepo();
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'ignored.md\n');
+  fs.writeFileSync(path.join(dir, 'new.md'), ['# New', `fresh${EM_DASH} line`].join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'ignored.md'), `ignored${EM_DASH} line\n`);
+  const r = checkDiff({ base: 'main', cwd: dir });
+  const where = r.violations.map((v) => v.where);
+  assert.ok(where.includes('new.md:2'), JSON.stringify(where));
+  assert.ok(!where.some((w) => w.startsWith('ignored.md')), JSON.stringify(where));
+});
+
+test('--diff returns the scanned counts, skipping deleted files', () => {
+  const r = checkDiff({ base: 'main', cwd: fixtureRepo() });
+  // doc.md lines 4-13 and code.mjs line 2; gone.md was deleted.
+  assert.equal(r.addedLines, 11);
+  assert.equal(r.files, 2);
+  assert.equal(r.commits, 1);
+  assert.match(r.mergeBase, /^[0-9a-f]{40}$/);
+});
+
+test('--diff throws a clear error for an unknown base', () => {
+  assert.throws(() => checkDiff({ base: 'no-such-ref-for-test', cwd: fixtureRepo() }), /no-such-ref-for-test/);
+});
+
+test('--diff without a base is a usage error', () => {
+  assert.equal(main(['--diff']), 2);
+});
+
+test('the CLI exits 2 for an unknown --diff base', () => {
+  const script = path.join(ROOT, 'scripts', 'check-copy-rules.mjs');
+  const r = spawnSync(process.execPath, [script, '--diff', 'no-such-ref-for-test'], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--diff <base>/);
 });

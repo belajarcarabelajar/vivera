@@ -215,7 +215,9 @@ export function issueBody(planText, { planId: id, key, sourcePath, status, gener
 }
 
 export function parseTrailer(body) {
-  const m = (body || '').match(/<!--\s*plan-sync:\s*plan_id=(.*?)\s*\|\s*key=(.*?)\s*\|\s*source=(.*?)\s*\|\s*status=(.*?)\s*\|\s*hash=(.*?)\s*\|\s*by=(.*?)\s*-->/);
+  // The last one: issueBody appends the trailer, so an earlier match is plan text quoting an example.
+  const all = [...(body || '').matchAll(/<!--\s*plan-sync:\s*plan_id=(.*?)\s*\|\s*key=(.*?)\s*\|\s*source=(.*?)\s*\|\s*status=(.*?)\s*\|\s*hash=(.*?)\s*\|\s*by=(.*?)\s*-->/g)];
+  const m = all.at(-1);
   if (!m) return null;
   return {
     plan_id: m[1].trim(),
@@ -570,6 +572,17 @@ function projectRootFor(opts) {
   }
 }
 
+// An edit after an adoption still prints its edit kind, so the lost row is named here.
+export function resultLine(res, { check = false } = {}) {
+  const tag = res.adopted && res.action !== 'adopt' ? ' (adopted)' : '';
+  if (res.action === 'current') return `⏭️  CURRENT   ${res.key} -> ${res.repo}#${res.number}`;
+  if (res.dryRun) {
+    const verb = check ? 'DRIFT' : 'DRY-RUN';
+    return `${check ? '❌' : '🔍'} ${verb.padEnd(9)} ${res.key} would ${res.action}${tag} on ${res.repo}${res.number ? `#${res.number}` : ''} (status ${res.status})`;
+  }
+  return `✅ ${res.action.padEnd(17)} ${res.key} -> ${res.repo}#${res.number}${tag}`;
+}
+
 function main(argv) {
   let opts;
   try {
@@ -636,15 +649,8 @@ function main(argv) {
         dryRun: opts.check || opts.dryRun,
       });
 
-      if (res.action === 'current') {
-        console.log(`⏭️  CURRENT   ${res.key} -> ${res.repo}#${res.number}`);
-      } else if (res.dryRun) {
-        drifted++;
-        const verb = opts.check ? 'DRIFT' : 'DRY-RUN';
-        console.log(`${opts.check ? '❌' : '🔍'} ${verb.padEnd(9)} ${res.key} would ${res.action} on ${res.repo}${res.number ? `#${res.number}` : ''} (status ${res.status})`);
-      } else {
-        console.log(`✅ ${res.action.padEnd(17)} ${res.key} -> ${res.repo}#${res.number}`);
-      }
+      if (res.action !== 'current' && res.dryRun) drifted++;
+      console.log(resultLine(res, { check: opts.check }));
       if (res.cfg) next = res.cfg;
     } catch (e) {
       failed++;

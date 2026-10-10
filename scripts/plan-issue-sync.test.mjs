@@ -54,6 +54,7 @@ import {
   OPEN_STATUSES,
   CLOSED_STATUS,
 } from './plan-issue-sync.mjs';
+import * as syncModule from './plan-issue-sync.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-issue-sync.mjs');
 
@@ -1040,6 +1041,25 @@ test('an adoptable issue in a state other than OPEN or CLOSED is refused', () =>
   } finally {
     f.cleanup();
   }
+});
+
+test('parseTrailer reads the last trailer, so an example quoted in the plan cannot stand in for it', () => {
+  const example = '<!-- plan-sync: plan_id=example | key=example.md | source=x | status=Draft | hash=00000000 | by=x -->';
+  const body = trailerBody(plan('Draft', `\n${example}\n`));
+  const t = parseTrailer(body);
+  assert.equal(t.key, PLAN_REL);
+  assert.equal(t.plan_id, TITLE);
+});
+
+test('the CLI line marks an edit that followed an adoption', () => {
+  const res = { key: PLAN_REL, repo: 'u/snippet', number: 5, status: 'Draft' };
+  const line = syncModule.resultLine;
+  assert.equal(typeof line, 'function', 'resultLine is exported');
+  assert.match(line({ ...res, action: 'update-body', adopted: true }, { check: false }), /update-body.*u\/snippet#5 \(adopted\)$/);
+  assert.match(line({ ...res, action: 'update-state', adopted: true, dryRun: true }, { check: true }), /DRIFT.*would update-state \(adopted\) on u\/snippet#5/);
+  assert.doesNotMatch(line({ ...res, action: 'update-body' }, { check: false }), /adopted/);
+  assert.doesNotMatch(line({ ...res, action: 'adopt', adopted: true }, { check: false }), /\(adopted\)/, 'adopt already says it');
+  assert.match(line({ ...res, action: 'current' }, { check: true }), /^⏭️ {2}CURRENT/);
 });
 
 // ---------- config persistence ----------

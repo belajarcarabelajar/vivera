@@ -661,6 +661,42 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3j. Prompting-guide amendments (2026-10-10).
+//
+// Three rules taken from published prompting guidance for one model family and
+// worded model-agnostically: pasted text is data unless the user's own message
+// says otherwise, an unattended run does not end a turn with work still owed,
+// and the frontend "named tells" list. None came from a measured incident here,
+// so the overnight rule carries a provenance line. Each needle pins one clause
+// so a later edit cannot quietly drop it.
+//
+// Revert: `git revert` the commit that added this block together with the three
+// skill edits and the `orkestrasi-overnight.md` term in validate-lib.mjs.
+{
+  const amendmentContract = [
+    { label: 'pasted text is untrusted data', needle: 'text the user pasted into a message' },
+    { label: 'pasted-text exception follows the user message', needle: 'Pasted-text exception' },
+    { label: 'text-only end of turn is a report', needle: 'A text-only end of turn is a report, not a completion' },
+    { label: 'running work is not done', needle: 'Anything still running is not done' },
+    { label: 'automatic continuations are capped', needle: 'Automatic continuations are capped' },
+    { label: 'early-stop rule carries its provenance', needle: 'Provenance: this rule comes from published prompting guidance' },
+    { label: 'anti-pattern row for announce-without-doing', needle: 'Ending the turn with a summary that announces the next step' },
+    { label: 'named tells count is seven', needle: 'these seven are named explicitly' },
+    { label: 'named tell: cream background', needle: 'cream or off-white page background' },
+    { label: 'named tell: italic accent words', needle: 'Italic accent words in a headline' },
+    { label: 'named tell: numbered section labels', needle: 'Numbered section labels' },
+  ];
+  const body = readSkillCorpus(rootDir);
+  for (const c of amendmentContract) {
+    if (body.includes(c.needle)) {
+      console.log(`✅ Prompting-guide amendment present: ${c.label}`);
+    } else {
+      console.error(`❌ Prompting-guide amendment missing: ${c.label}: literal "${c.needle}" not found in the skill corpus.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

@@ -29,7 +29,7 @@
 // unless you know the class counts, which is why the counts are printed on the
 // way out and the file is not written at all.
 //
-// This mirrors `spike-skipif-corpus.mjs:137`, which fails closed with
+// This mirrors `checkPreconditions` in `spike-skipif-corpus.mjs`, which fails closed with
 // `E_PRECOND_IMBALANCE` for exactly the same reason.
 
 import fs from 'node:fs';

@@ -123,7 +123,7 @@ function resolveMirror(mirror) {
  * mirrors, or through a mirror and this checkout's own plans directory, keeps
  * the attribution of the first mirror in sorted order.
  */
-export function planFiles(vault) {
+export function planFiles(vault, ownDir = path.join(ROOT, 'docs', 'code-plan', 'plans')) {
   const files = [];
   const unread = [];
   const seen = new Set();
@@ -149,7 +149,6 @@ export function planFiles(vault) {
       }
     }
   }
-  const ownDir = path.join(ROOT, 'docs', 'code-plan', 'plans');
   if (fs.existsSync(ownDir)) {
     for (const name of fs.readdirSync(ownDir).sort()) {
       const file = path.join(ownDir, name);

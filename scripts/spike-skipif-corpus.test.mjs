@@ -201,6 +201,24 @@ test('planFiles lists a source plan once when two mirrors point at it', () => {
   }
 });
 
+test('planFiles reads a plan once when it is reached through a mirror and the own plans directory', () => {
+  const fx = fixtureVault();
+  const ownDir = path.dirname(fx.sourceA);
+  const onlyOwn = path.join(ownDir, 'only-own.md');
+  fs.writeFileSync(onlyOwn, planMd([], ['bun test fixture/only-own.test.mjs']));
+  try {
+    const { files } = planFiles(fx.vault, ownDir);
+    const hitsA = files.filter((f) => path.resolve(f.file) === path.resolve(fx.sourceA));
+    assert.equal(hitsA.length, 1, 'reached both ways, read once');
+    assert.equal(hitsA[0].project, 'fixproj', 'the mirror reaches it first and keeps attribution');
+    const own = files.filter((f) => path.resolve(f.file) === path.resolve(onlyOwn));
+    assert.equal(own.length, 1, 'a plan only in the own directory is still read');
+    assert.equal(own[0].project, 'vivera');
+  } finally {
+    fs.rmSync(fx.tmp, { recursive: true, force: true });
+  }
+});
+
 live('the CLI harvests the vault and reports a balanced corpus', () => {
   const r = spawnSync('bun', [CLI, '--stats'], { cwd: ROOT, encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);

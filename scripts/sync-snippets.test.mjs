@@ -142,3 +142,24 @@ test('checkDrift reports a missing snippet rather than treating it as empty', ()
   assert.equal(results[0].inSync, false);
   assert.match(results[0].problem, /not found/);
 });
+
+// The progress meter is defined once, in `sucp-rules` (Progress Meter at Checkpoints).
+// A snippet that leaves it to the agent to load that skill gets no meter when the
+// skill is not loaded, which is the case for every short `cmd-*` snippet. So every
+// trigger carries the same paragraph itself, and this test keeps them identical.
+test('every trigger snippet carries the same progress-meter paragraph', () => {
+  const manifest = loadManifest();
+  const paragraphs = new Map();
+  for (const s of manifest.snippets) {
+    const body = extractPromptBody(readFileSync(path.join(rootDir, s.source), 'utf8'));
+    const found = body.split('\n').filter((l) => l.startsWith('PROGRESS METER:'));
+    assert.equal(found.length, 1, `${s.source} must contain exactly one PROGRESS METER paragraph, found ${found.length}`);
+    paragraphs.set(s.source, found[0]);
+  }
+  assert.ok(paragraphs.size >= 16, `expected every manifest snippet, got ${paragraphs.size}`);
+  const first = [...paragraphs.values()][0];
+  for (const [src, p] of paragraphs) assert.equal(p, first, `${src} drifted from the shared paragraph`);
+  for (const token of ['▰', '▱', 'N/M', '★', '☆', 'never estimate', 'never written to a file']) {
+    assert.ok(first.includes(token), `shared paragraph lost "${token}"`);
+  }
+});

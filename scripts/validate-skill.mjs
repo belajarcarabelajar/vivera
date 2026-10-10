@@ -14,6 +14,7 @@ import {
   BANNED_RUNTIME_SNIPPETS,
   hasStrictMermaidFence,
   extractMermaidBlocksStrict,
+  renderMermaidBatch,
 } from './validate-lib.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1042,66 +1043,73 @@ if (!mmdcAvailable) {
   // SVG is an unlabelled graphic for screen readers.
   const a11yRe = /accTitle:[^\n]*\n\s*accDescr:/;
 
+  // Collect every block first so one mmdc call (one Chromium launch) renders
+  // them all; one call per block cost about 2.7 s each.
+  const collected = [];
   for (const mdFile of mdFiles) {
     const content = fs.readFileSync(mdFile, 'utf8');
     // Strict extraction mirroring scripts/render-diagrams.sh awk
     // (/^```mermaid[ \t]*$/ open, /^```[ \t]*$/ close). Canonical
     // implementation lives in scripts/validate-lib.mjs.
     const blocks = extractMermaidBlocksStrict(content);
+    const rel = path.relative(rootDir, mdFile);
+    blocks.forEach((source, i) => collected.push({ rel, index: i, source }));
+  }
 
-    for (let i = 0; i < blocks.length; i++) {
-      const rel = path.relative(rootDir, mdFile);
-      const tmpIn = path.join(tmpDir, `block-${mermaidValid + mermaidInvalid + 1}.mmd`);
-      const tmpOut = path.join(tmpDir, `block-${mermaidValid + mermaidInvalid + 1}.svg`);
-      fs.writeFileSync(tmpIn, blocks[i]);
-      const puppeteerCfg = path.join(rootDir, 'puppeteer-config.json');
-      const mermaidCfg = path.join(rootDir, 'mermaid.config.json');
-      const cfgFlag = [
-        fs.existsSync(mermaidCfg) ? ` -c "${mermaidCfg}"` : '',
-        fs.existsSync(puppeteerCfg) ? ` -p "${puppeteerCfg}"` : '',
-      ].join('');
-      try {
-        execSync(`"${mmdc}"${cfgFlag} -b transparent --input "${tmpIn}" --output "${tmpOut}"`, { stdio: 'pipe' });
-        mermaidValid++;
-      } catch (err) {
-        console.error(`❌ Mermaid syntax error in ${rel} [block ${i + 1}]`);
-        console.error(`   ${err.stderr?.toString().trim().split('\n')[0] || 'unknown error'}`);
-        mermaidInvalid++;
-        errors++;
-        continue;
-      }
+  const puppeteerCfg = path.join(rootDir, 'puppeteer-config.json');
+  const mermaidCfg = path.join(rootDir, 'mermaid.config.json');
+  const mmdcArgs = [
+    ...(fs.existsSync(mermaidCfg) ? ['-c', mermaidCfg] : []),
+    ...(fs.existsSync(puppeteerCfg) ? ['-p', puppeteerCfg] : []),
+    '-b', 'transparent',
+  ];
+  const { results: rendered } = collected.length
+    ? renderMermaidBatch(collected.map((b) => b.source), { mmdc, args: mmdcArgs, tmpDir })
+    : { results: [] };
 
-      if (!a11yRe.test(blocks[i])) {
-        console.error(`❌ Missing accessibility metadata in ${rel} [block ${i + 1}]: add accTitle + accDescr.`);
-        mermaidMissingA11y++;
-        errors++;
-        continue;
-      }
+  for (let k = 0; k < collected.length; k++) {
+    const { rel, index: i, source } = collected[k];
+    const result = rendered[k];
+    if (result.ok) {
+      mermaidValid++;
+    } else {
+      console.error(`❌ Mermaid syntax error in ${rel} [block ${i + 1}]`);
+      console.error(`   ${result.error}`);
+      mermaidInvalid++;
+      errors++;
+      continue;
+    }
 
-      // Source-level accTitle/accDescr is necessary but not sufficient. The
-      // skill claims Mermaid emits these as <title>/<desc> wired to
-      // aria-labelledby, and that claim is about the RENDERED SVG, not the
-      // source. Checking only the source would pass even if the renderer
-      // silently dropped the wiring, which is exactly the kind of claim that
-      // goes stale unnoticed.
-      //
-      // I had this backwards once: a grep reported no <title> in a rendered
-      // diagram, and I concluded from one failed tool result that the feature
-      // was broken. It was not — the tags and the aria wiring were both there.
-      // So this check reads the SVG the renderer just wrote, and the negative
-      // control is a block whose source has no accTitle at all, not a guess
-      // about renderer behaviour.
-      const svg = fs.readFileSync(tmpOut, 'utf8');
-      const wired = /<title[^>]*>/.test(svg)
-        && /<desc[^>]*>/.test(svg)
-        && /aria-labelledby="[^"]*"/.test(svg)
-        && /aria-describedby="[^"]*"/.test(svg);
-      if (!wired) {
-        console.error(`❌ Rendered SVG lacks the a11y wiring in ${rel} [block ${i + 1}]: the source declares `
-          + 'accTitle/accDescr but the output has no <title>/<desc> pair referenced by aria-labelledby/aria-describedby.');
-        mermaidMissingWiring++;
-        errors++;
-      }
+    if (!a11yRe.test(source)) {
+      console.error(`❌ Missing accessibility metadata in ${rel} [block ${i + 1}]: add accTitle + accDescr.`);
+      mermaidMissingA11y++;
+      errors++;
+      continue;
+    }
+
+    // Source-level accTitle/accDescr is necessary but not sufficient. The
+    // skill claims Mermaid emits these as <title>/<desc> wired to
+    // aria-labelledby, and that claim is about the RENDERED SVG, not the
+    // source. Checking only the source would pass even if the renderer
+    // silently dropped the wiring, which is exactly the kind of claim that
+    // goes stale unnoticed.
+    //
+    // I had this backwards once: a grep reported no <title> in a rendered
+    // diagram, and I concluded from one failed tool result that the feature
+    // was broken. It was not — the tags and the aria wiring were both there.
+    // So this check reads the SVG the renderer just wrote, and the negative
+    // control is a block whose source has no accTitle at all, not a guess
+    // about renderer behaviour.
+    const svg = result.svg;
+    const wired = /<title[^>]*>/.test(svg)
+      && /<desc[^>]*>/.test(svg)
+      && /aria-labelledby="[^"]*"/.test(svg)
+      && /aria-describedby="[^"]*"/.test(svg);
+    if (!wired) {
+      console.error(`❌ Rendered SVG lacks the a11y wiring in ${rel} [block ${i + 1}]: the source declares `
+        + 'accTitle/accDescr but the output has no <title>/<desc> pair referenced by aria-labelledby/aria-describedby.');
+      mermaidMissingWiring++;
+      errors++;
     }
   }
 

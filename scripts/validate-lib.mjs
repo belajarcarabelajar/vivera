@@ -108,6 +108,8 @@ export const SNIPPET_CONTRACTS = {
     'graphify:sync',
     '#{clipboard}',
     'ENTRY GATE RUNS FIRST',
+    'THE HANDOFF IS THE RUN RECORD',
+    'Result: running',
     'RETRY BUDGET',
     'A TURN WITH NO TOOL CALL IS A REPORT',
     'Refuse four endings while work is owed',

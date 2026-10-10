@@ -15,7 +15,7 @@ defaults:
 tasks:
   - id: T1
     depends_on: []                  # DAG edges — machine-parseable, must match Mermaid
-    impacts: ["path/to/file1.ts consumers - rg 'file1' src/", "templates/implementation-plan-template.md §4 - bun scripts/validate-skill.mjs"]   # what this task can BREAK, not what it touches (flow-style only)
+    impacts: ["path/to/file1.ts consumers - rg 'file1' src/", "templates/implementation-plan-template.md §4 - bun scripts/validate-skill.mjs"]   # what this task can BREAK, not what it touches (flow-style only); quote any path containing [ ] { } , : # as "pages/[slug].astro"
     files: { create: [path/to/file1.ts], modify: [], test: [path/to/file1.test.ts] }
     idempotency_key: "T1:path/to/file1.ts"
     skip_if: "bun test path/to/file1.test.ts"   # exit 0 = already done → SKIPPED-IDEMPOTENT

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 // a rule `plan-publish.mjs --check` does not have, and then the two disagree
 // about the same file with no way to tell which one is right.
 import { planFreshness } from './plan-publish.mjs';
+import { strictYamlError } from './frontmatter-strict.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLISHER = path.join(__dirname, 'plan-publish.mjs');
@@ -685,9 +686,11 @@ function validateImpacts(plan, errors, warnings) {
 
 // ---------- Validation ----------
 
-export function validatePlan(plan, body) {
+export function validatePlan(plan, body, { frontmatter } = {}) {
   const errors = [];
   const warnings = [];
+  const strict = strictYamlError(frontmatter);
+  if (strict) errors.push(`frontmatter is not valid YAML (the vault's Obsidian reader would show it as raw text): ${strict}`);
   if (plan.schema !== SCHEMA_ID) errors.push(`schema must be "${SCHEMA_ID}" (got "${plan.schema}")`);
   if (plan.runner_contract !== true) warnings.push('runner_contract is not true; plan may not be runner-managed.');
 
@@ -1399,7 +1402,7 @@ function main(argv) {
   const md = readFileSync(file, 'utf8');
   const { frontmatter, body } = extractFrontmatter(md);
   const plan = parseUltraPlanYaml(frontmatter);
-  const { errors, warnings } = validatePlan(plan, body);
+  const { errors, warnings } = validatePlan(plan, body, { frontmatter });
 
   // The gate sits after validation and before any task step, and only for
   // --execute. A plan that fails validation cannot run at all, so gating it

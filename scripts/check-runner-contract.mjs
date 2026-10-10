@@ -32,6 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RUNNER_CONTRACT_KEYS, extractFrontmatter, parseUltraPlanYaml } from './ultra-plan-runner.mjs';
+import { strictYamlError } from './frontmatter-strict.mjs';
 import { readSkillCorpus } from './skill-corpus.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -133,7 +134,9 @@ export function checkRunnerContract() {
   const problems = [];
   const warnings = [];
 
-  const check = (artifact, planLike) => {
+  const check = (artifact, planLike, frontmatter) => {
+    const strict = strictYamlError(frontmatter);
+    if (strict) problems.push(`${artifact} frontmatter is not valid YAML: ${strict}`);
     for (const k of missingKeys(planLike)) {
       problems.push(`the runner reads \`${k}\` but ${artifact} does not declare it`);
     }
@@ -149,7 +152,7 @@ export function checkRunnerContract() {
   } else {
     try {
       const { frontmatter } = extractFrontmatter(fs.readFileSync(templatePath, 'utf8'));
-      check('templates/implementation-plan-template.md', parseUltraPlanYaml(frontmatter));
+      check('templates/implementation-plan-template.md', parseUltraPlanYaml(frontmatter), frontmatter);
     } catch (e) {
       problems.push(`templates/implementation-plan-template.md has unusable frontmatter: ${e.message}`);
     }
@@ -165,7 +168,7 @@ export function checkRunnerContract() {
       problems.push('the master skill has no fenced `ultra-plan/v1` plan header template to check');
     } else {
       const { frontmatter } = extractFrontmatter(fenced[0].replace(/^```[^\n]*\n/, ''));
-      check('the master skill plan header template', parseUltraPlanYaml(frontmatter));
+      check('the master skill plan header template', parseUltraPlanYaml(frontmatter), frontmatter);
     }
   } catch (e) {
     problems.push(`the master skill plan header template is unusable: ${e.message}`);

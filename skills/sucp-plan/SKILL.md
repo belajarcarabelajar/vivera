@@ -251,8 +251,8 @@ bun scripts/plan-issue-sync.mjs --status                # table, always exit 0
 | `Blocked` | open. Blocked means unfinished, so closing it would report done. |
 | `Complete` | closed |
 
-- The sync is a pure decision over `(recorded entry, plan text, plan status)`, resolving to exactly one of `create`, `update-body`, `update-state`, `update-and-state`, or `current`. That is what makes running it twice safe, and it is why the whole matrix is unit-tested without a network.
-- **`current` is the real no-op** and performs zero `gh` calls. A duplicate issue in a real repository is the failure this prevents, and a body edit never silently closes or reopens the issue.
+- The sync is a pure decision over `(recorded entry, live issue state, plan text, plan status)`, resolving to exactly one of `create`, `update-body`, `update-state`, `update-and-state`, or `current`. That is what makes running it twice safe, and it is why the whole matrix is unit-tested without a network.
+- **`current` is the real no-op**: it writes nothing and costs one read, `gh issue view --json state`, because the recorded state is the script's own past opinion and is checked against GitHub rather than believed. A duplicate issue in a real repository is the failure this prevents, and a body edit never silently closes or reopens the issue.
 - **An unrecorded plan looks before it creates.** With no issue number recorded, the sync lists the repository's issues (`gh issue list --state all`, without `--search`, so the read has no search-index lag) and matches the title exactly. One match whose `plan-sync` trailer names this plan's key is adopted: its number is recorded and the normal update path runs. The run reports `adopt` when the issue needs no edit, and otherwise the edit it made (`update-body`, `update-state`, or both) with `adopted: true` in the result; `--check` reports the pending action and exits 1, because the sidecar is missing the row. A same-title issue without that trailer, two or more matches, a failed list, or a list cut at its limit is refused with the issue numbers named, and nothing is created or written. This covers a create that reached GitHub while its local record was lost.
 - **The body goes on stdin** via `--body-file -`, never on argv. On argv a 10 KB plan hits `ARG_MAX` and goes through the shell's quoting rules, so the bytes stop being identical to the plan, which is the entire premise.
 - **A project with no configured repository is refused, not guessed.** `plan.issues.json` maps project name to `owner/repo` explicitly. A plan filed under the wrong repository is worse than one that is not filed.
@@ -274,7 +274,7 @@ flowchart TD
     Decision -->|"hash differs"| Body["gh issue edit<br/>title plus body"]
     Decision -->|"status differs"| State["gh issue edit<br/>open or closed"]
     Decision -->|"both differ"| Both["gh issue edit<br/>body plus state, one call"]
-    Decision -->|"identical"| Current["current<br/>zero gh calls"]
+    Decision -->|"identical"| Current["current<br/>one state read, no write"]
     Create --> Record["Record number, url,<br/>hash, state in plan.issues.json"]
     Adopt --> Record
     Body --> Record

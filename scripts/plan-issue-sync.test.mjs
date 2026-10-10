@@ -990,6 +990,58 @@ test('an adopted issue whose plan changed is edited and marked adopted', () => {
   }
 });
 
+test('a same-title issue whose trailer names another plan_id is refused', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const body = issueBody(text, { planId: 'another-plan', key: PLAN_REL, sourcePath: null, status: 'Draft', generatedBy: 'u/snippet' });
+    const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: body } });
+    assert.throws(() => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }), refusal(/#5\b/, /another-plan/));
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an adopted CLOSED issue of an open plan is reopened from the observed state', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers({ list: [issueRow(5, TITLE, 'CLOSED')], bodies: { 5: trailerBody(text) } });
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    // The list row is the observation; assuming "open" would record CLOSED as current.
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'issue reopen']);
+    assert.equal(res.action, 'update-state');
+    assert.equal(res.adopted, true);
+    assert.equal(res.cfg.issues[PLAN_REL].state, 'open');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a same-title issue whose body cannot be read is refused as unreadable', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers({ list: [issueRow(5)], bodies: {} });
+    assert.throws(() => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }), refusal(/#5\b/, /returned no body/));
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('an adoptable issue in a state other than OPEN or CLOSED is refused', () => {
+  const text = plan('Draft');
+  const f = tmpPlan(text);
+  try {
+    const run = ghAnswers({ list: [issueRow(5, TITLE, 'MERGED')], bodies: { 5: trailerBody(text) } });
+    assert.throws(() => syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run }), refusal(/#5\b/, /MERGED/));
+    assert.ok(!verbs(run).includes('issue create'));
+  } finally {
+    f.cleanup();
+  }
+});
+
 // ---------- config persistence ----------
 
 test('config round-trips and a missing file is an explicit error', () => {

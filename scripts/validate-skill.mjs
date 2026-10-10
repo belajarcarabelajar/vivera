@@ -721,8 +721,10 @@ for (const snip of requiredSnippets) {
     { label: 'subagent report carries NOT READ lines', file: template, needle: 'NOT READ: <source> (<reason>)' },
     { label: 'gather checkpoint resolves NOT READ lines', file: template, needle: 'Every `NOT READ:` line' },
     { label: 'handoff is written right after the entry gate', file: overnight, needle: 'the first file the run writes is the handoff' },
-    { label: 'handoff starts as running', file: overnight, needle: 'Result: running' },
+    { label: 'handoff starts as running', file: overnight, needle: 'with `Result: running`, the start time' },
+    { label: 'running is replaced at close', file: overnight, needle: 'Replace `Result: running` with the final result' },
     { label: 'handoff is updated per checklist item', file: overnight, needle: 'The handoff is the run record' },
+    { label: 'Last update is rewritten per item', file: overnight, needle: "rewrite the handoff's `Last update` line" },
     { label: 'a stale running handoff means the run died', file: overnight, needle: 'still says `running` with no live process' },
     { label: 'failed entry check still writes nothing', file: overnight, needle: 'A failed check still writes nothing' },
   ];

@@ -14,7 +14,8 @@ import { fileURLToPath } from 'node:url';
 const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const LIB_DIR = path.join(ROOT, 'scripts', 'install');
-const FILES = ['install.ps1', ...fs.readdirSync(LIB_DIR).filter((f) => /^windows-.*\.ps1$/.test(f)).map((f) => `scripts/install/${f}`)];
+// Sorted: readdirSync order depends on the filesystem (tmpfs gave windows-ops before windows-core).
+const FILES = ['install.ps1', ...fs.readdirSync(LIB_DIR).filter((f) => /^windows-.*\.ps1$/.test(f)).sort().map((f) => `scripts/install/${f}`)];
 const bytes = fs.readFileSync(path.join(ROOT, 'install.ps1'));
 const ps1 = bytes.toString('utf8');
 const all = FILES.map(read).join('\n');

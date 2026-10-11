@@ -11,6 +11,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
 
@@ -161,14 +162,22 @@ describe('F2 and F6: pruning a stale managed phase dir', () => {
     });
   }
 
-  test('digest: a stale dir whose name holds a newline is skipped, and files in the working dir survive', () => {
+  // A filesystem that cannot hold a newline in a name has nothing to test: the test is skipped, not passed.
+  const holdsNewlineNames = (() => {
+    const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-nl-'));
+    try {
+      fs.mkdirSync(path.join(probe, 'a\nb'));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      fs.rmSync(probe, { recursive: true, force: true });
+    }
+  })();
+  test.skipIf(!holdsNewlineNames)('digest: a stale dir whose name holds a newline is skipped, and files in the working dir survive', () => {
     const sb = sandbox();
     const odd = at(sb, `${SKILLS}/sucp-x\n..`);
-    try {
-      fs.mkdirSync(odd, { recursive: true });
-    } catch {
-      return; // this filesystem cannot hold such a name, so there is nothing to test
-    }
+    fs.mkdirSync(odd, { recursive: true });
     fs.writeFileSync(`${odd}/SKILL.md`, 'old');
     fs.writeFileSync(`${odd}/${MARKER}`, `source=${sb.repo}\n`);
     // The installer runs with the sandbox home as its working dir, so a `..` entry would reach the root.

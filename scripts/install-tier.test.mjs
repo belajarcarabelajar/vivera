@@ -107,7 +107,10 @@ test.skipIf(!HAS_GH_AND_TGREP)('tier: --tier full with gh and tgrep present inst
 // same tiers.tsv) says that tool is required. --dry-run keeps the runs cheap; the prerequisite code
 // path is the same.
 for (const tier of TIERS) {
-  test(`tier: prerequisite failures match requiredAt at ${tier}`, () => {
+  // At full every combination needs gh and tgrep on the machine's PATH (the sandbox links real tools), so a
+  // machine without them skips this tier visibly instead of failing on `ran`.
+  const tierTest = tier === 'full' && !HAS_GH_AND_TGREP ? test.skip : test;
+  tierTest(`tier: prerequisite failures match requiredAt at ${tier}`, () => {
     const required = requiredAt(rows, tier);
     let ran = 0;
     for (const tool of ['git', 'bun', 'gh', 'tgrep']) {

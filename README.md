@@ -4,6 +4,12 @@ Comprehensive, production-grade, all-in-one skill pipeline for AI coding agents.
 
 **Vivera** is the name of this farm. The vocabulary around the pipeline borrows from *Harvest Moon: Back to Nature*: skills are crops, pull requests are Blue Feather proposals, subagents are the seven Harvest Sprites (watering/menyiram is keep-alive, animal care/merawat is long-lived assets, harvesting/memanen is shipping), and the PR registry is the shipping bin. The flavor is cosmetic; every command, path, and behavior in this document is literal. See [The Vivera Farm Glossary](docs/vivera-glossary.md).
 
+<p align="center">
+  <img alt="Vivera, the farm's mascot: a smiling short-haired girl in a blue cyberpunk maid outfit with a holographic apron, holding a glowing clipboard tablet in a rainy neon city street." src="docs/images/vivera.jpg" width="480">
+  <br>
+  <sub>Vivera, the farm's mascot. AI-generated artwork; embedded provenance metadata was stripped, the pixels are unchanged.</sub>
+</p>
+
 Verification is the last gate, not the last step. Once the plan is `Done 100%` and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them through the harness's own prompt widget as multi-select groups in a single call. The user taps checkboxes instead of retyping, selected items run as real work, and the session ends with zero unexamined coding debt.
 
 Maintains a **Single Source of Truth** (`Super Ultra Code Plan Implementation.md`) so the agent never loses contextual invariants, safety constraints, or human-approval gates during execution.
@@ -158,6 +164,8 @@ vivera/
 │   ├── lifecycle.svg                            # README hero, light
 │   └── lifecycle-dark.svg                       # README hero, dark
 ├── docs/
+│   ├── images/
+│   │   └── vivera.jpg                           # README mascot artwork (metadata stripped)
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch

@@ -88,7 +88,7 @@ jobs:
         with:
           name: mermaid-diagrams
           path: diagrams/
-        if-no-files-found: warn
+          if-no-files-found: warn
 
       # The mirror-drift gate, the plan-lifecycle audit, and the skip_if registry
       # audit are absent from this file on purpose: all three walk the

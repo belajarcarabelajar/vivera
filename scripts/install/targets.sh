@@ -85,12 +85,29 @@ install_selfcheck() {
     echo "[DRY-RUN]   - mermaid.config.json -> ../../mermaid.config.json"
     echo "[DRY-RUN]   - mermaid.dark.config.json -> ../../mermaid.dark.config.json"
   else
-    mkdir -p "$REPO_DIR/skills/super-ultra-code-plan"
-    ln -sf "../../Super Ultra Code Plan Implementation.md" "$REPO_DIR/skills/super-ultra-code-plan/SKILL.md"
-    ln -sfn "../../templates" "$REPO_DIR/skills/super-ultra-code-plan/templates"
-    ln -sfn "../../examples" "$REPO_DIR/skills/super-ultra-code-plan/examples"
-    ln -sf "../../mermaid.config.json" "$REPO_DIR/skills/super-ultra-code-plan/mermaid.config.json"
-    ln -sf "../../mermaid.dark.config.json" "$REPO_DIR/skills/super-ultra-code-plan/mermaid.dark.config.json"
+    local package_dir="$REPO_DIR/skills/super-ultra-code-plan"
+    local entry name relative_target
+    # name|relative target, in the order the dry-run block above lists them.
+    local internal_links=(
+      "SKILL.md|../../Super Ultra Code Plan Implementation.md"
+      "templates|../../templates"
+      "examples|../../examples"
+      "mermaid.config.json|../../mermaid.config.json"
+      "mermaid.dark.config.json|../../mermaid.dark.config.json"
+    )
+    mkdir -p "$package_dir"
+    for entry in "${internal_links[@]}"; do
+      place_repo_link "${entry#*|}" "$package_dir/${entry%%|*}"
+    done
+    # Verify before claiming it: each link must resolve and carry the expected relative target.
+    for entry in "${internal_links[@]}"; do
+      name="${entry%%|*}"
+      relative_target="${entry#*|}"
+      if [ ! -e "$package_dir/$name" ] || [ "$(readlink "$package_dir/$name")" != "$relative_target" ]; then
+        echo "[FAIL] internal repo skill package link $name does not resolve" >&2
+        exit 1
+      fi
+    done
     echo "[OK] Internal repo skill package symlinks verified."
   fi
 }

@@ -5,7 +5,7 @@
 // scripts/lib/install-sandbox.mjs (temp HOME, PATH of symlinks to a named tool
 // list), so "bun is missing" is true on the PATH the installer sees.
 
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -159,4 +159,45 @@ test('tier: -h lists --tier on stdout and exits 0', () => {
   expect(r.status).toBe(0);
   expect(r.stdout).toContain('Usage:');
   expect(r.stdout).toContain('--tier');
+});
+
+// The installer is split by responsibility (T04). The mode flags are accepted by the parser but are
+// not in the usage text and answer "not implemented yet" until T07 to T09 replace the stubs; those
+// tasks rewrite this block.
+describe('modes', () => {
+  for (const mode of ['check', 'update', 'uninstall']) {
+    test(`modes: --${mode} exits 2 as not implemented yet and writes nothing`, () => {
+      const sb = sandbox({ tools: ['git', 'bun'] });
+      const r = sb.run([`--${mode}`]);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toContain(`${mode} is not implemented yet`);
+      expect(sb.snapshot()).toEqual([]);
+    });
+  }
+
+  test('modes: a second mode flag exits 2 asking to choose one', () => {
+    const sb = sandbox({ tools: ['git', 'bun'] });
+    const r = sb.run(['--check', '--update']);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('Choose one of --check, --update, --uninstall');
+    expect(r.stderr).toContain('Usage:');
+    expect(sb.snapshot()).toEqual([]);
+  });
+
+  test('modes: the usage text does not mention the unimplemented mode flags yet', () => {
+    const sb = sandbox({ tools: [] });
+    const r = sb.run(['-h']);
+    expect(r.status).toBe(0);
+    for (const flag of ['--check', '--update', '--uninstall']) expect(r.stdout).not.toContain(flag);
+  });
+
+  test('modes: install.sh is split into the expected files and each stays within 500 lines', () => {
+    const dir = path.join(WORKTREE, 'scripts/install');
+    const parts = fs.readdirSync(dir).filter((f) => f.endsWith('.sh')).sort();
+    expect(parts).toEqual(['check.sh', 'lib.sh', 'prereq.sh', 'targets.sh', 'uninstall.sh', 'update.sh']);
+    for (const file of ['install.sh', ...parts.map((f) => `scripts/install/${f}`)]) {
+      const lines = fs.readFileSync(path.join(WORKTREE, file), 'utf8').split('\n').length - 1;
+      expect({ file, ok: lines <= 500 }).toEqual({ file, ok: true });
+    }
+  });
 });

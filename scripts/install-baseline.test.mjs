@@ -197,7 +197,8 @@ test('baseline: without graphify the run skips core.hooksPath and leaves the rep
 test('baseline: the layout check fails when the installer targets another path', () => {
   // Mutation proof that the comparison above can fail: change one target in the sandbox copy only.
   const sb = sandbox({ tools: ['git', 'bun'] });
-  const script = path.join(sb.repo, 'install.sh');
+  // The link targets live in targets.sh; install.sh only mentions the path in its usage text.
+  const script = path.join(sb.repo, 'scripts/install/targets.sh');
   const src = fs.readFileSync(script, 'utf8');
   expect(src).toContain('.agents/skills');
   fs.writeFileSync(script, src.replaceAll('.agents/skills', '.agentz/skills'));

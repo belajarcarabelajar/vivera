@@ -3,10 +3,11 @@
 #
 # One line per path: [ok], [missing], [stale], [dangling] or [foreign]; then `check: CURRENT` (exit 0)
 # or `check: N problem(s)` (exit 1). Nothing is created, moved or removed, and --dry-run changes
-# nothing here. Sprite agents are not checked yet.
+# nothing here. With --copy the copies are compared by content instead of the links by target.
+# Sprite agents are not checked yet.
 
 mode_check() {
-  local selected id desired dest state target
+  local selected id desired dest state target expected
   local problems=0
 
   selected="$(select_targets)"
@@ -33,16 +34,30 @@ mode_check() {
           fi
           ;;
         ours-stale)
-          target="$(readlink "$dest")"
-          if [ ! -e "$dest" ]; then
-            echo "[dangling] $dest -> $target (expected $desired)"
+          if [ -L "$dest" ]; then
+            target="$(readlink "$dest")"
+            expected="$desired"
+            if [ "${COPY_MODE:-false}" = true ]; then
+              expected="a copy of $desired"
+            fi
+            if [ ! -e "$dest" ]; then
+              echo "[dangling] $dest -> $target (expected $expected)"
+            else
+              echo "[stale] $dest -> $target (expected $expected)"
+            fi
+          elif [ "${COPY_MODE:-false}" = true ]; then
+            echo "[stale] $dest (copy differs from $desired)"
           else
-            echo "[stale] $dest -> $target (expected $desired)"
+            echo "[stale] $dest (a managed copy; expected a link to $desired)"
           fi
           problems=$((problems + 1))
           ;;
         foreign)
-          echo "[foreign] $dest (not a vivera link; --update would move it aside)"
+          if [ "${COPY_MODE:-false}" = true ]; then
+            echo "[foreign] $dest (not a vivera copy; --update would move it aside)"
+          else
+            echo "[foreign] $dest (not a vivera link; --update would move it aside)"
+          fi
           problems=$((problems + 1))
           ;;
       esac

@@ -201,7 +201,10 @@ install_targets() {
 
 # 7. Local Repo Self-Check
 install_selfcheck() {
-  if [ "$DRY_RUN" = true ]; then
+  # Copy mode installs files, not links into this checkout, so its own relative links are not part of it.
+  if [ "${COPY_MODE:-false}" = true ]; then
+    echo "[SKIP] internal repo links: copy mode"
+  elif [ "$DRY_RUN" = true ]; then
     echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/super-ultra-code-plan"
     echo "[DRY-RUN]   - SKILL.md -> ../../Super Ultra Code Plan Implementation.md"
     echo "[DRY-RUN]   - templates -> ../../templates"

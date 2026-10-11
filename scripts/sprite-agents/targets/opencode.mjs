@@ -1,5 +1,5 @@
 // OpenCode v2 agent files, which skip a Claude Code file without a message.
-import { capitalize, splitFrontmatter } from '../crew.mjs';
+import { readTemplate, skillLine } from '../common.mjs';
 import { MARKER } from '../sync.mjs';
 
 // OpenCode v2 takes a six-digit hex color and skips the whole agent, without a
@@ -48,16 +48,7 @@ function openCodeShellRules() {
 }
 
 export function renderOpenCodeAgent(template, member, { templateLabel = `agents/roles/${member.role}.md` } = {}) {
-  const { head, body } = splitFrontmatter(template, templateLabel);
-  const fm = Bun.YAML.parse(head.join('\n')) ?? {};
-  for (const key of Object.keys(fm)) {
-    if (!OPENCODE_TEMPLATE_KEYS.includes(key)) {
-      throw new Error(`${templateLabel}: "${key}" has no OpenCode translation in scripts/sprite-agents/targets/opencode.mjs; add one before using it`);
-    }
-  }
-  if (typeof fm.description !== 'string' || fm.description.trim() === '') {
-    throw new Error(`${templateLabel}: "description" is required`);
-  }
+  const { fm, body, description, readOnly, skills } = readTemplate(template, member, { allowedKeys: OPENCODE_TEMPLATE_KEYS, target: 'opencode', templateLabel });
   for (const entries of Object.values(fm.hooks ?? {})) {
     for (const hook of entries.flatMap((e) => e.hooks ?? [])) {
       if (!String(hook.command ?? '').includes(GUARD_SCRIPT)) {
@@ -67,12 +58,8 @@ export function renderOpenCodeAgent(template, member, { templateLabel = `agents/
   }
 
   const permissions = fm.hooks ? openCodeShellRules() : [];
-  const tools = typeof fm.tools === 'string' ? fm.tools.split(',').map((t) => t.trim()) : fm.tools;
-  if (Array.isArray(tools) && !tools.some((t) => ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(t))) {
-    permissions.push({ action: 'edit', resource: '*', effect: 'deny' });
-  }
+  if (readOnly) permissions.push({ action: 'edit', resource: '*', effect: 'deny' });
 
-  const description = `${capitalize(member.sprite)}, a Harvest Sprite on the ${member.role} crew. ${fm.description.trim()}`;
   const lines = ['---', `description: ${JSON.stringify(description)}`, 'mode: subagent', `color: "${OPENCODE_COLORS[member.color]}"`];
   if (Number.isInteger(fm.maxTurns)) lines.push(`steps: ${fm.maxTurns}`);
   if (permissions.length > 0) {
@@ -82,10 +69,7 @@ export function renderOpenCodeAgent(template, member, { templateLabel = `agents/
   lines.push(`${MARKER} from ${templateLabel} and agents/crew.json; edit those, then run ./install.sh.`, '---');
 
   const preface = [];
-  if (Array.isArray(fm.skills) && fm.skills.length > 0) {
-    const names = fm.skills.map((s) => `\`${s}\``).join(', ');
-    preface.push('', `Load the ${names} skill with the skill tool before anything else; it holds the rules of your phase.`);
-  }
+  if (skills.length > 0) preface.push('', skillLine(skills, 'with the skill tool'));
   if (fm.hooks) {
     preface.push('', 'In this harness the guard allows only common read-only git forms and blocks `git -C`; run `cd <dir> && git <command>` instead.');
   }

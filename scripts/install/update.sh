@@ -17,12 +17,19 @@ prune_stale_skills() {
         continue
       fi
       skill_md="$entry/SKILL.md"
-      if marker_regular "$entry/.vivera-managed" && [ -e "$skill_md" ] && [ ! -L "$skill_md" ]; then
-        recorded="$(recorded_digest "$skill_md")"
-        current="$(entry_digest "$skill_md")"
-        if [ -z "$current" ] || [ "$current" != "$recorded" ]; then
-          echo "[KEEP] $entry (modified copy of a skill this checkout no longer has)"
+      if marker_regular "$entry/.vivera-managed"; then
+        # The installer places a plain file in a marked dir; a symlink there (live or dangling) is the user's.
+        if [ -L "$skill_md" ]; then
+          echo "[KEEP] $entry (not a plain file)"
           continue
+        fi
+        if [ -e "$skill_md" ]; then
+          recorded="$(recorded_digest "$skill_md")"
+          current="$(entry_digest "$skill_md")"
+          if [ -z "$current" ] || [ "$current" != "$recorded" ]; then
+            echo "[KEEP] $entry (modified copy of a skill this checkout no longer has)"
+            continue
+          fi
         fi
       fi
       if [ "$DRY_RUN" = true ]; then

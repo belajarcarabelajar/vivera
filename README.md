@@ -110,6 +110,7 @@ vivera/
 │   │   ├── btn-harvest-sprites.jpg              # Back to Nature (PS1) Harvest Sprites illustration
 │   │   └── sprites/                             # Seven Harvest Sprite portraits (chef.png ... bold.png)
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
+│   ├── graphify-indexed-session-artifacts.md    # One session's review report and ledger, kept visible to graphify query
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
 │       ├── plans/
@@ -117,7 +118,9 @@ vivera/
 │       └── spikes/                              # Spike reports & hypothesis evaluation
 ├── examples/
 │   ├── worked-example.md                        # Full pipeline walkthrough (filled-in reference)
-│   └── deep-research-worked-example.md          # Citation-grounded report at target density
+│   ├── deep-research-worked-example.md          # Citation-grounded report at target density
+│   ├── graph-viewer-demo.html                   # Self-contained knowledge-graph viewer demo (synthetic data)
+│   └── graph-viewer-demo.md                     # What the demo shows and how it is generated
 ├── scripts/
 │   ├── sync.sh                                  # Bidirectional sync (~/.config/ai <-> repo)
 │   ├── render-diagrams.sh                       # Render all mermaid blocks to SVG
@@ -212,6 +215,28 @@ tools an agent actually calls. One master skill, one set of rules.
 The skill installs through `skills/super-ultra-code-plan/`, which is a set of symlinks into
 the repo root rather than a copy. The master file stays single-sourced, and
 `render-diagrams.sh` skips symlinked files so the same diagram is never rendered twice.
+
+### Scripts without a section of their own
+
+The tree lists only some of `scripts/`, and later sections document most of the rest. These have no
+section, so this table is where they are described. Each line comes from the script's own header
+comment. Test files (`*.test.mjs`) sit next to the script they cover and are omitted.
+
+| Script | What it does |
+|---|---|
+| `install-skill-links.mjs` | Links every skill in `skills/` into `~/.config/opencode/skills/`, the only place the OpenCode skill tool reads. Never overwrites a real file or a foreign symlink. `install.sh` links the phase skills too; this is the standalone way to re-run or verify just that. `bun run skills:link` applies, `bun run skills:check` exits 1 on a missing or stale link, `--dry-run` prints the actions. |
+| `frontmatter-strict.mjs` | Runs plan frontmatter through a strict YAML check. The runner's own parser is a lenient subset, so a plan can pass it and still not be valid YAML. |
+| `validate-lib.mjs` | The pure, importable part of `validate-skill.mjs`, plus `renderMermaidBatch`, so unit tests can pin the checks. |
+| `mermaid-batch.mjs` | Renders a list of `.mmd` files from stdin with a batch-and-bisect fallback, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
+| `skill-corpus.mjs` | Holds the list of phase skills and `readSkillCorpus`, which reads the master skill and the phase skills together for the validators. |
+| `make-graph-demo.py` | Regenerates `examples/graph-viewer-demo.html` from a seeded synthetic graph. Needs `numpy`. |
+| `vault-index-batch.mjs` | Splits the unindexed vault between parallel extraction subagents by bytes, not by file count. |
+| `vault-index-resolve-chunk.mjs` | Turns a subagent's draft chunk into a final chunk whose `source_file` paths are the exact ones from `batches.json`. |
+| `vault-index-ids.mjs` | Searches node ids that chunks already emitted, by substring, so a subagent does not invent a duplicate. |
+| `vault-index-merge.mjs` | Joins the chunks into one `graph.json`. |
+| `vault-index-fold-rationale.mjs` | Folds `rationale_for` edges into a `rationale` attribute on the target node. |
+| `vault-index-narration.py` | Reduces a rendered session transcript to its narration by dropping the tool-call traffic. |
+| `vault-index-cluster.py` | Computes communities over the merged vault graph, because `graphify cluster-only` refuses to write on it. |
 
 ---
 
@@ -388,8 +413,8 @@ Diagrams are rendered to SVG with the pinned [mermaid-cli](https://github.com/me
 bun install                              # pinned toolchain
 bun run render-diagrams                  # all blocks -> diagrams/
 bun run validate                         # syntax + a11y + config + hero presence
-bun test scripts/                        # plan-runner contract tests
-bun run ci                               # everything above, in order
+bun test scripts/                        # unit tests for every script under scripts/
+bun run ci                               # render, validate, agents check, tests, snippet drift check
 ```
 
 These run **locally, by you, before the commit** — not on a hosted runner. Two reasons,
@@ -454,6 +479,7 @@ See the [`examples/`](examples/) folder for a complete filled-in walkthrough:
 
 - **[`worked-example.md`](examples/worked-example.md)**: Full pipeline from Classify through the session-close debt sweep on a real-sized task (adding zod input validation to a REST endpoint). Use this as a reference for what correct output looks like at each phase.
 - **[`deep-research-worked-example.md`](examples/deep-research-worked-example.md)**: Citation-grounded research report at target length and density.
+- **[`graph-viewer-demo.md`](examples/graph-viewer-demo.md)**: The knowledge-graph viewer used with the vault pipeline, as a self-contained HTML demo on synthetic data ([`graph-viewer-demo.html`](examples/graph-viewer-demo.html), works offline).
 
 ---
 
@@ -489,7 +515,7 @@ Bun only.
 ```bash
 bun run plan:check docs/code-plan/plans/<plan>.md   # validate the DAG and the visual map
 bun run plan:run   docs/code-plan/plans/<plan>.md   # same, then execute the tasks
-bun run contract:check                              # fast structural check for all 18 runner keys (~1s)
+bun run contract:check                              # fast structural check for all 23 runner keys (~1s)
 bun run audit:skipif                                # tally & audit skip_if predicates across registry
 ```
 
@@ -1596,7 +1622,7 @@ bun run render-diagrams
 # Validate frontmatter, symlinks, templates, scripts, mermaid syntax & a11y
 bun run validate
 
-# Contract tests for the plan runner and the snippet sync guard
+# Unit tests for every script under scripts/
 bun test scripts/
 
 # Trigger prompts vs the Snipset database (skips cleanly where no database exists)

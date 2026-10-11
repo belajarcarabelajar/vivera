@@ -7,6 +7,7 @@
 // HOME, a private TMPDIR, and a PATH made only of the tools a test names.
 
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -32,11 +33,67 @@ beforeAll(() => {
   const r = Bun.spawnSync(['bash', BUILD, TAG, released], { env });
   if (r.exitCode !== 0) throw new Error(`build-archive.sh failed: ${r.stderr.toString()}`);
   headCommit = Bun.spawnSync(['git', '-C', ROOT, 'rev-parse', '--short', 'HEAD'], { env }).stdout.toString().trim();
+  if (HAS_OPENSSL) startOrigins();
 });
 
 afterAll(() => {
+  plain?.stop(true);
+  secure?.stop(true);
   fs.rmSync(fixture, { recursive: true, force: true });
 });
+
+// --- Two local origins that serve the built release, for the checks that need a real network hop:
+// `plain` speaks http, `secure` speaks https with a certificate made here (clients are told to trust
+// it through CURL_CA_BUNDLE and WGETRC, so the system trust store is never touched). Under
+// secure, /ok/<tag>/<file> serves the file, /to-http/... redirects to the plain origin, and
+// /to-https/... redirects to the same server under another host name, which is another origin.
+const HAS_OPENSSL = Bun.which('openssl') !== null;
+const HAS_WGET = Bun.which('wget') !== null;
+let plain;
+let secure;
+let plainHits = 0;
+let certFile = '';
+let wgetrc = '';
+
+function served(pathname) {
+  const file = path.join(fixture, 'dl', pathname);
+  if (pathname.includes('..') || !fs.existsSync(file)) return new Response('not found', { status: 404 });
+  return new Response(Bun.file(file));
+}
+
+function startOrigins() {
+  certFile = path.join(fixture, 'cert.pem');
+  const keyFile = path.join(fixture, 'key.pem');
+  const made = Bun.spawnSync([
+    'openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes', '-days', '2',
+    '-keyout', keyFile, '-out', certFile, '-subj', '/CN=localhost', '-addext', 'subjectAltName=IP:127.0.0.1,DNS:localhost',
+  ]);
+  if (made.exitCode !== 0) throw new Error(`openssl failed: ${made.stderr.toString()}`);
+  wgetrc = path.join(fixture, 'wgetrc');
+  fs.writeFileSync(wgetrc, `ca_certificate = ${certFile}\n`);
+  plain = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: (req) => {
+      plainHits++;
+      return served(new URL(req.url).pathname);
+    },
+  });
+  secure = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    tls: { cert: Bun.file(certFile), key: Bun.file(keyFile) },
+    fetch: (req) => {
+      const m = new URL(req.url).pathname.match(/^\/(ok|to-http|to-https)\/(.*)$/);
+      if (!m) return new Response('not found', { status: 404 });
+      if (m[1] === 'to-http') return Response.redirect(`http://127.0.0.1:${plain.port}/${m[2]}`, 302);
+      if (m[1] === 'to-https') return Response.redirect(`https://localhost:${secure.port}/ok/${m[2]}`, 302);
+      return served(`/${m[2]}`);
+    },
+  });
+}
+const secureBase = (kind) => `https://127.0.0.1:${secure.port}/${kind}`;
+const trust = () => ({ CURL_CA_BUNDLE: certFile, WGETRC: wgetrc });
 
 const open = [];
 afterEach(() => {
@@ -65,6 +122,24 @@ function boot(sb, args, { base, stdin, env = {} } = {}) {
     ...(stdin === undefined ? {} : { stdin: new TextEncoder().encode(stdin) }),
   });
   return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+}
+
+// The same run, without blocking the event loop, so the origins above can answer while bash runs.
+async function bootAsync(sb, args, { base, env = {} } = {}) {
+  const runEnv = { ...sb.env, ...(base ? { VIVERA_BASE_URL: base } : {}), ...env };
+  assertSandbox(runEnv);
+  const pairs = Object.entries(runEnv).map(([k, v]) => `${k}=${v}`);
+  const proc = Bun.spawn(['/usr/bin/env', '-i', ...pairs, path.join(sb.bin, 'bash'), BOOT, ...args], {
+    cwd: sb.home,
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const timer = setTimeout(() => proc.kill(), 60_000);
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  await proc.exited;
+  clearTimeout(timer);
+  return { status: proc.exitCode, stdout, stderr };
 }
 
 const tmpLeft = (sb) => fs.readdirSync(path.join(sb.root, 'tmp'));
@@ -322,5 +397,233 @@ describe('bootstrap: other refusals', () => {
     expect(path.isAbsolute(fs.readlinkSync(skill))).toBe(true);
     // The script's working directory is HOME, and bash reports it by its physical path.
     expect(fs.readlinkSync(skill).startsWith(`${path.join(fs.realpathSync(sb.home), 'rel-dest', TAG)}/`)).toBe(true);
+  });
+});
+
+// --- Fixes from the independent review ---------------------------------------------------------
+
+const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const EMPTY_SHA256 = sha256Hex('');
+
+describe('bootstrap: the network is reached over https only', () => {
+  test.skipIf(!HAS_OPENSSL)('a plain-http VIVERA_BASE_URL exits 2 and says https, and no request is made', async () => {
+    const { sb, dest } = setup();
+    const before = plainHits;
+    const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: `http://127.0.0.1:${plain.port}` });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('https');
+    expect(plainHits).toBe(before);
+    expectUntouched(sb, dest);
+  });
+
+  test('a base URL that is neither https nor file exits 2 before anything is fetched', () => {
+    const { sb, dest } = setup();
+    for (const base of ['http://example.invalid/x', 'ftp://example.invalid/x', 'example.invalid/x', 'HTTP://example.invalid/x']) {
+      const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+      expect({ base, status: r.status }).toEqual({ base, status: 2 });
+      expect(r.stderr).toContain('https');
+    }
+    expectUntouched(sb, dest);
+  });
+
+  test.skipIf(!HAS_OPENSSL)('a redirect from https to plain http is refused: exit 1, the plain origin is never contacted', async () => {
+    const { sb, dest } = setup();
+    const before = plainHits;
+    const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-http'), env: trust() });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('[FAIL]');
+    expect(plainHits).toBe(before);
+    expectUntouched(sb, dest);
+  });
+
+  test.skipIf(!HAS_OPENSSL)('control: https straight from the origin installs', async () => {
+    const { sb, dest } = setup();
+    const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('ok'), env: trust() });
+    expect(r.stderr).not.toContain('[FAIL]');
+    expect(r.status).toBe(0);
+    expectInstalled(sb, dest);
+  });
+
+  test.skipIf(!HAS_OPENSSL)('control: a redirect to another https origin is followed (a release host redirects to its CDN)', async () => {
+    const { sb, dest } = setup();
+    const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-https'), env: trust() });
+    expect(r.stderr).not.toContain('[FAIL]');
+    expect(r.status).toBe(0);
+    expectInstalled(sb, dest);
+  });
+
+  test.skipIf(!HAS_OPENSSL)('control: https to a certificate the system does not trust exits 1', async () => {
+    const { sb, dest } = setup();
+    const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('ok') });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('[FAIL]');
+    expectUntouched(sb, dest);
+  });
+
+  describe('through wget, when curl is absent', () => {
+    const WGET_TOOLS = ['git', 'bun', 'tar', 'gzip', 'wget'];
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('control: https straight from the origin installs', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('ok'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+
+    // GNU wget's --https-only only limits links followed in recursive mode: with wget 1.25.0 it still
+    // fetched a plain-http URL and followed an https-to-http redirect (probed), so the redirect is
+    // checked from the response headers instead and the downloaded file is thrown away.
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a redirect from https to plain http is refused: exit 1, nothing installed', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-http'), env: trust() });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('[FAIL]');
+      expectUntouched(sb, dest);
+    });
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a redirect to another https origin is followed', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-https'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+  });
+});
+
+describe('bootstrap: the checksum file must be about this archive', () => {
+  test('a .sha256 that names another file, even with a digest that file really has, exits 1 before extraction', () => {
+    const { sb, base, dest, served: dir } = setup();
+    fs.writeFileSync(path.join(dir, `${ARCHIVE}.sha256`), `${EMPTY_SHA256}  /dev/null\n`);
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('[FAIL]');
+    expectUntouched(sb, dest);
+  });
+
+  test("the archive's real digest under another file name exits 1", () => {
+    const { sb, base, dest, served: dir } = setup();
+    const real = sha256Hex(fs.readFileSync(path.join(dir, ARCHIVE)));
+    fs.writeFileSync(path.join(dir, `${ARCHIVE}.sha256`), `${real}  other-${ARCHIVE}\n`);
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('[FAIL]');
+    expectUntouched(sb, dest);
+  });
+
+  test('a file with no digest, or a short one, exits 1', () => {
+    const { sb, base, dest, served: dir } = setup();
+    for (const body of ['', '\n', `abc123  ${ARCHIVE}\n`, `${ARCHIVE}\n`]) {
+      fs.writeFileSync(path.join(dir, `${ARCHIVE}.sha256`), body);
+      const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+      expect({ body, status: r.status }).toEqual({ body, status: 1 });
+    }
+    expectUntouched(sb, dest);
+  });
+
+  test('control: the right name with a zero digest exits 1', () => {
+    const { sb, base, dest, served: dir } = setup();
+    fs.writeFileSync(path.join(dir, `${ARCHIVE}.sha256`), `${'0'.repeat(64)}  ${ARCHIVE}\n`);
+    expect(boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base }).status).toBe(1);
+    expectUntouched(sb, dest);
+  });
+
+  test('control: the right name and digest installs, also with the binary-mode marker and an upper-case digest', () => {
+    for (const style of ['plain', 'binary', 'upper']) {
+      const { sb, base, dest, served: dir } = setup();
+      const real = sha256Hex(fs.readFileSync(path.join(dir, ARCHIVE)));
+      const line = { plain: `${real}  ${ARCHIVE}\n`, binary: `${real} *${ARCHIVE}\n`, upper: `${real.toUpperCase()}  ${ARCHIVE}\n` }[style];
+      fs.writeFileSync(path.join(dir, `${ARCHIVE}.sha256`), line);
+      const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+      expect({ style, status: r.status, err: r.stderr.includes('[FAIL]') }).toEqual({ style, status: 0, err: false });
+      expectInstalled(sb, dest);
+    }
+  });
+});
+
+describe('bootstrap: what a truncated download does', () => {
+  const text = fs.readFileSync(BOOT, 'utf8');
+
+  test('the header says what is true: nothing executes, but the shell may exit 0 having done nothing', () => {
+    const header = text.split('\n').filter((l) => l.startsWith('#')).join('\n');
+    expect(header).not.toMatch(/ends in a syntax error/);
+    expect(header).toMatch(/nothing executes/i);
+    expect(header).toMatch(/may exit 0/);
+  });
+
+  test('cut at every line boundary before the final call, no prefix fetches, extracts or installs anything', () => {
+    const lines = text.split('\n');
+    expect(lines.at(-1)).toBe('');
+    expect(lines.at(-2)).toBe('main "$@"');
+    const { sb, base, dest } = setup();
+    const statuses = new Set();
+    for (let n = 1; n < lines.length - 2; n++) {
+      const prefix = `${lines.slice(0, n).join('\n')}\n`;
+      statuses.add(boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base, stdin: prefix }).status);
+    }
+    // A silent exit 0 is real (the first cut is one), which is why the header must not promise a syntax error.
+    expect(statuses.has(0)).toBe(true);
+    expectUntouched(sb, dest);
+  });
+});
+
+describe('bootstrap: a failed extraction removes only what this run created', () => {
+  // A truncated archive with a checksum that matches it: the checksum passes, tar fails part way.
+  function truncatedRelease(dir) {
+    const archive = path.join(dir, ARCHIVE);
+    const bytes = fs.readFileSync(archive);
+    const cut = bytes.subarray(0, Math.floor(bytes.length * 0.6));
+    fs.writeFileSync(archive, cut);
+    fs.writeFileSync(`${archive}.sha256`, `${sha256Hex(cut)}  ${ARCHIVE}\n`);
+  }
+
+  test('an empty <dest>/<ref> the user made beforehand is still there, and empty, afterwards', () => {
+    const { sb, base, dest, served: dir } = setup();
+    truncatedRelease(dir);
+    fs.mkdirSync(path.join(dest, TAG), { recursive: true });
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('could not extract');
+    expect(fs.existsSync(path.join(dest, TAG))).toBe(true);
+    expect(fs.readdirSync(path.join(dest, TAG))).toEqual([]);
+    expect(sb.snapshot()).toEqual([]);
+    expect(tmpLeft(sb)).toEqual([]);
+  });
+
+  test('control: a <dest>/<ref> this run created is removed', () => {
+    const { sb, base, dest, served: dir } = setup();
+    truncatedRelease(dir);
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('could not extract');
+    expect(fs.existsSync(path.join(dest, TAG))).toBe(false);
+    expect(sb.snapshot()).toEqual([]);
+    expect(tmpLeft(sb)).toEqual([]);
+  });
+});
+
+describe('bootstrap: an existing tree says how to resume', () => {
+  test('a directory holding an install.sh is offered a resume command with the install.sh arguments', () => {
+    const { sb, base, dest } = setup();
+    const target = path.join(dest, TAG);
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, 'install.sh'), '#!/bin/sh\n');
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/already exists/);
+    expect(r.stderr).toContain(`cd ${target} && ./install.sh --tier minimal --only agents`);
+    expect(fs.readdirSync(target)).toEqual(['install.sh']);
+  });
+
+  test('a directory without an install.sh is only refused, with no resume command', () => {
+    const { sb, base, dest } = setup();
+    const target = path.join(dest, TAG);
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, 'keep.txt'), 'mine');
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/already exists/);
+    expect(r.stderr).not.toContain('./install.sh');
   });
 });

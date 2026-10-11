@@ -1,6 +1,6 @@
 # Session-Close Debt Sweep & Follow-Up Injection — Template
 
-> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched multi-select question, not a report. Default 3-5 items.
+> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
 
 ---
 
@@ -39,16 +39,16 @@ Rank by `leftover risk x blast radius x cheapness to close`. Everything below th
 2. `[short label]` — ...
 3. `[short label]` — ...
 
-Banned as a question: destructive, externally visible, credential-touching, or scope-expanding items (use explicit confirmation instead); already-completed items; cosmetic preferences with no code outcome.
+Banned from the batch: destructive, externally visible, credential-touching, or scope-expanding items (ask each on its own through the Confirmation Protocol, safe option first); already-completed items; cosmetic preferences with no code outcome.
 
 ## 4. The Question (single batched multi-select call)
 
-Present through the harness's structured question mechanism (`question`/`ask` tool, AskUserQuestion-style prompt, plan-approval or multi-select widget) as one question-set call placed after the final recap. Discover the mechanism first; if the runtime has none, render the checkbox list below as a fallback and say plainly that the widget is missing.
+Present through the harness's structured question mechanism (the tool table is in the Confirmation Protocol) as one question-tool call placed after the final recap. Cap: multi-select questions of at most 4 options each, at most 4 questions per call, and the last option of the last group is `Nothing, close session`. If the runtime has no question tool, render the checkbox list below as the Confirmation Protocol fallback (the gate stays closed) and say plainly that the widget is missing.
 
 - [ ] **`<option label>`** — `<one line: surface touched + finish line>` (recommended)
 - [ ] **`<option label>`** — `<one line>`
 - [ ] **`<option label>`** — `<one line>`
-- [ ] Skip for now — keep these in the backlog with their `defer:` markers
+- [ ] `Nothing, close session`: keep these in the backlog with their `defer:` markers
 
 Never ask one call per item. Never re-ask a declined item in the same session.
 
@@ -73,10 +73,10 @@ Did executing a selected item create new debt in the surface it touched? List ne
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one multi-select question, execute the selected items through the full pipeline, then re-sweep for any new debt they created.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups, execute the selected items through the full pipeline, then re-sweep for any new debt they created.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
-    Rank --> Ask["ONE multi-select question\nvia harness prompt"]
+    Rank --> Ask["One question-tool call\nof multi-select groups"]
     Ask -->|"User selects"| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]

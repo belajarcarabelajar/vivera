@@ -6,7 +6,7 @@
 > **Scope: a local diff, a branch, or a worktree.** Reviewing a pull request
 > somebody else opened is a different unit of review: remote state has to be
 > fetched first, coverage has to be answered per category, and the output is a
-> comment a human approves before it is posted. Use
+> comment a human approves, through the Confirmation Protocol, before it is posted. Use
 > `templates/pr-review-template.md` for that, and keep the 8-point qualification
 > filter below as the shared core. Do not duplicate one template into the other;
 > the split is what keeps the internal report and the posted comment from

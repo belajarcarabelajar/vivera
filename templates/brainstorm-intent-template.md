@@ -51,6 +51,6 @@ flowchart TD
 - [ ] AC-2: [criterion]
 
 ## 8. Approval Gate
-- [ ] Human approves this intent lock before any plan is written.
+- [ ] Human approves this intent lock before any plan is written, answered through the Confirmation Protocol (header `Intent`).
 - [ ] Approved scope (tasks A/B/C/D as locked): [...]
 - [ ] Next step: invoke the plan snippet to generate the implementation plan from this lock.

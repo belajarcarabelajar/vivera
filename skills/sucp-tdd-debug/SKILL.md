@@ -20,7 +20,7 @@ Cycle: RED (one minimal failing test) → verify fails for right reason → GREE
 | Minimal | One behavior per test | "and" in test name |
 | Clear | Name describes behavior | test('test1') |
 | Shows intent | Demonstrates desired API | Obscures intended behavior |
-Exceptions require explicit human approval: throwaway prototypes, generated code, documentation/configuration-only work, and visual-only changes. Every exception still needs an appropriate verification method.
+Exceptions require explicit human approval, asked through the Confirmation Protocol (header `TDD waiver`): throwaway prototypes, generated code, documentation/configuration-only work, and visual-only changes. Every exception still needs an appropriate verification method.
 Red flags — stop, restart: code before test, test passes immediately, can't explain failure, "just this once", "keep as reference", sunk-cost argument, "spirit not ritual" argument.
 
 ```mermaid

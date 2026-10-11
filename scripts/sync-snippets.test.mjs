@@ -163,3 +163,35 @@ test('every trigger snippet carries the same progress-meter paragraph', () => {
     assert.ok(first.includes(token), `shared paragraph lost "${token}"`);
   }
 });
+
+// Same reason as the progress meter: the cmd-* snippets never load `sucp-rules`, so the
+// Confirmation Protocol has to travel inside each trigger. Without it a snippet-started
+// session asks its approval gates as plain chat text and the user has to type the answer.
+test('every trigger snippet carries the same confirmations paragraph', () => {
+  const manifest = loadManifest();
+  const paragraphs = new Map();
+  for (const s of manifest.snippets) {
+    const body = extractPromptBody(readFileSync(path.join(rootDir, s.source), 'utf8'));
+    const found = body.split('\n').filter((l) => l.startsWith('CONFIRMATIONS:'));
+    assert.equal(found.length, 1, `${s.source} must contain exactly one CONFIRMATIONS paragraph, found ${found.length}`);
+    paragraphs.set(s.source, found[0]);
+  }
+  assert.ok(paragraphs.size >= 16, `expected every manifest snippet, got ${paragraphs.size}`);
+  const first = [...paragraphs.values()][0];
+  for (const [src, p] of paragraphs) assert.equal(p, first, `${src} drifted from the shared paragraph`);
+  const tokens = [
+    '`AskUserQuestion`',
+    '`question`',
+    '`ask_user`',
+    '(Recommended)',
+    'never end a turn on a plain-text question',
+    'A dismissed question is not an approval',
+    'At most 4 questions per call',
+    'Unattended Continuation Rule',
+    'no interactive client is attached',
+    'with no `(Recommended)` tag',
+  ];
+  for (const token of tokens) {
+    assert.ok(first.includes(token), `shared paragraph lost "${token}"`);
+  }
+});

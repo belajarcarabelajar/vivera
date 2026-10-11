@@ -86,7 +86,6 @@ $Targets = @(
     [pscustomobject]@{ Id = 'antigravity'; Kind = 'package'; Rel = '.gemini\config\skills\super-ultra-code-plan'; Dirs = @('.gemini'); Cmds = @('agy'); Always = $false },
     [pscustomobject]@{ Id = 'antigravity-cli'; Kind = 'package'; Rel = '.gemini\antigravity-cli\skills\super-ultra-code-plan'; Dirs = @('.gemini\antigravity-cli'); Cmds = @('agy'); Always = $false },
     [pscustomobject]@{ Id = 'antigravity-builtin'; Kind = 'package'; Rel = '.gemini\antigravity-cli\builtin\skills\super-ultra-code-plan'; Dirs = @('.gemini\antigravity-cli\builtin\skills'); Cmds = @(); Always = $false },
-    [pscustomobject]@{ Id = 'gemini-cli'; Kind = 'package'; Rel = '.gemini\skills\super-ultra-code-plan'; Dirs = @(); Cmds = @('gemini'); Always = $false },
     [pscustomobject]@{ Id = 'opencode'; Kind = 'package'; Rel = '.config\opencode\skills\super-ultra-code-plan'; Dirs = @('.config\opencode'); Cmds = @('opencode'); Always = $false },
     [pscustomobject]@{ Id = 'claude'; Kind = 'package'; Rel = '.claude\skills\super-ultra-code-plan'; Dirs = @('.claude'); Cmds = @(); Always = $false },
     [pscustomobject]@{ Id = 'codex'; Kind = 'none'; Rel = ''; Dirs = @('.codex'); Cmds = @('codex'); Always = $false },

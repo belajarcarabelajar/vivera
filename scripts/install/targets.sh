@@ -9,7 +9,7 @@
 # sprite_target in sprites.sh).
 
 target_ids() {
-  printf '%s\n' ai-config agents antigravity antigravity-cli antigravity-builtin gemini-cli opencode claude codex cursor copilot
+  printf '%s\n' ai-config agents antigravity antigravity-cli antigravity-builtin opencode claude codex cursor copilot
 }
 
 target_skills_dir() {
@@ -19,7 +19,6 @@ target_skills_dir() {
     antigravity) echo "$HOME/.gemini/config/skills/super-ultra-code-plan" ;;
     antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/super-ultra-code-plan" ;;
     antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/super-ultra-code-plan" ;;
-    gemini-cli) echo "$HOME/.gemini/skills/super-ultra-code-plan" ;;
     opencode) echo "$HOME/.config/opencode/skills/super-ultra-code-plan" ;;
     claude) echo "$HOME/.claude/skills/super-ultra-code-plan" ;;
     codex | cursor | copilot) echo "" ;;
@@ -32,7 +31,7 @@ target_kind() {
   case "$1" in
     ai-config) echo "file" ;;
     codex | cursor | copilot) echo "none" ;;
-    agents | antigravity | antigravity-cli | antigravity-builtin | gemini-cli | opencode | claude) echo "package" ;;
+    agents | antigravity | antigravity-cli | antigravity-builtin | opencode | claude) echo "package" ;;
     *) return 1 ;;
   esac
 }
@@ -44,7 +43,6 @@ target_detected() {
     antigravity) [ -d "$HOME/.gemini" ] || tool_available agy ;;
     antigravity-cli) [ -d "$HOME/.gemini/antigravity-cli" ] || tool_available agy ;;
     antigravity-builtin) [ -d "$HOME/.gemini/antigravity-cli/builtin/skills" ] ;;
-    gemini-cli) tool_available gemini ;;
     opencode) [ -d "$HOME/.config/opencode" ] || tool_available opencode ;;
     claude) [ -d "$HOME/.claude" ] ;;
     codex) [ -d "$HOME/.codex" ] || tool_available codex ;;
@@ -282,6 +280,18 @@ install_targets() {
   #     ~/.gemini/antigravity-cli/builtin/skills/use-tinyfish/, then `rmdir` the
   #     empty dirs. They are symlinks into this repo, so removing the target breaks
   #     them without touching real content.
+
+  # Retired 2026-10-11: the `gemini-cli` target (~/.gemini/skills/super-ultra-code-plan, detected by a
+  #     `gemini` on PATH) is gone. Google stopped serving Gemini CLI to free, AI Pro and Ultra accounts
+  #     on 2026-06-18 and replaced it with Antigravity CLI (`agy`), which the antigravity-cli target
+  #     already covers (~/.gemini/antigravity-cli/skills). Gemini CLI lives on only under a Code Assist
+  #     Standard/Enterprise licence or a paid API key; those users can link the package themselves.
+  #     Source: https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/
+  #     Revert: restore the four `gemini-cli` lines in this file and the row in install.ps1 from git
+  #     history at the commit before this one, then re-run ./install.sh. Cleanup for an already-deployed
+  #     copy: this installer no longer lists the link, so --uninstall and --check skip it; remove it by
+  #     hand with `rm -f` on the symlinks under ~/.gemini/skills/super-ultra-code-plan/ and `rmdir` the
+  #     empty dirs. They are symlinks into this repo, so removing them touches no real content.
 }
 
 # Local repo self-check: the relative links inside this checkout's own skill package.

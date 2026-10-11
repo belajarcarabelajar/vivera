@@ -52,9 +52,8 @@ Every point where the pipeline pauses for a human decision, from the Step 1 inte
 |---|---|---|---|
 | Claude Code | `AskUserQuestion` | 1 to 4 questions, 2 to 4 options each, header up to 12 characters, `multiSelect` | the tool adds "Other" |
 | OpenCode v2 | `question` | header, prompt, choices, `multiple`; dismissing cancels | always available |
-| Gemini CLI | `ask_user` | 1 to 4 questions, 2 to 4 options each, header up to 16 characters, `multiSelect` | types `text` and `yesno` exist; not stated for `choice` |
 
-Verified 2026-10-11: Claude Code against the tool schema, OpenCode v2 against <https://opencode.ai/v2/docs/tools/>, Gemini CLI against <https://geminicli.com/docs/tools/ask-user/>. Any other harness (Antigravity included) is not verified: the agent looks for a question tool by name, reads its schema, and uses the closest equivalent. With no tool, a tool error, or no interactive client, it renders a numbered list in the final message, says the prompt widget is missing, and keeps the gate closed.
+Verified 2026-10-11: Claude Code against the tool schema, OpenCode v2 against <https://opencode.ai/v2/docs/tools/>. Any other harness (Antigravity included) is not verified: the agent looks for a question tool by name, reads its schema, and uses the closest equivalent. With no tool, a tool error, or no interactive client, it renders a numbered list in the final message, says the prompt widget is missing, and keeps the gate closed.
 
 What a question looks like:
 
@@ -150,7 +149,7 @@ vivera/
 │   │   ├── digest.sh                            # Directory listing and equality helpers behind the digests
 │   │   ├── place.sh                             # Link or copy one entry, with backup and restore
 │   │   ├── prereq.sh                            # Tier and tool checks, read from tiers.tsv
-│   │   ├── targets.sh                           # The 11 targets, detection, selection, install steps
+│   │   ├── targets.sh                           # The 10 targets, detection, selection, install steps
 │   │   ├── check.sh                             # --check
 │   │   ├── update.sh                            # --update and prune
 │   │   ├── uninstall.sh                         # --uninstall
@@ -417,7 +416,7 @@ throwaway home, exit code checked. Anything else is "not verified".
 
 ### Supported Harnesses & Target Paths
 
-The installer has 11 targets, listed here in install order. The first two are always installed. Every
+The installer has 10 targets, listed here in install order. The first two are always installed. Every
 other target is installed only when its harness is detected, or when you name it with `--only`.
 
 | Target id | Harness | Detected when | Skills go to | Sprite agents go to | Do the sprites load? |
@@ -427,7 +426,6 @@ other target is installed only when its harness is detected, or when you name it
 | `antigravity` | Antigravity 2.0 and the IDE | `~/.gemini` exists, or `agy` is on `PATH` | `~/.gemini/config/skills/` | `~/.gemini/config/agents/<sprite>/agent.md` | not verified (Antigravity 1.3.3) |
 | `antigravity-cli` | Antigravity CLI (`agy`) | `~/.gemini/antigravity-cli` exists, or `agy` is on `PATH` | `~/.gemini/antigravity-cli/skills/` | none | n/a |
 | `antigravity-builtin` | Antigravity CLI built-in skills dir | `~/.gemini/antigravity-cli/builtin/skills` exists | `~/.gemini/antigravity-cli/builtin/skills/` | none | n/a |
-| `gemini-cli` | Gemini CLI | `gemini` is on `PATH` | `~/.gemini/skills/` | none | n/a |
 | `opencode` | OpenCode | `~/.config/opencode` exists, or `opencode` is on `PATH` | `~/.config/opencode/skills/` | `~/.config/opencode/agents/<sprite>.md` | listed in `opencode debug agents` (OpenCode v2.0.24), not run with a prompt |
 | `claude` | Claude Code | `~/.claude` exists (no CLI probe) | `~/.claude/skills/` | `~/.claude/agents/<sprite>.md` | not verified (Claude Code 2.1.296) |
 | `codex` | Codex | `~/.codex` exists, or `codex` is on `PATH` | none | `~/.codex/agents/<sprite>.toml` | not verified (CLI not installed here) |
@@ -436,8 +434,15 @@ other target is installed only when its harness is detected, or when you name it
 
 Every skills directory above except `~/.config/ai` holds `super-ultra-code-plan/` (`SKILL.md`, `templates/`, `examples/` and the two
 Mermaid configs) next to the seven phase skills, `sucp-<name>/SKILL.md`. Runs on Linux in a throwaway home
-checked the directory-based and the CLI-based detection and the skills and sprite paths of all 11 targets,
+checked the directory-based and the CLI-based detection and the skills and sprite paths of all 10 targets,
 using stub CLIs for detection.
+
+Gemini CLI (`gemini`) is not a target. Google stopped serving it to free, AI Pro and Ultra accounts on
+2026-06-18 and replaced it with Antigravity CLI (`agy`), which the `antigravity-cli` target covers
+(<https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/>).
+It remains available under a Code Assist Standard or Enterprise licence or with a paid API key; those
+users can link the skill package into `~/.gemini/skills/` themselves. An earlier revision of this
+installer had a `gemini-cli` target; `--only gemini-cli` now exits 2 as an unknown target.
 
 - **Detected, not installed.** A target that is absent after a successful `./install.sh` means its harness
   was not detected, not that the install failed. The installer does not create an empty config tree for a
@@ -455,8 +460,8 @@ using stub CLIs for detection.
 - **Codex, Cursor and Copilot have no skills target.** The installer takes their skills to come from
   `~/.agents/skills`, which was not checked against those three harnesses. They get sprite agents only.
 - **Sprite agents are rendered, and only OpenCode is confirmed to list them (no harness was run with a model prompt).** Six harnesses get them
-  (Claude Code, OpenCode, Codex, Cursor, Copilot and the `antigravity` target). `antigravity-cli`,
-  `antigravity-builtin` and `gemini-cli` get none, and tier `minimal` renders none. OpenCode v2.0.24
+  (Claude Code, OpenCode, Codex, Cursor, Copilot and the `antigravity` target). `antigravity-cli`
+  and `antigravity-builtin` get none, and tier `minimal` renders none. OpenCode v2.0.24
   listed all seven sprites in `opencode debug agents`. Antigravity 1.3.3 was not confirmed: `agy agents`
   lists only agents written with `mainAgent: true`, and the sprites are written with `mainAgent: false`.
   Claude Code 2.1.296 has no non-interactive lister of subagent definitions (`claude agents --json` lists background sessions and printed `[]` with the sprites installed), and Codex, Cursor and Copilot were never run.
@@ -728,8 +733,8 @@ holds for every harness below except Claude Code's own `.claude/agents/` in this
 `scripts/gen-sprite-agents.mjs` renders the seven Harvest Sprites for six harnesses, from the four role
 templates in `agents/roles/` and the roster in `agents/crew.json`. Each harness is one file in
 `scripts/sprite-agents/targets/`. `./install.sh` renders them for each harness that is detected or named with
-`--only`, and tier `minimal` renders none because the generator needs `bun`. `antigravity-cli`,
-`antigravity-builtin` and `gemini-cli` get none.
+`--only`, and tier `minimal` renders none because the generator needs `bun`. `antigravity-cli`
+and `antigravity-builtin` get none.
 
 | Harness | File and path | How read-only roles are restricted | Git guard | Verification |
 |---|---|---|---|---|

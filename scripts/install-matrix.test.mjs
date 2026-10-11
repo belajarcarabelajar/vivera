@@ -267,7 +267,7 @@ describe('a home with every harness', () => {
     for (const dir of ['.claude', '.config/opencode', '.gemini', '.codex', '.cursor', '.copilot']) {
       fs.mkdirSync(at(sb, dir), { recursive: true });
     }
-    for (const tool of ['agy', 'gemini']) shim(sb, tool);
+    shim(sb, 'agy');
     let check = null;
     for (const args of [[], ['--check'], ['--uninstall']]) {
       const repo = sb.snapshot(sb.repo);

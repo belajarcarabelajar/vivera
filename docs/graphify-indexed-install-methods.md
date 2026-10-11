@@ -24,7 +24,7 @@ install Bun and git, run `./install.sh`". The Intent Lock fixed five areas:
 | Tiers | `minimal` (skills only, no git, no bun), `standard` (git and bun, the default), `full` (plus gh and tgrep), one table in `scripts/install/tiers.tsv` read by bash and Bun the same way |
 | Platforms and modes | `--copy` mode, Git Bash default to copy, `install.ps1` for Windows (copy only), an offline install, macOS and WSL notes |
 | Lifecycle and safety | backup then link, `--uninstall`, `--update`, `--check`, `--only` and `--skip`, `--dry-run`, a sandbox helper for tests, digests so an edited copy is never discarded |
-| Harness breadth | `~/.gemini/skills` target, sprite agents rendered for Claude Code, OpenCode, Codex, Cursor, Copilot and Antigravity, `agy plugin` researched (adopt later) |
+| Harness breadth | the Antigravity skills targets (the `~/.gemini/skills` target for Gemini CLI was built, then removed on 2026-10-11 when Antigravity CLI replaced it), sprite agents rendered for Claude Code, OpenCode, Codex, Cursor, Copilot and Antigravity, `agy plugin` researched (adopt later) |
 
 ## Where the code lives
 

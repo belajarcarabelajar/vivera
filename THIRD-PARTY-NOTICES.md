@@ -46,8 +46,10 @@ the copies listed above.
   vertical 1x5 convolution, enlarged 3x with Real-ESRGAN `realesr-animevideov3-x3`
   (realesrgan-ncnn-vulkan 20220424), then resized to 1796 x 1580 px and saved as JPEG
   quality 90 with no embedded metadata.
-- Facts in the README (hut, hiring, birthdays, colors, affection and skill) come from
-  https://www.harvestmoonbacktonatureguide.com/characters.html (PS1) and
-  https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN).
+- Facts in the README (hut, hiring, birthdays, colors, affection, skill, weather) come from
+  https://www.harvestmoonbacktonatureguide.com/characters.html (PS1),
+  https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/26294 (PS1), and
+  https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN). The glossary lists every
+  source, including the ones rejected.
 - Removal: delete `docs/images/btn-harvest-sprites.jpg` and the image block in the
   "The Harvest Sprites" section of `README.md`.

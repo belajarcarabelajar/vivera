@@ -39,11 +39,15 @@ Rank by `leftover risk x blast radius x cheapness to close`. Everything below th
 2. `[short label]` — ...
 3. `[short label]` — ...
 
+In the list above and the checklist below, the description of the recommended option starts with `Why: <ranking factor>`, then the one line shown.
+
 Banned from the batch: destructive, externally visible, credential-touching, or scope-expanding items (ask each on its own through the Confirmation Protocol, safe option first); already-completed items; cosmetic preferences with no code outcome.
 
 ## 4. The Question (single batched multi-select call)
 
 Present through the harness's structured question mechanism (the tool table is in the Confirmation Protocol) as one question-tool call placed after the final recap. Cap: multi-select questions of at most 4 options each, at most 4 questions per call, and the last option of the last group is `Nothing, close session`. If the runtime has no question tool, render the checkbox list below as the Confirmation Protocol fallback (the gate stays closed) and say plainly that the widget is missing.
+
+The description of the recommended option begins with `Why:` and the ranking factor that put it first, then the usual one line naming the surface and the finish line.
 
 - [ ] **`<option label>`** — `<one line: surface touched + finish line>` (recommended)
 - [ ] **`<option label>`** — `<one line>`

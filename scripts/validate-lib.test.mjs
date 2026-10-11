@@ -517,10 +517,13 @@ test('mermaid-batch CLI exits 2 when stdin names no files', () => {
 
 // ---------- checkGateCatalog ----------
 
-const GATE_TABLE_HEAD = '| Gate | Header | Options, in order |\n|---|---|---|';
+const GATE_TABLE_HEAD = '| Gate | Header | Options, in order | Basis |\n|---|---|---|---|';
+// The table as it was before the Basis column, for the missing-column test.
+const GATE_TABLE_HEAD_NO_BASIS = '| Gate | Header | Options, in order |\n|---|---|---|';
 
-function gateRow(header, options) {
-  return `| A gate | \`${header}\` | ${options} |`;
+// The basis defaults to a non-empty reason so a fixture only goes wrong where a test says so.
+function gateRow(header, options, basis = 'A reason or the facts to state') {
+  return `| A gate | \`${header}\` | ${options} | ${basis} |`;
 }
 
 function gateTable(rows) {
@@ -553,6 +556,13 @@ function withRow(header, replacement) {
 
 test('checkGateCatalog accepts a well-formed table', () => {
   assert.deepEqual(checkGateCatalog(gateTable(GOOD_GATE_ROWS)), []);
+});
+
+test('checkGateCatalog accepts a four-column table with a filled Basis in every row', () => {
+  const text = gateTable(GOOD_GATE_ROWS);
+  assert.ok(text.includes('| Gate | Header | Options, in order | Basis |'));
+  assert.ok(GOOD_GATE_ROWS.every((row) => row.split('|').length === 6), 'every fixture row has four cells');
+  assert.deepEqual(checkGateCatalog(text), []);
 });
 
 test('checkGateCatalog reports a header over 12 characters by name', () => {
@@ -606,6 +616,50 @@ test('checkGateCatalog lets Blocked and Follow-ups omit (Recommended)', () => {
   assert.ok(text.includes('`Blocked` | One option per concrete way forward |'));
   assert.ok(text.includes('`Follow-ups` | Multi-select groups |'));
   assert.deepEqual(checkGateCatalog(text), []);
+});
+
+test('checkGateCatalog reports a header line without a Basis column', () => {
+  const text = ['Intro line.', '', GATE_TABLE_HEAD_NO_BASIS, ...GOOD_GATE_ROWS, '', 'Closing line.'].join('\n');
+  const problems = checkGateCatalog(text);
+  // One table-level problem, not one per row: every row would lack a Basis cell.
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^table: the header has no Basis column$/);
+});
+
+test('checkGateCatalog reports an empty Basis cell by its row header', () => {
+  const problems = checkGateCatalog(gateTable(withRow('Merge', gateRow('Merge', 'Do not merge; Merge the PR', ' '))));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^Merge: the Basis cell is empty$/);
+});
+
+test('checkGateCatalog names an empty Basis cell by row number when the header is empty', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Root cause', gateRow('', 'Approve the fix (Recommended)', ''))),
+  );
+  assert.ok(problems.includes('row 13: the Basis cell is empty'), problems.join(' | '));
+});
+
+test('checkGateCatalog reports a row that has no fourth cell at all as an empty Basis', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Probe', '| A gate | `Probe` | Run the probe (Recommended), Change the probe |')),
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^Probe: the Basis cell is empty$/);
+});
+
+test('checkGateCatalog reports a row with more than four cells, such as a pipe inside the Basis', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Probe', '| A gate | `Probe` | Run the probe (Recommended), Change the probe | Spike: an answer | not kept code |')),
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^Probe: row has 5 cells, expected 4$/);
+});
+
+test('checkGateCatalog accepts an escaped pipe inside a cell', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Probe', '| A gate | `Probe` | Run the probe (Recommended), Change the probe | Spike: an answer \\| not kept code |')),
+  );
+  assert.deepEqual(problems, []);
 });
 
 test('checkGateCatalog reports a missing table', () => {

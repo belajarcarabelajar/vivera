@@ -331,6 +331,17 @@ behind_symlinked_dir() {
   [ "$phys_dir" != "$phys_home$rel" ]
 }
 
+# behind_symlinked_dir for a <dest> whose directory may not exist yet: the nearest directory that does
+# exist decides, because whatever is created below a symlinked directory lands in the other tree.
+behind_symlinked_ancestor() {
+  local dir
+  dir="$(dirname "$1")"
+  while [ ! -d "$dir" ]; do
+    dir="$(dirname "$dir")"
+  done
+  behind_symlinked_dir "$dir/x"
+}
+
 # The state of a symlink at <dest>: ok when it already resolves to <desired>; ours-stale when it
 # resolves inside this repo (live or dangling) or is a legacy link of the old ai-skills repo (the
 # installer made it, so it is replaced without a backup); foreign for any other link, including one
@@ -376,10 +387,15 @@ classify_link() {
 
 # Prints exactly one of: absent, ok, ours-stale, foreign, inrepo, viadir.
 #   inrepo     <dest> is a file of this checkout itself (see dest_in_repo); it is never touched
-#   viadir     <dest> is an existing real file or directory that lives behind a symlinked directory
-#              (see behind_symlinked_dir): it belongs to another tree, so it is never moved or removed.
-#              A link there, and an absent dest, are judged as anywhere else: placing or moving a link
-#              is safe
+#   viadir     <dest> lives behind a symlinked directory (see behind_symlinked_dir), so it belongs to
+#              another tree (another checkout, the user's dotfiles) and is never moved, removed or
+#              retargeted. That is: an existing real file or directory; a link there that classify_link
+#              calls foreign (live or dangling, not the installer's own); and, in copy mode only, an
+#              absent dest, even when its directory is absent too (see behind_symlinked_ancestor): a copy
+#              is a real file written into the other tree, which check, update and uninstall would then
+#              leave alone for good, so the second run would refuse what the first one wrote. In link
+#              mode an absent dest stays absent: the link is the installer's own, and check, update and
+#              uninstall manage it. An ok or ours-stale link there is judged as anywhere else
 #   ok         what is wanted is there: a link to <desired>, or in copy mode a managed copy with the
 #              same content as <desired>
 #   ours-stale the installer's own and wrong: a link as classify_link says, or a managed copy that is
@@ -402,6 +418,8 @@ classify_dest() {
     state="$(classify_link "$dest" "$desired")"
     if [ "$state" = "ok" ] && [ "${COPY_MODE:-false}" = true ]; then
       state="ours-stale"
+    elif [ "$state" = "foreign" ] && behind_symlinked_dir "$dest"; then
+      state="viadir"
     fi
     echo "$state"
   elif [ -e "$dest" ]; then
@@ -416,6 +434,8 @@ classify_dest() {
         *) echo "foreign" ;;
       esac
     fi
+  elif [ "${COPY_MODE:-false}" = true ] && behind_symlinked_ancestor "$dest"; then
+    echo "viadir"
   else
     echo "absent"
   fi

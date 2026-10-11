@@ -203,3 +203,44 @@ test('check: a leftover backup file next to a correct link is not mentioned', ()
   expect(r.stdout).toContain('check: CURRENT');
   expect(r.stdout).not.toContain('vivera-bak');
 });
+
+// ---- Hardening round 2: mutants the tests above let survive ----------------------------------------
+
+test('check: a phase skill dir this checkout no longer has is [stale], and a real sucp-* dir of the user is not reported', () => {
+  const sb = sandbox();
+  expect(sb.run([]).status).toBe(0);
+  link(sb, path.join(sb.repo, 'skills/sucp-gone/SKILL.md'), '.agents/skills/sucp-gone/SKILL.md');
+  fs.mkdirSync(at(sb, '.agents/skills/sucp-mine'), { recursive: true });
+  fs.writeFileSync(at(sb, '.agents/skills/sucp-mine/SKILL.md'), 'my own skill');
+  const r = sb.run(['--check']);
+  expect(r.status).toBe(1);
+  expect(r.stdout).toContain(`[stale] ${at(sb, '.agents/skills/sucp-gone')} (a skill this checkout no longer has`);
+  expect(r.stdout).toContain('check: 1 problem(s)');
+  expect(r.stdout).not.toContain('sucp-mine');
+});
+
+test('check: --check and --uninstall ask for no tool with no --tier flag at all, while a plain install does', () => {
+  const sb = sandbox([]);
+  const install = sb.run([]);
+  expect(install.status).toBe(1);
+  expect(install.stderr).toContain('Missing prerequisite');
+  for (const mode of ['--check', '--uninstall']) {
+    const r = sb.run([mode]);
+    expect({ mode, asked: `${r.stdout}${r.stderr}`.includes('Missing prerequisite') }).toEqual({ mode, asked: false });
+  }
+});
+
+test('check: it writes nothing in the checkout, the bin dir or the temp dir, whether the install is current or not', () => {
+  const outsideHome = (sb) => sb.snapshot(sb.root).filter((l) => l !== 'home|d|' && !l.startsWith('home/'));
+  const current = sandbox();
+  expect(current.run([]).status).toBe(0);
+  const before = outsideHome(current);
+  expect(before.length).toBeGreaterThan(50);
+  expect(current.run(['--check']).status).toBe(0);
+  expect(outsideHome(current)).toEqual(before);
+
+  const bare = sandbox();
+  const beforeBare = outsideHome(bare);
+  expect(bare.run(['--check']).status).toBe(1);
+  expect(outsideHome(bare)).toEqual(beforeBare);
+});

@@ -7,23 +7,110 @@
 # PLACE_QUIET: link_skill_package sets it so the dozen routine "Linked" lines of one package fold
 # into its single summary line; backups, repoints and skips are always printed.
 # PLACE_CHANGED: how many placements were not already current since it was last reset.
+# PLACE_SKIPPED: how many entries of the current package were left alone (inside the checkout, or
+# behind a symlinked directory), so the package is not reported as installed when it is not.
+# LEFT_ALONE: the same count for the whole run, for the last line of install and update.
+# PLACED_DESTS: the destinations that now hold the installer's own copy, for the digests in the marker.
 PLACE_QUIET=false
 PLACE_CHANGED=0
+PLACE_SKIPPED=0
+LEFT_ALONE=0
+PLACED_DESTS=()
 
-# One line marks a package dir (or a lone file, by sidecar) as vivera's own. Rewritten only when it differs.
-write_marker() {
+# One "[SKIP] ... left alone" line, counted for the last line of the run.
+left_alone() {
+  echo "[SKIP] $1"
+  LEFT_ALONE=$((LEFT_ALONE + 1))
+}
+
+# Last line of install and update when something was left alone: say so instead of "complete".
+finish_if_left_alone() {
+  local word="entries"
+  if [ "$LEFT_ALONE" -gt 0 ]; then
+    if [ "$LEFT_ALONE" -eq 1 ]; then
+      word="entry"
+    fi
+    echo "==> Vivera finished with $LEFT_ALONE $word left alone (see the [SKIP] lines above)"
+    exit 0
+  fi
+}
+
+# A placement step failed for a reason of the machine (a read-only dir, a full disk): one clear line.
+place_fail() {
+  echo "[FAIL] could not place $1: $2 failed" >&2
+  exit 1
+}
+
+# --- Markers ----------------------------------------------------------------------------------
+# <dir>/.vivera-managed (or <dest>.vivera-managed for a lone file) holds "source=<repo>" and one
+# "entry <name> <algo>:<digest>" line per entry the installer placed (see managed_state in lib.sh).
+
+# A marker path is usable when nothing is there yet or a plain file is: never a FIFO (opening it
+# would hang), a directory or a symlink. Anything else stops the run before any copy is made.
+marker_check() {
   local marker="$1"
-  local line="source=$REPO_DIR"
-  if [ -f "$marker" ] && [ "$(cat "$marker")" = "$line" ]; then
+  if [ -e "$marker" ] || [ -L "$marker" ]; then
+    if ! marker_regular "$marker"; then
+      echo "[FAIL] $marker is not a regular file; move it away" >&2
+      exit 1
+    fi
+  fi
+}
+
+# Copy mode, before anything is copied into the dir: the marker exists, so an abort half way leaves
+# a managed dir (judged entry by entry) and not copies nobody claims.
+marker_begin() {
+  local marker="$1"
+  if dest_in_repo "$marker"; then
     return 0
   fi
-  mkdir -p "$(dirname "$marker")"
-  printf '%s\n' "$line" > "$marker"
+  marker_check "$marker"
+  if [ -e "$marker" ]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$marker")" || place_fail "$(dirname "$marker")" mkdir
+  printf 'source=%s\n' "$REPO_DIR" > "$marker"
+}
+
+# Copy mode, after the placement: source plus one digest line per placed entry. Rewritten only when
+# it differs.
+write_marker() {
+  local marker="$1"
+  shift
+  local content="source=$REPO_DIR"
+  local dest digest
+  if dest_in_repo "$marker"; then
+    return 0
+  fi
+  marker_check "$marker"
+  for dest in "$@"; do
+    digest="$(entry_digest "$dest")"
+    if [ -n "$digest" ]; then
+      content="$content"$'\n'"entry $(basename "$dest") $digest"
+    fi
+  done
+  if marker_regular "$marker" && [ "$(cat "$marker")" = "$content" ]; then
+    return 0
+  fi
+  mkdir -p "$(dirname "$marker")" || place_fail "$(dirname "$marker")" mkdir
+  printf '%s\n' "$content" > "$marker"
+}
+
+# Link mode: nothing is managed, so a marker left by an earlier copy install goes. Only a plain file
+# is removed; a directory or anything else of that name was never ours.
+drop_marker() {
+  local marker="$1"
+  if dest_in_repo "$marker"; then
+    return 0
+  fi
+  if marker_regular "$marker"; then
+    rm -f "$marker"
+  fi
 }
 
 # Clears what is at <dest> so a fresh link or copy can take its place. Only callers that know <dest>
-# is the installer's own use it (classified ours-stale, or a managed copy verified identical to its
-# source by uninstall): a managed copy directory is the one real directory removed with rm -r.
+# is the installer's own use it (classified ours-stale, or a managed copy judged identical or pristine
+# by uninstall): a managed copy directory is the one real directory removed with rm -r.
 remove_replaced() {
   local dest="$1"
   if [ -d "$dest" ] && [ ! -L "$dest" ]; then
@@ -55,10 +142,12 @@ place_link() {
 
   case "$state" in
     inrepo)
-      echo "[SKIP] $dest is inside this checkout; left alone"
+      left_alone "$dest is inside this checkout; left alone"
+      PLACE_SKIPPED=$((PLACE_SKIPPED + 1))
       ;;
     viadir)
-      echo "[SKIP] $dest is reached through a symlinked directory; left alone"
+      left_alone "$dest is reached through a symlinked directory; left alone"
+      PLACE_SKIPPED=$((PLACE_SKIPPED + 1))
       ;;
     ok)
       if [ "$PLACE_QUIET" != true ]; then
@@ -71,8 +160,8 @@ place_link() {
           echo "[DRY-RUN] Would link: $dest -> $desired"
         fi
       else
-        mkdir -p "$(dirname "$dest")"
-        ln -s "$desired" "$dest"
+        mkdir -p "$(dirname "$dest")" || place_fail "$dest" mkdir
+        ln -s "$desired" "$dest" || place_fail "$dest" ln
         if [ "$PLACE_QUIET" != true ]; then
           echo "[OK] Linked: $dest -> $desired"
         fi
@@ -87,8 +176,8 @@ place_link() {
       if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] Would repoint: $dest -> $desired ($old)"
       else
-        remove_replaced "$dest"
-        ln -s "$desired" "$dest"
+        remove_replaced "$dest" || place_fail "$dest" rm
+        ln -s "$desired" "$dest" || place_fail "$dest" ln
         echo "[OK] Repointed: $dest -> $desired ($old)"
       fi
       ;;
@@ -97,7 +186,7 @@ place_link() {
       if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] Would back up $dest to $backup, then link"
       else
-        mv "$dest" "$backup"
+        mv "$dest" "$backup" || place_fail "$dest" mv
         if ! ln -s "$desired" "$dest"; then
           restore_backup "$dest" "$backup"
         fi
@@ -122,7 +211,9 @@ copy_entry() {
   fi
 }
 
-# The copy-mode twin of place_link. The marker is written by the caller once the whole package is placed.
+# The copy-mode twin of place_link. A managed copy the user edited is "foreign" here (see classify_dest)
+# and is moved aside like any user file; one that is merely outdated is refreshed. The marker is written
+# by the caller, from PLACED_DESTS, once the whole package is placed.
 place_copy() {
   local src="$1"
   local dest="$2"
@@ -135,12 +226,15 @@ place_copy() {
 
   case "$state" in
     inrepo)
-      echo "[SKIP] $dest is inside this checkout; left alone"
+      left_alone "$dest is inside this checkout; left alone"
+      PLACE_SKIPPED=$((PLACE_SKIPPED + 1))
       ;;
     viadir)
-      echo "[SKIP] $dest is reached through a symlinked directory; left alone"
+      left_alone "$dest is reached through a symlinked directory; left alone"
+      PLACE_SKIPPED=$((PLACE_SKIPPED + 1))
       ;;
     ok)
+      PLACED_DESTS+=("$dest")
       if [ "$PLACE_QUIET" != true ]; then
         echo "[OK] Already current: $dest"
       fi
@@ -151,7 +245,8 @@ place_copy() {
           echo "[DRY-RUN] Would copy: $src -> $dest"
         fi
       else
-        copy_entry "$src" "$dest"
+        copy_entry "$src" "$dest" || place_fail "$dest" cp
+        PLACED_DESTS+=("$dest")
         if [ "$PLACE_QUIET" != true ]; then
           echo "[OK] Copied: $dest"
         fi
@@ -161,8 +256,9 @@ place_copy() {
       if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] Would refresh: $dest from $src"
       else
-        remove_replaced "$dest"
-        copy_entry "$src" "$dest"
+        remove_replaced "$dest" || place_fail "$dest" rm
+        copy_entry "$src" "$dest" || place_fail "$dest" cp
+        PLACED_DESTS+=("$dest")
         echo "[OK] Refreshed: $dest"
       fi
       ;;
@@ -171,10 +267,11 @@ place_copy() {
       if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] Would back up $dest to $backup, then copy"
       else
-        mv "$dest" "$backup"
+        mv "$dest" "$backup" || place_fail "$dest" mv
         if ! copy_entry "$src" "$dest"; then
           restore_backup "$dest" "$backup"
         fi
+        PLACED_DESTS+=("$dest")
         echo "[BACKUP] $dest moved to $backup"
         if [ "$PLACE_QUIET" != true ]; then
           echo "[OK] Copied: $dest"
@@ -207,36 +304,33 @@ place_repo_link() {
   ln -s "$relative_target" "$dest"
 }
 
-# A lone file's marker goes beside it. In link mode nothing is managed, so a leftover marker from an
-# earlier copy install is removed once the link is in place. A marker path inside this checkout (a
-# harness dir that is a symlink into the repo) is never written or removed.
-settle_marker() {
-  local marker="$1"
-  if [ "$DRY_RUN" = true ] || dest_in_repo "$marker"; then
-    return 0
-  fi
-  if [ "${COPY_MODE:-false}" = true ]; then
-    write_marker "$marker"
-  else
-    rm -f "$marker"
-  fi
-}
-
 link_target() {
   local target_dir="$1"
   local target_file="$2"
+  local sidecar="$target_file.vivera-managed"
 
   if [ "$DRY_RUN" = true ]; then
     echo "[DRY-RUN] Would create directory: $target_dir"
+    place_entry "$MASTER_FILE" "$target_file"
+    return 0
   fi
-  place_entry "$MASTER_FILE" "$target_file"
-  settle_marker "$target_file.vivera-managed"
+  if [ "${COPY_MODE:-false}" = true ]; then
+    marker_begin "$sidecar"
+    PLACED_DESTS=()
+    place_entry "$MASTER_FILE" "$target_file"
+    write_marker "$sidecar" ${PLACED_DESTS[@]+"${PLACED_DESTS[@]}"}
+  else
+    place_entry "$MASTER_FILE" "$target_file"
+    drop_marker "$sidecar"
+  fi
 }
 
 link_skill_package() {
   local target_skill_dir="$1"
-  local sibling_dir desired dest marked_dir
+  local sibling_dir desired dest marked_dir word
+  local placed=()
   local dirs=()
+  local unique=$'\n'
   sibling_dir="$(dirname "$target_skill_dir")"
 
   if [ "$DRY_RUN" = true ]; then
@@ -255,21 +349,57 @@ link_skill_package() {
     fi
   fi
 
+  # The dirs the entries live in: the package dir and one dir per phase skill.
+  while IFS=$'\t' read -r -u 3 desired dest; do
+    marked_dir="$(dirname "$dest")"
+    case "$unique" in
+      *$'\n'"$marked_dir"$'\n'*) ;;
+      *)
+        unique="$unique$marked_dir"$'\n'
+        dirs+=("$marked_dir")
+        ;;
+    esac
+  done 3<<< "$(package_entries "$target_skill_dir")"
+
+  if [ "$DRY_RUN" != true ] && [ "${COPY_MODE:-false}" = true ]; then
+    # Markers first, all of them, so a path that cannot hold one stops the run before any copy is made.
+    for marked_dir in "${dirs[@]}"; do
+      marker_begin "$marked_dir/.vivera-managed"
+    done
+  fi
+
   PLACE_QUIET=true
   PLACE_CHANGED=0
+  PLACE_SKIPPED=0
+  PLACED_DESTS=()
   # fd 3 keeps the entry list apart from stdin of the commands run in the loop.
   while IFS=$'\t' read -r -u 3 desired dest; do
     place_entry "$desired" "$dest"
-    dirs+=("$(dirname "$dest")")
   done 3<<< "$(package_entries "$target_skill_dir")"
   PLACE_QUIET=false
 
   if [ "$DRY_RUN" != true ]; then
-    # Markers go in only now, so the placement above judged every entry before any of them was marked.
     for marked_dir in "${dirs[@]}"; do
-      settle_marker "$marked_dir/.vivera-managed"
+      if [ "${COPY_MODE:-false}" = true ]; then
+        # The digests of what was placed here, now that it is placed.
+        placed=()
+        for dest in ${PLACED_DESTS[@]+"${PLACED_DESTS[@]}"}; do
+          if [ "$(dirname "$dest")" = "$marked_dir" ]; then
+            placed+=("$dest")
+          fi
+        done
+        write_marker "$marked_dir/.vivera-managed" ${placed[@]+"${placed[@]}"}
+      else
+        drop_marker "$marked_dir/.vivera-managed"
+      fi
     done
-    if [ "$PLACE_CHANGED" -eq 0 ]; then
+    if [ "$PLACE_SKIPPED" -gt 0 ]; then
+      word="entries"
+      if [ "$PLACE_SKIPPED" -eq 1 ]; then
+        word="entry"
+      fi
+      echo "[WARN] skill package in: $target_skill_dir: $PLACE_SKIPPED $word left alone, the rest is in place"
+    elif [ "$PLACE_CHANGED" -eq 0 ]; then
       echo "[OK] Already current: skill package in: $target_skill_dir"
     elif [ "${COPY_MODE:-false}" = true ]; then
       echo "[OK] Copied skill package in: $target_skill_dir"

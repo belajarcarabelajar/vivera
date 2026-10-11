@@ -10,6 +10,7 @@
 // each sandbox here gets symlinks to the real ones.
 
 import { afterEach, describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './lib/install-sandbox.mjs';
@@ -62,9 +63,10 @@ describe('install', () => {
     expect(r.stdout).toContain('[OK] Copied');
 
     for (const dir of [PKG, ...phases(sb).map((n) => `${SKILLS}/${n}`)]) {
-      expect(read(sb, `${dir}/${MARKER}`)).toBe(`source=${sb.repo}\n`);
+      // Changed in T10d: after `source=` the marker holds one digest line per entry (install-digest.test.mjs).
+      expect(read(sb, `${dir}/${MARKER}`).startsWith(`source=${sb.repo}\n`)).toBe(true);
     }
-    expect(read(sb, `.config/ai/${MASTER}${MARKER}`)).toBe(`source=${sb.repo}\n`);
+    expect(read(sb, `.config/ai/${MASTER}${MARKER}`).startsWith(`source=${sb.repo}\n`)).toBe(true);
 
     const master = fs.readFileSync(path.join(sb.repo, MASTER));
     expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md`)).equals(master)).toBe(true);
@@ -132,15 +134,26 @@ describe('install', () => {
     expect(backups(sb).filter((l) => l.includes('mermaid')).length).toBe(0);
   });
 
-  test('copy: link mode without cmp and diff cannot tell an edited copy from a pristine one, so it backs it up', () => {
+  // Changed in T10d: without cmp and diff the copy is now judged by digest, so a copy with the source's
+  // bytes is the installer's own and is relinked, while one with other bytes and no record is backed up.
+  test('copy: link mode without cmp and diff judges a copy by digest: identical is relinked, unrecorded and different is backed up', () => {
+    const identical = sandbox({ compare: false });
+    fs.mkdirSync(at(identical, PKG), { recursive: true });
+    fs.copyFileSync(path.join(identical.repo, MASTER), at(identical, `${PKG}/SKILL.md`));
+    fs.writeFileSync(at(identical, `${PKG}/${MARKER}`), `source=${identical.repo}\n`);
+    const r = identical.run([]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('[BACKUP]');
+    expect(fs.lstatSync(at(identical, `${PKG}/SKILL.md`)).isSymbolicLink()).toBe(true);
+
     const sb = sandbox({ compare: false });
     fs.mkdirSync(at(sb, PKG), { recursive: true });
-    fs.copyFileSync(path.join(sb.repo, MASTER), at(sb, `${PKG}/SKILL.md`));
+    fs.writeFileSync(at(sb, `${PKG}/SKILL.md`), 'something else');
     fs.writeFileSync(at(sb, `${PKG}/${MARKER}`), `source=${sb.repo}\n`);
-    const r = sb.run([]);
-    expect(r.status).toBe(0);
-    expect(r.stdout).toContain('[BACKUP]');
-    expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}`)).equals(fs.readFileSync(path.join(sb.repo, MASTER)))).toBe(true);
+    const other = sb.run([]);
+    expect(other.status).toBe(0);
+    expect(other.stdout).toContain('[BACKUP]');
+    expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}`), 'utf8')).toBe('something else');
   });
 
   test('copy: --copy honors --only and --skip', () => {
@@ -195,14 +208,17 @@ describe('check and update', () => {
     fs.appendFileSync(inDir, '\nedited');
     const stale = sb.run(['--check', '--copy']);
     expect(stale.status).toBe(1);
-    expect(stale.stdout).toContain(`[stale] ${edited} (copy differs from ${path.join(sb.repo, 'mermaid.config.json')})`);
-    expect(stale.stdout).toContain(`[stale] ${at(sb, `${PKG}/templates`)} (copy differs`);
+    // Changed in T10d: an edit is the user's, so check says so and update moves it aside (it used to
+    // overwrite it, "Refreshed", with no backup).
+    expect(stale.stdout).toContain(`[stale] ${edited} (copy edited since it was installed; --update moves it aside)`);
+    expect(stale.stdout).toContain(`[stale] ${at(sb, `${PKG}/templates`)} (copy edited since it was installed`);
     expect(stale.stdout).toContain('check: 2 problem(s)');
 
     const upd = sb.run(['--update', '--copy']);
     expect(upd.status).toBe(0);
-    expect(upd.stdout).toContain('Refreshed');
-    expect(backups(sb)).toEqual([]);
+    expect(upd.stdout).toContain('[BACKUP]');
+    expect(exists(sb, `${PKG}/templates.vivera-bak-${STAMP}`)).toBe(true);
+    expect(fs.readFileSync(`${edited}.vivera-bak-${STAMP}`, 'utf8').endsWith('\nedited')).toBe(true);
     expect(fs.readFileSync(edited).equals(fs.readFileSync(path.join(sb.repo, 'mermaid.config.json')))).toBe(true);
     expectSameTree(path.join(sb.repo, 'templates'), at(sb, `${PKG}/templates`));
     const after = sb.run(['--check', '--copy']);
@@ -250,7 +266,9 @@ describe('check and update', () => {
     expect(sb.run(['--copy']).status).toBe(0);
     fs.mkdirSync(at(sb, `${SKILLS}/sucp-gone`));
     fs.writeFileSync(at(sb, `${SKILLS}/sucp-gone/SKILL.md`), 'old copy');
-    fs.writeFileSync(at(sb, `${SKILLS}/sucp-gone/${MARKER}`), `source=${sb.repo}\n`);
+    // Changed in T10d: the marker records the digest of what was placed, which is what makes the copy prunable.
+    const placed = `sha256:${createHash('sha256').update('old copy').digest('hex')}`;
+    fs.writeFileSync(at(sb, `${SKILLS}/sucp-gone/${MARKER}`), `source=${sb.repo}\nentry SKILL.md ${placed}\n`);
     fs.mkdirSync(at(sb, `${SKILLS}/sucp-theirs`));
     fs.writeFileSync(at(sb, `${SKILLS}/sucp-theirs/SKILL.md`), 'user skill');
     const r = sb.run(['--update', '--copy']);
@@ -325,13 +343,16 @@ describe('dry run, usage and banners', () => {
     expect(sb.snapshot()).toEqual(before);
   });
 
-  test('copy: --dry-run --update --copy over an edited copy says Would refresh and changes nothing', () => {
+  // Changed in T10d: an edited copy is backed up, only an outdated one is refreshed.
+  test('copy: --dry-run --update --copy says Would back up an edited copy and Would refresh an outdated one, and changes nothing', () => {
     const sb = sandbox();
     expect(sb.run(['--copy']).status).toBe(0);
     fs.appendFileSync(at(sb, `${PKG}/mermaid.config.json`), '\nedited');
+    fs.appendFileSync(path.join(sb.repo, 'mermaid.dark.config.json'), '\n');
     const before = sb.snapshot();
     const r = sb.run(['--update', '--copy', '--dry-run']);
     expect(r.status).toBe(0);
+    expect(r.stdout).toContain('[DRY-RUN] Would back up');
     expect(r.stdout).toContain('[DRY-RUN] Would refresh');
     expect(sb.snapshot()).toEqual(before);
   });

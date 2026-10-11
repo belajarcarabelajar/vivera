@@ -222,9 +222,32 @@ link_target() {
   place_link "$MASTER_FILE" "$target_file"
 }
 
+# The links one skill package makes in <skills dir>, one "<desired><TAB><dest>" line each, in the
+# order they are placed. This is the only place that knows the list: install, check, update and
+# uninstall all read it. Paths contain spaces but never a TAB or a newline.
+package_entries() {
+  local dir="$1"
+  local sibling_dir phase_dir phase_name
+  sibling_dir="$(dirname "$dir")"
+
+  printf '%s\t%s\n' "$MASTER_FILE" "$dir/SKILL.md"
+  # Phase skills are siblings of the orchestrator, so each harness discovers
+  # them by name and the orchestrator can load them with the skill tool.
+  for phase_dir in "$REPO_DIR"/skills/sucp-*; do
+    phase_name="$(basename "$phase_dir")"
+    printf '%s\t%s\n' "$phase_dir/SKILL.md" "$sibling_dir/$phase_name/SKILL.md"
+  done
+  printf '%s\t%s\n' "$REPO_DIR/templates" "$dir/templates"
+  printf '%s\t%s\n' "$REPO_DIR/examples" "$dir/examples"
+  # Theming config ships with the skill so an installed harness can reproduce
+  # the same diagram rendering (font embedding, palette, dark variant).
+  printf '%s\t%s\n' "$REPO_DIR/mermaid.config.json" "$dir/mermaid.config.json"
+  printf '%s\t%s\n' "$REPO_DIR/mermaid.dark.config.json" "$dir/mermaid.dark.config.json"
+}
+
 link_skill_package() {
   local target_skill_dir="$1"
-  local sibling_dir
+  local sibling_dir desired dest
   sibling_dir="$(dirname "$target_skill_dir")"
 
   if [ "$DRY_RUN" = true ]; then
@@ -239,19 +262,10 @@ link_skill_package() {
 
   PLACE_QUIET=true
   PLACE_CHANGED=0
-  place_link "$MASTER_FILE" "$target_skill_dir/SKILL.md"
-  # Phase skills are siblings of the orchestrator, so each harness discovers
-  # them by name and the orchestrator can load them with the skill tool.
-  for phase_dir in "$REPO_DIR"/skills/sucp-*; do
-    phase_name="$(basename "$phase_dir")"
-    place_link "$phase_dir/SKILL.md" "$sibling_dir/$phase_name/SKILL.md"
-  done
-  place_link "$REPO_DIR/templates" "$target_skill_dir/templates"
-  place_link "$REPO_DIR/examples" "$target_skill_dir/examples"
-  # Theming config ships with the skill so an installed harness can reproduce
-  # the same diagram rendering (font embedding, palette, dark variant).
-  place_link "$REPO_DIR/mermaid.config.json" "$target_skill_dir/mermaid.config.json"
-  place_link "$REPO_DIR/mermaid.dark.config.json" "$target_skill_dir/mermaid.dark.config.json"
+  # fd 3 keeps the entry list apart from stdin of the commands run in the loop.
+  while IFS=$'\t' read -r -u 3 desired dest; do
+    place_link "$desired" "$dest"
+  done 3<<< "$(package_entries "$target_skill_dir")"
   PLACE_QUIET=false
 
   if [ "$DRY_RUN" != true ]; then

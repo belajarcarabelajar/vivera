@@ -274,3 +274,80 @@ describe('table', () => {
     }
   });
 });
+
+// package_entries (lib.sh) and target_entries (targets.sh) are the one place that knows which links a
+// target makes, so install, check, update and uninstall all read the same list.
+describe('entries', () => {
+  // The entry lines of one target as [desired, dest] pairs, read through a clean bash with the
+  // variables install.sh would have set.
+  function entryLines(sb, id) {
+    assertSandbox(sb.env);
+    const pairs = Object.entries(sb.env).map(([k, v]) => `${k}=${v}`);
+    const script =
+      'REPO_DIR="$1"; MASTER_FILE="$1/Super Ultra Code Plan Implementation.md"; DRY_RUN=false; TIER=standard; ' +
+      '. "$1/scripts/install/lib.sh"; . "$1/scripts/install/targets.sh"; target_entries "$2"';
+    const r = Bun.spawnSync(['/usr/bin/env', '-i', ...pairs, Bun.which('bash'), '-c', script, '_', sb.repo, id], {
+      cwd: sb.home,
+    });
+    expect(r.exitCode).toBe(0);
+    return r.stdout
+      .toString()
+      .split('\n')
+      .filter((l) => l !== '')
+      .map((l) => l.split('\t'));
+  }
+  const phaseDirs = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
+
+  test('targets: entries of the agents target are SKILL.md, every phase skill, then four package links', () => {
+    const sb = sandbox();
+    const lines = entryLines(sb, 'agents');
+    const phases = phaseDirs(sb);
+    expect(phases.length).toBeGreaterThan(0);
+    expect(lines.length).toBe(5 + phases.length);
+    const pkg = at(sb, `.agents/skills/${PKG}`);
+    const master = path.join(sb.repo, MASTER);
+    expect(lines[0]).toEqual([master, `${pkg}/SKILL.md`]);
+    expect(lines.slice(1, 1 + phases.length)).toEqual(
+      phases.map((n) => [path.join(sb.repo, 'skills', n, 'SKILL.md'), at(sb, `.agents/skills/${n}/SKILL.md`)]),
+    );
+    expect(lines.slice(1 + phases.length)).toEqual([
+      [path.join(sb.repo, 'templates'), `${pkg}/templates`],
+      [path.join(sb.repo, 'examples'), `${pkg}/examples`],
+      [path.join(sb.repo, 'mermaid.config.json'), `${pkg}/mermaid.config.json`],
+      [path.join(sb.repo, 'mermaid.dark.config.json'), `${pkg}/mermaid.dark.config.json`],
+    ]);
+  });
+
+  test('targets: every package target keeps its links under its package dir or its sibling phase dirs', () => {
+    const sb = sandbox();
+    const phases = new Set(phaseDirs(sb));
+    for (const id of ['agents', 'antigravity', 'antigravity-cli', 'antigravity-builtin', 'gemini-cli', 'opencode', 'claude']) {
+      const dir = table(sb, 'target_skills_dir', id).out;
+      const siblings = path.dirname(dir);
+      const lines = entryLines(sb, id);
+      expect({ id, count: lines.length }).toEqual({ id, count: 5 + phases.size });
+      for (const [desired, dest] of lines) {
+        expect(fs.existsSync(desired)).toBe(true);
+        const underPackage = dest.startsWith(`${dir}/`);
+        const underPhase = dest.startsWith(`${siblings}/sucp-`) && phases.has(path.basename(path.dirname(dest)));
+        expect({ id, dest, ok: underPackage || underPhase }).toEqual({ id, dest, ok: true });
+      }
+    }
+  });
+
+  test('targets: ai-config has exactly one entry, the master file, and codex has none', () => {
+    const sb = sandbox();
+    expect(entryLines(sb, 'ai-config')).toEqual([[path.join(sb.repo, MASTER), at(sb, `.config/ai/${MASTER}`)]]);
+    for (const id of ['codex', 'cursor', 'copilot']) expect(entryLines(sb, id)).toEqual([]);
+  });
+
+  test('targets: a path with spaces survives the TAB split intact', () => {
+    const sb = sandbox();
+    for (const [desired, dest] of entryLines(sb, 'ai-config')) {
+      expect(desired).toContain(' ');
+      expect(dest).toContain(' ');
+      expect(desired.endsWith(MASTER)).toBe(true);
+      expect(dest.endsWith(MASTER)).toBe(true);
+    }
+  });
+});

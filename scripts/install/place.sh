@@ -11,6 +11,7 @@
 # behind a symlinked directory), so the package is not reported as installed when it is not.
 # LEFT_ALONE: the same count for the whole run, for the last line of install and update.
 # PLACED_DESTS: the destinations that now hold the installer's own copy, for the digests in the marker.
+# COPY_FAILED_STEP: "cp" or "mv", set by copy_entry, so a failed copy names the step that failed.
 PLACE_QUIET=false
 PLACE_CHANGED=0
 PLACE_SKIPPED=0
@@ -159,13 +160,15 @@ remove_replaced() {
   fi
 }
 
-# The link or the copy did not take after the user's file was moved aside: put that file back.
+# The link or the copy did not take after the user's file was moved aside: put that file back. A copy
+# passes the step that failed as $3 (COPY_FAILED_STEP); a link names none.
 restore_backup() {
   local dest="$1"
   local backup="$2"
+  local step="${3:+: $3 failed}"
   remove_replaced "$dest" 2>/dev/null || true
   mv "$backup" "$dest"
-  echo "[FAIL] could not place $dest; your file was put back" >&2
+  echo "[FAIL] could not place $dest$step; your file was put back" >&2
   exit 1
 }
 
@@ -264,6 +267,7 @@ copy_entry() {
   local dest="$2"
   local tmp="$dest.vivera-tmp-$$"
   local copied=true
+  COPY_FAILED_STEP="cp"
   make_dir "$(dirname "$dest")"
   remove_stale_tmp "$dest"
   if [ -d "$src" ]; then
@@ -275,9 +279,10 @@ copy_entry() {
     # cp keeps the source's modes: a read-only checkout would give a copy that refresh and uninstall
     # cannot remove. The digests only look at the owner exec bit, so they do not change.
     chmod -R u+w "$tmp" 2>/dev/null || true
-  fi
-  if [ "$copied" = true ] && mv "$tmp" "$dest"; then
-    return 0
+    if mv "$tmp" "$dest"; then
+      return 0
+    fi
+    COPY_FAILED_STEP="mv"
   fi
   remove_replaced "$tmp" 2>/dev/null || true
   return 1
@@ -317,7 +322,7 @@ place_copy() {
           echo "[DRY-RUN] Would copy: $src -> $dest"
         fi
       else
-        copy_entry "$src" "$dest" || place_fail "$dest" cp
+        copy_entry "$src" "$dest" || place_fail "$dest" "$COPY_FAILED_STEP"
         PLACED_DESTS+=("$dest")
         if [ "$PLACE_QUIET" != true ]; then
           echo "[OK] Copied: $dest"
@@ -329,7 +334,7 @@ place_copy() {
         echo "[DRY-RUN] Would refresh: $dest from $src"
       else
         remove_replaced "$dest" || place_fail "$dest" rm
-        copy_entry "$src" "$dest" || place_fail "$dest" cp
+        copy_entry "$src" "$dest" || place_fail "$dest" "$COPY_FAILED_STEP"
         PLACED_DESTS+=("$dest")
         echo "[OK] Refreshed: $dest"
       fi
@@ -341,7 +346,7 @@ place_copy() {
       else
         mv "$dest" "$backup" || place_fail "$dest" mv
         if ! copy_entry "$src" "$dest"; then
-          restore_backup "$dest" "$backup"
+          restore_backup "$dest" "$backup" "$COPY_FAILED_STEP"
         fi
         PLACED_DESTS+=("$dest")
         echo "[BACKUP] $dest moved to $backup"

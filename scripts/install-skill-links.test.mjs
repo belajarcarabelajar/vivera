@@ -1,11 +1,18 @@
-import { test, expect } from "bun:test";
+import { test, expect, afterAll } from "bun:test";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { planLinks, applyActions } from "./install-skill-links.mjs";
 
+// Every root setup() made, removed after the last test so a run leaves nothing in the temp dir.
+const roots = [];
+afterAll(() => {
+  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+});
+
 function setup() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "skill-links-"));
+  roots.push(root);
   const source = path.join(root, "vivera-skills");
   const target = path.join(root, "registry");
   fs.mkdirSync(path.join(source, "sucp-rules"), { recursive: true });

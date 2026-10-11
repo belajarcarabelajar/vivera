@@ -366,16 +366,18 @@ describe('skills path safety and wording', () => {
     expect(errors.some((e) => e.includes('has no skills/'))).toBe(false);
   });
 
-  test('the not-found message points at install.sh', () => {
+  // The condition is that the repository lacks skills/<name>/SKILL.md, and install.sh only links skills
+  // that exist, so the message must name the two real fixes and must not say install.sh cures it.
+  test('the not-found message names the two fixes and does not claim install.sh cures it', () => {
     writeAgent('reviewer.md', `${VALID}\nskills:\n  - ghost`);
     const { errors } = validateAgentsDir(agentsDir, skillsDir);
-    expect(
-      errors.some(
-        (e) =>
-          e.includes('skill "ghost" has no skills/ghost/SKILL.md in this repository') &&
-          e.includes('Claude Code resolves skills from installed locations; run ./install.sh'),
-      ),
-    ).toBe(true);
+    const found = errors.filter((e) => e.includes('skill "ghost" has no skills/ghost/SKILL.md in this repository'));
+    expect(found).toHaveLength(1);
+    expect(found[0]).toContain(
+      '(fix the skill name in the agent file or add skills/ghost/SKILL.md; ./install.sh then installs it where Claude Code resolves skills)',
+    );
+    expect(found[0]).not.toContain('run ./install.sh)');
+    expect(found[0]).not.toContain('Claude Code resolves skills from installed locations');
   });
 });
 

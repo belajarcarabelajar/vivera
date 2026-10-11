@@ -147,12 +147,12 @@ test('baseline: a second real run leaves the home byte identical', () => {
   expect(sb.snapshot()).toEqual(first);
 });
 
-test('baseline: an unknown argument is ignored today and the run still succeeds', () => {
-  // T03 changes this to exit 2; this test is rewritten there.
+test('baseline: an unknown argument exits 2 and writes nothing (changed in T03, it was ignored before)', () => {
   const sb = sandbox({ tools: ['git', 'bun'] });
   const r = sb.run(['--bogus']);
-  expect(r.status).toBe(0);
-  expectLayout(sb);
+  expect(r.status).toBe(2);
+  expect(r.stderr).toContain('Unknown argument');
+  expect(sb.snapshot()).toEqual([]);
 });
 
 test('baseline: -h prints usage, exits 0 and writes nothing', () => {

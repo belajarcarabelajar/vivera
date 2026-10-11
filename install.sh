@@ -30,6 +30,8 @@ SKIP=""
 . "$REPO_DIR/scripts/install/lib.sh"
 # shellcheck source=scripts/install/place.sh
 . "$REPO_DIR/scripts/install/place.sh"
+# shellcheck source=scripts/install/sprites.sh
+. "$REPO_DIR/scripts/install/sprites.sh"
 # shellcheck source=scripts/install/prereq.sh
 . "$REPO_DIR/scripts/install/prereq.sh"
 # shellcheck source=scripts/install/targets.sh
@@ -193,6 +195,7 @@ mode_install() {
   install_targets
   install_selfcheck
   install_hooks
+  sprites_exit_if_failed
   echo "==> Vivera farm planted: the Ultimate AI Coding Skill installation is complete!"
 }
 

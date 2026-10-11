@@ -67,6 +67,8 @@ function expectedLayout(sb, { opencode = false, claude = false, builtin = false 
   }
   for (const s of sprites(sb)) {
     if (opencode) add(`.config/opencode/agents/${s}.md`, 'f');
+    // T17: the Antigravity target also renders its sprite agents, one dir per sprite.
+    if (builtin) add(`.gemini/config/agents/${s}/agent.md`, 'f');
     if (claude) add(`.claude/agents/${s}.md`, 'f');
   }
   return want;

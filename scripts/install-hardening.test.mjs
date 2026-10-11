@@ -280,8 +280,14 @@ describe('H4: check finds stale phase dirs and refuses to call an empty check CU
   });
 
   test('H4: nothing selected, or only targets without skills, is exit 2 and never CURRENT', () => {
-    for (const args of [['--check', '--only', 'codex'], ['--check', '--only', 'claude', '--skip', 'claude']]) {
-      const sb = sandbox();
+    // Changed in T17: with bun on PATH a codex check also looks at its sprite dir, so that case runs with
+    // no bun (the sprite line is then a skip that counts for nothing).
+    const cases = [
+      { args: ['--check', '--only', 'codex'], tools: [] },
+      { args: ['--check', '--only', 'claude', '--skip', 'claude'], tools: ['git', 'bun'] },
+    ];
+    for (const { args, tools } of cases) {
+      const sb = sandbox({ tools });
       const r = sb.run(args);
       expect({ args, status: r.status }).toEqual({ args, status: 2 });
       expect(r.stdout).toContain('check: nothing to check (no selected target has skills)');

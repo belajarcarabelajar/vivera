@@ -5,7 +5,8 @@
 # One row per harness, in install order. A harness is "present" when its dir exists under HOME or
 # its CLI is on PATH. ai-config and agents are the baseline every machine gets; the rest are
 # installed only when present or named with --only. codex, cursor and copilot read their skills
-# from ~/.agents/skills, so they have no skills dir of their own (they gain sprites in a later task).
+# from ~/.agents/skills, so they have no skills dir of their own; they get sprite agents only (see
+# sprite_target in sprites.sh).
 
 target_ids() {
   printf '%s\n' ai-config agents antigravity antigravity-cli antigravity-builtin gemini-cli opencode claude codex cursor copilot

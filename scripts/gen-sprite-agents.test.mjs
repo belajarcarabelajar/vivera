@@ -86,6 +86,21 @@ describe('renderAgent', () => {
     expect(lines.slice(close).some((l) => l.startsWith(MARKER))).toBe(false);
   });
 
+  // The committed .claude/agents is rewritten by agents:gen; a hook-root render is the user-level
+  // install, which only ./install.sh rewrites. The marker names the command that fixes that file.
+  const markerLine = (text) => text.split('\n').find((l) => l.startsWith(MARKER));
+  const FROM = 'from agents/roles/implementer.md and agents/crew.json; edit those, then run';
+
+  test('the marker of a committed file (no hook root) says bun run agents:gen', () => {
+    expect(markerLine(renderAgent(TEMPLATE, chef))).toBe(`${MARKER} ${FROM} bun run agents:gen.`);
+  });
+
+  test('the marker of a user-level file (hook root) says ./install.sh, like the other targets', () => {
+    const line = markerLine(renderAgent(TEMPLATE, chef, { hookRoot: '/home/u/my farm' }));
+    expect(line).toBe(`${MARKER} ${FROM} ./install.sh.`);
+    expect(line).not.toContain('agents:gen');
+  });
+
   test('leaves $CLAUDE_PROJECT_DIR alone without a hook root', () => {
     const fm = frontmatter(renderAgent(TEMPLATE, chef));
     expect(fm.hooks.PreToolUse[0].hooks[0].command).toBe('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs');
@@ -322,6 +337,50 @@ describe('CLI', () => {
     expect(run('--check').exitCode).toBe(1);
     run();
     expect(run('--check').exitCode).toBe(0);
+  });
+
+  describe('the drift message names the command that fixes the checked directory', () => {
+    // scripts/install/check.sh matches this prefix, so it must survive any wording after it.
+    const PREFIX = 'sprite agents are out of date:';
+    const lastLine = (r) => r.stderr.toString().trim().split('\n').at(-1);
+
+    test('an explicit --out directory says ./install.sh --update', () => {
+      const r = run('--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('a user-level render (--hook-root) says ./install.sh --update', () => {
+      const root = path.join(tmp, 'farm');
+      writeHook(root);
+      expect(run('--hook-root', root).exitCode).toBe(0);
+      fs.appendFileSync(path.join(outDir, 'chef.md'), 'edited\n');
+      const r = run('--hook-root', root, '--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('another target says ./install.sh --update', () => {
+      expect(run('--target', 'opencode').exitCode).toBe(0);
+      fs.appendFileSync(path.join(outDir, 'chef.md'), 'edited\n');
+      const r = run('--target', 'opencode', '--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('the repository default directory (claude, no hook root) says bun run agents:gen', () => {
+      // --check writes nothing, so a different roster only makes the committed agents drift.
+      const r = Bun.spawnSync(['bun', SCRIPT, '--roles', rolesDir, '--crew', crewFile, '--check']);
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run bun run agents:gen`);
+    });
+
+    test('naming the repository agents directory with --out says bun run agents:gen too', () => {
+      const repoAgents = path.join(path.dirname(SCRIPT), '..', '.claude', 'agents');
+      const r = Bun.spawnSync(['bun', SCRIPT, '--roles', rolesDir, '--crew', crewFile, '--out', repoAgents, '--check']);
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run bun run agents:gen`);
+    });
   });
 
   test('--hook-root fails when the hook script is not under that root', () => {

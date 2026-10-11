@@ -119,15 +119,44 @@ function candidateRoots(p) {
   return [p.root, ...(Array.isArray(p.worktrees) ? p.worktrees : [])];
 }
 
+// `scripts/pr-registry.mjs claim` creates every session worktree at
+// <repo-parent>/<repo-basename>-wt/<slot>. Deriving that container from a
+// project's root is what routes a slot without a per-slot config entry. Both
+// directions live here so the publisher and the issue mirror cannot disagree.
+const SESSION_WORKTREE_SUFFIX = '-wt';
+
+export function sessionWorktreesDir(root) {
+  return `${path.resolve(root)}${SESSION_WORKTREE_SUFFIX}`;
+}
+
+// The root checkout that owns `dir` when `dir` is a <root>-wt/<slot> directory,
+// otherwise null.
+export function sessionWorktreeRoot(dir) {
+  const parent = path.dirname(path.resolve(dir));
+  const base = path.basename(parent);
+  if (base.length <= SESSION_WORKTREE_SUFFIX.length || !base.endsWith(SESSION_WORKTREE_SUFFIX)) return null;
+  return path.join(path.dirname(parent), base.slice(0, -SESSION_WORKTREE_SUFFIX.length));
+}
+
+// A plan directly in <root>-wt is not inside any slot, so it is not routed.
+function inSessionWorktree(container, planPath) {
+  return owns(container, planPath) && path.relative(container, path.resolve(planPath)).includes(path.sep);
+}
+
 export function resolveProject(registry, planPath) {
   // Longest root wins, so a project nested inside another project resolves to
   // the inner one instead of the outer. Worktrees compete on the same scale,
   // otherwise a worktree path nested in a registered project would lose to the
-  // outer project it is supposed to belong to.
+  // outer project it is supposed to belong to. The derived <root>-wt container
+  // is shorter than any explicit <root>-wt/<slot> entry, so an explicit
+  // `worktrees` entry always wins over it.
   let best = null;
   let bestRoot = null;
   for (const p of registry.projects) {
-    for (const root of candidateRoots(p)) {
+    const roots = candidateRoots(p);
+    const container = sessionWorktreesDir(p.root);
+    if (inSessionWorktree(container, planPath)) roots.push(container);
+    for (const root of roots) {
       if (!owns(root, planPath)) continue;
       if (!best || root.length > bestRoot.length) {
         best = p;

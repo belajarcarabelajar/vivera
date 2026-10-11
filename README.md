@@ -1125,6 +1125,10 @@ trailer carrying the plan id, key, source path, status, and hash. A summary body
 is banned: a summary is a second source of truth that goes quietly stale the
 moment the plan changes, and then the issue is wrong in a way nothing reports.
 The trailer is what makes "is this issue current?" answerable from the issue alone.
+A plan longer than GitHub's 65,536-character body limit becomes its longest verbatim
+prefix, cut at a line boundary, followed by one explicit `**Truncated:**` line naming
+N of M characters and the plan's repository path, then the unchanged trailer, whose
+hash still covers the full plan: a prefix with a marker, never a summary.
 
 ### Three things that will bite you, and why they are built this way
 
@@ -1671,6 +1675,7 @@ project's plans on another branch.
 | --- | --- |
 | Routing | `resolveProject()` treats a worktree as a candidate location for its project, so a plan written in a worktree mirrors into `01 - Projects/<Project>/plans/` beside its siblings. It creates no second project and no second index. |
 | Enumeration | `enumeratePlans()` reads the **root only**, never the worktrees. This asymmetry is the whole point of the field: routing must accept a worktree, enumeration must not, because the worktree's plans are the root's plans. `enumeratePlans` is asserted against it directly. |
+| Session worktrees | A plan under `<root>-wt/<slot>/`, the layout `scripts/pr-registry.mjs claim` creates, routes to the project whose `root` is `<root>` with no config entry, in both `plan-publish.mjs` and `plan-issue-sync.mjs`; an explicit `worktrees` entry still wins over that derived rule. |
 | Precedence | Roots and worktrees compete on the same longest-prefix scale, so a real project nested inside a worktree still wins over the worktree that contains it. |
 | Refusal | A `worktrees` value that is not an array, an entry that is empty or not a string, an entry that is already a registered root, and an entry two projects both claim are all load errors. One directory is never routable as two projects. |
 | Detection | There is no git-identity check, so nothing infers that two roots are one repository. A worktree has to be declared. `loadRegistry` rejects the collision instead of letting the longer-prefix rule pick a winner by accident. |

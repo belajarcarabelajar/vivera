@@ -117,11 +117,15 @@ What a question looks like:
 - 2 to 4 options. The recommended one comes first, labelled `(Recommended)`, so Enter accepts it. Labels are five words or fewer, each with a one-line description.
 - At most 4 questions per call and at most 4 options per question. The debt sweep groups its follow-ups into multi-select questions of at most 4 options.
 - Destructive, hard-to-reverse, externally visible, or shared-system actions (force push, delete, merge, publish, deploy) put the safe option first, `Cancel, do nothing`, and the go-ahead second, naming the exact action. Enter never runs the action, so no option carries `(Recommended)`, and such a question is asked alone, never batched.
+- Every recommended option says why: its description starts with `Why:` and one line of basis (a repository fact, a measured result, or the pipeline rule behind the gate), or `Why: my judgment` when that is the only basis. A judgment is never presented as a best practice that was not checked.
+- A risky question carries no tag, but its question text carries one `Facts:` line, for example the PR number, head commit, mergeable state and checks. It is evidence to weigh, not a nudge toward either option.
+- Answering "not sure" is safe: a non-risky gate takes the recommended option and records it as an assumption, and a risky gate means cancel.
 - A dismissed question is not an approval. The gate stays closed, one line says what is pending, and the same question is not asked again in that session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption.
 - Unattended runs ask nothing mid-run. The overnight entry gate is collected while the user is present, and a mid-run decision follows the Unattended Continuation Rule: a reversible one continues on the most reasonable reading, an irreversible one that could go either way is parked in the handoff. The debt-sweep question is the one exception, as the last act of the run, and only when the harness has an interactive client.
 - Question text follows the user's language preference, never a hardcoded language. Subagents never ask: a question goes into their report and the parent asks.
 
 The full rule is the `### ⏸️ Confirmation Protocol` section of [`skills/sucp-rules/SKILL.md`](skills/sucp-rules/SKILL.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
+The catalog also has a `Basis` column holding the standard reason for each gate, which the validator requires.
 
 ---
 

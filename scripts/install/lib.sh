@@ -37,6 +37,16 @@ check_prereq() {
   fi
   local version
   version="$("$cmd" --version </dev/null 2>&1 | head -n 1 || true)"
+  # On macOS /usr/bin/git is a stub that only offers to install the developer tools; it is not git.
+  if [ "$cmd" = "git" ]; then
+    case "$version" in
+      "xcode-select:"*)
+        echo "❌ Missing prerequisite: 'git' ($label) is mandatory; the one found is the macOS developer-tools stub." >&2
+        echo "   Hint: xcode-select --install, or install git another way." >&2
+        exit 1
+        ;;
+    esac
+  fi
   [ -z "$version" ] && version="installed (no version flag)"
   echo "[OK] Prerequisite verified: $cmd — $version"
 }
@@ -85,22 +95,129 @@ require_copy_tools() {
   done
 }
 
+# A marker is "regular" when it is a plain file and not a symlink: nothing else is ever opened or read
+# (a FIFO would hang the installer), and a link could point at any file of the user's.
+marker_regular() {
+  [ -f "$1" ] && [ ! -L "$1" ]
+}
+
 # True when <dest> is a copy the installer made: its directory holds a .vivera-managed marker (a
 # package entry) or it has a <dest>.vivera-managed sidecar (a lone file such as the ai-config one).
 copy_managed() {
   local dest="$1"
-  [ -f "$(dirname "$dest")/.vivera-managed" ] || [ -f "$dest.vivera-managed" ]
+  marker_regular "$(dirname "$dest")/.vivera-managed" || marker_regular "$dest.vivera-managed"
 }
 
-# True when the copy at <dest> has the same content as <src>: cmp for a file, diff -rq for a directory.
+# True when the copy at <dest> has the same content as <src>: cmp for a file, diff -rq for a directory
+# (a .DS_Store that macOS drops into a folder is not content).
 content_equal() {
   local src="$1"
   local dest="$2"
   copy_tools_present || return 1
   if [ -d "$src" ]; then
-    [ -d "$dest" ] && [ ! -L "$dest" ] && diff -rq "$src" "$dest" >/dev/null 2>&1
+    [ -d "$dest" ] && [ ! -L "$dest" ] && diff -rq -x .DS_Store "$src" "$dest" >/dev/null 2>&1
   else
     [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$src" "$dest"
+  fi
+}
+
+# --- Digests ---------------------------------------------------------------------------------
+# A managed copy that differs from its source is either outdated (the checkout moved on) or edited by
+# the user. The marker keeps, per entry, the digest of what the installer last placed: a copy that still
+# has that digest is "pristine" and may be refreshed or removed; any other difference is "modified" and
+# is never discarded. The digest names its algorithm, so a record is only compared with the same one.
+HASH_ALGO=""
+HASH_CMD=()
+
+hash_init() {
+  if [ -n "$HASH_ALGO" ]; then
+    return 0
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    HASH_ALGO="sha256"
+    HASH_CMD=(sha256sum)
+  elif command -v shasum >/dev/null 2>&1; then
+    HASH_ALGO="sha256"
+    HASH_CMD=(shasum -a 256)
+  else
+    HASH_ALGO="cksum"
+    HASH_CMD=(cksum)
+  fi
+}
+
+# Reads stdin, prints "<algo>:<digest>".
+digest_stdin() {
+  local out
+  hash_init
+  out="$("${HASH_CMD[@]}")"
+  if [ "$HASH_ALGO" = "cksum" ]; then
+    out="${out// /-}"
+  else
+    out="${out%% *}"
+  fi
+  echo "$HASH_ALGO:$out"
+}
+
+# "<algo>:<digest>" of a file's bytes, or of a directory's sorted list of "<file digest> <path>" for
+# every regular file in it (links followed, .DS_Store left out). Prints nothing for anything else.
+entry_digest() {
+  local path="$1"
+  hash_init
+  if [ -d "$path" ] && [ ! -L "$path" ]; then
+    (cd "$path" && LC_ALL=C find -L . -type f ! -name .DS_Store -exec "${HASH_CMD[@]}" {} + 2>/dev/null | LC_ALL=C sort) | digest_stdin
+  elif [ -f "$path" ] && [ ! -L "$path" ]; then
+    digest_stdin < "$path"
+  fi
+  return 0
+}
+
+# The digest the marker recorded for <dest> ("entry <name> <algo>:<digest>"), or nothing.
+recorded_digest() {
+  local dest="$1"
+  local name marker line rest
+  name="$(basename "$dest")"
+  for marker in "$(dirname "$dest")/.vivera-managed" "$dest.vivera-managed"; do
+    if marker_regular "$marker"; then
+      while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+          "entry $name "*)
+            rest="${line#"entry $name "}"
+            case "$rest" in
+              *" "*) ;;
+              *)
+                echo "$rest"
+                return 0
+                ;;
+            esac
+            ;;
+        esac
+      done < "$marker"
+    fi
+  done
+  return 0
+}
+
+# What a managed copy is, judged against its source: identical (same content), pristine (not the
+# source's content, but exactly what the installer last placed: merely outdated) or modified (anything
+# else, which includes a copy with no record or a record made with another algorithm).
+managed_state() {
+  local src="$1"
+  local dest="$2"
+  local current recorded
+  if content_equal "$src" "$dest"; then
+    echo "identical"
+    return 0
+  fi
+  current="$(entry_digest "$dest")"
+  if [ -n "$current" ] && [ "$current" = "$(entry_digest "$src")" ]; then
+    echo "identical"
+    return 0
+  fi
+  recorded="$(recorded_digest "$dest")"
+  if [ -n "$current" ] && [ "$current" = "$recorded" ]; then
+    echo "pristine"
+  else
+    echo "modified"
   fi
 }
 
@@ -190,12 +307,13 @@ classify_link() {
 #              is safe
 #   ok         what is wanted is there: a link to <desired>, or in copy mode a managed copy with the
 #              same content as <desired>
-#   ours-stale the installer's own and wrong: a link as classify_link says, or in copy mode a managed
-#              copy that differs, or in link mode a managed copy that is still identical to its
-#              source; replaced without a backup because nothing the user wrote is lost
-#   foreign    a real file or directory without a marker, a live link anywhere else, or in link mode a
-#              managed copy that differs from its source (the user may have edited it, and without
-#              cmp and diff a copy cannot be judged identical): moved aside, never discarded
+#   ours-stale the installer's own and wrong: a link as classify_link says, or a managed copy that is
+#              pristine (outdated but never edited, see managed_state), or in link mode a managed
+#              copy that is identical to its source; replaced without a backup because nothing the
+#              user wrote is lost
+#   foreign    a real file or directory without a marker, a live link anywhere else, or a managed copy
+#              that is modified (the user edited it, or nothing proves they did not): moved aside,
+#              never discarded
 classify_dest() {
   local dest="$1"
   local desired="$2"
@@ -214,12 +332,14 @@ classify_dest() {
   elif [ -e "$dest" ]; then
     if ! copy_managed "$dest"; then
       echo "foreign"
-    elif content_equal "$desired" "$dest"; then
-      if [ "${COPY_MODE:-false}" = true ]; then echo "ok"; else echo "ours-stale"; fi
-    elif [ "${COPY_MODE:-false}" = true ]; then
-      echo "ours-stale"
     else
-      echo "foreign"
+      case "$(managed_state "$desired" "$dest")" in
+        identical)
+          if [ "${COPY_MODE:-false}" = true ]; then echo "ok"; else echo "ours-stale"; fi
+          ;;
+        pristine) echo "ours-stale" ;;
+        *) echo "foreign" ;;
+      esac
     fi
   else
     echo "absent"

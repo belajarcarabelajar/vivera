@@ -76,7 +76,7 @@ render_sprites() {
   fi
   dir="$(sprite_out_dir "$id")"
   if sprite_dir_in_repo "$dir"; then
-    echo "[SKIP] $id sprites: $dir is inside this checkout; left alone"
+    left_alone "$id sprites: $dir is inside this checkout; left alone"
     return 0
   fi
   if [ "$DRY_RUN" = true ]; then
@@ -97,4 +97,7 @@ sprites_exit_if_failed() {
     echo "==> Vivera finished, but the sprite agents failed for: $SPRITES_FAILED (see [FAIL] above)" >&2
     exit 1
   fi
+  # Entries left alone (inside the checkout, behind a symlinked dir) are not a failure, but the closing
+  # line must not claim a complete install: it counts them instead and ends the run here.
+  finish_if_left_alone
 }

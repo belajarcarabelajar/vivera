@@ -98,7 +98,7 @@ describe('offline', () => {
     expect(files.length).toBeGreaterThan(6);
     const network = /\b(curl|wget|ssh|nc)\b|git\s+(fetch|pull|clone)\b/;
     // The one allowed line only PRINTS the official Bun install command as advice when bun is missing.
-    const advice = 'hint="curl -fsSL https://bun.sh/install | bash"';
+    const advice = 'hint="curl -fsSL https://bun.sh/install | bash   (the installer needs unzip; on Alpine it also needs libstdc++)"';
     const hits = [];
     for (const file of files) {
       fs.readFileSync(path.join(WORKTREE, file), 'utf8')

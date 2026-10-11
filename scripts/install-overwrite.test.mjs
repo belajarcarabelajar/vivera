@@ -214,3 +214,29 @@ test('overwrite: no link is made with ln -sf any more, every one goes through pl
     expect({ file, found: text.includes('ln -sf') }).toEqual({ file, found: false });
   }
 });
+
+// ---- Hardening round 2: mutants the tests above let survive ----------------------------------------
+
+test('overwrite: a dangling symlink already at the backup name makes the next backup take -1, and the old one survives', () => {
+  const sb = sandbox();
+  write(sb, `${PKG}/SKILL.md`, 'mine');
+  link(sb, '/nowhere/at/all', `${PKG}/SKILL.md.vivera-bak-${STAMP}`);
+  const dest = at(sb, `${PKG}/SKILL.md`);
+  expect(lib(sb, 'backup_path', dest).out).toBe(`${dest}.vivera-bak-${STAMP}-1`);
+
+  const r = sb.run(['--only', 'agents']);
+  expect(r.status).toBe(0);
+  expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}-1`), 'utf8')).toBe('mine');
+  expect(fs.readlinkSync(at(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}`))).toBe('/nowhere/at/all');
+});
+
+test('overwrite: --dry-run with a stale link of ours prints Would repoint and changes nothing', () => {
+  const sb = sandbox();
+  link(sb, path.join(sb.repo, 'gone/old-skill.md'), `${PKG}/SKILL.md`);
+  const before = sb.snapshot();
+  const r = sb.run(['--dry-run', '--only', 'agents']);
+  expect(r.status).toBe(0);
+  expect(r.stdout).toContain('[DRY-RUN] Would repoint');
+  expect(r.stdout).toContain(path.join(sb.repo, 'gone/old-skill.md'));
+  expect(sb.snapshot()).toEqual(before);
+});

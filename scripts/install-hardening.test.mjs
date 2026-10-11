@@ -527,3 +527,159 @@ describe('H10: a real file reached through a directory symlink into another tree
     }
   });
 });
+
+// ---- Hardening round 2 -------------------------------------------------------------------------
+//   C1 .gitattributes keeps the installer scripts LF
+//   C2 an unset HOME, and Git Bash / MSYS / Cygwin where ln -s copies
+//   C9a who owns a link, the cases that were not asserted
+//   C9d a directory copy that fails half way puts the user's directory back
+
+const WORKTREE = path.resolve(import.meta.dir, '..');
+
+describe('C1: the installer scripts and the tier table stay LF on a Windows clone', () => {
+  test('C1: .gitattributes pins *.sh and tiers.tsv to eol=lf', () => {
+    const lines = fs.readFileSync(path.join(WORKTREE, '.gitattributes'), 'utf8').split('\n');
+    expect(lines).toContain('*.sh text eol=lf');
+    expect(lines).toContain('scripts/install/tiers.tsv text eol=lf');
+  });
+
+  test('C1: git itself reports eol: lf for an installer script, the table and install.sh', () => {
+    const files = ['scripts/install/lib.sh', 'scripts/install/tiers.tsv', 'install.sh'];
+    const r = Bun.spawnSync(['git', '-C', WORKTREE, 'check-attr', 'eol', '--', ...files], {
+      env: { PATH: process.env.PATH, HOME: WORKTREE, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.toString().trim().split('\n')).toEqual(files.map((f) => `${f}: eol: lf`));
+  });
+});
+
+describe('C2: HOME and Windows shells', () => {
+  // install.sh run with exactly the given environment, no HOME unless the test gives one.
+  function bare(sb, env) {
+    const pairs = Object.entries({ PATH: sb.bin, ...env }).map(([k, v]) => `${k}=${v}`);
+    const r = Bun.spawnSync(['/usr/bin/env', '-i', ...pairs, path.join(sb.bin, 'bash'), path.join(sb.repo, 'install.sh')], { cwd: sb.root });
+    return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  }
+
+  test('C2: an unset HOME exits 2 naming HOME, before any banner', () => {
+    const sb = sandbox();
+    const r = bare(sb, {});
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('install.sh: HOME is not set');
+    expect(r.stderr).not.toContain('unbound variable');
+    expect(r.stdout).toBe('');
+  });
+
+  test('C2: an empty HOME exits 2 the same way', () => {
+    const sb = sandbox();
+    const r = bare(sb, { HOME: '' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('install.sh: HOME is not set');
+    expect(r.stdout).toBe('');
+  });
+
+  const NOTE = '[NOTE] Windows shell: symlinks are not reliable here, using --copy';
+
+  for (const name of ['MINGW64_NT-10.0-19045', 'MSYS_NT-10.0-19045', 'CYGWIN_NT-10.0-19045']) {
+    test(`C2: uname ${name} makes copy the default: one note, no symlink under HOME, markers written`, () => {
+      const sb = sandbox();
+      withCompareTools(sb);
+      shim(sb, 'uname', `echo ${name}`);
+      const r = sb.run(['--only', 'agents', '--tier', 'minimal']);
+      expect(r.status).toBe(0);
+      expect(r.stdout.split(NOTE).length - 1).toBe(1);
+      expect(sb.snapshot().filter((l) => l.split('|')[1] === 'l')).toEqual([]);
+      expect(exists(sb, `${PKG}/.vivera-managed`)).toBe(true);
+      expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md`), 'utf8')).toBe(fs.readFileSync(path.join(sb.repo, MASTER), 'utf8'));
+
+      const check = sb.run(['--check', '--only', 'agents']);
+      expect(check.status).toBe(0);
+      expect(check.stdout).toContain('check: CURRENT');
+    });
+  }
+
+  test('C2: on Linux nothing changes: links, and no note', () => {
+    const sb = sandbox();
+    const r = sb.run(['--only', 'agents', '--tier', 'minimal']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('Windows shell');
+    expect(isLink(sb, `${PKG}/SKILL.md`)).toBe(true);
+  });
+
+  test('C2: an explicit --copy on a Windows shell does not repeat the note', () => {
+    const sb = sandbox();
+    withCompareTools(sb);
+    shim(sb, 'uname', 'echo MINGW64_NT-10.0-19045');
+    const r = sb.run(['--only', 'agents', '--tier', 'minimal', '--copy']);
+    expect(r.status).toBe(0);
+    expect(r.stdout).not.toContain('Windows shell');
+  });
+});
+
+describe('C9a: a link that is not this repo and not a legacy ai-skills item is foreign', () => {
+  const classify = (sb, dest) => lib(sb, 'classify_dest', dest, path.join(sb.repo, MASTER));
+
+  test('C9a: a sibling directory that shares the repo path as a prefix is foreign, live or dangling', () => {
+    const sb = sandbox();
+    fs.mkdirSync(at(sb, 'l'), { recursive: true });
+    fs.mkdirSync(`${sb.repo}-old`);
+    fs.writeFileSync(`${sb.repo}-old/x.md`, 'x');
+    fs.symlinkSync(`${sb.repo}-old/x.md`, at(sb, 'l/live'));
+    fs.symlinkSync(`${sb.repo}-old/gone.md`, at(sb, 'l/dangling'));
+    expect(classify(sb, at(sb, 'l/live'))).toBe('foreign');
+    expect(classify(sb, at(sb, 'l/dangling'))).toBe('foreign');
+  });
+
+  test('C9a: the legacy item names with no ai-skills parent are foreign', () => {
+    const sb = sandbox();
+    fs.mkdirSync(at(sb, 'l'), { recursive: true });
+    const names = ['/x/templates', '/x/examples', '/x/skills/y', `/x/${MASTER}`];
+    for (const [i, target] of names.entries()) {
+      fs.symlinkSync(target, at(sb, `l/n${i}`));
+      expect({ target, state: classify(sb, at(sb, `l/n${i}`)) }).toEqual({ target, state: 'foreign' });
+    }
+  });
+
+  test('C9a: an install moves each of them aside as a link instead of repointing it', () => {
+    const sb = sandbox();
+    fs.mkdirSync(`${sb.repo}-old`);
+    const planted = {
+      [`${PKG}/templates`]: '/x/templates',
+      [`${PKG}/examples`]: '/x/examples',
+      [`${AGENTS}/sucp-plan/SKILL.md`]: '/x/skills/y',
+      [`.config/ai/${MASTER}`]: `/x/${MASTER}`,
+      [`${PKG}/mermaid.config.json`]: `${sb.repo}-old/x.md`,
+    };
+    for (const [rel, target] of Object.entries(planted)) link(sb, target, rel);
+    const r = sb.run(['--tier', 'minimal', '--only', 'agents,ai-config']);
+    expect(r.status).toBe(0);
+    for (const [rel, target] of Object.entries(planted)) {
+      expect({ rel, backup: fs.readlinkSync(at(sb, `${rel}.vivera-bak-${STAMP}`)) }).toEqual({ rel, backup: target });
+      expect(fs.readlinkSync(at(sb, rel)).startsWith(sb.repo)).toBe(true);
+    }
+    expect(r.stdout.split('[BACKUP]').length - 1).toBe(Object.keys(planted).length);
+    expect(r.stdout).not.toContain('Repointed');
+  });
+});
+
+describe('C9d: a directory copy that fails half way restores the whole user directory', () => {
+  test('C9d: the partial copy is removed, mine.md is back, and no backup is left', () => {
+    const sb = sandbox();
+    withCompareTools(sb);
+    mkdir(sb, `${PKG}/templates`);
+    fs.writeFileSync(at(sb, `${PKG}/templates/mine.md`), 'my own template');
+    const realCp = Bun.which('cp');
+    shim(
+      sb,
+      'cp',
+      `for last; do :; done\ncase "$last" in\n  */templates) mkdir -p "$last"; echo half > "$last/partial"; exit 1 ;;\nesac\nexec ${realCp} "$@"`,
+    );
+    const r = sb.run(['--copy', '--only', 'agents', '--tier', 'minimal']);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('your file was put back');
+    expect(fs.readFileSync(at(sb, `${PKG}/templates/mine.md`), 'utf8')).toBe('my own template');
+    expect(exists(sb, `${PKG}/templates/partial`)).toBe(false);
+    expect(fs.readdirSync(at(sb, `${PKG}/templates`))).toEqual(['mine.md']);
+    expect(backupsUnder(sb)).toEqual([]);
+  });
+});

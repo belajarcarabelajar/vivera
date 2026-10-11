@@ -117,8 +117,9 @@ select_targets() {
 # entry that is a real directory is considered, and only when it is the installer's own: it carries a
 # .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
 # ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
-# link to a file elsewhere, and a skill the checkout still has are never listed. Both --check (which
-# reports them) and --update (which prunes them) read this one list.
+# link to a file elsewhere, and a skill the checkout still has are never listed. A name with a newline
+# or a tab would break this one-per-line list, so it is never listed (report_unusual_stale_names says so).
+# Both --check (which reports them) and --update (which prunes them) read this one list.
 stale_phase_dirs() {
   local id="$1"
   local parent entry name skill_md state
@@ -131,6 +132,9 @@ stale_phase_dirs() {
       continue
     fi
     name="$(basename "$entry")"
+    case "$name" in
+      *$'\n'* | *$'\t'*) continue ;;
+    esac
     if [ -e "$REPO_DIR/skills/$name" ]; then
       continue
     fi
@@ -138,7 +142,7 @@ stale_phase_dirs() {
     if dest_in_repo "$skill_md"; then
       continue
     fi
-    if [ -f "$entry/.vivera-managed" ]; then
+    if marker_regular "$entry/.vivera-managed"; then
       echo "$entry"
       continue
     fi
@@ -148,6 +152,24 @@ stale_phase_dirs() {
     state="$(classify_dest "$skill_md" "$REPO_DIR/skills/$name/SKILL.md")"
     case "$state" in
       ok | ours-stale) echo "$entry" ;;
+    esac
+  done
+}
+
+# One "[SKIP] <name>: unusual name" line for every sucp-* dir of a package target whose name holds a
+# newline or a tab: it is left alone, because nothing that reads names a line at a time can be trusted
+# with it.
+report_unusual_stale_names() {
+  local id="$1"
+  local parent entry name
+  if [ "$(target_kind "$id")" != package ]; then
+    return 0
+  fi
+  parent="$(dirname "$(target_skills_dir "$id")")"
+  for entry in "$parent"/sucp-*; do
+    name="$(basename "$entry")"
+    case "$name" in
+      *$'\n'* | *$'\t'*) left_alone "$(printf '%q' "$name"): unusual name" ;;
     esac
   done
 }

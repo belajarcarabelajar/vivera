@@ -109,7 +109,10 @@ mode_check() {
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           ;;
         foreign)
-          if [ "${COPY_MODE:-false}" = true ]; then
+          if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
+            # The installer's own copy, edited since: --update moves it aside before refreshing it.
+            echo "[stale] $dest (copy edited since it was installed; --update moves it aside)"
+          elif [ "${COPY_MODE:-false}" = true ]; then
             echo "[foreign] $dest (not a vivera copy; --update would move it aside)"
           else
             echo "[foreign] $dest (not a vivera link; --update would move it aside)"

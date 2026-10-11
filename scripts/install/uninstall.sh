@@ -14,7 +14,9 @@ UNINSTALL_KEPT=0
 UNINSTALL_KEPT_DIRS=""
 
 # Prints the newest "<dest>.vivera-bak-<UTC stamp>[-N]" beside <dest>, or nothing. Newest means the
-# later stamp, then the larger N compared as a number: a name sort would put -10 before -2.
+# later stamp, then the larger N compared as a number: a name sort would put -10 before -2. A name is
+# judged by its shape alone: a stray file the user named like a backup (a stamp in the future, say) is
+# restored as if the installer had made it. Known and accepted; there is no record to tell them apart.
 newest_backup() {
   local dest="$1"
   local dir candidate suffix stamp n
@@ -43,21 +45,16 @@ newest_backup() {
   fi
 }
 
-# A managed copy goes only while it is identical to its source (cmp, or diff -rq for a directory);
-# a modified one is the user's work now. A directory is deleted only through remove_replaced in
-# lib.sh, and only after that comparison says it holds exactly the installer's own bytes.
+# A managed copy goes only while it is the installer's own bytes: identical to its source, or pristine
+# (exactly what the installer last placed, merely outdated; see managed_state in lib.sh, which falls
+# back to digests when cmp and diff are missing). A modified one is the user's work now. A directory is
+# deleted only through remove_replaced in lib.sh, and only after that judgement.
 uninstall_copy() {
   local desired="$1"
   local dest="$2"
   local backup
 
-  if ! copy_tools_present; then
-    UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
-    UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
-    echo "[KEEP] $dest (cannot compare: cmp or diff is missing)"
-    return 0
-  fi
-  if ! content_equal "$desired" "$dest"; then
+  if [ "$(managed_state "$desired" "$dest")" = "modified" ]; then
     UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
     UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
     echo "[KEEP] $dest (modified copy)"
@@ -75,7 +72,9 @@ uninstall_copy() {
     fi
   else
     remove_replaced "$dest"
-    rm -f "$dest.vivera-managed"
+    if marker_regular "$dest.vivera-managed"; then
+      rm -f "$dest.vivera-managed"
+    fi
     echo "[REMOVED] $dest"
     if [ -n "$backup" ]; then
       mv "$backup" "$dest"
@@ -224,7 +223,11 @@ mode_uninstall() {
         fi
         case "$UNINSTALL_KEPT_DIRS" in
           *"|$dir|"*) ;;
-          *) rm -f "$dir/.vivera-managed" ;;
+          *)
+            if marker_regular "$dir/.vivera-managed"; then
+              rm -f "$dir/.vivera-managed"
+            fi
+            ;;
         esac
       done
       uninstall_empty_dirs "$id" "$(target_skills_dir "$id")" "${dirs[@]}"

@@ -198,3 +198,42 @@ describe('modes', () => {
     }
   });
 });
+
+// ---- Hardening round 2 -------------------------------------------------------------------------
+
+test('C3: the bun hint says its installer needs unzip, and libstdc++ on Alpine', () => {
+  const sb = sandbox({ tools: ['git'] });
+  const r = sb.run(['--tier', 'standard']);
+  expect(r.status).toBe(1);
+  const hint = r.stderr.split('\n').find((l) => l.includes('Hint:')) ?? '';
+  expect(hint).toContain('curl -fsSL https://bun.sh/install | bash');
+  expect(hint).toContain('unzip');
+  expect(hint).toContain('Alpine');
+  expect(hint).toContain('libstdc++');
+});
+
+describe('C8: the test timeout', () => {
+  test('C8: the npm test script passes --timeout 30000', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(WORKTREE, 'package.json'), 'utf8'));
+    expect(pkg.scripts.test).toBe('bun test --timeout 30000 scripts/');
+  });
+
+  test('C8: importing the sandbox helper raises the default timeout above the 5 s of a bare bun test', async () => {
+    expect(fs.readFileSync(path.join(WORKTREE, 'scripts/lib/install-sandbox.mjs'), 'utf8')).toContain('setDefaultTimeout(30_000)');
+    // A test that waits 5.5 s passes only when the default timeout is higher than bun's own 5 s.
+    const dir = fs.mkdtempSync(path.join(process.env.TMPDIR || '/tmp', 'timeout-probe-'));
+    try {
+      const helper = path.join(WORKTREE, 'scripts/lib/install-sandbox.mjs');
+      const body = "import { test } from 'bun:test';\ntest('waits past 5 s', async () => { await Bun.sleep(5500); });\n";
+      fs.writeFileSync(path.join(dir, 'with-helper.test.mjs'), `import ${JSON.stringify(helper)};\n${body}`);
+      fs.writeFileSync(path.join(dir, 'control.test.mjs'), body);
+      const run = (file) =>
+        Bun.spawn(['bun', 'test', path.join(dir, file)], { cwd: dir, stdout: 'pipe', stderr: 'pipe', env: { PATH: process.env.PATH, HOME: dir } }).exited;
+      const [withHelper, control] = await Promise.all([run('with-helper.test.mjs'), run('control.test.mjs')]);
+      expect(control).not.toBe(0);
+      expect(withHelper).toBe(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

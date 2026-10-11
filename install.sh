@@ -3,6 +3,13 @@
 # This file parses arguments and dispatches; the work lives in scripts/install/*.sh (sourced below).
 set -euo pipefail
 
+# Every path the installer writes is under HOME; without it `set -u` would stop later with an
+# unbound variable and exit 1.
+if [ -z "${HOME:-}" ]; then
+  echo "install.sh: HOME is not set" >&2
+  exit 2
+fi
+
 # A CDPATH would make every `cd` below print or resolve somewhere else.
 unset CDPATH
 
@@ -190,6 +197,17 @@ validate_target_list() {
 }
 validate_target_list "$ONLY"
 validate_target_list "$SKIP"
+
+# Git Bash, MSYS and Cygwin make `ln -s` copy the file, or fail, unless symlinks are switched on, so a
+# plain install there would report links it did not make. Copy mode says what actually happens.
+case "$(uname -s 2>/dev/null || true)" in
+  MINGW* | MSYS* | CYGWIN*)
+    if [ "$COPY_MODE" != true ]; then
+      COPY_MODE=true
+      echo "[NOTE] Windows shell: symlinks are not reliable here, using --copy"
+    fi
+    ;;
+esac
 
 mode_install() {
   install_targets

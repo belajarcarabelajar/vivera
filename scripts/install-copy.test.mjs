@@ -134,16 +134,20 @@ describe('install', () => {
     expect(backups(sb).filter((l) => l.includes('mermaid')).length).toBe(0);
   });
 
-  // Changed in T10d: without cmp and diff the copy is now judged by digest, so a copy with the source's
-  // bytes is the installer's own and is relinked, while one with other bytes and no record is backed up.
-  test('copy: link mode without cmp and diff judges a copy by digest: identical is relinked, unrecorded and different is backed up', () => {
+  // Changed in T10d and again in T10e: without cmp and diff only a recorded digest can show a copy is the
+  // installer's own. A copy with no record (this marker holds only `source=`) is not vouched for, even
+  // when it has the source's bytes, so it is backed up before the link goes in; one with other bytes and
+  // no record is backed up too. A copy WITH a matching record is refreshed without a backup (see
+  // install-digest-hardening.test.mjs).
+  test('copy: link mode without cmp and diff judges a copy by its record: with no record, equal bytes and different bytes are both backed up', () => {
     const identical = sandbox({ compare: false });
     fs.mkdirSync(at(identical, PKG), { recursive: true });
     fs.copyFileSync(path.join(identical.repo, MASTER), at(identical, `${PKG}/SKILL.md`));
     fs.writeFileSync(at(identical, `${PKG}/${MARKER}`), `source=${identical.repo}\n`);
     const r = identical.run([]);
     expect(r.status).toBe(0);
-    expect(r.stdout).not.toContain('[BACKUP]');
+    expect(r.stdout).toContain('[BACKUP]');
+    expect(fs.readFileSync(at(identical, `${PKG}/SKILL.md.vivera-bak-${STAMP}`), 'utf8')).toBe(fs.readFileSync(path.join(identical.repo, MASTER), 'utf8'));
     expect(fs.lstatSync(at(identical, `${PKG}/SKILL.md`)).isSymbolicLink()).toBe(true);
 
     const sb = sandbox({ compare: false });

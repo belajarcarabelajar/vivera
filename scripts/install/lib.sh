@@ -1,6 +1,9 @@
 # shellcheck shell=bash
 # Sourced by install.sh: tool probing, and how a destination is judged (classify_dest) and named.
-# Placing links and copies is in place.sh.
+# Placing links and copies is in place.sh. The directory helpers behind the digests are in digest.sh.
+
+# shellcheck source=digest.sh
+. "$REPO_DIR/scripts/install/digest.sh"
 
 tool_available() {
   # Single source of truth for "can we call $cmd". Beyond the current PATH it
@@ -131,13 +134,14 @@ copy_managed() {
 }
 
 # True when the copy at <dest> has the same content as <src>: cmp for a file, diff -rq for a directory
-# (a .DS_Store that macOS drops into a folder is not content).
+# (dirs_equal in digest.sh). Trouble of any kind (a missing tool, an unreadable file, diff exiting 2) is
+# "not equal". This is the one judgement of "identical": a digest never overrides it.
 content_equal() {
   local src="$1"
   local dest="$2"
   copy_tools_present || return 1
   if [ -d "$src" ]; then
-    [ -d "$dest" ] && [ ! -L "$dest" ] && diff -rq -x .DS_Store "$src" "$dest" >/dev/null 2>&1
+    [ -d "$dest" ] && [ ! -L "$dest" ] && dirs_equal "$src" "$dest"
   else
     [ -f "$dest" ] && [ ! -L "$dest" ] && cmp -s "$src" "$dest"
   fi
@@ -148,80 +152,133 @@ content_equal() {
 # the user. The marker keeps, per entry, the digest of what the installer last placed: a copy that still
 # has that digest is "pristine" and may be refreshed or removed; any other difference is "modified" and
 # is never discarded. The digest names its algorithm, so a record is only compared with the same one.
+# A digest FAILS CLOSED: entry_digest prints nothing when it cannot vouch for what it was asked about (no
+# working hash tool, an unreadable entry, a FIFO), and nothing can match an empty digest.
 HASH_ALGO=""
 HASH_CMD=()
+HASH_READY=false
 
+# True when the hash command "$@" works: it exists, exits 0 on empty input and prints a first field of
+# the shape <algo> gives. A tool that is on PATH but cannot run (a shasum without perl) does not count.
+hash_probe() {
+  local algo="$1"
+  local out
+  shift
+  command -v "$1" >/dev/null 2>&1 || return 1
+  out="$("$@" </dev/null 2>/dev/null)" || return 1
+  out="${out%% *}"
+  case "$algo" in
+    sha256)
+      case "$out" in
+        "" | *[!0-9a-f]*) return 1 ;;
+      esac
+      [ "${#out}" -eq 64 ]
+      ;;
+    *)
+      case "$out" in
+        "" | *[!0-9]*) return 1 ;;
+      esac
+      ;;
+  esac
+}
+
+# Picks the first hash tool that really works. With none, HASH_ALGO stays empty and every digest is empty.
 hash_init() {
-  if [ -n "$HASH_ALGO" ]; then
+  if [ "$HASH_READY" = true ]; then
     return 0
   fi
-  if command -v sha256sum >/dev/null 2>&1; then
+  HASH_ALGO=""
+  HASH_CMD=()
+  if hash_probe sha256 sha256sum; then
     HASH_ALGO="sha256"
     HASH_CMD=(sha256sum)
-  elif command -v shasum >/dev/null 2>&1; then
+  elif hash_probe sha256 shasum -a 256; then
     HASH_ALGO="sha256"
     HASH_CMD=(shasum -a 256)
-  else
+  elif hash_probe cksum cksum; then
     HASH_ALGO="cksum"
     HASH_CMD=(cksum)
   fi
+  HASH_READY=true
 }
 
-# Reads stdin, prints "<algo>:<digest>".
+# Reads stdin, prints "<algo>:<digest>". Fails, printing nothing, when there is no working hash tool or
+# the tool fails.
 digest_stdin() {
   local out
   hash_init
-  out="$("${HASH_CMD[@]}")"
+  if [ -z "$HASH_ALGO" ]; then
+    return 1
+  fi
+  out="$("${HASH_CMD[@]}")" || return 1
   if [ "$HASH_ALGO" = "cksum" ]; then
     out="${out// /-}"
   else
     out="${out%% *}"
   fi
+  if [ -z "$out" ]; then
+    return 1
+  fi
   echo "$HASH_ALGO:$out"
 }
 
-# "<algo>:<digest>" of a file's bytes, or of a directory's sorted list of "<file digest> <path>" for
-# every regular file in it (links followed, .DS_Store left out). Prints nothing for anything else.
+# "<algo>:<digest>" of a file's bytes, or of a directory's listing (dir_listing in digest.sh: every
+# directory, symlink and regular file in it, sorted, with a header line so that an empty directory is not
+# the digest of an empty file). Prints nothing for anything else, and whenever it cannot vouch for all of
+# it: no working hash tool, a command that fails, an unreadable entry, a FIFO, a name with a newline.
 entry_digest() {
   local path="$1"
+  local listing sorted
   hash_init
+  if [ -z "$HASH_ALGO" ]; then
+    return 0
+  fi
   if [ -d "$path" ] && [ ! -L "$path" ]; then
-    (cd "$path" && LC_ALL=C find -L . -type f ! -name .DS_Store -exec "${HASH_CMD[@]}" {} + 2>/dev/null | LC_ALL=C sort) | digest_stdin
+    listing="$(dir_listing "$path")" || return 0
+    sorted="$(printf 'vivera-dir\n%s\n' "$listing" | LC_ALL=C sort)" || return 0
+    digest_stdin <<< "$sorted" || true
   elif [ -f "$path" ] && [ ! -L "$path" ]; then
-    digest_stdin < "$path"
+    digest_stdin 2>/dev/null < "$path" || true
   fi
   return 0
 }
 
-# The digest the marker recorded for <dest> ("entry <name> <algo>:<digest>"), or nothing.
+# The digest the marker recorded for <dest> ("entry <name> <algo>:<digest>"), or nothing. A name that
+# has more than one line (in the package marker and the sidecar together) is ambiguous: nothing is
+# believed, so the copy is judged modified.
 recorded_digest() {
   local dest="$1"
-  local name marker line rest
+  local name marker line rest found count
   name="$(basename "$dest")"
+  found=""
+  count=0
   for marker in "$(dirname "$dest")/.vivera-managed" "$dest.vivera-managed"; do
     if marker_regular "$marker"; then
       while IFS= read -r line || [ -n "$line" ]; do
         case "$line" in
           "entry $name "*)
+            count=$((count + 1))
             rest="${line#"entry $name "}"
             case "$rest" in
               *" "*) ;;
-              *)
-                echo "$rest"
-                return 0
-                ;;
+              *) found="$rest" ;;
             esac
             ;;
         esac
       done < "$marker"
     fi
   done
+  if [ "$count" -eq 1 ] && [ -n "$found" ]; then
+    echo "$found"
+  fi
   return 0
 }
 
-# What a managed copy is, judged against its source: identical (same content), pristine (not the
-# source's content, but exactly what the installer last placed: merely outdated) or modified (anything
-# else, which includes a copy with no record or a record made with another algorithm).
+# What a managed copy is, judged against its source: identical (cmp or diff says the content is the
+# same), pristine (not the source's content, but exactly what the installer last placed, so merely
+# outdated) or modified (anything else, which includes a copy with no record, an ambiguous or foreign
+# record, and a copy that cannot be vouched for). The digest only ever decides pristine: it never
+# overrides cmp or diff, because it could not see everything they see (and the other way round).
 managed_state() {
   local src="$1"
   local dest="$2"
@@ -231,10 +288,6 @@ managed_state() {
     return 0
   fi
   current="$(entry_digest "$dest")"
-  if [ -n "$current" ] && [ "$current" = "$(entry_digest "$src")" ]; then
-    echo "identical"
-    return 0
-  fi
   recorded="$(recorded_digest "$dest")"
   if [ -n "$current" ] && [ "$current" = "$recorded" ]; then
     echo "pristine"

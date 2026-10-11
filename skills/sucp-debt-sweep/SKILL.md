@@ -118,7 +118,7 @@ The meter line during the sweep (`sucp-rules`, Output) is one star per debt the 
 ```mermaid
 flowchart TD
     accTitle: Session-close debt sweep and follow-up injection
-    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one multi-select question, executed as real work, and swept again until no new debt appears.
+    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one question-tool call of multi-select groups, executed as real work, and swept again until no new debt appears.
     Gate["Plan tasks Done 100%\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
     Harvest --> Rank["Classify NOW vs LATER\nrank by risk x blast radius x cost\ndefault 3-5 items"]
     Rank --> Ask["Inject one question-tool call\nof multi-select groups,\ncheckboxes, not prose"]

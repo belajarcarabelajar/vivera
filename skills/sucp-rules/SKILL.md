@@ -352,7 +352,7 @@ flowchart LR
 |---|---|
 | An option | Continue. At a gate, record the answer in the plan's approval section. |
 | Free-form text | Treat it as the user's own answer. If it changes scope, restate it in one line and ask once more, because a changed decision is a new question. On a risky question, text that does not name the go-ahead is not approval: ask again with the exact action. |
-| Dismissed or cancelled | **A dismissed question is not an approval.** The gate stays closed, one line says what is pending and what unblocks it, independent work continues (before Gate 1 or Gate 2 only read-only work, as the HARD GATE says), a later typed approval in chat is the user's own answer and ends the pending state, and the same question is not asked again in this session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption in the plan. |
+| Dismissed or cancelled | **A dismissed question is not an approval.** The gate stays closed, one line says what is pending and what unblocks it, independent work continues (before Gate 1 or Gate 2: no implementation, scaffolding or code, as the HARD GATE says), a later typed approval in chat is the user's own answer and ends the pending state (on a risky question it must name the action), and the same question is not asked again in this session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption in the plan. |
 | No tool, a tool error, or no interactive client | Render a numbered list in the final message with one line saying the runtime lacks a prompt widget. The gate stays closed. Never skip the ask and never proceed as if it were approved. |
 
 - **Unattended runs ask nothing mid-run.** The entry gate (`sucp-overnight`) is collected while the user is present. After that a mid-run decision follows the Unattended Continuation Rule: a reversible one takes the most reasonable reading and continues, and an irreversible one that could go either way is parked in the handoff under `Waiting on a human` with a recommended answer while independent work goes on. The only question asked is the debt-sweep question, as the last act of the run, and only when the harness has an interactive client.
@@ -375,7 +375,7 @@ flowchart LR
 | Destructive action | `Destructive` | Cancel, do nothing; the exact action |
 | Promote a rule to a global file | `Promote` | Keep in the repository only; Promote this rule (names the file) |
 | Overnight run start | `Overnight` | Start the overnight run (Recommended), Not yet |
-| Root-cause fix (debugging) | `Root cause` | Approve the fix (Recommended), Revise the diagnosis |
+| Root-cause fix (only where the debugging trigger requires an RCA gate) | `Root cause` | Approve the fix (Recommended), Revise the diagnosis |
 | Debt sweep (Step 6) | `Follow-ups` | Multi-select groups, see `sucp-debt-sweep` |
 
 - A `Hand-off` answer is a claim, not proof: verify the result (for example `gh auth status`) before relying on it.
@@ -438,7 +438,7 @@ flowchart LR
 | "Updating the plan instead of running it" | A plan update is not progress. Keep it current, then execute; trivial single-step work needs no plan at all |
 | "I left a few TODOs, I'll clean them later" | Session-Close Debt Sweep: every noticed-but-unclosed item becomes a selectable follow-up now, so nothing survives the handoff as debt |
 | "Plan says done, so the session is over" | Plan Completion Saturation: tasks reach `Done 100%` with evidence, and the Step 6 sweep runs before the plan flips to `Complete` |
-| "I'll list the follow-ups at the end so you can read them" | Ask, don't narrate: one multi-select question with checkboxes, batched after the recap, so the user taps instead of retyping |
+| "I'll list the follow-ups at the end so you can read them" | Ask, don't narrate: one question-tool call of multi-select checkboxes, batched after the recap, so the user taps instead of retyping |
 | "Here are 8 follow-ups, pick the important ones" | Rank then cap: default 3-5 ranked follow-ups; the tail goes to the written backlog with `defer:` markers instead of a longer question list |
 | "You declined, so let me re-ask at the end" | A declined follow-up is closed. Record it in the backlog and finish; never re-ask the same question in one session |
 | "Ending the turn with a summary that announces the next step" | A turn with no tool call and checklist items still open is a report. With no blocker written, take the next step in the same message (see `sucp-overnight`, section 4) |

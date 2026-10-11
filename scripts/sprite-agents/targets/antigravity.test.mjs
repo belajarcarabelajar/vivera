@@ -239,7 +239,7 @@ describe('antigravity through the generator', () => {
     fs.mkdirSync(path.join(out, 'mine'), { recursive: true });
     fs.writeFileSync(path.join(out, 'mine', 'agent.md'), '---\nname: mine\n---\nmine\n');
 
-    const r = syncDir(out, outputs);
+    const r = syncDir(out, outputs, { nested: true });
     expect(r.removed).toEqual(['old/agent.md']);
     expect(fs.existsSync(path.join(out, 'old'))).toBe(false);
     expect(fs.readFileSync(path.join(out, 'mine', 'agent.md'), 'utf8')).toBe('---\nname: mine\n---\nmine\n');

@@ -154,7 +154,7 @@ describe('syncDir with a name that differs only by case', () => {
   test('refuses a nested output whose existing file differs by case in the directory or the name', () => {
     put(at('Chef', 'agent.md'), mine);
     put(at('hoggy', 'Agent.md'), mine);
-    const r = syncDir(out, new Map([['chef/agent.md', md('chef')], ['hoggy/agent.md', md('hoggy')]]));
+    const r = syncDir(out, new Map([['chef/agent.md', md('chef')], ['hoggy/agent.md', md('hoggy')]]), { nested: true });
     expect(r.refused.sort()).toEqual(['Chef/agent.md', 'hoggy/Agent.md']);
     expect(r.written).toEqual([]);
   });

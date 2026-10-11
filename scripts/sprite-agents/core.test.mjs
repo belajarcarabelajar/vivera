@@ -111,7 +111,7 @@ describe('syncDir with nested keys', () => {
 
   test('removes a stale nested file together with its directory once the directory is empty', () => {
     syncDir(out, new Map([['a/agent.md', md('a')], ['b/agent.md', md('b')]]));
-    const r = syncDir(out, new Map([['b/agent.md', md('b')]]));
+    const r = syncDir(out, new Map([['b/agent.md', md('b')]]), { nested: true });
     expect(r.removed).toEqual(['a/agent.md']);
     expect(fs.existsSync(at('a'))).toBe(false);
     expect(fs.existsSync(at('b', 'agent.md'))).toBe(true);
@@ -120,7 +120,7 @@ describe('syncDir with nested keys', () => {
   test('keeps the directory of a stale nested file when a hand-written file is still in it', () => {
     syncDir(out, new Map([['a/agent.md', md('a')]]));
     put('a/notes.txt', 'mine\n');
-    expect(syncDir(out, new Map()).removed).toEqual(['a/agent.md']);
+    expect(syncDir(out, new Map(), { nested: true }).removed).toEqual(['a/agent.md']);
     expect(fs.existsSync(at('a', 'notes.txt'))).toBe(true);
   });
 

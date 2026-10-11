@@ -73,16 +73,43 @@ marker_begin() {
 }
 
 # Copy mode, after the placement: source plus one digest line per placed entry. Rewritten only when
-# it differs.
+# it differs. A name this run did not place keeps the line it has, while that name is still in the
+# marker's directory: two targets can share one marker (one skills dir reached through a symlink), and
+# the one that places nothing must not erase what the other recorded. The names it did place get fresh
+# lines, and a line whose name is gone, or that is not an entry line, goes.
 write_marker() {
   local marker="$1"
   shift
   local content="source=$REPO_DIR"
-  local dest digest
+  local dest digest line rest name
+  local dir placed=$'\n'
   if dest_in_repo "$marker"; then
     return 0
   fi
   marker_check "$marker"
+  dir="$(dirname "$marker")"
+  for dest in "$@"; do
+    placed="$placed$(basename "$dest")"$'\n'
+  done
+  if marker_regular "$marker"; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        "entry "*" "*) ;;
+        *) continue ;;
+      esac
+      rest="${line#entry }"
+      name="${rest% *}"
+      case "$name" in
+        "" | */*) continue ;;
+      esac
+      case "$placed" in
+        *$'\n'"$name"$'\n'*) continue ;;
+      esac
+      if [ -e "$dir/$name" ] || [ -L "$dir/$name" ]; then
+        content="$content"$'\n'"$line"
+      fi
+    done < "$marker"
+  fi
   for dest in "$@"; do
     digest="$(entry_digest "$dest")"
     if [ -n "$digest" ]; then
@@ -199,16 +226,44 @@ place_link() {
   esac
 }
 
-# cp for a file, cp -RL for a directory: a copy never holds a link into the repo.
+# What a killed run left beside <dest>: only a name of exactly the shape copy_entry gives its temporary
+# copy, <dest>.vivera-tmp-<digits>. It is not a backup and not the user's: it goes before the next copy
+# to <dest>, and with --uninstall.
+remove_stale_tmp() {
+  local dest="$1"
+  local candidate suffix
+  for candidate in "$dest".vivera-tmp-*; do
+    suffix="${candidate#"$dest".vivera-tmp-}"
+    case "$suffix" in
+      "" | *[!0-9]*) continue ;;
+    esac
+    if [ -e "$candidate" ] || [ -L "$candidate" ]; then
+      remove_replaced "$candidate" 2>/dev/null || true
+    fi
+  done
+}
+
+# cp for a file, cp -RL for a directory: a copy never holds a link into the repo. The copy is made under
+# a temporary name beside <dest> and renamed into place only when cp succeeded, so a run killed half way
+# leaves a temporary name and never a partial copy at <dest> (which the next run would back up as the
+# newest backup, and --uninstall would restore over the live path).
 copy_entry() {
   local src="$1"
   local dest="$2"
+  local tmp="$dest.vivera-tmp-$$"
+  local copied=true
   make_dir "$(dirname "$dest")"
+  remove_stale_tmp "$dest"
   if [ -d "$src" ]; then
-    cp -RL "$src" "$dest"
+    cp -RL "$src" "$tmp" || copied=false
   else
-    cp "$src" "$dest"
+    cp "$src" "$tmp" || copied=false
   fi
+  if [ "$copied" = true ] && mv "$tmp" "$dest"; then
+    return 0
+  fi
+  remove_replaced "$tmp" 2>/dev/null || true
+  return 1
 }
 
 # The copy-mode twin of place_link. A managed copy the user edited is "foreign" here (see classify_dest)
@@ -363,7 +418,7 @@ link_skill_package() {
 
   if [ "$DRY_RUN" != true ] && [ "${COPY_MODE:-false}" = true ]; then
     # Markers first, all of them, so a path that cannot hold one stops the run before any copy is made.
-    for marked_dir in "${dirs[@]}"; do
+    for marked_dir in ${dirs[@]+"${dirs[@]}"}; do
       marker_begin "$marked_dir/.vivera-managed"
     done
   fi
@@ -379,7 +434,7 @@ link_skill_package() {
   PLACE_QUIET=false
 
   if [ "$DRY_RUN" != true ]; then
-    for marked_dir in "${dirs[@]}"; do
+    for marked_dir in ${dirs[@]+"${dirs[@]}"}; do
       if [ "${COPY_MODE:-false}" = true ]; then
         # The digests of what was placed here, now that it is placed.
         placed=()

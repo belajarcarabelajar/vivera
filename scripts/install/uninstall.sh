@@ -106,6 +106,10 @@ uninstall_entry() {
     echo "[KEEP] $dest (behind a symlinked directory)"
     return 0
   fi
+  # What a killed copy left beside it (see copy_entry in place.sh): it would keep its directory from going.
+  if [ "$DRY_RUN" != true ]; then
+    remove_stale_tmp "$dest"
+  fi
   if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
     uninstall_copy "$desired" "$dest"
     return 0
@@ -223,7 +227,7 @@ mode_uninstall() {
     done 3< <(target_entries "$id")
     if [ "$(target_kind "$id")" = package ] && [ "$DRY_RUN" != true ]; then
       # A marker stays only in a directory that still holds a kept (modified) copy.
-      for dir in "${dirs[@]}"; do
+      for dir in ${dirs[@]+"${dirs[@]}"}; do
         if dest_in_repo "$dir/.vivera-managed"; then
           continue
         fi
@@ -236,7 +240,7 @@ mode_uninstall() {
             ;;
         esac
       done
-      uninstall_empty_dirs "$id" "$(target_skills_dir "$id")" "${dirs[@]}"
+      uninstall_empty_dirs "$id" "$(target_skills_dir "$id")" ${dirs[@]+"${dirs[@]}"}
     fi
     clean_sprites "$id"
   done

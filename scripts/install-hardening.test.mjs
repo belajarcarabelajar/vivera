@@ -672,7 +672,7 @@ describe('C9d: a directory copy that fails half way restores the whole user dire
     shim(
       sb,
       'cp',
-      `for last; do :; done\ncase "$last" in\n  */templates) mkdir -p "$last"; echo half > "$last/partial"; exit 1 ;;\nesac\nexec ${realCp} "$@"`,
+      `for last; do :; done\ncase "$last" in\n  */templates | */templates.vivera-tmp-*) mkdir -p "$last"; echo half > "$last/partial"; exit 1 ;;\nesac\nexec ${realCp} "$@"`,
     );
     const r = sb.run(['--copy', '--only', 'agents', '--tier', 'minimal']);
     expect(r.status).toBe(1);

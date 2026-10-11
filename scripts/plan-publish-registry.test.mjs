@@ -312,6 +312,42 @@ test('resolveProject routes a worktree plan to the project that owns the worktre
   cleanup(f);
 });
 
+// pr-registry.mjs claim creates sessions at <repo-parent>/<repo-basename>-wt/<slot>,
+// so a slot is never listed in the config and must route by the root's name alone.
+test('resolveProject routes a plan in an unlisted <root>-wt/<slot> session worktree to the root project', () => {
+  const f = fixture('wt-session', [
+    { name: 'Snipset', rootRel: 'Snipset', mirror: true, plans: ['a.md'] },
+  ]);
+  const inSlot = path.join(f.base, 'Snipset-wt', 'feature-modules', 'docs', 'code-plan', 'plans', 'x.md');
+  const project = resolveProject(f.registry, inSlot);
+  assert.equal(project.name, 'Snipset');
+  assert.ok(destPathFor(f.registry, project, inSlot).includes('01 - Projects/Snipset/plans/'));
+  cleanup(f);
+});
+
+test('resolveProject does not treat a <root>-wtx lookalike or a bare <root>-wt file as a session worktree', () => {
+  const f = fixture('wt-lookalike', [
+    { name: 'Snipset', rootRel: 'Snipset', mirror: true },
+  ]);
+  for (const orphan of [
+    path.join(f.base, 'Snipset-wtx', 'slot', 'docs', 'code-plan', 'plans', 'x.md'),
+    path.join(f.base, 'Snipset-wt', 'x.md'),
+  ]) {
+    assert.throws(() => resolveProject(f.registry, orphan), /no project in plans\.publish\.json owns/, orphan);
+  }
+  cleanup(f);
+});
+
+test('resolveProject lets an explicit worktrees entry win over the derived <root>-wt session rule', () => {
+  const f = fixture('wt-explicit', [
+    { name: 'Snipset', rootRel: 'Snipset', mirror: true },
+    { name: 'other', rootRel: 'other', mirror: true, worktrees: [{ rel: 'Snipset-wt/pinned' }] },
+  ]);
+  const plan = path.join(f.base, 'Snipset-wt', 'pinned', 'docs', 'code-plan', 'plans', 'x.md');
+  assert.equal(resolveProject(f.registry, plan).name, 'other');
+  cleanup(f);
+});
+
 test('resolveProject still prefers a longer registered root over a worktree claim', () => {
   const f = fixture('wt-nested', [
     { name: 'outer', rootRel: 'outer', mirror: true, worktrees: [{ rel: 'outer/wt' }] },

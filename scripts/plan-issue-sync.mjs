@@ -42,6 +42,7 @@ import { writeFileAtomic } from './lib/atomic-write.mjs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -211,7 +212,42 @@ export function issueBody(planText, { planId: id, key, sourcePath, status, gener
     `<!-- plan-sync: plan_id=${id} | key=${key} | source=${sourcePath} | status=${status ?? 'unknown'} | hash=${hashOf(planText)} | by=${generatedBy ?? 'plan-issue-sync'} -->`,
     '',
   ].join('\n');
-  return `${planText.replace(/\s*$/, '')}\n${trailer}`;
+  const text = planText.replace(/\s*$/, '');
+  const full = `${text}\n${trailer}`;
+  if (githubLength(full) <= ISSUE_BODY_BUDGET) return full;
+
+  // Still the plan, never a summary: the longest verbatim prefix that fits, an
+  // explicit marker, and the trailer whose hash covers the FULL plan, so drift
+  // detection is unchanged. The marker is sized with M in place of N because
+  // N <= M, which makes the room an upper bound.
+  const marker = (n) => `**Truncated:** this issue shows the first ${n} of ${planText.length} characters of the plan, `
+    + `cut at a line boundary to fit GitHub's 65,536-character body limit. The full plan is \`${key}\` in the repository.`;
+  const tail = (n) => `\n\n${marker(n)}\n\n${trailer}`;
+  const room = ISSUE_BODY_BUDGET - githubLength(tail(planText.length));
+  // githubLength(text.slice(0, i)) is i plus the newlines before i, tracked as `lines`.
+  let cut = 0;
+  let lines = 0;
+  for (let i = text.indexOf('\n'); i !== -1 && i + lines <= room; i = text.indexOf('\n', i + 1)) {
+    cut = i;
+    lines++;
+  }
+  if (cut === 0) {
+    cut = room;
+    if (/[\uD800-\uDBFF]/.test(text[cut - 1])) cut--;
+  }
+  return `${text.slice(0, cut)}${tail(cut)}`;
+}
+
+// GitHub caps an issue body at 65,536 characters. A stored body may have its
+// line endings normalized to CRLF, so each LF counts twice, and the headroom
+// absorbs any remaining difference in how GitHub counts.
+const ISSUE_BODY_LIMIT = 65536;
+const ISSUE_BODY_BUDGET = ISSUE_BODY_LIMIT - 512;
+
+function githubLength(s) {
+  let n = s.length;
+  for (let i = s.indexOf('\n'); i !== -1; i = s.indexOf('\n', i + 1)) n++;
+  return n;
 }
 
 export function parseTrailer(body) {
@@ -456,7 +492,14 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
 
   // An explicit project name wins over the directory name, because a worktree
   // directory is named after the branch, not after the project it belongs to.
-  const project = projectOverride ?? path.basename(path.resolve(repoRoot || rootDir));
+  // A <root>-wt/<slot> session worktree is the <root> project; a slot name that
+  // was already mapped by hand keeps working when <root> itself is not mapped.
+  const dir = path.resolve(repoRoot || rootDir);
+  const own = path.basename(dir);
+  const sessionRoot = sessionWorktreeRoot(dir);
+  const fromSession = sessionRoot ? path.basename(sessionRoot) : null;
+  const project = projectOverride
+    ?? (fromSession && (cfg.projects[fromSession] || !cfg.projects[own]) ? fromSession : own);
   const repo = cfg.projects[project];
   if (!repo) {
     throw new Error(
@@ -534,7 +577,7 @@ const USAGE = `usage:
   bun scripts/plan-issue-sync.mjs <plan.md>...          create or sync the issue
   bun scripts/plan-issue-sync.mjs --check <plan.md>...  report only, never writes
   bun scripts/plan-issue-sync.mjs --status              table of every entry, always exit 0
-  bun scripts/plan-issue-sync.mjs --project <name>      the project whose repo is used (default: repo dir name)
+  bun scripts/plan-issue-sync.mjs --project <name>      the project whose repo is used (default: repo dir name, or <root> inside <root>-wt/<slot>)
 
   --repo-root <path>   repository root the key is computed relative to
   --config <path>      config file (default plan.issues.json)

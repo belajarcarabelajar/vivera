@@ -1,14 +1,14 @@
 # Vivera: Ultimate All-in-One AI Coding Agent Pipeline
 
+<p align="center">
+  <img alt="Vivera, the project's mascot: a smiling short-haired girl in a blue cyberpunk maid outfit with a holographic apron, holding a glowing clipboard tablet in a rainy neon city street." src="docs/images/vivera.jpg" width="100%">
+  <br>
+  <sub>Vivera, the project's mascot. AI-generated artwork.</sub>
+</p>
+
 Comprehensive, production-grade, all-in-one skill pipeline for AI coding agents. Designed to guide agents through the entire software engineering lifecycle: **Idea -> Design -> Plan -> Human Approval Gate -> TDD -> Systematic Debugging -> Subagent Orchestration -> Verification -> Finishing -> Session-Close Debt Sweep**.
 
-**Vivera** is the name of this farm. The vocabulary around the pipeline borrows from *Harvest Moon: Back to Nature*: skills are crops, pull requests are Blue Feather proposals, subagents are the seven Harvest Sprites (watering/menyiram is keep-alive, animal care/merawat is long-lived assets, harvesting/memanen is shipping), and the PR registry is the shipping bin. The flavor is cosmetic; every command, path, and behavior in this document is literal. See [The Vivera Farm Glossary](docs/vivera-glossary.md).
-
-<p align="center">
-  <img alt="Vivera, the farm's mascot: a smiling short-haired girl in a blue cyberpunk maid outfit with a holographic apron, holding a glowing clipboard tablet in a rainy neon city street." src="docs/images/vivera.jpg" width="480">
-  <br>
-  <sub>Vivera, the farm's mascot. AI-generated artwork.</sub>
-</p>
+**Vivera** is a fictional name inspired by Elli, one of the characters in *Harvest Moon: Back to Nature*. The vocabulary around the pipeline borrows from the same game: skills are crops, pull requests are Blue Feather proposals, subagents are the seven Harvest Sprites (watering is keep-alive, animal care is long-lived assets, harvesting is shipping), and the PR registry is the shipping bin. The flavor is cosmetic; every command, path, and behavior in this document is literal. See [The Vivera Glossary](docs/vivera-glossary.md).
 
 Verification is the last gate, not the last step. Once the plan is `Done 100%` and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them through the harness's own prompt widget as multi-select groups in a single call. The user taps checkboxes instead of retyping, selected items run as real work, and the session ends with zero unexamined coding debt.
 
@@ -166,7 +166,8 @@ vivera/
 ├── docs/
 │   ├── images/
 │   │   ├── vivera.jpg                           # README mascot artwork
-│   │   └── btn-harvest-sprites.jpg              # Back to Nature (PS1) Harvest Sprites illustration, 2x enlarged
+│   │   ├── btn-harvest-sprites.jpg              # Back to Nature (PS1) Harvest Sprites illustration, 2x enlarged
+│   │   └── sprites/                             # Seven Harvest Sprite portraits, 8x enlarged (chef.png ... bold.png)
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
@@ -324,13 +325,13 @@ color stay, but a sprite gets a fixed role in `agents/crew.json` instead of a fr
 
 | Sprite | In the game (PlayStation) | Role in Vivera | Default affinity | What it does |
 |---|---|---|---|---|
-| **Chef** | Red. Birthday Fall 14. Loves to cook. In the fourth year he is found afraid of the dark, carrying a lantern. | `implementer` | harvesting | Implements one chunk of an approved plan, test first, inside the permitted files. |
-| **Nappy** | Orange. Birthday Winter 22. The brothers live together in his house. | `implementer` | animal care | Same role as Chef, on a different chunk. |
-| **Hoggy** | Yellow. Birthday Fall 10. Loves to sleep and is lazy about work. | `implementer` | harvesting | Same role as Chef, on a different chunk. |
-| **Timid** | Green. Birthday Summer 16. Easily scared. | `researcher` | animal care | Investigates one narrow question about the code, the history, or the web, and edits no files. |
-| **Aqua** | Light blue. Birthday Spring 26. Likes to dress nicely. | `researcher` | watering | Same role as Timid, on a different question. |
-| **Staid** | Dark blue (sources also say blue or indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
-| **Bold** | Purple. Birthday Spring 4. Brave, and scares others off with a battle cry. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
+| <img src="docs/images/sprites/chef.png" alt="Chef, the red Harvest Sprite" width="96"><br>**Chef** | Red. Birthday Fall 14. Loves to cook. In the fourth year he is found afraid of the dark, carrying a lantern. | `implementer` | harvesting | Implements one chunk of an approved plan, test first, inside the permitted files. |
+| <img src="docs/images/sprites/nappy.png" alt="Nappy, the orange Harvest Sprite" width="96"><br>**Nappy** | Orange. Birthday Winter 22. The brothers live together in his house. | `implementer` | animal care | Same role as Chef, on a different chunk. |
+| <img src="docs/images/sprites/hoggy.png" alt="Hoggy, the yellow Harvest Sprite" width="96"><br>**Hoggy** | Yellow. Birthday Fall 10. Loves to sleep and is lazy about work. | `implementer` | harvesting | Same role as Chef, on a different chunk. |
+| <img src="docs/images/sprites/timid.png" alt="Timid, the green Harvest Sprite" width="96"><br>**Timid** | Green. Birthday Summer 16. Easily scared. | `researcher` | animal care | Investigates one narrow question about the code, the history, or the web, and edits no files. |
+| <img src="docs/images/sprites/aqua.png" alt="Aqua, the light blue Harvest Sprite" width="96"><br>**Aqua** | Light blue. Birthday Spring 26. Likes to dress nicely. | `researcher` | watering | Same role as Timid, on a different question. |
+| <img src="docs/images/sprites/staid.png" alt="Staid, the dark blue Harvest Sprite" width="96"><br>**Staid** | Dark blue (sources also say blue or indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
+| <img src="docs/images/sprites/bold.png" alt="Bold, the purple Harvest Sprite" width="96"><br>**Bold** | Purple. Birthday Spring 4. Brave, and scares others off with a battle cry. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
 
 Four things are worth knowing:
 
@@ -344,7 +345,7 @@ Four things are worth knowing:
   request. In Vivera the role is fixed by the roster, while the affinity column is only the default
   for fan-out (watering is keep-alive work, animal care is long-lived assets, harvesting is
   shipping). The parent may send any sprite to any chunk. See
-  [The Vivera Farm Glossary](docs/vivera-glossary.md).
+  [The Vivera Glossary](docs/vivera-glossary.md).
 - **Agent colors differ for two sprites.** `agents/crew.json` gives Aqua `blue` and Staid `cyan`, while
   the game has Aqua light blue and Staid dark blue.
 
@@ -353,8 +354,11 @@ respective owners, as hosted on the
 [Harvest Moon Wiki](https://harvestmoon.fandom.com/wiki/File:BTN_Sprites.jpg) (credited there to Ranch
 Story). The scan edge was cropped, the print texture smoothed, and the image enlarged 2× with Real-ESRGAN
 (`realesr-animevideov3`) to 1796 × 1580 px. It shows sprites at work rather
-than the seven by name: the wiki's per-sprite portraits come from *Friends of Mineral Town* and the
-Nintendo DS game, so they are not used here. Facts come from four PS1 sources (the
+than the seven by name. The portraits in the table are the wiki's `Th_*.png` thumbnails (44 × 52 px)
+from its Harvest Sprites (BTN) page, enlarged 8× to 352 × 416 px with Real-ESRGAN
+(`realesr-animevideov3`). The wiki files them under *Friends of Mineral Town* portraits, a remake of
+this game, so they may differ slightly from the PS1 sprites; the Nintendo DS portraits on the same wiki
+pages are not used. Facts come from four PS1 sources (the
 [Back to Nature guide](https://www.harvestmoonbacktonatureguide.com/characters.html), the
 [Ushi No Tane page](https://fogu.com/hm/btn/harvestsprites.php), the
 [GameFAQs walkthrough](https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/26294),
@@ -1714,10 +1718,10 @@ This project is an independent personal pipeline and is not affiliated with, end
 
 [MIT License](LICENSE). Copyright (c) 2026 Iwan Kurniawan.
 
-## The Vivera Farm Glossary
+## The Vivera Glossary
 
-Vivera is the name this repository goes by. The pipeline underneath is
-unchanged; the vocabulary around it borrows from *Harvest Moon: Back to
+Vivera is a fictional name inspired by Elli, one of the characters in
+*Harvest Moon: Back to Nature*. The pipeline underneath is unchanged; the vocabulary around it borrows from *Harvest Moon: Back to
 Nature* (Sony PlayStation, Victor Interactive Software, 1999; published in English by Natsume on 22 November 2000), a farming game
 about slow, patient work that pays off. The terms below are cosmetic labels
 for real pipeline concepts. When a document says "ship it", "dispatch the
@@ -1745,9 +1749,10 @@ This glossary follows the PlayStation game only, not *Friends of Mineral Town* o
 
 ### Naming
 
-Vivera is a name the repository owner coined for this farm. It does not
-appear in Harvest Moon: Back to Nature; it is the umbrella the
-game-inspired vocabulary hangs under.
+Vivera is a fictional name inspired by Elli, one of the characters in
+Harvest Moon: Back to Nature. It is not the name of a farm or a place in the
+game, and the repository is only called the farm in the game-inspired
+vocabulary.
 
 ### Sources
 

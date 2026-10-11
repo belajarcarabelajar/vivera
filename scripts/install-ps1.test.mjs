@@ -1,49 +1,76 @@
 // scripts/install-ps1.test.mjs
 //
-// Structural tests for install.ps1, the Windows copy-mode installer. PowerShell was not available on
-// the machine that wrote it, so the script was never run and these tests only read it: they check the
-// file's safety rules and compare its target table, markers, tags and exit codes with the bash
-// installer (scripts/install/*.sh). When pwsh or powershell is on PATH, two more tests parse the file
-// and run -Help; they are skipped otherwise.
+// Structural tests for install.ps1 and its two dot-sourced parts, scripts/install/windows-core.ps1 and
+// windows-ops.ps1: the file safety rules, and the target table, markers, tags and exit codes compared with
+// the bash installer (scripts/install/*.sh). They only READ the files. What the script does when it runs is
+// in scripts/install-ps1-run.test.mjs, which needs PowerShell and skips without it. INSTALL_PS1_ROOT points
+// both suites at another copy of the tree (how a mutant is tried without editing the real files).
 
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PS1_PATH = path.join(ROOT, 'install.ps1');
-const bytes = fs.readFileSync(PS1_PATH);
-const ps1 = bytes.toString('utf8');
+const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+const LIB_DIR = path.join(ROOT, 'scripts', 'install');
+const FILES = ['install.ps1', ...fs.readdirSync(LIB_DIR).filter((f) => /^windows-.*\.ps1$/.test(f)).map((f) => `scripts/install/${f}`)];
+const bytes = fs.readFileSync(path.join(ROOT, 'install.ps1'));
+const ps1 = bytes.toString('utf8');
+const all = FILES.map(read).join('\n');
 
-// The script without comment lines and block comments, so a rule is not tripped by prose about it.
-const code = ps1
-  .replace(/<#[\s\S]*?#>/g, '')
-  .split('\n')
-  .filter((l) => !/^\s*#/.test(l))
-  .join('\n');
+// The script files without comment lines and block comments, so a rule is not tripped by prose about it.
+const stripComments = (text) =>
+  text
+    .replace(/<#[\s\S]*?#>/g, '')
+    .split('\n')
+    .filter((l) => !/^\s*#/.test(l))
+    .join('\n');
+const code = stripComments(all);
 const codeLines = code.split('\n');
 const linesWith = (re) => codeLines.filter((l) => re.test(l));
 
 describe('install.ps1: file hygiene', () => {
-  test('exists and is ASCII only, every byte below 128', () => {
+  test('the script is split into install.ps1 and exactly the two windows-*.ps1 parts', () => {
+    expect(FILES).toEqual(['install.ps1', 'scripts/install/windows-core.ps1', 'scripts/install/windows-ops.ps1']);
     expect(bytes.length).toBeGreaterThan(2000);
-    const bad = [];
-    bytes.forEach((b, i) => {
-      if (b >= 128) bad.push(i);
-    });
-    expect(bad.slice(0, 5)).toEqual([]);
   });
 
-  test('has no byte order mark', () => {
-    expect([...bytes.subarray(0, 3)]).not.toEqual([0xef, 0xbb, 0xbf]);
+  test('every file is ASCII only (every byte below 128), LF only, and has no byte order mark', () => {
+    for (const f of FILES) {
+      const b = fs.readFileSync(path.join(ROOT, f));
+      const bad = [];
+      b.forEach((x, i) => {
+        if (x >= 128 || x === 13) bad.push(i);
+      });
+      expect({ f, bad: bad.slice(0, 5) }).toEqual({ f, bad: [] });
+      expect({ f, bom: [...b.subarray(0, 3)].join() === '239,187,191' }).toEqual({ f, bom: false });
+    }
   });
 
-  test('the header says NOT VERIFIED and that it was never executed', () => {
-    const header = ps1.slice(0, ps1.indexOf('param('));
-    expect(header).toContain('NOT VERIFIED');
-    expect(header.toLowerCase()).toContain('never executed');
+  test('the header says it is NOT VERIFIED ON WINDOWS and never ran there, and lists the known limits', () => {
+    const header = ps1.slice(0, ps1.indexOf('[CmdletBinding'));
+    expect(header).toContain('NOT VERIFIED ON WINDOWS');
+    expect(header).toContain('never been executed on Windows');
+    expect(header).toContain('Known limits');
+    for (const limit of ['OneDrive', 'put back only for the entry being placed', 'ALWAYS moved to a backup', 'tiers.tsv is not read', 'exit 1 (PowerShell', 'ps-sha256']) {
+      expect({ limit, said: header.includes(limit) }).toEqual({ limit, said: true });
+    }
+  });
+
+  test('install.ps1 dot-sources both parts from beside itself ($PSScriptRoot), with two-argument Join-Path', () => {
+    expect(code).toContain("'windows-core.ps1', 'windows-ops.ps1'");
+    expect(code).toMatch(/\. \$libFile/);
+    expect(code).toContain("Join-Path (Join-Path $RepoDir 'scripts') 'install'");
+  });
+
+  test('windows-core.ps1 and windows-ops.ps1 hold only functions: no param block and no top-level statement', () => {
+    for (const f of FILES.slice(1)) {
+      const text = stripComments(read(f));
+      expect({ f, param: /\bparam\(/.test(text) }).toEqual({ f, param: false });
+      const top = text.split('\n').filter((l) => /^\S/.test(l) && !/^(function |\}|\))/.test(l));
+      expect({ f, top }).toEqual({ f, top: [] });
+    }
   });
 
   test('the header documents the -File run with a bypass for this one process, and Unblock-File', () => {
@@ -53,11 +80,11 @@ describe('install.ps1: file hygiene', () => {
   });
 
   test('no line is longer than 240 characters, the target table rows being the longest', () => {
-    expect(ps1.split('\n').filter((l) => l.length > 240)).toEqual([]);
+    for (const f of FILES) expect({ f, long: read(f).split('\n').filter((l) => l.length > 240) }).toEqual({ f, long: [] });
   });
 
-  test('stays under 500 lines', () => {
-    expect(ps1.trimEnd().split('\n').length).toBeLessThanOrEqual(500);
+  test('every file stays under 500 lines', () => {
+    for (const f of FILES) expect({ f, ok: read(f).trimEnd().split('\n').length <= 500 }).toEqual({ f, ok: true });
   });
 });
 
@@ -76,7 +103,7 @@ describe('install.ps1: strictness and parameters', () => {
   test('has a param block with the parameters of the bash installer', () => {
     const block = code.slice(code.indexOf('param('), code.indexOf(')\n', code.indexOf('[switch]$Help')) + 1);
     expect(block).toMatch(/\[ValidateSet\('minimal', 'standard', 'full'\)\]\s*\[string\]\$Tier = 'standard'/);
-    for (const name of ['Only', 'Skip']) expect(block).toMatch(new RegExp(`\\[string\\]\\$${name}\\b`));
+    for (const name of ['Only', 'Skip']) expect(block).toMatch(new RegExp(`\\[string\\[\\]\\]\\$${name} = @\\(\\)`));
     for (const name of ['DryRun', 'Check', 'Update', 'Uninstall', 'Help']) expect(block).toMatch(new RegExp(`\\[switch\\]\\$${name}\\b`));
   });
 
@@ -117,12 +144,25 @@ describe('install.ps1: what it must not contain', () => {
     expect(linesWith(/Remove-Item/).filter((l) => /-Recurse/i.test(l))).toEqual([]);
   });
 
-  test('every Copy-Item, Move-Item, Remove-Item, Test-Path, Get-Item and Get-ChildItem call uses -LiteralPath', () => {
-    for (const cmd of ['Copy-Item', 'Move-Item', 'Remove-Item', 'Test-Path', 'Get-Item', 'Get-ChildItem', 'Get-FileHash']) {
+  test('every Copy-Item, Remove-Item, Test-Path, Get-Item, Get-ChildItem and Get-FileHash call uses -LiteralPath', () => {
+    for (const cmd of ['Copy-Item', 'Remove-Item', 'Test-Path', 'Get-Item', 'Get-ChildItem', 'Get-FileHash']) {
       const calls = linesWith(new RegExp(`\\b${cmd}\\b`));
       expect(calls.length).toBeGreaterThan(0);
       for (const l of calls) expect({ cmd, line: l.trim(), literal: /-LiteralPath/.test(l) }).toEqual({ cmd, line: l.trim(), literal: true });
     }
+  });
+
+  test('F5: nothing moves with Move-Item (its -Destination is a wildcard pattern in 5.1); Move-Path uses the literal .NET moves', () => {
+    expect(linesWith(/\bMove-Item\b/)).toEqual([]);
+    expect(code).toContain('[System.IO.File]::Move($From, $To)');
+    expect(code).toContain('[System.IO.Directory]::Move($From, $To)');
+    expect(linesWith(/\bMove-Path\b/).length).toBeGreaterThanOrEqual(4);
+  });
+
+  test('no Split-Path -LiteralPath (it takes no -Parent or -Leaf: a parameter-set error, measured under PowerShell 7.6.6)', () => {
+    expect(linesWith(/Split-Path/)).toEqual([]);
+    expect(code).toContain('[System.IO.Path]::GetDirectoryName($Path)');
+    expect(code).toContain('[System.IO.Path]::GetFileName($Path)');
   });
 
   test('Copy-Item always names an explicit destination', () => {
@@ -195,6 +235,64 @@ describe('install.ps1: pitfalls a read can catch', () => {
   test('comment-based help sits before the param block, and the file starts with it', () => {
     expect(ps1.startsWith('<#\n.SYNOPSIS')).toBe(true);
     expect(ps1.indexOf('#>')).toBeLessThan(ps1.indexOf('[CmdletBinding'));
+  });
+});
+
+// What each fix is made of, read from the text. The behaviour is proved in install-ps1-run.test.mjs.
+describe('install.ps1: the fixes F1, F2, F3 and F6, read from the text', () => {
+  const fn = (name) => {
+    const start = all.indexOf(`function ${name}`);
+    expect({ name, found: start > -1 }).toEqual({ name, found: true });
+    return all.slice(start, all.indexOf('\n}\n', start));
+  };
+
+  test('F3: -Only and -Skip are string arrays, and every element is split on commas', () => {
+    expect(fn('Split-List')).toMatch(/\.Split\(','\)/);
+    expect(fn('Split-List')).toMatch(/foreach \(\$item in @\(\$List\)\)/);
+    expect(code).not.toMatch(/\[string\]\$(Only|Skip)\b/);
+  });
+
+  test('F1: a real file behind a linked directory is a state of its own (viadir), and install, check, uninstall and the empty-dir guard honour it', () => {
+    expect(fn('Test-BehindLinkedDir')).toMatch(/Test-Reparse/);
+    expect(fn('Get-DestState')).toMatch(/viadir/);
+    expect(fn('Invoke-Place')).toMatch(/viadir/);
+    expect(fn('Invoke-Check')).toMatch(/viadir/);
+    expect(fn('Uninstall-Entry')).toMatch(/Test-BehindLinkedDir/);
+    expect(fn('Remove-IfEmpty')).toMatch(/Test-BehindLinkedDir/);
+  });
+
+  test('F1: the bash installer words it the same way (left alone, KEEP behind a symlinked directory)', () => {
+    expect(read('scripts/install/place.sh')).toContain('is reached through a symlinked directory; left alone');
+    expect(code).toContain('is reached through a symlinked directory; left alone');
+    expect(read('scripts/install/uninstall.sh')).toContain('(behind a symlinked directory)');
+    expect(code).toContain("'behind a symlinked directory'");
+    expect(read('scripts/install/check.sh')).toContain('(behind a symlinked directory; left alone)');
+    expect(code).toContain('(behind a symlinked directory; left alone)');
+  });
+
+  test('F2: -Update prunes a stale SKILL.md only on a digest that equals the record, with the bash KEEP wording', () => {
+    const prune = fn('Invoke-Prune');
+    expect(prune).toContain('Get-RecordedDigest');
+    expect(prune).toContain('Get-EntryDigest');
+    expect(prune).toMatch(/-cne \(Get-RecordedDigest/);
+    expect(prune).toContain('(modified copy of a skill this checkout no longer has)');
+    expect(read('scripts/install/update.sh')).toContain('(modified copy of a skill this checkout no longer has)');
+    expect(prune.indexOf('[KEEP]')).toBeLessThan(prune.indexOf('Remove-File $skill'));
+  });
+
+  test('F2: the digest carries its own tag, so a bash record (sha256:) is never read as proof', () => {
+    expect(code).toContain("$DigestTag = 'ps-sha256:'");
+    expect(read('scripts/install/lib.sh')).toContain('HASH_ALGO="sha256"');
+    expect(fn('Get-RecordedDigest')).toMatch(/'entry ' \+ \(Get-LeafName \$Dest\) \+ ' '/);
+  });
+
+  test('F6: a dry run says so at the end, for install and for -Update', () => {
+    expect(code).toContain("'==> Vivera dry run: nothing was written'");
+    expect(code).toContain("'==> Vivera update dry run: nothing was written'");
+  });
+
+  test('Test-UnderPath reads both separators, so the guards also work on a Linux run', () => {
+    expect(fn('Test-UnderPath')).toContain(".Replace('/', '\\')");
   });
 });
 
@@ -327,23 +425,5 @@ describe('install.ps1: markers, backups, entries, tags, and exit codes match the
   test('a managed copy that differs is moved aside, never discarded, and a link is never kept as ours', () => {
     expect(code).toMatch(/modified/);
     expect(code).toMatch(/ReparsePoint/);
-  });
-});
-
-// --- Run with PowerShell, when the machine has it --------------------------------------------
-const shell = Bun.which('pwsh') ?? Bun.which('powershell');
-if (!shell) console.log('install-ps1.test: pwsh and powershell are not on PATH; the parse and -Help tests are skipped');
-
-describe('install.ps1: with PowerShell on PATH', () => {
-  test.skipIf(!shell)('parses with no syntax error', () => {
-    const script = `$e = $null; $t = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($args[0], [ref]$t, [ref]$e); if ($e.Count -gt 0) { $e | ForEach-Object { $_.Message }; exit 1 }; exit 0`;
-    const r = Bun.spawnSync([shell, '-NoProfile', '-NonInteractive', '-Command', script, PS1_PATH]);
-    expect({ status: r.exitCode, out: r.stdout.toString() }).toEqual({ status: 0, out: '' });
-  });
-
-  test.skipIf(!shell)('-Help prints the usage and exits 0', () => {
-    const r = Bun.spawnSync([shell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', PS1_PATH, '-Help']);
-    expect(r.exitCode).toBe(0);
-    expect(r.stdout.toString()).toContain('Usage');
   });
 });

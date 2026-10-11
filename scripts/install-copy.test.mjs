@@ -290,7 +290,7 @@ describe('uninstall', () => {
 
     const r = sb.run(['--copy', '--uninstall']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain(`[KEEP] ${modified} (modified copy)`);
+    expect(r.stdout).toContain(`[KEEP] ${modified} (modified copy: it stays as it is; ./install.sh --update --copy replaces it after backing yours up)`);
     expect(fs.readFileSync(modified, 'utf8').endsWith('\nmine')).toBe(true);
     expect(exists(sb, `${PKG}/SKILL.md`)).toBe(false);
     expect(exists(sb, `${PKG}/templates`)).toBe(false);

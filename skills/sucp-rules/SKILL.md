@@ -330,7 +330,7 @@ flowchart LR
 ### ⏸️ Confirmation Protocol
 > Every point where the pipeline pauses for a human decision, from Step 1 to the end of the Step 6 debt sweep, is a call to the harness's own question tool with ready-made options. The person running this pipeline dislikes typing and wants short, fast turns, so tapping an option or pressing Enter is the default way to answer and typing is the exception. This changes how a gate is asked, never whether it exists: the HARD GATE and every approval gate stay.
 
-- **The rule:** when a human decision is needed, call the question tool. Never end a turn on a plain-text question, never open a text-only prompt, and never call the tool without options. Waiting in chat for a typed "yes" is the failure this section removes.
+- **The rule:** when a human decision is needed, call the question tool, and never end a turn on a plain-text question, never open a text-only prompt, and never call the tool without options. Waiting in chat for a typed "yes" is the failure this section removes.
 - **Find the tool by its schema, not by memory.** Read the schema before the first call; a call composed from memory with a stringified array failed once in this repository.
 
 | Harness | Tool | Limits | Free-form answer |

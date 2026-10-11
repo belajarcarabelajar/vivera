@@ -840,6 +840,37 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3m. Recommendation reasons (2026-10-11, plan 2026-10-11-recommendation-reasons).
+// A recommended option says why in one `Why:` line, and a risky question carries one
+// `Facts:` line instead of a tag; the Basis column of the gate catalog holds the reason
+// or the facts per gate (its shape is checked by checkGateCatalog in block 3l). The
+// snippet wording is pinned in sync-snippets.test.mjs.
+// Revert: `git revert` the commits that added this block with their skill, template, snippet, and README edits.
+{
+  const rules = 'skills/sucp-rules/SKILL.md';
+  const reasonContract = [
+    { label: 'the recommended option starts with Why:', file: rules, needle: 'starts with `Why:`' },
+    { label: 'a judgment call says so', file: rules, needle: 'Why: my judgment' },
+    { label: 'a risky question carries one Facts line', file: rules, needle: 'carries one `Facts:` line' },
+    { label: 'a not-sure answer to a risky gate cancels', file: rules, needle: 'a risky gate means cancel' },
+    { label: 'the catalog has a Basis column', file: rules, needle: '| Gate | Header | Options, in order | Basis |' },
+    { label: 'the Basis of a risky gate names the facts', file: rules, needle: 'the facts to state for a risky gate' },
+    { label: 'each sweep option begins with Why: (sweep)', file: 'skills/sucp-debt-sweep/SKILL.md', needle: 'begins with `Why:`' },
+    { label: 'each sweep option begins with Why: (template)', file: 'templates/follow-up-injection-template.md', needle: 'begins with `Why:`' },
+    { label: 'a brainstorm default states its basis', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'states its basis in one line' },
+  ];
+  for (const c of reasonContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Recommendation reasons present: ${c.label}`);
+    } else {
+      console.error(`❌ Recommendation reasons missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

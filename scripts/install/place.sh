@@ -49,13 +49,16 @@ place_link() {
   local state old backup
 
   state="$(classify_dest "$dest" "$desired")"
-  if [ "$state" != "ok" ] && [ "$state" != "inrepo" ]; then
+  if [ "$state" != "ok" ] && [ "$state" != "inrepo" ] && [ "$state" != "viadir" ]; then
     PLACE_CHANGED=$((PLACE_CHANGED + 1))
   fi
 
   case "$state" in
     inrepo)
       echo "[SKIP] $dest is inside this checkout; left alone"
+      ;;
+    viadir)
+      echo "[SKIP] $dest is reached through a symlinked directory; left alone"
       ;;
     ok)
       if [ "$PLACE_QUIET" != true ]; then
@@ -126,13 +129,16 @@ place_copy() {
   local state backup
 
   state="$(classify_dest "$dest" "$src")"
-  if [ "$state" != "ok" ] && [ "$state" != "inrepo" ]; then
+  if [ "$state" != "ok" ] && [ "$state" != "inrepo" ] && [ "$state" != "viadir" ]; then
     PLACE_CHANGED=$((PLACE_CHANGED + 1))
   fi
 
   case "$state" in
     inrepo)
       echo "[SKIP] $dest is inside this checkout; left alone"
+      ;;
+    viadir)
+      echo "[SKIP] $dest is reached through a symlinked directory; left alone"
       ;;
     ok)
       if [ "$PLACE_QUIET" != true ]; then

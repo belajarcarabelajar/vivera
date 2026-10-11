@@ -423,3 +423,101 @@ describe('H9: a failed placement after a move puts the user file back', () => {
     expect(backupsUnder(sb)).toEqual([]);
   });
 });
+
+describe('H10: a real file reached through a directory symlink into another tree is never moved', () => {
+  const VIA = 'is reached through a symlinked directory; left alone';
+
+  // Install, update, check and uninstall in turn. `tree` is the other tree: its snapshot must not change
+  // for the files that were already there, and no backup may appear anywhere in it.
+  function runEveryMode(sb, tree, files) {
+    const out = {};
+    for (const args of [[], ['--update'], ['--check'], ['--uninstall']]) {
+      const r = sb.run(args);
+      out[args[0] ?? 'install'] = r;
+      for (const [file, content] of Object.entries(files)) {
+        expect({ args, file, content: fs.readFileSync(path.join(tree, file), 'utf8') }).toEqual({ args, file, content });
+        expect(fs.lstatSync(path.join(tree, file)).isFile()).toBe(true);
+      }
+      expect(sb.snapshot(tree).filter((l) => l.split('|')[0].includes('.vivera-bak-'))).toEqual([]);
+    }
+    return out;
+  }
+
+  test('H10-1: a file of another checkout behind ~/.claude/skills/sucp-rules is left alone by every mode', () => {
+    const sb = sandbox();
+    const other = path.join(sb.root, 'other');
+    fs.mkdirSync(path.join(other, 'skills/sucp-rules'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'skills/sucp-rules/SKILL.md'), 'the other checkout');
+    mkdir(sb, '.claude/skills');
+    fs.symlinkSync(path.join(other, 'skills/sucp-rules'), at(sb, '.claude/skills/sucp-rules'));
+    // Control: the destination is a real file that lives in another tree.
+    const dest = at(sb, '.claude/skills/sucp-rules/SKILL.md');
+    expect(fs.realpathSync(dest).startsWith(fs.realpathSync(other))).toBe(true);
+    expect(fs.lstatSync(dest).isSymbolicLink()).toBe(false);
+
+    const before = sb.snapshot(other);
+    const runs = runEveryMode(sb, other, { 'skills/sucp-rules/SKILL.md': 'the other checkout' });
+    expect(sb.snapshot(other)).toEqual(before);
+    for (const mode of ['install', '--update', '--uninstall']) expect({ mode, status: runs[mode].status }).toEqual({ mode, status: 0 });
+    expect(runs.install.stdout).toContain(`[SKIP] ${dest} ${VIA}`);
+    expect(runs['--check'].status).toBe(1);
+    expect(runs['--check'].stdout).toContain(`[foreign] ${dest} (behind a symlinked directory; left alone)`);
+    expect(runs['--uninstall'].stdout).toContain(`[KEEP] ${dest} (behind a symlinked directory)`);
+  });
+
+  test('H10-2: a real package file in a symlinked dotfiles dir stays, while the missing links are placed beside it', () => {
+    const sb = sandbox();
+    const dotfiles = path.join(sb.root, 'dotfiles');
+    fs.mkdirSync(path.join(dotfiles, 'super-ultra-code-plan'), { recursive: true });
+    fs.writeFileSync(path.join(dotfiles, 'super-ultra-code-plan/SKILL.md'), 'my own copy');
+    mkdir(sb, '.claude');
+    fs.symlinkSync(dotfiles, at(sb, '.claude/skills'));
+    const dest = at(sb, '.claude/skills/super-ultra-code-plan/SKILL.md');
+
+    const install = sb.run([]);
+    expect(install.status).toBe(0);
+    expect(install.stdout).toContain(`[SKIP] ${dest} ${VIA}`);
+    // The other entries of the package were absent there and are placed as links inside the dotfiles dir.
+    expect(fs.lstatSync(path.join(dotfiles, 'super-ultra-code-plan/templates')).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(dotfiles, 'super-ultra-code-plan/SKILL.md'), 'utf8')).toBe('my own copy');
+
+    const runs = runEveryMode(sb, dotfiles, { 'super-ultra-code-plan/SKILL.md': 'my own copy' });
+    for (const mode of ['install', '--update', '--uninstall']) expect({ mode, status: runs[mode].status }).toEqual({ mode, status: 0 });
+    expect(runs['--check'].status).toBe(1);
+    expect(runs['--check'].stdout).toContain(`[foreign] ${dest} (behind a symlinked directory; left alone)`);
+    expect(runs['--uninstall'].stdout).toContain(`[KEEP] ${dest} (behind a symlinked directory)`);
+    // Uninstall removed the links it had placed there, and only those.
+    expect(fs.existsSync(path.join(dotfiles, 'super-ultra-code-plan/templates'))).toBe(false);
+  });
+
+  test('H10-3: a HOME that is itself reached through a symlink installs normally', () => {
+    const sb = sandbox();
+    const homeLink = path.join(sb.root, 'homelink');
+    fs.symlinkSync(sb.home, homeLink);
+    const env = { env: { HOME: homeLink } };
+    const install = sb.run([], env);
+    expect(install.status).toBe(0);
+    expect(install.stdout).not.toContain('symlinked directory');
+    expect(isLink(sb, `${PKG}/SKILL.md`)).toBe(true);
+    const check = sb.run(['--check'], env);
+    expect(check.status).toBe(0);
+    expect(check.stdout).toContain('check: CURRENT');
+  });
+
+  test("H10-4: the user's real layout (~/.claude/skills pointing at ~/.config/opencode/skills, sucp-* dir links) is still left alone", () => {
+    const sb = sandbox();
+    mkdir(sb, '.config/opencode/skills');
+    for (const name of phases(sb)) {
+      fs.symlinkSync(path.join(sb.repo, 'skills', name), at(sb, `.config/opencode/skills/${name}`));
+    }
+    mkdir(sb, '.claude');
+    fs.symlinkSync(at(sb, '.config/opencode/skills'), at(sb, '.claude/skills'));
+    for (const args of [[], ['--update'], ['--check'], ['--uninstall']]) {
+      const before = sb.snapshot(sb.repo);
+      const r = sb.run(args);
+      expect({ args, status: r.status }).toEqual({ args, status: 0 });
+      expect(sb.snapshot(sb.repo)).toEqual(before);
+      expect(backupsUnder(sb)).toEqual([]);
+    }
+  });
+});

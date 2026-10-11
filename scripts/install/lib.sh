@@ -119,6 +119,26 @@ dest_in_repo() {
   return 1
 }
 
+# True when <dest> is under $HOME and some directory between $HOME and <dest> is a symlink, so that
+# <dest> physically lives somewhere else: another checkout, or the user's dotfiles. A symlink at or
+# above $HOME does not count (a temp dir or a home on another mount is often reached through one).
+# The test compares the physical directory of <dest> with the physical $HOME plus the same relative
+# path: they differ exactly when a symlink sits in between. A directory that does not exist is not
+# behind anything.
+behind_symlinked_dir() {
+  local dest="$1"
+  local dir rel phys_dir phys_home
+  case "$dest" in
+    "$HOME"/*) ;;
+    *) return 1 ;;
+  esac
+  dir="$(dirname "$dest")"
+  rel="${dir#"$HOME"}"
+  phys_dir="$(cd -P "$dir" 2>/dev/null && pwd -P)" || return 1
+  phys_home="$(cd -P "$HOME" && pwd -P)"
+  [ "$phys_dir" != "$phys_home$rel" ]
+}
+
 # The state of a symlink at <dest>: ok when it already resolves to <desired>; ours-stale when it
 # resolves inside this repo (live or dangling) or is a legacy link of the old ai-skills repo (the
 # installer made it, so it is replaced without a backup); foreign for any other link, including one
@@ -162,8 +182,12 @@ classify_link() {
   echo "foreign"
 }
 
-# Prints exactly one of: absent, ok, ours-stale, foreign, inrepo.
+# Prints exactly one of: absent, ok, ours-stale, foreign, inrepo, viadir.
 #   inrepo     <dest> is a file of this checkout itself (see dest_in_repo); it is never touched
+#   viadir     <dest> is an existing real file or directory that lives behind a symlinked directory
+#              (see behind_symlinked_dir): it belongs to another tree, so it is never moved or removed.
+#              A link there, and an absent dest, are judged as anywhere else: placing or moving a link
+#              is safe
 #   ok         what is wanted is there: a link to <desired>, or in copy mode a managed copy with the
 #              same content as <desired>
 #   ours-stale the installer's own and wrong: a link as classify_link says, or in copy mode a managed
@@ -179,6 +203,8 @@ classify_dest() {
 
   if dest_in_repo "$dest"; then
     echo "inrepo"
+  elif [ ! -L "$dest" ] && [ -e "$dest" ] && behind_symlinked_dir "$dest"; then
+    echo "viadir"
   elif [ -L "$dest" ]; then
     state="$(classify_link "$dest" "$desired")"
     if [ "$state" = "ok" ] && [ "${COPY_MODE:-false}" = true ]; then

@@ -39,7 +39,8 @@ export function renderAgent(template, member, { hookRoot, templateLabel = `agent
     `description: ${JSON.stringify(description)}`,
     `color: ${member.color}`,
     ...rest,
-    `${MARKER} from ${templateLabel} and agents/crew.json; edit those, then run bun run agents:gen.`,
+    // A hook root marks the user-level render, which agents:gen does not rewrite; only ./install.sh does.
+    `${MARKER} from ${templateLabel} and agents/crew.json; edit those, then run ${hookRoot === undefined ? 'bun run agents:gen' : './install.sh'}.`,
     '---',
     body,
   ].join('\n');

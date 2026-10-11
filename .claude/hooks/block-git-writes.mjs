@@ -5,7 +5,15 @@
 // Exit 2 blocks the call and shows stderr to the model; exit 0 allows it.
 // Every parse failure exits 0, because a crashing guard would block all Bash calls.
 //
-// defer: first-token match only, upgrade when a bypass such as aliases and functions, or $( ) and backtick substitution is observed
+// It tokenizes the command line and checks the command word of each command, not only the first
+// one. Matches: a git write subcommand or any gh call after && || ; | or a newline, behind a
+// leading VAR=value, env, command, sudo, nohup, time, exec or xargs, behind a path (/usr/bin/git),
+// with git global options (-C dir, -c a=b), inside one sh/bash/zsh/dash -c string, and inside the
+// value of an assignment such as x=$(git commit).
+// Does not catch: an alias or function, eval, a backtick or $( ) that is not an assignment, text
+// piped into a shell (echo ... | sh), a second nested sh -c, or a write by redirection.
+//
+// defer: no alias, eval, substitution, piped-shell or nested sh -c handling, upgrade when one of those bypasses is observed
 
 const ALWAYS_WRITE = new Set([
   "add", "commit", "push", "checkout", "switch", "merge", "rebase", "reset",

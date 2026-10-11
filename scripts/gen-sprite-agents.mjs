@@ -42,6 +42,7 @@ import { renderAgent } from './sprite-agents/targets/claude.mjs';
 export { MARKER, OPENCODE_COLORS, parseCrew, renderAgent, renderOpenCodeAgent, syncDir };
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const DEFAULT_OUT_DIR = path.join(ROOT, '.claude', 'agents');
 
 function getTarget(id) {
   if (!Object.hasOwn(TARGETS, id)) throw new Error(`--target must be one of ${targetIds().join(', ')} (got ${id})`);
@@ -92,7 +93,7 @@ function parseArgs(argv) {
   // A target with nothing committed here has no safe default directory.
   if (target.requiresOut && opts.outDir === undefined) throw new Error(`--target ${target.id} needs --out <dir>`);
   if (opts.hookRoot !== undefined && target.id !== 'claude') throw new Error('--hook-root applies to --target claude only, the one target that runs hooks');
-  opts.outDir ??= path.join(ROOT, '.claude', 'agents');
+  opts.outDir ??= DEFAULT_OUT_DIR;
   return opts;
 }
 
@@ -107,7 +108,10 @@ if (import.meta.main) {
       console.error(`${path.join(opts.outDir, f)}: ${why}, left untouched`);
     }
     for (const d of r.drift) console.error(`${path.join(opts.outDir, d)}`);
-    if (r.drift.length > 0) console.error('sprite agents are out of date: run bun run agents:gen');
+    // agents:gen rewrites only the committed .claude/agents. Any other directory, target or hook root
+    // is an installed copy. scripts/install/check.sh matches the "sprite agents are out of date:" prefix.
+    const committed = opts.target === 'claude' && opts.hookRoot === undefined && opts.outDir === DEFAULT_OUT_DIR;
+    if (r.drift.length > 0) console.error(`sprite agents are out of date: run ${committed ? 'bun run agents:gen' : './install.sh --update'}`);
     if (r.refused.length > 0 || r.drift.length > 0) process.exit(1);
     if (opts.clean) {
       for (const f of r.removed) console.log(`removed ${path.join(opts.outDir, f)}`);

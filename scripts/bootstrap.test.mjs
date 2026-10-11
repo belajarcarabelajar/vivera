@@ -39,6 +39,7 @@ beforeAll(() => {
 afterAll(() => {
   plain?.stop(true);
   secure?.stop(true);
+  ftp?.stop(true);
   fs.rmSync(fixture, { recursive: true, force: true });
 });
 
@@ -47,10 +48,17 @@ afterAll(() => {
 // it through CURL_CA_BUNDLE and WGETRC, so the system trust store is never touched). Under
 // secure, /ok/<tag>/<file> serves the file, /to-http/... redirects to the plain origin, and
 // /to-https/... redirects to the same server under another host name, which is another origin.
+// /to-ftp/... redirects to `ftp` (a bare TCP listener that counts connects), /to-root/... with a
+// root-relative Location, /to-dir/... with a path-relative one, /to-upper/... to an upper-case
+// HTTPS:// URL that then redirects root-relative, and /hop/<n>/... through n redirects
+// (odd hops absolute, even hops root-relative) before it serves the file.
 const HAS_OPENSSL = Bun.which('openssl') !== null;
 const HAS_WGET = Bun.which('wget') !== null;
 let plain;
 let secure;
+let ftp;
+let ftpConnects = 0;
+let hopServed = 0;
 let plainHits = 0;
 let certFile = '';
 let wgetrc = '';
@@ -70,7 +78,8 @@ function startOrigins() {
   ]);
   if (made.exitCode !== 0) throw new Error(`openssl failed: ${made.stderr.toString()}`);
   wgetrc = path.join(fixture, 'wgetrc');
-  fs.writeFileSync(wgetrc, `ca_certificate = ${certFile}\n`);
+  // tries = 1: a target that answers badly is given up on at once instead of retried for minutes.
+  fs.writeFileSync(wgetrc, `ca_certificate = ${certFile}\ntries = 1\n`);
   plain = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -79,15 +88,47 @@ function startOrigins() {
       return served(new URL(req.url).pathname);
     },
   });
+  ftp = Bun.listen({
+    hostname: '127.0.0.1',
+    port: 0,
+    socket: {
+      open(socket) {
+        ftpConnects++;
+        socket.write('421 closed\r\n');
+        socket.end();
+      },
+      data() {},
+    },
+  });
+  const redirect = (location) => new Response(null, { status: 302, headers: { Location: location } });
   secure = Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
     tls: { cert: Bun.file(certFile), key: Bun.file(keyFile) },
     fetch: (req) => {
-      const m = new URL(req.url).pathname.match(/^\/(ok|to-http|to-https)\/(.*)$/);
+      const url = new URL(req.url);
+      const m = url.pathname.match(/^\/(ok|to-http|to-https|to-ftp|to-root|to-dir|to-upper|hop)\/(.*)$/);
       if (!m) return new Response('not found', { status: 404 });
       if (m[1] === 'to-http') return Response.redirect(`http://127.0.0.1:${plain.port}/${m[2]}`, 302);
       if (m[1] === 'to-https') return Response.redirect(`https://localhost:${secure.port}/ok/${m[2]}`, 302);
+      if (m[1] === 'to-ftp') return redirect(`ftp://127.0.0.1:${ftp.port}/${m[2]}`);
+      if (m[1] === 'to-root') return redirect(`/ok/${m[2]}`);
+      if (m[1] === 'to-upper') return redirect(`HTTPS://localhost:${secure.port}/to-root/${m[2]}`);
+      if (m[1] === 'to-dir') {
+        // <tag>/<file>: the redirect names only <file>, resolved against the directory of the request URL.
+        if (url.searchParams.has('r')) return served(`/${m[2]}`);
+        return redirect(`${m[2].split('/').pop()}?r=1`);
+      }
+      if (m[1] === 'hop') {
+        const [n, ...rest] = m[2].split('/');
+        const left = Number(n);
+        if (left > 0) {
+          const next = `/hop/${left - 1}/${rest.join('/')}`;
+          return redirect(left % 2 === 1 ? `https://localhost:${secure.port}${next}` : next);
+        }
+        hopServed++;
+        return served(`/${rest.join('/')}`);
+      }
       return served(`/${m[2]}`);
     },
   });
@@ -221,17 +262,20 @@ describe('bootstrap: a good release', () => {
     expect(tmpLeft(sb)).toEqual([]);
   });
 
-  test('uses wget when curl is absent (wget stands in as a shim, since wget cannot read file:// itself)', () => {
+  // wget cannot read file://, so with no curl a file:// base is refused up front, by name, instead of
+  // as a generic "could not download". The shim records a call, so "before any request" is checked.
+  // (This replaces a test in which a shim wget copied file:// URLs: it passed because the shim could
+  // do what the real wget cannot, and the real wget path is covered through the https origins below.)
+  test('a file:// base with no curl exits 1 saying file:// needs curl, and wget is never run', () => {
     const { sb, base, dest } = setup(['git', 'bun', 'tar', 'gzip']);
-    fs.writeFileSync(
-      path.join(sb.bin, 'wget'),
-      '#!/bin/sh\n[ "$1" = "-qO" ] || exit 2\ncase "$3" in file://*) cp "${3#file://}" "$2" ;; *) exit 3 ;; esac\n',
-      { mode: 0o755 },
-    );
+    const calls = path.join(sb.root, 'wget.calls');
+    fs.writeFileSync(path.join(sb.bin, 'wget'), `#!/bin/sh\necho "$@" >> '${calls}'\nexit 3\n`, { mode: 0o755 });
     const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
-    expect(r.stderr).not.toContain('[FAIL]');
-    expect(r.status).toBe(0);
-    expectInstalled(sb, dest);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('[FAIL]');
+    expect(r.stderr).toContain('file:// needs curl');
+    expect(fs.existsSync(calls)).toBe(false);
+    expectUntouched(sb, dest);
   });
 
   test('falls back to shasum -a 256 when sha256sum is absent', () => {
@@ -295,10 +339,20 @@ describe('bootstrap: a release that cannot be trusted is refused before anything
 describe('bootstrap: only a release tag is accepted', () => {
   const never = 'file:///nonexistent';
 
-  // The last five match a plain [0-9A-Za-z.] pattern but are not valid git ref names, or are not ASCII.
-  const badRefs = ['main', 'v1', 'v1.0.0;rm -rf x', '0.1.0', '', 'a1b2c3d4e5f6', 'v1.0.0/../x', 'v1.0.0..', 'v1.0.0.lock', 'v1.0.0-.', 'v1.0.0-rc..1', 'v1.0.0-é'];
+  // A tag is capped at 100 characters (the file names derived from it stay far under the 255-byte limit),
+  // the same cap as build-archive.sh. At the cap it passes; one more, or 300, is refused.
+  const atCap = `v1.0.0-${'a'.repeat(93)}`;
+  const overCap = `v1.0.0-${'a'.repeat(94)}`;
+  const longTag = `v1.0.0-${'a'.repeat(293)}`;
+  test('the length fixtures are 100, 101 and 300 characters', () => {
+    expect([atCap.length, overCap.length, longTag.length]).toEqual([100, 101, 300]);
+  });
+
+  // From 'v1.0.0..' to 'v1.0.0-é', five match a plain [0-9A-Za-z.] pattern but are not valid git ref names,
+  // or are not ASCII; the last two are over the length cap.
+  const badRefs = ['main', 'v1', 'v1.0.0;rm -rf x', '0.1.0', '', 'a1b2c3d4e5f6', 'v1.0.0/../x', 'v1.0.0..', 'v1.0.0.lock', 'v1.0.0-.', 'v1.0.0-rc..1', 'v1.0.0-é', overCap, longTag];
   for (const ref of badRefs) {
-    test(`--ref ${JSON.stringify(ref)} exits 2 with the usage text and attempts nothing`, () => {
+    test(`--ref ${ref.length > 40 ? `(a ${ref.length}-character tag)` : JSON.stringify(ref)} exits 2 with the usage text and attempts nothing`, () => {
       const { sb, dest } = setup();
       const r = boot(sb, ['--ref', ref, '--dest', dest], { base: never });
       expect(r.status).toBe(2);
@@ -320,7 +374,7 @@ describe('bootstrap: only a release tag is accepted', () => {
 
   test('bootstrap.sh and build-archive.sh accept and refuse the same tags', () => {
     const { sb, dest } = setup();
-    const accepted = ['v1.0.0', 'v1.0.0-rc.1', 'v1.0.0.1', 'v1.0.0-.1', 'v10.20.30', 'v1.2.3-rc.1.2'];
+    const accepted = ['v1.0.0', 'v1.0.0-rc.1', 'v1.0.0.1', 'v1.0.0-.1', 'v10.20.30', 'v1.2.3-rc.1.2', atCap];
     const buildEnv = { PATH: process.env.PATH, HOME: sb.home, GIT_CONFIG_GLOBAL: '/dev/null', VIVERA_REPO_DIR: path.join(sb.root, 'no-such-repo') };
     for (const tag of [...accepted, ...badRefs.filter((r) => r !== '' && r !== 'a1b2c3d4e5f6')]) {
       const built = Bun.spawnSync(['bash', BUILD, tag, path.join(sb.root, 'parity-out')], { env: buildEnv });
@@ -387,6 +441,19 @@ describe('bootstrap: other refusals', () => {
     const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
     expect(r.status).toBe(0);
     expectInstalled(sb, dest);
+  });
+
+  // `--dest ""` used to fall back to the default directory and install there, which is not what the
+  // caller wrote; an empty value is a usage error like an empty --ref.
+  test('--dest "" exits 2 with the usage text and installs nothing, not even in the default directory', () => {
+    const { sb, base } = setup();
+    const r = boot(sb, ['--ref', TAG, '--dest', '', ...MINIMAL], { base });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('Usage:');
+    expect(r.stderr).toContain('--dest');
+    expect(r.stderr).not.toContain('[FAIL]');
+    expect(sb.snapshot()).toEqual([]);
+    expect(tmpLeft(sb)).toEqual([]);
   });
 
   test('a relative --dest is made absolute so the installed links do not depend on the working directory', () => {
@@ -488,6 +555,63 @@ describe('bootstrap: the network is reached over https only', () => {
       expect(r.stderr).not.toContain('[FAIL]');
       expect(r.status).toBe(0);
       expectInstalled(sb, dest);
+    });
+
+    // wget followed an https-to-ftp redirect on its own (anonymous FTP connects to the target) while
+    // curl refuses it. The script now follows redirects itself and checks every target's scheme first.
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a redirect from https to ftp is refused: exit 1, and nothing connects to the ftp listener', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const before = ftpConnects;
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-ftp'), env: trust() });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('[FAIL]');
+      expect(r.stderr).toContain('ftp');
+      expect(ftpConnects).toBe(before);
+      expectUntouched(sb, dest);
+    });
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a root-relative redirect is followed on the same https origin', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-root'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a path-relative redirect is followed on the same https origin', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-dir'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+
+    // After an upper-case HTTPS:// hop, the next relative redirect must still resolve against that host.
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('an upper-case HTTPS:// redirect is followed, and so is a relative redirect after it', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('to-upper'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a chain of 5 redirects (absolute and relative) is followed', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('hop/5'), env: trust() });
+      expect(r.stderr).not.toContain('[FAIL]');
+      expect(r.status).toBe(0);
+      expectInstalled(sb, dest);
+    });
+
+    test.skipIf(!HAS_OPENSSL || !HAS_WGET)('a chain of 6 redirects is refused: exit 1, and the file at the end of it is never requested', async () => {
+      const { sb, dest } = setup(WGET_TOOLS);
+      const before = hopServed;
+      const r = await bootAsync(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base: secureBase('hop/6'), env: trust() });
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('[FAIL]');
+      expect(r.stderr).toMatch(/too many redirects/);
+      expect(hopServed).toBe(before);
+      expectUntouched(sb, dest);
     });
   });
 });
@@ -600,6 +724,59 @@ describe('bootstrap: a failed extraction removes only what this run created', ()
     expect(fs.existsSync(path.join(dest, TAG))).toBe(false);
     expect(sb.snapshot()).toEqual([]);
     expect(tmpLeft(sb)).toEqual([]);
+  });
+});
+
+describe('bootstrap: an archive with no top-level install.sh removes only what this run created', () => {
+  // A well-formed archive (so extraction succeeds and the checksum matches) that has no install.sh.
+  function releaseWithoutInstaller(sb, dir) {
+    const stage = path.join(sb.root, 'stage');
+    fs.mkdirSync(path.join(stage, `vivera-${TAG}`), { recursive: true });
+    fs.writeFileSync(path.join(stage, `vivera-${TAG}`, 'README.md'), 'no installer here\n');
+    const archive = path.join(dir, ARCHIVE);
+    expect(Bun.spawnSync(['tar', '-czf', archive, '-C', stage, `vivera-${TAG}`]).exitCode).toBe(0);
+    fs.writeFileSync(`${archive}.sha256`, `${sha256Hex(fs.readFileSync(archive))}  ${ARCHIVE}\n`);
+  }
+
+  test('a <dest>/<ref> this run created is removed, so the next run does not say "already exists"', () => {
+    const { sb, base, dest, served: dir } = setup();
+    releaseWithoutInstaller(sb, dir);
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('no install.sh');
+    expect(fs.existsSync(path.join(dest, TAG))).toBe(false);
+    expect(sb.snapshot()).toEqual([]);
+    expect(tmpLeft(sb)).toEqual([]);
+    // With the good release back in place, the same command now installs.
+    fs.copyFileSync(path.join(fixture, 'dl', TAG, ARCHIVE), path.join(dir, ARCHIVE));
+    fs.copyFileSync(path.join(fixture, 'dl', TAG, `${ARCHIVE}.sha256`), path.join(dir, `${ARCHIVE}.sha256`));
+    const again = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(again.stderr).not.toContain('already exists');
+    expect(again.status).toBe(0);
+    expectInstalled(sb, dest);
+  });
+
+  test('an empty <dest>/<ref> the user made beforehand is still there, and empty, afterwards', () => {
+    const { sb, base, dest, served: dir } = setup();
+    releaseWithoutInstaller(sb, dir);
+    fs.mkdirSync(path.join(dest, TAG), { recursive: true });
+    const r = boot(sb, ['--ref', TAG, '--dest', dest, ...MINIMAL], { base });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('no install.sh');
+    expect(fs.readdirSync(path.join(dest, TAG))).toEqual([]);
+    expect(sb.snapshot()).toEqual([]);
+    expect(tmpLeft(sb)).toEqual([]);
+  });
+});
+
+describe('bootstrap: .gitattributes keeps the git hooks LF', () => {
+  // .githooks/pre-commit is a bash script with no .sh suffix, so *.sh does not cover it; a Windows
+  // autocrlf clone would give it CRLF and break its shebang. Read-only: nothing here writes.
+  test('.gitattributes lists .githooks/* as text with eol=lf, and git resolves the hook to eol=lf', () => {
+    expect(fs.readFileSync(path.join(ROOT, '.gitattributes'), 'utf8').split('\n')).toContain('.githooks/* text eol=lf');
+    const r = Bun.spawnSync(['git', '-C', ROOT, 'check-attr', 'text', 'eol', '--', '.githooks/pre-commit'], { env: { PATH: process.env.PATH, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' } });
+    expect(r.stdout.toString()).toContain('.githooks/pre-commit: eol: lf');
+    expect(r.stdout.toString()).toContain('.githooks/pre-commit: text: set');
   });
 });
 

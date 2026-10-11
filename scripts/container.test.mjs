@@ -386,6 +386,32 @@ describe('.dockerignore', () => {
     }
   });
 
+  // A denylist cannot name every secret, but these are the credential stores the tools on a developer
+  // machine write inside a project or a home directory: registry tokens (.npmrc, bunfig.toml), network
+  // and git logins, cloud keys, and the auth files of the agent CLIs.
+  test('credential files and key material are kept out at any depth', () => {
+    for (const file of [
+      '.npmrc', 'packages/a/.npmrc',
+      '.netrc', 'home/.netrc',
+      '.git-credentials', 'home/.git-credentials',
+      'bunfig.toml', 'packages/a/bunfig.toml',
+      '.aws/credentials', '.aws/config', 'home/.aws/credentials',
+      'credentials.json', 'deploy/credentials.json',
+      'server.key', 'certs/server.key',
+      'client.p12', 'certs/client.p12',
+      '.claude/.credentials.json', 'home/.claude/.credentials.json',
+      '.opencode/auth.json', 'home/.opencode/auth.json',
+    ]) {
+      expect({ file, ignored: ignored(file, lines) }).toEqual({ file, ignored: true });
+    }
+  });
+
+  test('the credential patterns are exact: lookalike names stay in the context', () => {
+    for (const file of ['package.json', 'docs/keys.md', 'docs/monkey.keyboard', 'credentials.md', 'docs/credentials.json.md', '.opencode/plugins/graphify.js', '.claude/hooks/block-git-writes.mjs', 'docs/bunfig.toml.md', 'docs/p12.md']) {
+      expect({ file, ignored: ignored(file, lines) }).toEqual({ file, ignored: false });
+    }
+  });
+
   test('the committed examples and the shared Claude hooks are still in the context', () => {
     for (const file of ['local.config.example.json', 'plan.issues.example.json', 'plans.publish.example.json', '.claude/hooks/block-git-writes.mjs']) {
       expect({ file, ignored: ignored(file, lines) }).toEqual({ file, ignored: false });

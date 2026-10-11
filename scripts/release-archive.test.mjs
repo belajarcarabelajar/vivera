@@ -41,13 +41,14 @@ function makeRepo(name) {
   fs.writeFileSync(path.join(repo, 'a.txt'), 'alpha\n');
   fs.writeFileSync(path.join(repo, 'sub', 'b.txt'), 'beta\n');
   fs.writeFileSync(path.join(repo, 'ignored.txt'), 'secret\n');
+  fs.writeFileSync(path.join(repo, 'tool.sh'), '#!/bin/sh\n', { mode: 0o755 });
   const g = (...args) => {
     const r = run('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'commit.gpgsign=false', ...args]);
     expect(r.status).toBe(0);
   };
   g('init', '-q', '-b', 'main');
   fs.appendFileSync(path.join(repo, '.git', 'info', 'exclude'), 'ignored.txt\n');
-  g('add', 'a.txt', 'sub/b.txt');
+  g('add', 'a.txt', 'sub/b.txt', 'tool.sh');
   g('commit', '-q', '-m', 'fixture');
   return repo;
 }
@@ -128,9 +129,11 @@ describe('build-archive.sh', () => {
   });
 
   // The last five match the old regex but are not valid git ref names (or are not ASCII).
-  const badTags = ['0.1.0', 'v1', 'v1.0.0;rm', 'v1.0.0 x', '', 'v1.0.0..', 'v1.0.0.lock', 'v1.0.0-.', 'v1.0.0-rc..1', 'v1.0.0-é'];
+  // The last two are over the 100-character cap: 101, and 300, which used to pass the regex and then die
+  // with a raw bash "File name too long" from a redirection.
+  const badTags = ['0.1.0', 'v1', 'v1.0.0;rm', 'v1.0.0 x', '', 'v1.0.0..', 'v1.0.0.lock', 'v1.0.0-.', 'v1.0.0-rc..1', 'v1.0.0-é', `v1.0.0-${'a'.repeat(94)}`, `v1.0.0-${'a'.repeat(293)}`];
   for (const bad of badTags) {
-    test(`the tag ${JSON.stringify(bad)} exits 2 with usage and writes nothing`, () => {
+    test(`the tag ${bad.length > 40 ? `(${bad.length} characters)` : JSON.stringify(bad)} exits 2 with usage and writes nothing`, () => {
       const out = path.join(scratch, `out-badtag-${fs.readdirSync(scratch).length}`);
       const r = build([bad, out], repo);
       expect(r.status).toBe(2);
@@ -151,6 +154,42 @@ describe('build-archive.sh', () => {
   test('a four-part tag that is a valid ref name is accepted', () => {
     const out = path.join(scratch, 'out-four');
     expect(build(['v1.0.0.1', out], repo).status).toBe(0);
+  });
+
+  test('a tag of exactly 100 characters is accepted and builds', () => {
+    const tag = `v1.0.0-${'a'.repeat(93)}`;
+    expect(tag.length).toBe(100);
+    const out = path.join(scratch, 'out-cap');
+    const r = build([tag, out], repo);
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(fs.existsSync(tarball(out, tag))).toBe(true);
+  });
+
+  // An outdir that starts with a dash was read as an option by mkdir and by sha256sum.
+  test('an outdir that begins with a dash is a directory name, not an option', () => {
+    const cwd = fs.mkdtempSync(path.join(scratch, 'cwd-'));
+    const r = run('bash', [BUILD, 'v0.1.0', '-out'], { cwd, env: baseEnv({ VIVERA_REPO_DIR: repo }) });
+    expect(r.stderr).toBe('');
+    expect(r.status).toBe(0);
+    expect(fs.readdirSync(path.join(cwd, '-out')).sort()).toEqual(['vivera-v0.1.0.tar.gz', 'vivera-v0.1.0.tar.gz.sha256']);
+    expect(fs.readFileSync(path.join(cwd, '-out', 'vivera-v0.1.0.tar.gz.sha256'), 'utf8')).toBe(`${sha256(path.join(cwd, '-out', 'vivera-v0.1.0.tar.gz'))}  vivera-v0.1.0.tar.gz\n`);
+  });
+
+  // git archive stores 0666 and 0777 masked by tar.umask; with the default 0002 that was 0664/0775,
+  // group-writable, and a tar extracted under umask 002 kept it.
+  test('the stored modes are 0644 for files and 0755 for executables and directories, whatever the umask', () => {
+    const modesOf = (r, out) => {
+      expect(r.status).toBe(0);
+      const listing = run('tar', ['-tvzf', tarball(out)]).stdout.split('\n').filter(Boolean);
+      const mode = (name) => listing.find((l) => l.trimEnd().endsWith(`vivera-v0.1.0/${name}`))?.split(/\s+/)[0];
+      return { dir: mode('sub/'), file: mode('a.txt'), nested: mode('sub/b.txt'), exec: mode('tool.sh') };
+    };
+    const want = { dir: 'drwxr-xr-x', file: '-rw-r--r--', nested: '-rw-r--r--', exec: '-rwxr-xr-x' };
+    const plain = path.join(scratch, 'out-modes');
+    expect(modesOf(build(['v0.1.0', plain], repo), plain)).toEqual(want);
+    const strict = path.join(scratch, 'out-modes-077');
+    expect(modesOf(buildUnderUmask077(['v0.1.0', strict], repo), strict)).toEqual(want);
   });
 
   test('the file modes in the archive do not depend on umask or on tar.umask in the user\'s git config', () => {

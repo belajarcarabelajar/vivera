@@ -13,7 +13,9 @@
 #
 # TLS is therefore the only integrity root, so the network is reached over https only: the base URL must
 # start with https://, curl is told --proto '=https' --proto-redir '=https', and a redirect to plain
-# http is refused. A file:// base is accepted too, for a local mirror.
+# http (or any other scheme, ftp included) is refused. Without curl, wget is run with --max-redirect=0
+# and this script follows the redirects itself, at most 5, each only to an https:// URL or a relative
+# path on the same origin. A file:// base is accepted too, for a local mirror, and it needs curl.
 #
 # Environment: VIVERA_BASE_URL (default https://github.com/belajarcarabelajar/vivera/releases/download),
 # VIVERA_HOME (destination when --dest is not given; default ${XDG_DATA_HOME:-$HOME/.local/share}/vivera).
@@ -40,14 +42,14 @@ trap 'exit 143' TERM
 usage() {
   cat <<'EOF'
 Usage: bootstrap.sh --ref <tag> [--dest <dir>] [--] [install.sh args...]
-  --ref <tag>   release tag to install, for example v1.2.3 or v1.2.3-rc.1 (required)
-                branches, SHAs and anything else are refused
-  --dest <dir>  where to extract; the release goes to <dir>/<tag> (default: $VIVERA_HOME, or
+  --ref <tag>   release tag to install, for example v1.2.3 or v1.2.3-rc.1, at most 100 characters
+                (required); branches, SHAs and anything else are refused
+  --dest <dir>  where to extract, not empty; the release goes to <dir>/<tag> (default: $VIVERA_HOME, or
                 ${XDG_DATA_HOME:-$HOME/.local/share}/vivera)
   --            everything after it is passed to the extracted install.sh
   -h, --help    print this text
-Environment: VIVERA_BASE_URL (release download base; https://, or file:// for a local mirror),
-             VIVERA_HOME (default destination)
+Environment: VIVERA_BASE_URL (release download base; https://, or file:// for a local mirror, which
+             needs curl), VIVERA_HOME (default destination)
 Needs curl or wget, tar, and sha256sum or shasum.
 EOF
 }
@@ -64,31 +66,76 @@ fail() {
   exit 1
 }
 
-# wget cannot be told to refuse a redirect to plain http: --https-only limits only the links followed
-# in recursive mode (probed with wget 1.25.0, it still fetched a plain-http URL and followed an
-# https-to-http redirect). So the response headers are read after the download, and a Location that
-# starts with http:// throws the file away before anything uses it.
+# resolve_https <current-url> <location>: prints the absolute URL a redirect points to, or returns 1 when
+# it is anything but https. A Location with a scheme must be https://; one without (//host/x, /x, x)
+# keeps the scheme and host of the URL it was answered from.
+resolve_https() {
+  local rest="${1#https://}" authority path scheme_re='^[A-Za-z][A-Za-z0-9+.-]*:'
+  authority="${rest%%[/?#]*}"
+  case "$2" in
+    # The scheme is written back in lower case: the next relative redirect strips "https://" from this URL.
+    [Hh][Tt][Tt][Pp][Ss]://*) printf 'https://%s\n' "${2#*://}" ;;
+    //*) printf 'https:%s\n' "$2" ;;
+    /*) printf 'https://%s%s\n' "$authority" "$2" ;;
+    *)
+      # A scheme such as http:, ftp:, file: (or https: without //) is refused; a path may hold a colon
+      # only after its first slash, so the pattern stops at the first / ? or #.
+      if [[ "$2" =~ $scheme_re ]]; then
+        return 1
+      fi
+      path="${rest#"$authority"}"
+      path="${path%%[?#]*}"
+      printf 'https://%s%s/%s\n' "$authority" "${path%/*}" "$2"
+      ;;
+  esac
+}
+
+# wget cannot be told to refuse a redirect to another scheme: --https-only limits only the links followed
+# in recursive mode (probed with wget 1.25.0: it still fetched a plain-http URL, followed an https-to-http
+# redirect, and followed an https-to-ftp redirect with anonymous FTP connects). So wget is run with
+# --max-redirect=0, which hands every redirect back here with its Location in the -S headers, and this
+# loop follows it, at most 5 times, only to a URL resolve_https accepts. Nothing is requested from a
+# refused target, and the file is thrown away.
 fetch_wget_https() {
-  local log="$WORK/wget.log"
-  wget -qS -O "$2" "$1" 2>"$log" || return 1
-  if grep -qi '^[[:space:]]*location:[[:space:]]*http://' "$log"; then
-    rm -f -- "$2"
-    echo "bootstrap.sh: refusing a redirect to plain http while downloading $1" >&2
-    return 1
-  fi
+  local url="$1" out="$2" log="$WORK/wget.log" hops=0 got http loc
+  while :; do
+    got=0
+    wget -qS --max-redirect=0 -O "$out" "$url" 2>"$log" || got=$?
+    http="$(sed -n 's|^[[:space:]]*HTTP/[0-9.]*[[:space:]][[:space:]]*\([0-9][0-9]*\).*|\1|p' "$log" | tail -n 1)"
+    case "$http" in
+      301 | 302 | 303 | 307 | 308) ;;
+      *)
+        [ "$got" -eq 0 ] && return 0
+        rm -f -- "$out"
+        return 1
+        ;;
+    esac
+    loc="$(grep -i '^[[:space:]]*location:' "$log" | tail -n 1 | sed 's/^[^:]*:[[:space:]]*//; s/[[:space:]]*$//')"
+    if [ -z "$loc" ]; then
+      rm -f -- "$out"
+      return 1
+    fi
+    if [ "$hops" -ge 5 ]; then
+      rm -f -- "$out"
+      echo "bootstrap.sh: too many redirects (more than 5) while downloading $1" >&2
+      return 1
+    fi
+    if ! url="$(resolve_https "$url" "$loc")"; then
+      rm -f -- "$out"
+      echo "bootstrap.sh: refusing a redirect to a ${loc%%:*}: URL while downloading $1 (only https is followed)" >&2
+      return 1
+    fi
+    hops=$((hops + 1))
+  done
 }
 
 # fetch <url> <file>: curl is preferred, wget is the fallback. A network URL is https for the first
 # request and for every redirect. A file:// URL gets there only through a file:// base, which main
-# accepts (the tests serve a release that way); wget cannot read file:// itself.
+# accepts (the tests serve a release that way) when curl is there to read it.
 fetch() {
   case "$1" in
     file://*)
-      if command -v curl >/dev/null 2>&1; then
-        curl --proto '=file' -fsSL -o "$2" "$1"
-      else
-        wget -qO "$2" "$1"
-      fi
+      curl --proto '=file' -fsSL -o "$2" "$1"
       ;;
     *)
       if command -v curl >/dev/null 2>&1; then
@@ -128,7 +175,9 @@ verify() {
 # asks `git check-ref-format`; here git is not required (tier minimal has none), and for the
 # characters the regex allows, those rules come down to the three patterns below.
 is_release_tag() {
-  local tag_re='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'
+  local tag_re='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' tag_max=100
+  # The same cap as build-archive.sh: the file names made from the tag stay far under 255 bytes.
+  [ "${#1}" -le "$tag_max" ] || return 1
   case "$1" in
     *..* | *. | *.lock) return 1 ;;
   esac
@@ -136,6 +185,16 @@ is_release_tag() {
     LC_ALL=C
     [[ "$1" =~ $tag_re ]]
   )
+}
+
+# discard_extraction <target> <existed>: the directory was absent or empty before this run, so what is in
+# it now is only this extraction. One this run created goes; an empty one the user made stays, emptied again.
+discard_extraction() {
+  if [ "$2" = true ]; then
+    find "$1" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  else
+    rm -rf -- "$1"
+  fi
 }
 
 main() {
@@ -151,6 +210,7 @@ main() {
         ;;
       --dest)
         [ $# -ge 2 ] || bad_usage "--dest needs a value"
+        [ -n "$2" ] || bad_usage "--dest needs a value that is not empty"
         dest="$2"
         shift 2
         ;;
@@ -171,7 +231,7 @@ main() {
 
   [ "$have_ref" = true ] || bad_usage "--ref is required"
   if ! is_release_tag "$ref"; then
-    bad_usage "--ref must be a release tag like v1.2.3 (got \"$ref\"); branches and SHAs are not accepted"
+    bad_usage "--ref must be a release tag like v1.2.3, at most 100 characters (got \"$ref\"); branches and SHAs are not accepted"
   fi
 
   local base="${VIVERA_BASE_URL:-https://github.com/belajarcarabelajar/vivera/releases/download}"
@@ -184,6 +244,10 @@ main() {
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     fail "need curl or wget to download the release"
   fi
+  # wget cannot read file://, so say so now instead of failing the download with a generic message.
+  case "$base" in
+    file://*) command -v curl >/dev/null 2>&1 || fail "VIVERA_BASE_URL is a file:// URL and file:// needs curl (wget cannot read it)" ;;
+  esac
   command -v tar >/dev/null 2>&1 || fail "need tar to extract the release"
   if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
     fail "need sha256sum or shasum to verify the release"
@@ -226,16 +290,13 @@ main() {
 
   mkdir -p "$target"
   if ! tar -xzf "$WORK/$archive" -C "$target" --strip-components=1; then
-    # The directory was absent or empty before, so what is in it now is only this extraction. One
-    # this run created goes; an empty one the user made stays, emptied again.
-    if [ "$target_existed" = true ]; then
-      find "$target" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-    else
-      rm -rf -- "$target"
-    fi
+    discard_extraction "$target" "$target_existed"
     fail "could not extract $archive"
   fi
-  [ -f "$target/install.sh" ] || fail "$archive has no install.sh at its top level"
+  if [ ! -f "$target/install.sh" ]; then
+    discard_extraction "$target" "$target_existed"
+    fail "$archive has no install.sh at its top level"
+  fi
 
   echo "==> Vivera $ref extracted to $target"
   local status=0

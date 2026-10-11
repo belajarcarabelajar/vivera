@@ -3,7 +3,7 @@
 <p align="center">
   <img alt="Vivera, the project's mascot: a smiling short-haired girl in a blue cyberpunk maid outfit with a holographic apron, holding a glowing clipboard tablet in a rainy neon city street." src="docs/images/vivera.jpg" width="100%">
   <br>
-  <sub>Vivera</sub>
+  <em>Vivera, the mascot of this project. The name is fictional and inspired by Elli, a character in Harvest Moon: Back to Nature.</em>
 </p>
 
 Comprehensive, production-grade, all-in-one skill pipeline for AI coding agents. Designed to guide agents through the entire software engineering lifecycle: **Idea -> Design -> Plan -> Human Approval Gate -> TDD -> Systematic Debugging -> Subagent Orchestration -> Verification -> Finishing -> Session-Close Debt Sweep**.
@@ -24,6 +24,10 @@ The skill is four components in sequence — **Brainstorming → Writing Plans �
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/lifecycle-dark.svg">
   <img alt="Execution lifecycle: a request is classified as Spike, Bounded, or Architectural; all paths converge on Brainstorming (Gate 1) then a Visual Implementation Plan (Gate 2 – Hard Human Approval); optional Deep Research with Graphify preflight can inject evidence; execution routes to TDD, Systematic Debugging (4-Phase RCA), or Subagent Orchestration (chunk → 10+ fan-out → gather → audit loop); a Verification gate (Gate 3) precedes Finishing and Git Hygiene; session closes with a Debt Sweep and Multi-Select Follow-Up Question; Compaction preserves state across context resets." src="diagrams/lifecycle.svg" width="820">
 </picture>
+
+<p align="center">
+  <em>Execution lifecycle. A request is classified as Spike, Bounded, or Architectural, passes the brainstorming and plan-approval gates, runs through TDD, debugging, or subagent orchestration, clears the verification gate, and closes with a debt sweep.</em>
+</p>
 
 ---
 
@@ -248,6 +252,8 @@ successful `./install.sh` means the harness is not installed — it is not a fai
 
 <p align="center">
   <img alt="Official Back to Nature artwork of the Harvest Sprites: little elves in knit caps watering sprouts with a green can, carrying an egg, and riding a cow and a chicken." src="docs/images/btn-harvest-sprites.jpg" width="100%">
+  <br>
+  <em>The seven Harvest Sprites at work on the farm: watering sprouts, carrying an egg, and riding a cow and a chicken. Official artwork from Harvest Moon: Back to Nature (PlayStation), © its respective owners.</em>
 </p>
 
 This section follows the PlayStation game *Harvest Moon: Back to Nature* (Victor Interactive Software,
@@ -286,7 +292,7 @@ Four things are worth knowing:
 - **Agent colors differ for two sprites.** `agents/crew.json` gives Aqua `blue` and Staid `cyan`, while
   the game has Aqua light blue and Staid dark blue.
 
-<sub>Artwork © its respective owners. Game facts and sources are in [the glossary](docs/vivera-glossary.md). Vivera is an independent project and is not affiliated with the Harvest Moon franchise.</sub>
+*The sprite portraits in the table are Harvest Moon artwork from the Harvest Moon Wiki, © their respective owners. Game facts and their sources are listed in [the glossary](docs/vivera-glossary.md). Vivera is an independent project and is not affiliated with the Harvest Moon franchise.*
 
 ### Claude Code agents
 

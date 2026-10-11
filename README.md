@@ -165,7 +165,8 @@ vivera/
 │   └── lifecycle-dark.svg                       # README hero, dark
 ├── docs/
 │   ├── images/
-│   │   └── vivera.jpg                           # README mascot artwork (metadata stripped)
+│   │   ├── vivera.jpg                           # README mascot artwork (metadata stripped)
+│   │   └── sprites/                             # Seven Harvest Sprite portraits, 4x enlarged (chef.png ... bold.png)
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
@@ -304,6 +305,40 @@ installer checks for the parent directory first (`~/.claude`, `~/.gemini/antigra
 and skips the target rather than fabricating an empty config tree. So a target that is absent after a
 successful `./install.sh` means the harness is not installed — it is not a failed install. Run
 `./install.sh --dry-run` to see exactly which targets your machine qualifies for.
+
+### The Harvest Sprites
+
+In *Harvest Moon: Back to Nature* the seven Harvest Sprites (コロボックル, *Korobokkuru*) live in a small
+hut behind the Church. You can hire one for 1 day, 3 days, or a week to water crops, harvest crops, or
+take care of animals. They look identical except for the color of their hat and shirt, and the seven
+colors together span the rainbow. In Vivera each sprite is a named subagent: the name and the color
+stay, but a sprite gets a fixed role in `agents/crew.json` instead of a free choice of job.
+
+| Sprite | In the game (BTN) | Role in Vivera | Default affinity | What it does |
+|---|---|---|---|---|
+| <img src="docs/images/sprites/chef.png" alt="Chef, the red Harvest Sprite" width="96"><br>**Chef** | Red. Birthday Fall 14. In the fourth year he is found afraid of the dark, carrying a lantern. | `implementer` | harvesting | Implements one chunk of an approved plan, test first, inside the permitted files. |
+| <img src="docs/images/sprites/nappy.png" alt="Nappy, the orange Harvest Sprite" width="96"><br>**Nappy** | Orange. Birthday Winter 22. | `implementer` | animal care | Same role as Chef, on a different chunk. |
+| <img src="docs/images/sprites/hoggy.png" alt="Hoggy, the yellow Harvest Sprite" width="96"><br>**Hoggy** | Yellow. Birthday Fall 10. | `implementer` | harvesting | Same role as Chef, on a different chunk. |
+| <img src="docs/images/sprites/timid.png" alt="Timid, the green Harvest Sprite" width="96"><br>**Timid** | Green. Birthday Summer 16. | `researcher` | animal care | Investigates one narrow question about the code, the history, or the web, and edits no files. |
+| <img src="docs/images/sprites/aqua.png" alt="Aqua, the light blue Harvest Sprite" width="96"><br>**Aqua** | Light blue. Birthday Spring 26. | `researcher` | watering | Same role as Timid, on a different question. |
+| <img src="docs/images/sprites/staid.png" alt="Staid, the dark blue Harvest Sprite" width="96"><br>**Staid** | Dark blue (the wiki also calls it indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
+| <img src="docs/images/sprites/bold.png" alt="Bold, the purple Harvest Sprite" width="96"><br>**Bold** | Purple. Birthday Spring 4. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
+
+Two differences from the game are worth knowing:
+
+- **Jobs are a default, not a rule.** In the game any sprite can do any of the three jobs, one per
+  request, and its skill is tracked per job. In Vivera the role is fixed by the roster, while the
+  affinity column is only the default for fan-out (watering is keep-alive work, animal care is
+  long-lived assets, harvesting is shipping). The parent may send any sprite to any chunk. See
+  [The Vivera Farm Glossary](docs/vivera-glossary.md).
+- **Agent colors differ for two sprites.** `agents/crew.json` gives Aqua `blue` and Staid `cyan`, while
+  the game has Aqua light blue and Staid dark blue.
+
+<sub>Artwork: the sprite portraits are *Harvest Moon: Back to Nature* artwork, copyright their respective
+owners, taken from the [Harvest Moon Wiki](https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN))
+(files `Harvest Sprite <color> 1.png`, 86 × 105 px). Each was enlarged 4× to 344 × 420 px with Real-ESRGAN
+(`realesrgan-x4plus-anime`) and had its embedded metadata stripped. Birthdays and colors come from the same
+wiki page. Vivera is an independent project and is not affiliated with the Harvest Moon franchise.</sub>
 
 ### Claude Code agents
 
@@ -1646,7 +1681,7 @@ cannot see. Run it locally when you own the vault.
 
 The graphify skill copy under `.opencode/skills/graphify/` and `.opencode/plugins/graphify.js` originate from the graphify project by Safi Shamsi, MIT licensed; full notices are in `THIRD-PARTY-NOTICES.md`.
 
-This project is an independent personal pipeline and is not affiliated with, endorsed by, or sponsored by any vendor whose tools it references, including Claude, OpenCode, Gemini, TinyFish, and graphify.
+This project is an independent personal pipeline and is not affiliated with, endorsed by, or sponsored by any vendor whose tools it references, including Claude, OpenCode, Gemini, TinyFish, and graphify. The Harvest Sprite portraits are fan documentation of *Harvest Moon: Back to Nature* artwork whose copyright belongs to its respective owners; Vivera is not affiliated with the Harvest Moon franchise.
 
 ---
 

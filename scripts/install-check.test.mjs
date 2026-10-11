@@ -138,7 +138,10 @@ test('check: --only claude checks just the Claude Code package and --skip agents
   expect(only.status).toBe(1);
   const lines = reportLines(only);
   expect(lines.length).toBeGreaterThan(5);
-  for (const l of lines) expect(l).toContain(`${sb.home}/.claude/skills/`);
+  // Changed in T17: the Claude Code sprite dir is one more line of the same target.
+  for (const l of lines) {
+    expect(l.includes(`${sb.home}/.claude/skills/`) || l.includes(`${sb.home}/.claude/agents (sprite agents)`)).toBe(true);
+  }
   expect(only.stdout).not.toContain(`${sb.home}/.agents`);
   expect(only.stdout).not.toContain(`${sb.home}/.config/ai`);
 
@@ -150,9 +153,10 @@ test('check: --only claude checks just the Claude Code package and --skip agents
   expect(skip.stdout).not.toContain(`${sb.home}/.agents`);
 });
 
-// Changed in T10b (H4): a check that looked at nothing is exit 2, never CURRENT.
+// Changed in T10b (H4): a check that looked at nothing is exit 2, never CURRENT. Changed in T17: it runs
+// with no bun, because with bun a codex check also looks at its sprite dir.
 test('check: a target without skills is reported as skipped, and with nothing else to check the answer is exit 2', () => {
-  const sb = sandbox();
+  const sb = sandbox([]);
   const r = sb.run(['--check', '--only', 'codex']);
   expect(r.status).toBe(2);
   expect(r.stdout).toContain('[skip] codex: no skills target');
@@ -162,7 +166,8 @@ test('check: a target without skills is reported as skipped, and with nothing el
 
 test('check: a target without skills next to a real one is not a problem', () => {
   const sb = sandbox();
-  expect(sb.run([]).status).toBe(0);
+  // Changed in T17: codex is installed first, since its sprite dir is now checked too.
+  expect(sb.run(['--only', 'codex,agents']).status).toBe(0);
   const r = sb.run(['--check', '--only', 'codex,agents']);
   expect(r.status).toBe(0);
   expect(r.stdout).toContain('[skip] codex: no skills target');

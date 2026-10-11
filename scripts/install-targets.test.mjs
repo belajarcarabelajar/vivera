@@ -192,12 +192,14 @@ describe('--only and --skip', () => {
     }
   });
 
-  test('targets: --only codex succeeds, says its skills come from ~/.agents/skills, and creates nothing', () => {
+  // Changed in T17: codex has no skills dir of its own, but its sprite agents are rendered.
+  test('targets: --only codex succeeds, says its skills come from ~/.agents/skills, and renders only its sprites', () => {
     const sb = sandbox();
     const r = sb.run(['--only', 'codex']);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('[SKIP] codex');
-    expect(sb.snapshot()).toEqual([]);
+    expect(entries(sb)).toEqual(['.codex']);
+    expect(entries(sb, '.codex')).toEqual(['agents']);
   });
 
   test('targets: --dry-run --only claude prints only Claude Code lines and writes nothing', () => {

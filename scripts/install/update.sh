@@ -33,5 +33,6 @@ mode_update() {
   install_selfcheck
   install_hooks
   prune_stale_skills
+  sprites_exit_if_failed
   echo "==> Vivera updated: links and rendered agents match this checkout"
 }

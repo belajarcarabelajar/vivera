@@ -2,7 +2,7 @@
 //
 // Two findings of an independent lifecycle review, both about a harness dir that is a symlink into
 // another tree (the user's dotfiles, or another live checkout of this repository). H10 in
-// install-hardening.test.mjs covers an EXISTING real file there; these cover what it did not:
+// install-hardening-ownership.test.mjs covers an EXISTING real file there; these cover what it did not:
 //   V1 copy mode writes no real file through a symlinked dir: an ABSENT destination there is left
 //      alone like an existing one, so install is idempotent and check, update and uninstall agree
 //   V2 link mode still creates absent links there, because links are what check, update and

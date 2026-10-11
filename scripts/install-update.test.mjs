@@ -113,7 +113,10 @@ test('update: a stale link in a directory that holds another file loses the link
   prunable(sb);
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(0);
-  expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-x`)}`);
+  // Changed in T10b (H6): the line says the directory stayed, instead of claiming it was pruned.
+  expect(r.stdout).toContain(
+    `[PRUNED] link removed from ${at(sb, `${AGENTS}/sucp-x`)}; the directory stays because it holds other files`,
+  );
   expect(exists(sb, `${AGENTS}/sucp-x/SKILL.md`)).toBe(false);
   expect(fs.readFileSync(at(sb, `${AGENTS}/sucp-x/notes.txt`), 'utf8')).toBe('keep me');
 });

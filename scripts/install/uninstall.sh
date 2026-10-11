@@ -88,6 +88,13 @@ uninstall_entry() {
   local dest="$2"
   local state backup
 
+  # A destination that is a file of this checkout itself (a harness dir symlinked into the repo) is
+  # the source, not an install of it: it is never removed.
+  if dest_in_repo "$dest"; then
+    UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
+    echo "[KEEP] $dest (inside this checkout)"
+    return 0
+  fi
   if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
     uninstall_copy "$desired" "$dest"
     return 0
@@ -123,16 +130,25 @@ uninstall_entry() {
 
 # rmdir refuses a directory that still holds something, so a file the user put beside or inside a
 # package survives. Stops at the package's parent skills dir: harness roots such as ~/.claude or
-# ~/.gemini are never touched. The arguments after the first are the directories the package's
-# links were in: the package dir and one dir per phase skill.
+# ~/.gemini are never touched, and neither is the skills dir the Antigravity CLI ships itself (the
+# builtin one), which an install did not create. The first argument is the target id, the second the
+# package dir, and the rest are the directories the package's links were in: the package dir and one
+# dir per phase skill.
 uninstall_empty_dirs() {
-  local package_dir="$1"
-  shift
-  local dir
+  local id="$1"
+  local package_dir="$2"
+  shift 2
+  local dir parent
   for dir in "$@"; do
-    rmdir "$dir" 2>/dev/null || true
+    # Never a directory of this checkout, empty or not.
+    if ! dest_in_repo "$dir/."; then
+      rmdir "$dir" 2>/dev/null || true
+    fi
   done
-  rmdir "$(dirname "$package_dir")" 2>/dev/null || true
+  parent="$(dirname "$package_dir")"
+  if [ "$id" != antigravity-builtin ] && ! dest_in_repo "$parent/."; then
+    rmdir "$parent" 2>/dev/null || true
+  fi
 }
 
 mode_uninstall() {
@@ -157,12 +173,15 @@ mode_uninstall() {
     if [ "$(target_kind "$id")" = package ] && [ "$DRY_RUN" != true ]; then
       # A marker stays only in a directory that still holds a kept (modified) copy.
       for dir in "${dirs[@]}"; do
+        if dest_in_repo "$dir/.vivera-managed"; then
+          continue
+        fi
         case "$UNINSTALL_KEPT_DIRS" in
           *"|$dir|"*) ;;
           *) rm -f "$dir/.vivera-managed" ;;
         esac
       done
-      uninstall_empty_dirs "$(target_skills_dir "$id")" "${dirs[@]}"
+      uninstall_empty_dirs "$id" "$(target_skills_dir "$id")" "${dirs[@]}"
     fi
   done
 

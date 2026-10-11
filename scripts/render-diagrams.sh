@@ -136,10 +136,23 @@ rendered=$((rendered + 2))
 # symptom this exists to stop.
 # One text node per line, sorted: node ORDER varies between renders as well,
 # so neither byte equality nor a greedy single-span match can tell churn from
-# a real edit. GNU grep -P is required (Arch ships it; the bare `grep -o` form
-# above was measured to keep churning because its greedy span swallows the path
-# data between the first and last node).
-svg_text() { grep -oP '<p>.*?</p>' "$1" 2>/dev/null | sort || true; }
+# a real edit. The pattern is POSIX ERE so BSD and macOS grep work: 28 of the 49
+# nodes in each hero hold a nested <br />, so `[^<]*` alone would drop them. A greedy
+# `.*` span swallows the path data between the first and last node. LC_ALL=C
+# keeps the sort order the same on every machine.
+svg_text() { grep -oE '<p>([^<]|<br ?/>)*</p>' "$1" 2>/dev/null | LC_ALL=C sort || true; }
+# True when two SVGs have the same text nodes. An empty result for a file that is not empty means grep
+# could not read the nodes (a grep without -E support prints nothing for both files, and two empty lists
+# are equal), so it is never "unchanged": a changed hero must not be kept because grep failed.
+svg_unchanged() {
+  local a b
+  a="$(svg_text "$1")"
+  b="$(svg_text "$2")"
+  if { [ -z "$a" ] && [ -s "$1" ]; } || { [ -z "$b" ] && [ -s "$2" ]; }; then
+    return 1
+  fi
+  [ "$a" = "$b" ]
+}
 mkdir -p "$OUTPUT_DIR"
 pruned=0
 kept=0
@@ -156,7 +169,7 @@ for staged in "$STAGE_DIR"/*.svg; do
   base="$(basename "$staged")"
   dest="$OUTPUT_DIR/$base"
   if [ -f "$dest" ] && ! git check-ignore -q "$dest" 2>/dev/null; then
-    if [ "$(svg_text "$staged")" = "$(svg_text "$dest")" ]; then
+    if svg_unchanged "$staged" "$dest"; then
       kept=$((kept + 1))
       continue
     fi

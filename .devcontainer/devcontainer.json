@@ -1,0 +1,10 @@
+{
+  "name": "vivera",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "target": "base"
+  },
+  "remoteUser": "bun",
+  "postCreateCommand": "bun install --frozen-lockfile --ignore-scripts && ./install.sh --tier standard --update --only agents"
+}

@@ -1,0 +1,49 @@
+# What COPY . leaves out of the image. It copies every file in the build context, gitignored or not,
+# and this repository is public: an image pushed from a working copy would publish whatever
+# machine-local state sits in it. So everything .gitignore names is listed here too, and
+# scripts/container.test.mjs fails when .gitignore names something this file does not.
+.git
+**/node_modules
+docs/code-plan
+**/graphify-out
+diagrams
+
+# Machine-local private state and live coordination state (named in .gitignore)
+**/vault-index
+**/spike-out
+**/plans.publish.json
+**/plan.issues.json
+**/local.config.json
+**/pr.registry.json
+**/plan.issues.local.json
+
+# Backups, temp files and editor debris (named in .gitignore)
+**/.mermaid-tmp
+**/*.json.bak
+**/*.md.bak
+**/.*.tmp-*
+**/.DS_Store
+**/Thumbs.db
+**/*~
+**/*.swp
+**/*.swo
+
+# Secrets that .gitignore does not name
+**/.env
+**/.env.*
+**/.claude/settings.local.json
+**/*.pem
+**/id_rsa*
+**/id_ed25519*
+
+# Credential stores and key material (a denylist: it names the common ones, it cannot name every secret)
+**/.npmrc
+**/.netrc
+**/.git-credentials
+**/bunfig.toml
+**/.aws
+**/credentials.json
+**/*.key
+**/*.p12
+**/.claude/.credentials.json
+**/.opencode/auth.json

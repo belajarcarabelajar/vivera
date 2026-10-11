@@ -86,6 +86,21 @@ describe('renderAgent', () => {
     expect(lines.slice(close).some((l) => l.startsWith(MARKER))).toBe(false);
   });
 
+  // The committed .claude/agents is rewritten by agents:gen; a hook-root render is the user-level
+  // install, which only ./install.sh rewrites. The marker names the command that fixes that file.
+  const markerLine = (text) => text.split('\n').find((l) => l.startsWith(MARKER));
+  const FROM = 'from agents/roles/implementer.md and agents/crew.json; edit those, then run';
+
+  test('the marker of a committed file (no hook root) says bun run agents:gen', () => {
+    expect(markerLine(renderAgent(TEMPLATE, chef))).toBe(`${MARKER} ${FROM} bun run agents:gen.`);
+  });
+
+  test('the marker of a user-level file (hook root) says ./install.sh, like the other targets', () => {
+    const line = markerLine(renderAgent(TEMPLATE, chef, { hookRoot: '/home/u/my farm' }));
+    expect(line).toBe(`${MARKER} ${FROM} ./install.sh.`);
+    expect(line).not.toContain('agents:gen');
+  });
+
   test('leaves $CLAUDE_PROJECT_DIR alone without a hook root', () => {
     const fm = frontmatter(renderAgent(TEMPLATE, chef));
     expect(fm.hooks.PreToolUse[0].hooks[0].command).toBe('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs');
@@ -113,6 +128,22 @@ describe('renderAgent', () => {
 
   test('rejects a template without frontmatter', () => {
     expect(() => renderAgent('just text\n', chef)).toThrow(/frontmatter/);
+  });
+
+  test('rejects a description spread over two lines, plain or quoted, instead of emitting invalid YAML', () => {
+    const one = 'description: Implements one chunk of an approved plan, test first.';
+    for (const spread of ['description: Implements one chunk\n  of an approved plan.', 'description: "Implements one chunk\n  of an approved plan."', 'description: Implements one chunk\n\n  of an approved plan.']) {
+      expect(() => renderAgent(TEMPLATE.replace(one, spread), chef)).toThrow(/"description" must be a single line/);
+    }
+  });
+
+  test('still takes a quoted one-line description, a trailing comment line, and a blank line before the next key', () => {
+    const one = 'description: Implements one chunk of an approved plan, test first.';
+    for (const ok of ['description: "Implements one chunk: test first."', `${one}\n  # a note`, `${one}\n`]) {
+      const fm = frontmatter(renderAgent(TEMPLATE.replace(one, ok), chef));
+      expect(fm.description).toStartWith('Chef, a Harvest Sprite on the implementer crew. Implements one chunk');
+      expect(fm.color).toBe('red');
+    }
   });
 });
 
@@ -182,6 +213,19 @@ describe('renderOpenCodeAgent', () => {
     expect(() => renderOpenCodeAgent(TEMPLATE.replace('maxTurns: 40', 'model: sonnet'), chef)).toThrow(/"model"/);
   });
 
+  test('emits no deny rules and no guard sentence for a template whose hooks object is empty', () => {
+    for (const hooks of ['hooks: {}', 'hooks:\n  PreToolUse: []']) {
+      const out = renderOpenCodeAgent(`---\ndescription: Does one thing.\n${hooks}\n---\nbody\n`, chef);
+      expect('permissions' in frontmatter(out)).toBe(false);
+      expect(out).not.toContain('blocks `git -C`');
+    }
+  });
+
+  test('rejects a hook command that only mentions the guard script', () => {
+    const sneaky = TEMPLATE.replace('bun \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/block-git-writes.mjs', 'rm -rf ~ # block-git-writes.mjs');
+    expect(() => renderOpenCodeAgent(sneaky, chef)).toThrow(/rm -rf/);
+  });
+
   test('has a hex color for every Claude Code color', () => {
     for (const c of ENUMS.color) expect(OPENCODE_COLORS[c]).toMatch(/^#[0-9a-f]{6}$/);
   });
@@ -199,6 +243,11 @@ describe('parseCrew', () => {
     expect(() => parseCrew('[{"sprite":"chef","color":"red"}]')).toThrow(/role/);
     expect(() => parseCrew('{}')).toThrow(/array/);
     expect(() => parseCrew('[]')).toThrow(/empty/);
+  });
+
+  test('rejects a key that is not sprite, role, or color, so a misspelled key is not ignored', () => {
+    expect(() => parseCrew('[{"sprite":"chef","role":"a","color":"red","colour":"blue"}]')).toThrow('crew: unknown key "colour" for sprite "chef"');
+    expect(() => parseCrew('[{"sprite":"hoggy","role":"a","color":"red","model":"opus"}]')).toThrow('crew: unknown key "model" for sprite "hoggy"');
   });
 });
 
@@ -290,6 +339,50 @@ describe('CLI', () => {
     expect(run('--check').exitCode).toBe(0);
   });
 
+  describe('the drift message names the command that fixes the checked directory', () => {
+    // scripts/install/check.sh matches this prefix, so it must survive any wording after it.
+    const PREFIX = 'sprite agents are out of date:';
+    const lastLine = (r) => r.stderr.toString().trim().split('\n').at(-1);
+
+    test('an explicit --out directory says ./install.sh --update', () => {
+      const r = run('--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('a user-level render (--hook-root) says ./install.sh --update', () => {
+      const root = path.join(tmp, 'farm');
+      writeHook(root);
+      expect(run('--hook-root', root).exitCode).toBe(0);
+      fs.appendFileSync(path.join(outDir, 'chef.md'), 'edited\n');
+      const r = run('--hook-root', root, '--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('another target says ./install.sh --update', () => {
+      expect(run('--target', 'opencode').exitCode).toBe(0);
+      fs.appendFileSync(path.join(outDir, 'chef.md'), 'edited\n');
+      const r = run('--target', 'opencode', '--check');
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run ./install.sh --update`);
+    });
+
+    test('the repository default directory (claude, no hook root) says bun run agents:gen', () => {
+      // --check writes nothing, so a different roster only makes the committed agents drift.
+      const r = Bun.spawnSync(['bun', SCRIPT, '--roles', rolesDir, '--crew', crewFile, '--check']);
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run bun run agents:gen`);
+    });
+
+    test('naming the repository agents directory with --out says bun run agents:gen too', () => {
+      const repoAgents = path.join(path.dirname(SCRIPT), '..', '.claude', 'agents');
+      const r = Bun.spawnSync(['bun', SCRIPT, '--roles', rolesDir, '--crew', crewFile, '--out', repoAgents, '--check']);
+      expect(r.exitCode).toBe(1);
+      expect(lastLine(r)).toBe(`${PREFIX} run bun run agents:gen`);
+    });
+  });
+
   test('--hook-root fails when the hook script is not under that root', () => {
     const r = run('--hook-root', path.join(tmp, 'nowhere'));
     expect(r.exitCode).toBe(1);
@@ -326,6 +419,33 @@ describe('CLI', () => {
 
   test('rejects an unknown target', () => {
     expect(run('--target', 'gemini').exitCode).toBe(1);
+  });
+
+  describe('an empty flag value', () => {
+    // Run in a directory of its own: an empty path used to resolve to the working directory.
+    const inCwd = (cwd, ...args) => Bun.spawnSync(['bun', SCRIPT, ...args], { cwd });
+    const base = () => ['--roles', rolesDir, '--crew', crewFile, '--out', outDir];
+    const without = (flag) => base().filter((_, i, a) => a[i] !== flag && a[i - 1] !== flag);
+
+    for (const flag of ['--out', '--roles', '--crew', '--hook-root']) {
+      test(`${flag} "" fails with a clear message and writes nothing`, () => {
+        const cwd = path.join(tmp, 'cwd');
+        fs.mkdirSync(cwd);
+        const r = inCwd(cwd, ...without(flag), flag, '');
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr.toString()).toContain(`${flag} needs a non-empty value`);
+        expect(fs.readdirSync(cwd)).toEqual([]);
+        expect(fs.existsSync(outDir)).toBe(false);
+      });
+    }
+
+    test('--clean --out "" removes nothing from the working directory', () => {
+      expect(run().exitCode).toBe(0);
+      const r = inCwd(outDir, '--clean', '--out', '');
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr.toString()).toContain('--out needs a non-empty value');
+      expect(fs.readdirSync(outDir).sort()).toEqual(['chef.md', 'hoggy.md', 'staid.md']);
+    });
   });
 
   test('exits 1 when it refused to overwrite a hand-written file', () => {

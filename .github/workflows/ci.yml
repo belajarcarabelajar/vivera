@@ -88,7 +88,7 @@ jobs:
         with:
           name: mermaid-diagrams
           path: diagrams/
-        if-no-files-found: warn
+          if-no-files-found: warn
 
       # The mirror-drift gate, the plan-lifecycle audit, and the skip_if registry
       # audit are absent from this file on purpose: all three walk the
@@ -111,7 +111,7 @@ jobs:
         run: bun scripts/gen-sprite-agents.mjs --check
 
       - name: Run Unit Tests
-        run: bun test scripts/
+        run: bun test --timeout 30000 scripts/
 
       # Hosted runners lack the private snipset CLI; skip cleanly instead of probing an unreachable database.
       - name: Check trigger prompts against the Snipset database

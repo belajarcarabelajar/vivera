@@ -22,6 +22,7 @@ if (!shell) console.log('install-ps1-run.test: no PowerShell (PWSH, pwsh, powers
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const KEEP = '[KEEP]';
+const MODIFIED_KEEP = 'modified copy: it stays as it is; .\\install.ps1 -Update replaces it after backing yours up';
 const bases = [];
 afterAll(() => {
   for (const b of bases) fs.rmSync(b, { recursive: true, force: true });
@@ -284,7 +285,7 @@ describe.skipIf(!shell)('install.ps1 run: -Uninstall', () => {
     put(path.join(fx.pkg, 'SKILL.md'), 'edited\n');
     const r = run(fx, [...ONLY, '-Uninstall']);
     clean(r);
-    expect(r.out).toContain(`${KEEP} ${path.join(fx.pkg, 'SKILL.md')} (modified copy)`);
+    expect(r.out).toContain(`${KEEP} ${path.join(fx.pkg, 'SKILL.md')} (${MODIFIED_KEEP})`);
     expect(read(path.join(fx.pkg, 'SKILL.md'))).toBe('edited\n');
     expect(fs.existsSync(path.join(fx.pkg, '.vivera-managed'))).toBe(true);
     expect(fs.existsSync(path.join(fx.pkg, 'templates'))).toBe(false);
@@ -422,5 +423,219 @@ describe.skipIf(!shell)('install.ps1 run: F2, -Update prunes a phase skill the c
     put(path.join(gone, '.vivera-managed'), `source=${fx.chk}\n`);
     expect(run(fx, [...ONLY, '-Update']).out).toContain(`${KEEP} ${gone}`);
     expect(fs.existsSync(path.join(gone, 'SKILL.md'))).toBe(true);
+  });
+});
+
+describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told from an edited one by the digest its marker recorded', () => {
+  const outdated = () => {
+    const fx = makeFixture();
+    clean(run(fx, ONLY));
+    // The checkout moves on: one phase skill (a file entry) and one file inside templates (a directory entry) change.
+    put(path.join(fx.chk, 'skills', 'sucp-a', 'SKILL.md'), 'skill sucp-a v2\n');
+    put(path.join(fx.chk, 'templates', 't.md'), 'template v2\n');
+    return fx;
+  };
+  const skillA = (fx) => path.join(fx.skills, 'sucp-a', 'SKILL.md');
+
+  test('W1: -Uninstall removes an outdated copy (a file and a directory) the installer placed, with no KEEP and no skills directory left', () => {
+    const fx = outdated();
+    const r = run(fx, [...ONLY, '-Uninstall']);
+    clean(r);
+    expect(r.out).not.toContain(KEEP);
+    expect(r.out).toContain(`[REMOVED] ${skillA(fx)}`);
+    expect(r.out).toContain(`[REMOVED] ${path.join(fx.pkg, 'templates')}`);
+    expect(fs.existsSync(fx.skills)).toBe(false);
+  });
+
+  test('W1: an edited copy is still kept after the checkout moved on, with the bash wording, and its marker stays', () => {
+    const fx = outdated();
+    put(skillA(fx), 'my edit of the old one\n');
+    const r = run(fx, [...ONLY, '-Uninstall']);
+    clean(r);
+    expect(r.out).toContain(`${KEEP} ${skillA(fx)} (${MODIFIED_KEEP})`);
+    expect(read(skillA(fx))).toBe('my edit of the old one\n');
+    expect(fs.existsSync(path.join(fx.skills, 'sucp-a', '.vivera-managed'))).toBe(true);
+  });
+
+  test('W2: -Update refreshes an outdated copy in place with no backup, and re-records its digest', () => {
+    const fx = outdated();
+    const r = run(fx, [...ONLY, '-Update']);
+    clean(r);
+    expect(r.out).toContain(`[OK] Refreshed: ${skillA(fx)}`);
+    expect(r.out).not.toContain('[BACKUP]');
+    expect(read(skillA(fx))).toBe('skill sucp-a v2\n');
+    expect(read(path.join(fx.pkg, 'templates', 't.md'))).toBe('template v2\n');
+    for (const dir of [fx.skills, path.join(fx.skills, 'sucp-a'), fx.pkg]) expect({ dir, baks: baks(dir) }).toEqual({ dir, baks: [] });
+    expect(read(path.join(fx.skills, 'sucp-a', '.vivera-managed'))).toContain(`entry SKILL.md ps-sha256:${sha('skill sucp-a v2\n')}`);
+    expect(read(path.join(fx.pkg, '.vivera-managed'))).toContain(`entry templates ${dirDigest(path.join(fx.chk, 'templates'))}`);
+    const chk = run(fx, [...ONLY, '-Check']);
+    clean(chk);
+    expect(chk.out).toContain('check: CURRENT');
+  });
+
+  test('W2: after such an -Update, -Uninstall restores nothing and no stale copy of the skill is left', () => {
+    const fx = outdated();
+    clean(run(fx, [...ONLY, '-Update']));
+    const r = run(fx, [...ONLY, '-Uninstall']);
+    clean(r);
+    expect(r.out).not.toContain('[RESTORED]');
+    expect(fs.existsSync(skillA(fx))).toBe(false);
+    expect(fs.existsSync(fx.skills)).toBe(false);
+  });
+
+  test('W2: an outdated copy the user also edited is backed up by -Update with the user bytes, then refreshed', () => {
+    const fx = outdated();
+    put(skillA(fx), 'my edit of the old one\n');
+    const r = run(fx, [...ONLY, '-Update']);
+    clean(r);
+    expect(r.out).toContain('[BACKUP]');
+    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('my edit of the old one\n');
+    expect(read(skillA(fx))).toBe('skill sucp-a v2\n');
+  });
+
+  test('W2: a record with the bash tag (sha256:) is never trusted: -Update backs the outdated copy up, -Uninstall keeps it', () => {
+    const fx = outdated();
+    const marker = path.join(fx.skills, 'sucp-a', '.vivera-managed');
+    put(marker, read(marker).replace(' ps-sha256:', ' sha256:'));
+    const un = run(fx, [...ONLY, '-Uninstall', '-DryRun']);
+    clean(un);
+    expect(un.out).toContain(`${KEEP} ${skillA(fx)} (${MODIFIED_KEEP})`);
+    const r = run(fx, [...ONLY, '-Update']);
+    clean(r);
+    expect(r.out).toContain('[BACKUP]');
+    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill sucp-a\n');
+  });
+
+  test('W2: a repeated record vouches for nothing (as in bash): the outdated copy counts as modified and is backed up', () => {
+    const fx = outdated();
+    const marker = path.join(fx.skills, 'sucp-a', '.vivera-managed');
+    put(marker, `${read(marker)}entry SKILL.md ps-sha256:${sha('skill sucp-a\n')}\n`);
+    const r = run(fx, [...ONLY, '-Update']);
+    clean(r);
+    expect(r.out).toContain('[BACKUP]');
+    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill sucp-a\n');
+  });
+
+  test('W2: -Check calls an outdated copy stale (exit 1) and says it is outdated; an edited one is told apart', () => {
+    const fx = outdated();
+    const r = run(fx, [...ONLY, '-Check']);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(`[stale] ${skillA(fx)} (outdated:`);
+    expect(r.out).toContain(`[stale] ${path.join(fx.pkg, 'templates')} (outdated:`);
+    put(skillA(fx), 'my edit of the old one\n');
+    expect(run(fx, [...ONLY, '-Check']).out).toContain(`[stale] ${skillA(fx)} (the copy differs from`);
+  });
+});
+
+describe.skipIf(!shell || win)('install.ps1 run: W3, nothing is created, moved or retargeted through a linked directory', () => {
+  const linked = () => {
+    const fx = makeFixture();
+    const dots = path.join(fx.base, 'dotfiles', 'skills');
+    fs.mkdirSync(dots, { recursive: true });
+    fs.symlinkSync(dots, fx.skills);
+    return { fx, dots };
+  };
+
+  test('absent destinations behind a linked skills directory are skipped and counted: no copy, no marker, no "planted"', () => {
+    const { fx, dots } = linked();
+    const r = run(fx, ONLY);
+    clean(r);
+    expect(r.out).toContain(`[SKIP] ${path.join(fx.pkg, 'SKILL.md')} is reached through a symlinked directory; left alone`);
+    expect(fs.readdirSync(dots)).toEqual([]);
+    expect(r.out).not.toContain('[OK] Copied');
+    expect(r.out).not.toContain('farm planted');
+    expect(r.out).toContain('==> Vivera finished with 7 entries left alone (see the [SKIP] lines above)');
+    const up = run(fx, [...ONLY, '-Update']);
+    clean(up);
+    expect(fs.readdirSync(dots)).toEqual([]);
+    expect(up.out).toContain('finished with 7 entries left alone');
+  });
+
+  test('the same holds when the harness directory itself is the link and the skills directory does not exist yet', () => {
+    const fx = makeFixture();
+    const other = path.join(fx.base, 'dotfiles', 'claude');
+    fs.mkdirSync(other, { recursive: true });
+    fs.rmSync(path.join(fx.home, '.claude'), { recursive: true });
+    fs.symlinkSync(other, path.join(fx.home, '.claude'));
+    const r = run(fx, ONLY);
+    clean(r);
+    expect(r.out).toContain('reached through a symlinked directory; left alone');
+    expect(fs.readdirSync(other)).toEqual([]);
+  });
+
+  test('-Check calls them foreign (exit 1), never missing; -Uninstall touches nothing and exits 0', () => {
+    const { fx, dots } = linked();
+    const chk = run(fx, [...ONLY, '-Check']);
+    expect(chk.code).toBe(1);
+    expect(chk.out).toContain(`[foreign] ${path.join(fx.pkg, 'SKILL.md')} (behind a symlinked directory; left alone)`);
+    expect(chk.out).not.toContain('[missing]');
+    clean(run(fx, [...ONLY, '-Uninstall']));
+    expect(fs.readdirSync(dots)).toEqual([]);
+    expect(fs.lstatSync(fx.skills).isSymbolicLink()).toBe(true);
+  });
+
+  test('a link AT the destination that lives behind a linked directory is never moved aside or retargeted (live or dangling)', () => {
+    for (const label of ['live', 'dangling']) {
+      const { fx, dots } = linked();
+      const elsewhere = path.join(fx.base, 'elsewhere.md');
+      if (label === 'live') put(elsewhere, 'elsewhere\n');
+      const sub = path.join(dots, 'super-ultra-code-plan');
+      fs.mkdirSync(sub, { recursive: true });
+      fs.symlinkSync(elsewhere, path.join(sub, 'SKILL.md'));
+      for (const args of [ONLY, [...ONLY, '-Update'], [...ONLY, '-Uninstall']]) clean(run(fx, args));
+      expect({ label, link: fs.lstatSync(path.join(sub, 'SKILL.md')).isSymbolicLink() }).toEqual({ label, link: true });
+      expect({ label, target: fs.readlinkSync(path.join(sub, 'SKILL.md')) }).toEqual({ label, target: elsewhere });
+      expect({ label, sub: fs.readdirSync(sub), dots: fs.readdirSync(dots) }).toEqual({ label, sub: ['SKILL.md'], dots: ['super-ultra-code-plan'] });
+      if (label === 'live') expect(read(elsewhere)).toBe('elsewhere\n');
+    }
+  });
+});
+
+describe.skipIf(!shell || win)('install.ps1 run: W4, a path that exists but cannot be inspected is a failure, not "absent"', () => {
+  test.skipIf(root)('an unreadable package directory fails install, update, check and uninstall with [FAIL] cannot inspect, and writes nothing', () => {
+    const fx = makeFixture();
+    clean(run(fx, ONLY));
+    const snap = () => fs.readdirSync(fx.skills, { recursive: true }).sort();
+    const before = snap();
+    fs.chmodSync(fx.pkg, 0);
+    try {
+      for (const args of [ONLY, [...ONLY, '-Update'], [...ONLY, '-Check'], [...ONLY, '-Uninstall']]) {
+        const r = run(fx, args);
+        expect({ args, code: r.code }).toEqual({ args, code: 1 });
+        expect({ args, fail: r.err.includes(`[FAIL] cannot inspect ${path.join(fx.pkg, 'SKILL.md')}: `) }).toEqual({ args, fail: true });
+        expect({ args, missing: r.out.includes('[missing]') }).toEqual({ args, missing: false });
+      }
+    } finally {
+      fs.chmodSync(fx.pkg, 0o755);
+    }
+    expect(snap()).toEqual(before);
+    expect(baks(fx.pkg)).toEqual([]);
+    expect(read(path.join(fx.pkg, 'SKILL.md'))).toBe('master v1\n');
+  });
+
+  test('a dangling link at the destination is still foreign: moved aside whole, its target never touched', () => {
+    const fx = makeFixture();
+    fs.mkdirSync(fx.pkg, { recursive: true });
+    const gone = path.join(fx.base, 'unmounted', 'SKILL.md');
+    fs.symlinkSync(gone, path.join(fx.pkg, 'SKILL.md'));
+    clean(run(fx, ONLY));
+    expect(fs.readlinkSync(path.join(fx.pkg, 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe(gone);
+    expect(read(path.join(fx.pkg, 'SKILL.md'))).toBe('master v1\n');
+    expect(fs.existsSync(path.dirname(gone))).toBe(false);
+  });
+});
+
+describe.skipIf(!shell)('install.ps1 run: W5, an empty id in -Only or -Skip', () => {
+  test('a trailing comma is ignored as in bash ("claude," is claude); any other empty id exits 2 with a line that says so', () => {
+    const fx = makeFixture();
+    const ok = run(fx, ['-Only', 'claude,', '-DryRun']);
+    clean(ok);
+    expect(ok.out).toContain('Would copy');
+    for (const args of [['-Only', 'claude,,codex'], ['-Only', ',claude'], ['-Skip', 'claude,,codex']]) {
+      const r = run(fx, [...args, '-DryRun']);
+      expect({ args, code: r.code }).toEqual({ args, code: 2 });
+      expect({ args, line: r.err.includes(`Unknown target: <empty id in ${args[0]} `) }).toEqual({ args, line: true });
+      expect(r.err).toContain('Valid targets:');
+    }
   });
 });

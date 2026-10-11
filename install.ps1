@@ -11,10 +11,11 @@ the first run on Windows as a trial: start with -DryRun, then -Check.
 The Windows twin of install.sh in copy mode. Symbolic links need administrator rights or Developer
 Mode, so this script never makes one: it copies, and marks each copied directory with a .vivera-managed
 file ("source=<this checkout>" and one "entry <name> ps-sha256:<hex>" line per copy it placed). Anything
-already there that is not a Vivera copy (a file, a directory, a symlink, a junction), and a copy that
-differs from its source, is moved to <name>.vivera-bak-<UTC yyyyMMddTHHmmssZ> first: nothing you wrote is
-deleted. A real file reached through a linked directory (a dotfiles repo behind ~\.claude\skills) is left
-alone, as is anything inside this checkout. Sprite agents are NOT rendered here (the generator needs bun):
+already there that is not a Vivera copy (a file, a directory, a symlink, a junction), and a copy someone
+edited, is moved to <name>.vivera-bak-<UTC yyyyMMddTHHmmssZ> first: nothing you wrote is deleted. A copy that
+is merely outdated (still exactly what this script placed) is refreshed without a backup. Anything reached
+through a linked directory (a dotfiles repo behind ~\.claude\skills), a link there and a destination that does
+not exist yet included, is left alone and counted on the last line, as is anything inside this checkout. Sprite agents are NOT rendered here (the generator needs bun):
 use ./install.sh from WSL or Git Bash. -Tier is accepted and ignored: skills only at every tier.
 
 Run it with a bypass that lasts for this one process, and never change the machine's policy:
@@ -36,8 +37,12 @@ Known limits (documented, not fixed):
   not. A profile directory kept in OneDrive may therefore read as a link (UNVERIFIED).
 - A copy that fails half way is put back only for the entry being placed; the directory marker is written
   after the whole package, so an aborted run leaves unmarked copies, and the next run moves them aside.
-- A managed copy that differs from its source is ALWAYS moved to a backup. The bash installer refreshes a
-  merely outdated copy (one still equal to what it placed) without a backup; this script takes the safe side.
+- A managed copy is identical to its source, pristine (it differs, but equals the digest its marker recorded:
+  outdated, never edited) or modified (anything else, a record with another tag or a repeated one included).
+  -Update refreshes a pristine copy with no backup and moves a modified one to a backup; -Uninstall removes an
+  identical or pristine copy and keeps a modified one. The judgement is the bash installer's (managed_state).
+- Tools are found on PATH only. The bash installer also probes ~\.bun\bin; a harness whose CLI lives only there
+  is not detected: name it with -Only.
 - -Tier is accepted and ignored: tiers.tsv is not read, and no tier installs anything but skills.
 - The digests in the markers are "ps-sha256:" and are not claimed to equal the bash "sha256:" ones, so a
   record made by one installer is never trusted by the other: its copy reads as modified (backed up, kept).
@@ -69,6 +74,7 @@ $script:Cmdlet = $PSCmdlet
 # -WhatIf is a dry run too: ShouldProcess would skip each write, but the closing lines would still claim one.
 $script:DryRunOn = $DryRun.IsPresent -or [bool]$WhatIfPreference
 $script:Changed = 0; $script:Removed = 0; $script:Restored = 0; $script:Kept = 0
+$script:Skipped = 0; $script:TargetSkipped = 0
 $script:KeptDirs = @{}
 $script:Placed = New-Object System.Collections.Generic.List[string]
 
@@ -132,11 +138,16 @@ foreach ($name in @('Only', 'Skip')) {
     if ($PSBoundParameters.ContainsKey($name) -and (@(Split-List $PSBoundParameters[$name] | Where-Object { $_ -ne '' }).Count -eq 0)) { Stop-Usage "Missing value for -$name" }
 }
 $validIds = @($Targets | ForEach-Object { $_.Id })
-foreach ($id in (@(Split-List $Only) + @(Split-List $Skip))) {
-    if ($validIds -notcontains $id) {
-        Write-Err "Unknown target: $id"
-        Write-Err ('Valid targets: ' + ($validIds -join ', '))
-        Stop-Usage 'Choose target ids from the list above.'
+foreach ($name in @('Only', 'Skip')) {
+    # Not wrapped in @(): the cmdlet hands the array over as one object, and wrapping would nest it.
+    $given = Get-Variable -Name $name -ValueOnly
+    foreach ($id in @(Split-List $given)) {
+        if ($validIds -notcontains $id) {
+            # An empty id is exit 2 in bash too; naming the list tells which one it is in.
+            if ($id -eq '') { Write-Err ("Unknown target: <empty id in -$name " + ($given -join ' ') + '>') } else { Write-Err "Unknown target: $id" }
+            Write-Err ('Valid targets: ' + ($validIds -join ', '))
+            Stop-Usage 'Choose target ids from the list above.'
+        }
     }
 }
 
@@ -168,13 +179,15 @@ try {
     } elseif ($Update) {
         Invoke-InstallAll $selected
         Invoke-Prune $selected
-        if ($script:DryRunOn) { Write-Host '==> Vivera update dry run: nothing was written' } else { Write-Host '==> Vivera updated: the copies match this checkout' }
+        Write-FinalLine '==> Vivera updated: the copies match this checkout' '==> Vivera update dry run: nothing was written'
     } else {
         Invoke-InstallAll $selected
-        if ($script:DryRunOn) { Write-Host '==> Vivera dry run: nothing was written' } else { Write-Host '==> Vivera farm planted: the skill package is installed as copies' }
+        Write-FinalLine '==> Vivera farm planted: the skill package is installed as copies' '==> Vivera dry run: nothing was written'
     }
 } catch {
-    Write-Err "install.ps1: $($_.Exception.Message)"
+    $reason = $_.Exception.Message
+    # A path that exists but could not be inspected stops the run as a [FAIL] line, never as "absent".
+    if ($reason.StartsWith('cannot inspect ', [System.StringComparison]::Ordinal)) { Write-Err "[FAIL] $reason" } else { Write-Err "install.ps1: $reason" }
     exit 1
 }
 exit 0

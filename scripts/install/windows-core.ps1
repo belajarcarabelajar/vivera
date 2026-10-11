@@ -13,8 +13,25 @@ function Join-Rel([string]$Base, [string]$Rel) {
     return $p
 }
 
+# Anything .NET can see at <Path> without following a link counts as present: only a plain "not found" is absent.
+# Used when Get-Item reports not found, because it may say so for a link whose target is gone (Windows PowerShell
+# 5.1: UNVERIFIED; PowerShell 7 on Linux returns the link) and a path that cannot be told apart must not read as free.
+function Test-EntryPresent([string]$Path) {
+    try { [void][System.IO.File]::GetAttributes($Path); return $true } catch {
+        $e = $_.Exception
+        if ($null -ne $e.InnerException) { $e = $e.InnerException }
+        return (-not (($e -is [System.IO.FileNotFoundException]) -or ($e -is [System.IO.DirectoryNotFoundException])))
+    }
+}
+
+# The item at <Path>, or $null when nothing is there. A path that exists but cannot be inspected (access denied, a
+# link Get-Item cannot read) is NOT "absent": it throws "cannot inspect <path>: <reason>", so nothing is written to it.
 function Get-ItemOrNull([string]$Path) {
-    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop } catch { return $null }
+    try { return Get-Item -LiteralPath $Path -Force -ErrorAction Stop } catch {
+        $err = $_
+        if (($err.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::ObjectNotFound) -and (-not (Test-EntryPresent $Path))) { return $null }
+        throw "cannot inspect ${Path}: $($err.Exception.Message)"
+    }
 }
 function Test-Reparse($Item) { return [bool]($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) }
 
@@ -52,6 +69,15 @@ function Test-BehindLinkedDir([string]$Dest) {
         $p = Get-ParentDir $p
     }
     return $false
+}
+
+# Test-BehindLinkedDir for a <Dest> whose directory may not exist yet: the nearest entry that does exist decides,
+# because whatever is created below a linked directory lands in the other tree (behind_symlinked_ancestor in lib.sh).
+function Test-BehindLinkedAncestor([string]$Dest) {
+    $p = Get-ParentDir $Dest
+    while ($p -and ($null -eq (Get-ItemOrNull $p))) { $p = Get-ParentDir $p }
+    if (-not $p) { return $false }
+    return (Test-BehindLinkedDir (Join-Path $p 'x'))
 }
 
 function Get-RelFiles([string]$Root) {
@@ -96,19 +122,24 @@ function Get-EntryDigest([string]$Path) {
     return ($DigestTag + (($bytes | ForEach-Object { $_.ToString('x2') }) -join ''))
 }
 
-# The digest the marker recorded for <Dest> ("entry <name> <tag>:<hex>"), or an empty string.
+# The digest the marker recorded for <Dest> ("entry <name> <tag>:<hex>"), or an empty string. Exactly one record
+# across both marker places counts, as in recorded_digest of lib.sh: a repeated or malformed one vouches for nothing.
 function Get-RecordedDigest([string]$Dest) {
     $prefix = 'entry ' + (Get-LeafName $Dest) + ' '
+    $count = 0
+    $found = ''
     foreach ($marker in @((Join-Path (Get-ParentDir $Dest) $MarkerName), ($Dest + $MarkerName))) {
         $m = Get-ItemOrNull $marker
         if (($null -eq $m) -or $m.PSIsContainer -or (Test-Reparse $m)) { continue }
         foreach ($line in [System.IO.File]::ReadAllLines($marker)) {
             if ($line.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+                $count++
                 $rest = $line.Substring($prefix.Length)
-                if ($rest.IndexOf(' ') -lt 0) { return $rest }
+                if ($rest.IndexOf(' ') -lt 0) { $found = $rest }
             }
         }
     }
+    if ($count -eq 1) { return $found }
     return ''
 }
 
@@ -118,17 +149,33 @@ function Test-Managed([string]$Dest) {
     return (Test-Path -LiteralPath ($Dest + $MarkerName) -PathType Leaf)
 }
 
-# One of: inrepo, viadir (a real file behind a symlinked or junctioned directory: another tree's, never touched),
-# absent, ok (a managed copy, same content), modified (a managed copy that differs: moved aside), foreign (no
-# marker, or any symlink or junction at the destination: moved aside).
+# What a managed copy is, judged against its source (managed_state in lib.sh): identical (same content), pristine
+# (not the source's content, but exactly the digest the marker recorded when it was placed: merely outdated, nobody
+# edited it) or modified (anything else, which includes a copy with no usable record and one recorded with the bash
+# "sha256:" tag, because that digest is not claimed to equal this one). The digest only ever decides pristine.
+function Get-ManagedState([string]$Src, [string]$Dest, [bool]$IsDir) {
+    if (Test-SameContent $Src $Dest $IsDir) { return 'identical' }
+    $current = Get-EntryDigest $Dest
+    if (($current -ne '') -and ($current -ceq (Get-RecordedDigest $Dest))) { return 'pristine' }
+    return 'modified'
+}
+
+# One of: inrepo; viadir (anything behind a symlinked or junctioned directory, absent or not, a link there too: it
+# belongs to another tree, and a copy written there would be refused by the next run); absent; ok (a managed copy,
+# same content); pristine (a managed copy that is only outdated: refreshed with no backup); modified (a managed copy
+# someone edited: moved aside); foreign (no marker, or a symlink or junction at the destination: moved aside).
 function Get-DestState([string]$Src, [string]$Dest, [bool]$IsDir) {
     if (Test-InsideCheckout $Dest) { return 'inrepo' }
     $item = Get-ItemOrNull $Dest
-    if ($null -eq $item) { return 'absent' }
-    if ((-not (Test-Reparse $item)) -and (Test-BehindLinkedDir $Dest)) { return 'viadir' }
+    if ($null -eq $item) {
+        if (Test-BehindLinkedAncestor $Dest) { return 'viadir' }
+        return 'absent'
+    }
+    if (Test-BehindLinkedDir $Dest) { return 'viadir' }
     if ((Test-Reparse $item) -or (-not (Test-Managed $Dest))) { return 'foreign' }
-    if (Test-SameContent $Src $Dest $IsDir) { return 'ok' }
-    return 'modified'
+    $managed = Get-ManagedState $Src $Dest $IsDir
+    if ($managed -eq 'identical') { return 'ok' }
+    return $managed
 }
 
 # <Dest>.vivera-bak-<UTC yyyyMMddTHHmmssZ>, with -1, -2, ... appended until the name is free.

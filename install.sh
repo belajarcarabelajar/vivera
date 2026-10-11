@@ -3,7 +3,8 @@
 # This file parses arguments and dispatches; the work lives in scripts/install/*.sh (sourced below).
 set -euo pipefail
 
-# Every path the installer writes is under HOME; without it `set -u` would stop later with an
+# The installer writes under HOME, and in this checkout the relative links of skills/super-ultra-code-plan
+# and, in a git checkout of its own, core.hooksPath. Without HOME `set -u` would stop later with an
 # unbound variable and exit 1.
 if [ -z "${HOME:-}" ]; then
   echo "install.sh: HOME is not set" >&2
@@ -237,7 +238,7 @@ case "$MODE" in
     ;;
 esac
 
-# 0. Prerequisites Check. Which tools are hard requirements depends on --tier and
+# Prerequisites check. Which tools are hard requirements depends on --tier and
 #    lives in scripts/install/tiers.tsv (standard: git and bun). Every other tool
 #    is optional: a missing one costs one capability, so install.sh warns (naming
 #    what is lost) and continues. It runs before every mode.

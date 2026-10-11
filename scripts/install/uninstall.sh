@@ -50,7 +50,7 @@ newest_backup() {
 # A managed copy goes only while it is the installer's own bytes: identical to its source, or pristine
 # (exactly what the installer last placed, merely outdated; see managed_state in lib.sh, which falls
 # back to digests when cmp and diff are missing). A modified one is the user's work now. A directory is
-# deleted only through remove_replaced in lib.sh, and only after that judgement.
+# deleted only through remove_replaced in place.sh, and only after that judgement.
 uninstall_copy() {
   local desired="$1"
   local dest="$2"
@@ -114,7 +114,8 @@ uninstall_entry() {
     uninstall_copy "$desired" "$dest"
     return 0
   fi
-  state="$(classify_dest "$dest" "$desired")"
+  # What is on disk decides, as in uninstall_copy: with --copy the installer's own links are still removed.
+  state="$(COPY_MODE=false classify_dest "$dest" "$desired")"
   case "$state" in
     ok | ours-stale)
       backup="$(newest_backup "$dest")"
@@ -139,6 +140,15 @@ uninstall_entry() {
     foreign)
       UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
       echo "[KEEP] $dest (not a vivera link)"
+      ;;
+    viadir)
+      # A foreign link behind a symlinked directory: the other tree's, so kept, and its directory keeps
+      # its marker. An absent entry is not there to keep and prints nothing.
+      if [ -e "$dest" ] || [ -L "$dest" ]; then
+        UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
+        UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
+        echo "[KEEP] $dest (behind a symlinked directory)"
+      fi
       ;;
   esac
 }

@@ -775,7 +775,6 @@ for (const snip of requiredSnippets) {
     { label: 'no turn ends on a plain-text question', file: rules, needle: 'never end a turn on a plain-text question' },
     { label: 'Claude Code tool is named', file: rules, needle: '`AskUserQuestion`' },
     { label: 'OpenCode tool is named', file: rules, needle: '`question`' },
-    { label: 'Gemini CLI tool is named', file: rules, needle: '`ask_user`' },
     { label: 'recommended option is first so Enter accepts it', file: rules, needle: 'so Enter accepts it' },
     { label: 'safe option first for risky actions', file: rules, needle: 'Enter must never run the action' },
     { label: 'question count cap', file: rules, needle: 'at most 4 questions per call' },

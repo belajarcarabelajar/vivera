@@ -16,7 +16,6 @@ const IDS = [
   'antigravity',
   'antigravity-cli',
   'antigravity-builtin',
-  'gemini-cli',
   'opencode',
   'claude',
   'codex',
@@ -109,18 +108,26 @@ describe('detection', () => {
     expect(installed(sb, '.gemini/config/skills')).toBe(true);
   });
 
-  test('targets: a gemini on PATH adds only ~/.gemini/skills when ~/.gemini did not exist', () => {
+  // Gemini CLI stopped serving consumer accounts on 2026-06-18 and Antigravity CLI replaced it, so a
+  // `gemini` on PATH is no longer a harness: it adds nothing, and ~/.gemini/skills is never written.
+  test('targets: a gemini on PATH is not a harness, and gemini-cli is not a target id', () => {
     const sb = sandbox();
     fake(sb, 'gemini');
     expect(sb.run([]).status).toBe(0);
-    expect(installed(sb, '.gemini/skills')).toBe(true);
-    expect(entries(sb, '.gemini')).toEqual(['skills']);
+    expect(exists(sb, '.gemini')).toBe(false);
 
     const withDir = sandbox();
     fake(withDir, 'gemini');
     mkdir(withDir, '.gemini');
     expect(withDir.run([]).status).toBe(0);
-    expect(entries(withDir, '.gemini')).toEqual(['config', 'skills']);
+    expect(exists(withDir, '.gemini/skills')).toBe(false);
+    expect(entries(withDir, '.gemini')).toEqual(['config']);
+
+    const named = sandbox();
+    const r = named.run(['--only', 'gemini-cli']);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('Unknown target: gemini-cli');
+    expect(named.snapshot()).toEqual([]);
   });
 
   test('targets: ~/.config/opencode adds the OpenCode package and the sprites', () => {
@@ -241,7 +248,7 @@ describe('table', () => {
         dirs.push(dir);
       }
     }
-    expect(dirs.length).toBe(8);
+    expect(dirs.length).toBe(7);
     expect(new Set(dirs).size).toBe(dirs.length);
   });
 
@@ -250,7 +257,6 @@ describe('table', () => {
     antigravity: { dir: '.gemini', tool: 'agy' },
     'antigravity-cli': { dir: '.gemini/antigravity-cli', tool: 'agy' },
     'antigravity-builtin': { dir: BUILTIN },
-    'gemini-cli': { tool: 'gemini' },
     opencode: { dir: '.config/opencode', tool: 'opencode' },
     claude: { dir: '.claude' },
     codex: { dir: '.codex', tool: 'codex' },
@@ -323,7 +329,7 @@ describe('entries', () => {
   test('targets: every package target keeps its links under its package dir or its sibling phase dirs', () => {
     const sb = sandbox();
     const phases = new Set(phaseDirs(sb));
-    for (const id of ['agents', 'antigravity', 'antigravity-cli', 'antigravity-builtin', 'gemini-cli', 'opencode', 'claude']) {
+    for (const id of ['agents', 'antigravity', 'antigravity-cli', 'antigravity-builtin', 'opencode', 'claude']) {
       const dir = table(sb, 'target_skills_dir', id).out;
       const siblings = path.dirname(dir);
       const lines = entryLines(sb, id);

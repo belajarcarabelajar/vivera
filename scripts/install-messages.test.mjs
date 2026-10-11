@@ -145,7 +145,7 @@ describe('2: optional-tool warnings follow the tier and the mode', () => {
 
 describe('3: a harness that is not detected is named once', () => {
   const BARE =
-    '[INFO] not detected, skipped: antigravity, antigravity-cli, antigravity-builtin, gemini-cli, opencode, claude, codex, cursor, copilot (name one with --only to install anyway)';
+    '[INFO] not detected, skipped: antigravity, antigravity-cli, antigravity-builtin, opencode, claude, codex, cursor, copilot (name one with --only to install anyway)';
 
   test('messages: a bare HOME names every undetected harness in one line, in a real run and a dry run', () => {
     const sb = sandbox();
@@ -166,7 +166,7 @@ describe('3: a harness that is not detected is named once', () => {
     const r = sb.run(['--dry-run']);
     const line = lines(r.stdout).find((l) => l.startsWith('[INFO] not detected'));
     expect(line).toBe(
-      '[INFO] not detected, skipped: antigravity, antigravity-cli, antigravity-builtin, gemini-cli, opencode, cursor, copilot (name one with --only to install anyway)',
+      '[INFO] not detected, skipped: antigravity, antigravity-cli, antigravity-builtin, opencode, cursor, copilot (name one with --only to install anyway)',
     );
   });
 
@@ -189,7 +189,6 @@ describe('3: a harness that is not detected is named once', () => {
   test('messages: when every harness is detected there is no line', () => {
     const sb = sandbox();
     for (const dir of ['.gemini/antigravity-cli/builtin/skills', '.config/opencode', '.claude', '.codex', '.cursor', '.copilot']) mkdir(sb, dir);
-    shim(sb, 'gemini');
     const r = sb.run(['--dry-run']);
     expect(r.status).toBe(0);
     expect(r.stdout).not.toContain('not detected');

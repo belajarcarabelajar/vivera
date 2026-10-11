@@ -383,7 +383,7 @@ describe('install.ps1: the target table matches scripts/install/targets.sh', () 
   test('lists the same ids in the same order', () => {
     const ids = [...ps1.matchAll(/Id = '([a-z-]+)'/g)].map((m) => m[1]);
     expect(ids).toEqual(bashIds);
-    expect(bashIds.length).toBe(11);
+    expect(bashIds.length).toBe(10);
   });
 
   test('each target has the same kind', () => {

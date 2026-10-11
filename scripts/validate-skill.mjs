@@ -1193,6 +1193,18 @@ if (!mmdcAvailable) {
     blocks.forEach((source, i) => collected.push({ rel, index: i, source }));
   }
 
+  // Standalone diagram sources (the README hero) are checked like fenced blocks.
+  const diagramSrcDir = path.join(rootDir, 'docs', 'diagrams-src');
+  if (fs.existsSync(diagramSrcDir)) {
+    for (const f of fs.readdirSync(diagramSrcDir).filter((n) => n.endsWith('.mmd')).sort()) {
+      collected.push({
+        rel: path.relative(rootDir, path.join(diagramSrcDir, f)),
+        index: 0,
+        source: fs.readFileSync(path.join(diagramSrcDir, f), 'utf8'),
+      });
+    }
+  }
+
   const puppeteerCfg = path.join(rootDir, 'puppeteer-config.json');
   const mermaidCfg = path.join(rootDir, 'mermaid.config.json');
   const mmdcArgs = [

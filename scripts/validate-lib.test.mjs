@@ -11,6 +11,7 @@
 // 5. Mermaid fence extraction matches the renderer's awk patterns
 // 6. renderMermaidBatch maps batch output to blocks and bisects a failing batch
 // 7. scripts/mermaid-batch.mjs writes SVGs beside each .mmd and reports counts
+// 8. checkGateCatalog pins the shape of the gate catalog in skills/sucp-rules/SKILL.md
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,6 +29,7 @@ import {
   checkBannedRuntime,
   hasStrictMermaidFence,
   extractMermaidBlocksStrict,
+  checkGateCatalog,
 } from './validate-lib.mjs';
 import * as lib from './validate-lib.mjs';
 import fs from 'fs';
@@ -511,4 +513,120 @@ test('mermaid-batch CLI exits 2 when stdin names no files', () => {
   const res = runCli(['--mmdc', '/bin/false'], '\n');
   assert.equal(res.status, 2);
   assert.equal(res.stdout, '');
+});
+
+// ---------- checkGateCatalog ----------
+
+const GATE_TABLE_HEAD = '| Gate | Header | Options, in order |\n|---|---|---|';
+
+function gateRow(header, options) {
+  return `| A gate | \`${header}\` | ${options} |`;
+}
+
+function gateTable(rows) {
+  return ['Intro line.', '', GATE_TABLE_HEAD, ...rows, '', 'Closing line.'].join('\n');
+}
+
+// 14 rows: the risky four carry no (Recommended), Blocked and Follow-ups are
+// exempt, and `Twelve chars` sits exactly on the 12-character cap.
+const GOOD_GATE_ROWS = [
+  gateRow('Intent', 'Approve and continue (Recommended), Revise a part'),
+  gateRow('Probe', 'Run the probe (Recommended), Change the probe'),
+  gateRow('Design', 'Approve and start (Recommended), Revise the design'),
+  gateRow('Section', 'Approve this section (Recommended), Revise this section'),
+  gateRow('Spec', 'Approve and write the plan (Recommended), Revise the spec'),
+  gateRow('Plan', 'Approve and execute (Recommended), Revise the plan'),
+  gateRow('Twelve chars', 'Keep test-first (Recommended), Waive for this change'),
+  gateRow('Blocked', 'One option per concrete way forward'),
+  gateRow('Publish', 'Cancel, do nothing; Publish (names the exact text or target)'),
+  gateRow('Merge', 'Do not merge; Merge the PR (names the number)'),
+  gateRow('Destructive', 'Cancel, do nothing; the exact action'),
+  gateRow('Promote', 'Keep in the repository only; Promote this rule (names the file)'),
+  gateRow('Root cause', 'Approve the fix (Recommended), Revise the diagnosis'),
+  gateRow('Follow-ups', 'Multi-select groups'),
+];
+
+// Swap the row with this header for a replacement row.
+function withRow(header, replacement) {
+  return GOOD_GATE_ROWS.map((row) => (row.includes(`\`${header}\``) ? replacement : row));
+}
+
+test('checkGateCatalog accepts a well-formed table', () => {
+  assert.deepEqual(checkGateCatalog(gateTable(GOOD_GATE_ROWS)), []);
+});
+
+test('checkGateCatalog reports a header over 12 characters by name', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Root cause', gateRow('Thirteen-char', 'Approve the fix (Recommended), Revise'))),
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Thirteen-char/);
+  assert.match(problems[0], /12/);
+});
+
+test('checkGateCatalog reports an empty header', () => {
+  const problems = checkGateCatalog(gateTable(withRow('Root cause', gateRow('', 'Approve the fix (Recommended)'))));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /header is empty/);
+});
+
+test('checkGateCatalog reports a duplicate header', () => {
+  const problems = checkGateCatalog(gateTable(withRow('Root cause', gateRow('Plan', 'Approve (Recommended), Revise'))));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Plan/);
+  assert.match(problems[0], /duplicate/);
+});
+
+test('checkGateCatalog reports an empty options cell', () => {
+  const problems = checkGateCatalog(gateTable(withRow('Root cause', gateRow('Root cause', ' '))));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Root cause/);
+  assert.match(problems[0], /options cell is empty/);
+});
+
+test('checkGateCatalog reports a risky row that carries (Recommended)', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Merge', gateRow('Merge', 'Do not merge; Merge the PR (Recommended)'))),
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Merge/);
+  assert.match(problems[0], /safe-option-first/);
+});
+
+test('checkGateCatalog reports a non-risky row that lacks (Recommended)', () => {
+  const problems = checkGateCatalog(gateTable(withRow('Probe', gateRow('Probe', 'Run the probe, Change the probe'))));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /Probe/);
+  assert.match(problems[0], /\(Recommended\)/);
+});
+
+test('checkGateCatalog lets Blocked and Follow-ups omit (Recommended)', () => {
+  // GOOD_GATE_ROWS already holds both without it; assert that is what makes it pass.
+  const text = gateTable(GOOD_GATE_ROWS);
+  assert.ok(text.includes('`Blocked` | One option per concrete way forward |'));
+  assert.ok(text.includes('`Follow-ups` | Multi-select groups |'));
+  assert.deepEqual(checkGateCatalog(text), []);
+});
+
+test('checkGateCatalog reports a missing table', () => {
+  const problems = checkGateCatalog('No gate catalog in this text.\n');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /table/);
+});
+
+test('checkGateCatalog reports a table with fewer than 10 rows', () => {
+  const problems = checkGateCatalog(gateTable(GOOD_GATE_ROWS.slice(0, 9)));
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /table/);
+  assert.match(problems[0], /10/);
+});
+
+test('checkGateCatalog stops reading at the first line that is not a table row', () => {
+  const trailing = ['', 'Prose between tables.', '', gateRow('Way too long a header', 'no marker')].join('\n');
+  assert.deepEqual(checkGateCatalog(gateTable(GOOD_GATE_ROWS) + trailing), []);
+});
+
+test('the real gate catalog in skills/sucp-rules/SKILL.md has a valid shape', () => {
+  const file = path.join(import.meta.dirname, '..', 'skills', 'sucp-rules', 'SKILL.md');
+  assert.deepEqual(checkGateCatalog(fs.readFileSync(file, 'utf8')), []);
 });

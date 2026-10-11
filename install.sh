@@ -73,7 +73,7 @@ EOF
 Always installed: ~/.config/ai and ~/.agents/skills. Every other harness is installed when it is
 detected (its directory under your home or its CLI on PATH) or named with --only.
 A file or directory that is already there and is not the installer's is moved to <name>.vivera-bak-<time>.
-A tool the chosen tier does not require prints one warning naming what is lost and is skipped.
+At standard and full, a tool the chosen tier does not require prints one warning naming what is lost and is skipped; at minimal it is silent.
 TinyFish web-evidence rules ship inside the master skill; no extra skill is deployed.
 Exit codes: 0 success or current, 1 failure (a required tool is missing, or --check found a problem),
 2 usage error (or --check had nothing to check). --check and --uninstall ask for no tool, whatever the

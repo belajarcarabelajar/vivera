@@ -352,12 +352,14 @@ flowchart LR
 |---|---|
 | An option | Continue. At a gate, record the answer in the plan's approval section. |
 | Free-form text | Treat it as the user's own answer. If it changes scope, restate it in one line and ask once more, because a changed decision is a new question. On a risky question, text that does not name the go-ahead is not approval: ask again with the exact action. |
-| Not sure (free-form, or a request for advice) | A not sure answer never approves a gate, risky or not. Restate the `Why:` or `Facts:` line in one sentence with what each option leads to, keep the gate closed, and ask again once: this is the one case where a question is asked a second time. A clarifying question that is not a gate takes its recommended default, as the next row says. |
+| Not sure (free-form, or a request for advice) | A not sure answer never approves a gate, risky or not. Restate the `Why:` or `Facts:` line in one sentence with what each option leads to, keep the gate closed, and ask again once. A second not sure leaves the gate closed and pending, as in the Dismissed row. A clarifying question that is not a gate takes its recommended default, as the next row says. |
 | Dismissed or cancelled | **A dismissed question is not an approval.** The gate stays closed, one line says what is pending and what unblocks it, independent work continues (before Gate 1 or Gate 2: no implementation, scaffolding or code, as the HARD GATE says), a later typed approval in chat is the user's own answer and ends the pending state (on a risky question it must name the action), and the same question is not asked again in this session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption in the plan. |
 | No tool, a tool error, or no interactive client | Render a numbered list in the final message with one line saying the runtime lacks a prompt widget. The gate stays closed. Never skip the ask and never proceed as if it were approved. |
 
 - **Unattended runs ask nothing mid-run.** The entry gate (`sucp-overnight`) is collected while the user is present. After that a mid-run decision follows the Unattended Continuation Rule: a reversible one takes the most reasonable reading and continues, and an irreversible one that could go either way is parked in the handoff under `Waiting on a human` with a recommended answer while independent work goes on. The only question asked is the debt-sweep question, as the last act of the run, and only when the harness has an interactive client.
 - **Not a question:** a fact the repository can answer (Homework-First), a preference with no outcome, and reversible work the approved scope already covers (Authorization Persistence).
+
+Every row below is a gate; a question without a row is a clarifying question.
 
 | Gate | Header | Options, in order | Basis |
 |---|---|---|---|

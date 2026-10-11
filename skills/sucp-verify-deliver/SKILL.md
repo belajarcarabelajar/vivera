@@ -57,7 +57,7 @@ Apply the gates relevant to the approved scope. Record `N/A` with a reason when 
   - Instruction Precedence for Rule Attribution: resolve guidance in order of `AGENTS.override.md`, then `AGENTS.md`, then any configured fallback filename, walking from the repository root down to the changed file. The most specific applicable file wins, and explicit user instructions about review scope or style override repository files.
   - Suggestion Blocks: emit a suggestion block only for a concrete, minimal replacement that preserves leading whitespace and surrounding indentation. Never place commentary inside one.
 - Non-trivial or shared-interface changes should receive independent review when a reviewer is available. If no independent reviewer exists, perform and report a documented self-review; do not imply peer approval.
-- Local commits follow repository conventions and the approved workflow. Pushes, releases, deployments, PR comments, and other externally visible publication require explicit authorization.
+- Local commits follow repository conventions and the approved workflow. Pushes, releases, deployments, PR comments, and other externally visible publication require explicit authorization, asked through the Confirmation Protocol (header `Publish`, safe option first) unless the approved scope already names it.
 - Never include secrets, credentials, private data, temporary artifacts, or unrelated cleanup in a commit or publication.
 
 ### 🚦 CI, Test Layers & Quality Gates
@@ -170,7 +170,7 @@ Verification matrix — run only the rows relevant to the approved scope and rec
 | Definition of Done | Every applicable gate and acceptance criterion is complete, evidenced, and traceable |
 | Build/deployment | Relevant build/package/deploy check when the deliverable includes it |
 | Documentation/configuration | References, examples, and configuration behavior match the implementation |
-| Session close / debt sweep | Every noticed-but-unclosed item classified `NOW`/`LATER`, 3-5 ranked follow-ups injected as one multi-select question, each selection executed with fresh evidence or explicitly deferred with a `defer:` marker |
+| Session close / debt sweep | Every noticed-but-unclosed item classified `NOW`/`LATER`, 3-5 ranked follow-ups injected as one question-tool call of multi-select groups, each selection executed with fresh evidence or explicitly deferred with a `defer:` marker |
 
 ```mermaid
 flowchart TD
@@ -274,7 +274,7 @@ Use `templates/pr-review-template.md` for the report. Two things make it determi
 
 **The verdict is binary and derived.** `not correct` if and only if there is at least one blocking (`P0`/`P1`) finding. No third state, no "looks good overall". A verdict names the specific checkable condition that would change it, because "after the author addresses comments" is not a condition.
 
-**Generating a review and posting it are two acts.** The posted comment is a shorter artifact than the internal report: verdict, blocking findings, and nothing else. Internal reasoning and praise stay in the report. Posting is externally visible publication and waits for a human to read the exact text first. A reviewer that posts its own draft has skipped the only gate that exists on this stage.
+**Generating a review and posting it are two acts.** The posted comment is a shorter artifact than the internal report: verdict, blocking findings, and nothing else. Internal reasoning and praise stay in the report. Posting is externally visible publication: the exact text is shown in chat first, then asked through the Confirmation Protocol (header `Publish`, safe option first). A reviewer that posts its own draft has skipped the only gate that exists on this stage.
 
 ### 5.5 Merging a batch of twenty PRs
 ```bash
@@ -288,6 +288,7 @@ bun scripts/pr-registry.mjs surface <s>  # what must rebase first, and what bloc
 - **Rebase before each merge, not once at the start.** The base branch moves with every merge, so a branch rebased at position 3 is already behind by position 7. `surface <s>` reports which sessions landed since the branch was cut.
 - **Verify locally after every single merge.** Twenty merges followed by one test run at the end means nineteen merges ship unverified. The check after merge N is the evidence for merge N, and it is cheap because the session was already verified once.
 - **One merge at a time.** A batch merge is an unverified batch.
+- **The merge itself is a question, once per merge.** Ask it through the Confirmation Protocol (header `Merge`): the first option is `Do not merge`, the second is `Merge the PR` with a description naming the PR number and the head commit. The standing gate on merging into the base branch is unchanged; the question only removes the typing.
 - **A conflict is resolved in the session's branch, never on the base branch.** Rebase the session branch onto `origin/<base>`, resolve there, re-run that session's verification, push, then merge. Editing the base branch directly to "fix" a conflict is how a conflict becomes an unreviewable change nobody can attribute to a session.
 - **If a session cannot be made mergeable, it does not merge.** Mark it and move to the next one in the order. A blocked session is a status, not a reason to freeze nineteen others.
 

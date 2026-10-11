@@ -15,6 +15,7 @@ import {
   hasStrictMermaidFence,
   extractMermaidBlocksStrict,
   renderMermaidBatch,
+  checkGateCatalog,
 } from './validate-lib.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -736,6 +737,104 @@ for (const snip of requiredSnippets) {
       console.log(`✅ Automation-article amendment present: ${c.label}`);
     } else {
       console.error(`❌ Automation-article amendment missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
+// 3l. Confirmation protocol (2026-10-11, plan 2026-10-11-confirm-via-question-tool).
+// Every point where the pipeline waits for a human decision is a call to the harness's
+// question tool, defined once in sucp-rules and pointed at by name from the orchestrator
+// and the phase skills. The negative check keeps the old typed-approval wording from
+// returning. The trigger snippets carry the same paragraph, pinned in sync-snippets.test.mjs.
+// Revert: `git revert` the commits that added this block with their skill, template, snippet, and README edits.
+{
+  const rules = 'skills/sucp-rules/SKILL.md';
+  const orchestrator = 'Super Ultra Code Plan Implementation.md';
+  const sweep = 'skills/sucp-debt-sweep/SKILL.md';
+  const confirmationContract = [
+    { label: 'protocol section exists', file: rules, needle: '### ⏸️ Confirmation Protocol' },
+    { label: 'no turn ends on a plain-text question', file: rules, needle: 'never end a turn on a plain-text question' },
+    { label: 'Claude Code tool is named', file: rules, needle: '`AskUserQuestion`' },
+    { label: 'OpenCode tool is named', file: rules, needle: '`question`' },
+    { label: 'Gemini CLI tool is named', file: rules, needle: '`ask_user`' },
+    { label: 'recommended option is first so Enter accepts it', file: rules, needle: 'so Enter accepts it' },
+    { label: 'safe option first for risky actions', file: rules, needle: 'Enter must never run the action' },
+    { label: 'question count cap', file: rules, needle: 'at most 4 questions per call' },
+    { label: 'dismissal is not approval', file: rules, needle: 'A dismissed question is not an approval' },
+    { label: 'questions are parent-only', file: rules, needle: 'Questions are parent-only' },
+    { label: 'a mid-run decision follows the Unattended Continuation Rule', file: rules, needle: 'follows the Unattended Continuation Rule' },
+    { label: 'a risky action is never part of a batch', file: rules, needle: 'a risky action is never part of the batch' },
+    { label: 'the sweep question needs an interactive client (rules)', file: rules, needle: 'only when the harness has an interactive client' },
+    { label: 'the sweep question needs an interactive client (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'only when the harness has an interactive client' },
+    { label: 'the handoff is finished before anything that can block', file: 'skills/sucp-overnight/SKILL.md', needle: 'so the record is complete before anything that can block is called' },
+    { label: 'gate catalog covers the overnight start', file: rules, needle: '`Overnight` | Start the overnight run (Recommended), Not yet' },
+    { label: 'gate catalog covers the root-cause fix', file: rules, needle: '`Root cause` | Approve the fix (Recommended), Revise the diagnosis' },
+    { label: 'a hand-off answer is a claim, not proof', file: rules, needle: 'A `Hand-off` answer is a claim, not proof' },
+    { label: 'the overnight snippet finishes the handoff first', file: 'snippets/orkestrasi-overnight.md', needle: 'CLOSE. Finish the handoff' },
+    { label: 'the overnight snippet asks only with an interactive client', file: 'snippets/orkestrasi-overnight.md', needle: 'only when the harness has an interactive client' },
+    { label: 'the overnight handoff names the backlog when no question is asked', file: 'skills/sucp-overnight/SKILL.md', needle: 'or, with no interactive client, the backlog location' },
+    { label: 'dismissal quotes the HARD GATE accurately', file: rules, needle: 'no implementation, scaffolding or code, as the HARD GATE says' },
+    { label: 'a typed approval on a risky question must name the action', file: rules, needle: 'on a risky question it must name the action' },
+    { label: 'the root-cause row names its trigger', file: rules, needle: 'only where the debugging trigger requires an RCA gate' },
+    { label: 'a late sweep answer is recorded in the handoff (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'is appended to the handoff' },
+    { label: 'a late sweep answer is recorded in the handoff (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'is appended to the handoff' },
+    { label: 'an absent graphify is recorded in the handoff Evidence row', file: 'snippets/orkestrasi-overnight.md', needle: 'append one line saying so to the handoff Evidence row' },
+    { label: 'no question tool in an unattended run still lists the follow-ups (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'the final message lists them as a numbered list' },
+    { label: 'no question tool in an unattended run still lists the follow-ups (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'the final message lists them as a numbered list' },
+    { label: 'the sweep skill names the unattended backlog path', file: sweep, needle: 'also go to the plan backlog' },
+    { label: 'anti-pattern row for a plain-text ask', file: rules, needle: '"Shall I proceed?" in plain text' },
+    { label: 'orchestrator routes every gate through the protocol', file: orchestrator, needle: 'Every approval gate is asked through the Confirmation Protocol' },
+    { label: 'brainstorm points at the protocol', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'Confirmation Protocol' },
+    { label: 'plan points at the protocol', file: 'skills/sucp-plan/SKILL.md', needle: 'Confirmation Protocol' },
+    { label: 'tdd-debug points at the protocol', file: 'skills/sucp-tdd-debug/SKILL.md', needle: 'Confirmation Protocol' },
+    { label: 'verify-deliver points at the protocol', file: 'skills/sucp-verify-deliver/SKILL.md', needle: 'Confirmation Protocol' },
+    { label: 'debt-sweep points at the protocol', file: sweep, needle: 'Confirmation Protocol' },
+    { label: 'overnight points at the protocol', file: 'skills/sucp-overnight/SKILL.md', needle: 'Confirmation Protocol' },
+    { label: 'sweep groups fit the option cap', file: sweep, needle: 'at most 4 options' },
+    { label: 'follow-up template fits the option cap', file: 'templates/follow-up-injection-template.md', needle: 'at most 4 options' },
+  ];
+  for (const c of confirmationContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Confirmation protocol present: ${c.label}`);
+    } else {
+      console.error(`❌ Confirmation protocol missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+
+  // skills/super-ultra-code-plan/SKILL.md is a symlink to the orchestrator, so it is skipped.
+  const typedApprovalPhrases = ['wait for explicit yes', 'nod sufficient', 'wait for explicit approval before plan'];
+  const typedApprovalFiles = [
+    orchestrator,
+    ...['sucp-brainstorm', 'sucp-debt-sweep', 'sucp-overnight', 'sucp-plan', 'sucp-rules', 'sucp-tdd-debug', 'sucp-verify-deliver']
+      .map((name) => `skills/${name}/SKILL.md`),
+  ];
+  let typedApprovalClean = true;
+  for (const file of typedApprovalFiles) {
+    const target = path.join(rootDir, file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    for (const phrase of typedApprovalPhrases) {
+      if (text.includes(phrase)) {
+        console.error(`❌ Typed-approval phrase still present: "${phrase}" in ${file}`);
+        errors++;
+        typedApprovalClean = false;
+      }
+    }
+  }
+  if (typedApprovalClean) console.log('✅ No typed-approval phrase remains');
+
+  // The needles above pin wording; this pins the table's shape (header cap, unique
+  // headers, safe-option-first). Logic and tests live in validate-lib.mjs.
+  const catalogFile = path.join(rootDir, rules);
+  const catalogProblems = checkGateCatalog(fs.existsSync(catalogFile) ? fs.readFileSync(catalogFile, 'utf8') : '');
+  if (catalogProblems.length === 0) {
+    console.log('✅ Gate catalog shape is valid');
+  } else {
+    for (const problem of catalogProblems) {
+      console.error(`❌ Gate catalog: ${problem}`);
       errors++;
     }
   }

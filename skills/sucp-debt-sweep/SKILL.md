@@ -37,24 +37,25 @@ The same sweep that mines code debt also mines the session for the agent's **own
 
 - Record the harvest with `templates/session-learning-ledger-template.md`: a raw Mistake Log, then a distilled set of `WHEN <situation> → DO <action>, NOT <anti-pattern>` candidate rules.
 - Each candidate must pass **both** existing gates or it is a NO-OP (zero file changes): the Minimum-Signal gate ("will a future agent plausibly act differently and more effectively?") and the 30-Day Horizon test ("still true and worth reading a month from now?"). This is what keeps the ledger from filling with transient noise.
-- `KEEP` rules are written in-repo automatically (append under a `Task Group:` header in `MEMORY.md`). A rule that recurs across projects on this machine may additionally be promoted to `~/AGENTS.md`, but global promotion is **per-item and requires explicit user approval**, is never destructive or credential-touching, and always writes a revert note inside the edited file. Decline leaves the rule in the ledger only.
+- `KEEP` rules are written in-repo automatically (append under a `Task Group:` header in `MEMORY.md`). A rule that recurs across projects on this machine may additionally be promoted to `~/AGENTS.md`, but global promotion is **per-item and requires explicit user approval**: each item is asked through the Confirmation Protocol (header `Promote`, first option `Keep in the repository only`). Promotion is never destructive or credential-touching, and always writes a revert note inside the edited file. Decline leaves the rule in the ledger only.
 - Learning candidates do not consume the 3-5 follow-up question cap; they are a separate written artifact. Only propose a question here when a kept rule implies a concrete code or doc change (e.g. encoding the rule into a lint or a check).
 
 ### 🧮 6.3 Rank & Cap — default 3 to 5 questions
 - Default to **3-5 follow-up questions**, ranked by `(leftover risk × blast radius × cheapness to close)`. Cap at 5 so the user can answer in one glance; rank below that always go to a written follow-up backlog in the plan or progress log, not to an extra question batch.
+- The follow-ups go into multi-select questions of at most 4 options each, at most 4 questions in the single call, because the Claude Code question tool caps a call at 4 questions and 4 options per question. Group by surface (for example Code, and Docs and tests). The lowest-ranked overflow goes to the written backlog. The last option of the last group is `Nothing, close session`, so a zero-selection submit is never required. The 3 to 5 default counts follow-up items, not tool questions. Every group has 2 to 4 options, so a lone leftover item joins another group. If `Nothing, close session` is ticked together with items, the items run.
 - Expand beyond 5 only when the harvested debt is itself more than 5 genuinely independent items, and then state explicitly why the cap was raised. Under-filling is also a defect: never ask a single trivial question when three real ones exist.
 - Every candidate is classified `NOW` (closes fully inside this session, no new approval, no destructive action, no external dependency) or `LATER`. `NOW` items become selectable questions. `LATER` items are recorded in the plan's follow-up backlog with an owner-less `defer: <ceiling>, <upgrade-trigger>` line so they survive the session instead of evaporating.
-- Banned as a question: anything destructive, externally visible, credential-touching, or scope-expanding. Those go through a normal explicit-confirmation path, not through a quick-select chip.
+- Banned from the batch: anything destructive, externally visible, credential-touching, or scope-expanding. Each such item is asked on its own, outside the sweep call, through the Confirmation Protocol with the safe option first, never as a quick-select chip.
 - Banned as a question: anything already `Done 100%`, anything the user never asked about and the plan never touched when the risk is cosmetic, and anything only phrased as a preference question with no code outcome ("would you like me to also..."). A question must resolve into a code change, a test, a doc, or a deletion.
 
 ### 🙋 6.4 Inject — ask, do not narrate (mandatory)
 > Record the sweep with `templates/follow-up-injection-template.md` (candidates, ranking, the question, the execution record, the deferred backlog).
-- Use the harness's own structured question mechanism. Discover it first: a `question`/`ask` tool, an AskUserQuestion-style prompt, a plan-approval or multi-select widget, or an equivalent. Present the follow-ups as **multi-select checkboxes** so the user answers by tapping, never by typing.
+- Use the harness's own structured question mechanism. Find it through the tool table in the Confirmation Protocol and read its schema before the first call. Present the follow-ups as **multi-select checkboxes** so the user answers by tapping, never by typing.
 - Batch every follow-up into **one single question-set call**, never one call per item, and place it after the final recap so the user first sees what was delivered, then decides what to finish.
 - Each option carries a short label plus a one-line description naming the file or surface it touches and the check that proves it closed. Label the first option of each question as the recommended default where one exists.
 - Ask even when the list is short, even when the session looked clean, and even when the user seemed satisfied. A quiet session is exactly where unnoticed debt accumulates; the sweep is not a courtesy, it is the closing gate.
-- If no structured question tool exists in the runtime, degrade to a rendered checkbox list in the final message with an explicit instruction to reply with the item numbers to execute, and state plainly that the runtime lacks a prompt widget. Never silently skip the ask because the widget was missing.
-- If the user selects nothing, accept it in one line, keep the items in the written backlog with their `defer:` markers, and close. Never re-ask the same question in the same session, and never treat a declined follow-up as a reason to re-open the completed plan.
+- If no structured question tool exists in the runtime, use the Confirmation Protocol fallback: a numbered list in the final message with an explicit instruction to reply with the item numbers to execute, and state plainly that the runtime lacks a prompt widget. The gate stays closed. Never silently skip the ask because the widget was missing. In an unattended run (`sucp-overnight`) the same items also go to the plan backlog.
+- If the user selects nothing, picks `Nothing, close session`, or dismisses the question, accept it in one line, keep the items in the written backlog with their `defer:` markers, and close. Never re-ask the same question in the same session, and never treat a declined follow-up as a reason to re-open the completed plan.
 
 ### 🛠️ 6.5 Execute — selected follow-ups run as real work
 - A selected follow-up is a task, not a favor. It enters the same pipeline as plan work: chunk it, fan out to subagents, TDD when behavior changes, verification with fresh evidence, diff audit, and commit. No reduced standard, no "quick fix" exemption.
@@ -117,10 +118,10 @@ The meter line during the sweep (`sucp-rules`, Output) is one star per debt the 
 ```mermaid
 flowchart TD
     accTitle: Session-close debt sweep and follow-up injection
-    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one multi-select question, executed as real work, and swept again until no new debt appears.
+    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one question-tool call of multi-select groups, executed as real work, and swept again until no new debt appears.
     Gate["Plan tasks Done 100%\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
     Harvest --> Rank["Classify NOW vs LATER\nrank by risk x blast radius x cost\ndefault 3-5 items"]
-    Rank --> Ask["Inject ONE multi-select\nquestion via harness prompt\ncheckboxes, not prose"]
+    Rank --> Ask["Inject one question-tool call\nof multi-select groups,\ncheckboxes, not prose"]
     Ask -->|User selects items| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|User selects nothing| Backlog["Record LATER items in backlog\nwith defer markers\nclose session"]
     Reopen --> Exec["Execute as real work:\nchunk, subagent fan-out,\nTDD, verify, diff audit, commit"]

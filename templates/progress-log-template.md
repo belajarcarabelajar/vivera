@@ -110,7 +110,7 @@
 |---|---|---|---|---|
 | F1 | | `NOW` / `LATER` | | `OPEN` / `DONE` / `DECLINED` / `DEFERRED` |
 
-- [ ] 3-5 ranked follow-ups injected as one multi-select question (checkboxes), not as a prose report.
+- [ ] 3-5 ranked follow-ups injected as one question-tool call of multi-select checkboxes, not as a prose report.
 - [ ] Every selected follow-up executed through the full pipeline with fresh evidence.
 - [ ] Declined and out-of-cap items written above, never dropped.
 

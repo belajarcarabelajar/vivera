@@ -171,7 +171,7 @@ flowchart TD
 |---|---|---|---|---|
 | F1 | | `NOW` / `LATER` | | `OPEN` / `DONE` / `DEFERRED` |
 
-- [ ] 3-5 ranked follow-ups injected as one multi-select question (checkboxes) after the final recap.
+- [ ] 3-5 ranked follow-ups injected as one question-tool call of multi-select checkboxes after the final recap.
 - [ ] Every selected follow-up executed through the full pipeline with fresh evidence.
 - [ ] Declined and out-of-cap items written here so no debt leaves the session unrecorded.
 

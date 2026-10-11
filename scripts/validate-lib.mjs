@@ -274,3 +274,68 @@ export function renderMermaidBatch(blocks, { mmdc, args = [], tmpDir }) {
   const results = renderSet(blocks);
   return { results, calls };
 }
+
+// --- gate catalog shape -------------------------------------------------------
+
+// The Claude Code question tool rejects a header longer than 12 characters.
+const GATE_HEADER_MAX = 12;
+const GATE_ROWS_MIN = 10;
+// Rows whose action is risky: the safe option comes first, so none of them may
+// mark an option (Recommended), which would make Enter accept the action.
+const GATE_RISKY_HEADERS = new Set(['Publish', 'Merge', 'Destructive', 'Promote']);
+// Rows that are not a fixed two-option question: Blocked lists one option per way
+// forward, Follow-ups is a multi-select.
+const GATE_UNMARKED_HEADERS = new Set(['Blocked', 'Follow-ups']);
+const GATE_TABLE_HEAD_RE = /^\|\s*Gate\s*\|\s*Header\s*\|\s*Options, in order\s*\|\s*$/;
+
+/**
+ * Check the shape of the gate catalog table in skills/sucp-rules/SKILL.md.
+ * Options are not counted: labels contain commas ("Cancel, do nothing"), so a
+ * split would be unreliable. Returns problem strings; empty means fine.
+ */
+export function checkGateCatalog(text) {
+  const lines = text.split('\n');
+  const start = lines.findIndex((line) => GATE_TABLE_HEAD_RE.test(line));
+  if (start === -1) return ['table: the gate catalog (| Gate | Header | Options, in order |) was not found'];
+
+  // Line start + 1 is the separator; the table ends at the first line that is not a row.
+  const rows = [];
+  for (let i = start + 2; i < lines.length && lines[i].startsWith('|'); i++) {
+    rows.push(lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim()));
+  }
+
+  const problems = [];
+  if (rows.length < GATE_ROWS_MIN) {
+    problems.push(`table: ${rows.length} data rows found, at least ${GATE_ROWS_MIN} are required`);
+  }
+
+  const seen = new Set();
+  rows.forEach((cells, index) => {
+    const header = (cells[1] ?? '').replace(/`/g, '').trim();
+    const options = cells[2] ?? '';
+    const label = header || `row ${index + 1}`;
+
+    if (cells.length < 3) {
+      problems.push(`${label}: row has ${cells.length} cells, expected 3`);
+      return;
+    }
+    if (!header) problems.push(`${label}: header is empty`);
+    if (header.length > GATE_HEADER_MAX) {
+      problems.push(`${label}: header is ${header.length} characters, the limit is ${GATE_HEADER_MAX}`);
+    }
+    if (header && seen.has(header)) problems.push(`${label}: duplicate header`);
+    seen.add(header);
+    if (!options) {
+      problems.push(`${label}: options cell is empty`);
+      return;
+    }
+
+    const marked = options.includes('(Recommended)');
+    if (GATE_RISKY_HEADERS.has(header)) {
+      if (marked) problems.push(`${label}: risky row must not carry (Recommended), safe-option-first rule`);
+    } else if (!GATE_UNMARKED_HEADERS.has(header) && !marked) {
+      problems.push(`${label}: options must mark one (Recommended)`);
+    }
+  });
+  return problems;
+}

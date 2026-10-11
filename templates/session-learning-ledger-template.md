@@ -74,7 +74,7 @@
 | 2 | `~/AGENTS.md` (global) | Recurs across projects on this machine | **PENDING user approval** |
 
 - **In-repo (auto):** append `KEEP` rules under a `Task Group:` header in `MEMORY.md`.
-- **Global (gated):** propose each `~/AGENTS.md` line as one explicit confirmation. State a revert path inside the edited file. Never write a global rule without an item-level yes.
+- **Global (gated):** ask each `~/AGENTS.md` line as its own question through the Confirmation Protocol (header `Promote`, safe option first). State a revert path inside the edited file. Never write a global rule without an item-level yes.
 
 ---
 

@@ -7,7 +7,8 @@
 > base branch, and handing a verdict back to the author.
 >
 > **Nothing is posted to GitHub from this document.** It is a draft until a
-> human approves the exact text. Generating a review and posting it are two
+> human approves the exact text, asked through the Confirmation Protocol (header
+> `Publish`, safe option first). Generating a review and posting it are two
 > separate acts, and the second one is externally visible publication.
 
 ## 1. Target

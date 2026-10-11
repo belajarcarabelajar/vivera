@@ -99,7 +99,7 @@ A  src/api/rate-limit.test.ts
 |---|---|---|---|---|
 | F1 | | `NOW` / `LATER` | | `OPEN` / `DONE` / `DECLINED` / `DEFERRED` |
 
-- [ ] 3-5 ranked follow-ups were offered as one multi-select question at session close.
+- [ ] 3-5 ranked follow-ups were offered through one question-tool call at session close.
 - [ ] Selected items executed and evidenced; nothing was left as an unexamined promise.
 
 ---

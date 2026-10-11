@@ -166,7 +166,7 @@ Treat unknown elements according to their epistemic nature before asking the use
    - Requirements, business priorities, architectural choices, and aesthetics cannot be derived from code inspection.
    - Formulate focused questions offering 2–4 mutually exclusive options plus an explicit recommended default.
    - If unanswered or ambiguous, proceed with the recommended default and record it as an explicit assumption in the plan.
-   - Interactive Elicitation Protocol: Use structured options when understanding user preferences, constraints, or goals before providing advice or plans. Keep to 1–3 focused questions with 2–4 concise, mutually exclusive options. Negative Triggers (when NOT to offer structured options): (1) user asks "A or B" (requires AI analysis/recommendation, not options echoed back); (2) user already provided concrete constraints or detailed prompt (proceed with constraints and state assumptions inline); (3) factual questions, emotional processing, or code review prose; (4) answer is already present in conversation history or discoverable in code ("Homework First" invariant).
+   - Interactive Elicitation Protocol: Use structured options when understanding user preferences, constraints, or goals before providing advice or plans. Keep to 1–3 focused questions with 2–4 concise, mutually exclusive options. Negative Triggers (when NOT to offer structured options): (1) user asks "A or B" (requires AI analysis/recommendation, not options echoed back); (2) user already provided concrete constraints or detailed prompt (proceed with constraints and state assumptions inline); (3) factual questions, emotional processing, or code review prose; (4) answer is already present in conversation history or discoverable in code ("Homework First" invariant). These options are asked through the Confirmation Protocol (the harness question tool, never plain chat text).
 3. **Visual & Artifact Specifications (Render, Don't Describe)**:
    - Specification Triggers: When the user provides a specification—a noun phrase describing a visual or structural artifact (e.g. "comparison table of REST vs GraphQL", "state machine for order lifecycle", "contact form layout")—the spec is the request. Render the artifact directly rather than describing it in prose.
    - Request Evaluation Checklist: (Step 0) Does the request need a visual at all? (Conveys spatial, architecture, or lifecycle flow vs text prose); (Step 1) Is a connected tool or MCP a category match? (Match category, not style preference; never subdivide categories to bypass tools); (Step 2) Did the user ask for a file? (Write to disk + present); (Step 3) Default inline visualizer (render Mermaid/SVG).
@@ -183,14 +183,14 @@ Treat unknown elements according to their epistemic nature before asking the use
 ### Spike
 1. Explore project context — minimum to frame probe
 2. Present question + probe plan (2-3 sentences)
-3. Get approval (nod sufficient)
+3. Get approval through the Confirmation Protocol (header `Probe`)
 4. Investigate — cheapest method preserving correctness
 5. Report recommendation — label built code as throwaway; include a MANDATORY Mermaid diagram (hypothesis → probe → outcome → decision, per spike-report-template §1b)
 ### Bounded
 1. Explore project context — files, docs, recent commits
-2. Ask clarifying questions — one at a time, only ones that matter
+2. Ask clarifying questions through the Confirmation Protocol, one decision at a time, only ones that matter
 3. Present short design in chat — MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched, testing plan, and itemized pre-execution todo checklist (`[ ]`)
-4. STOP — wait for explicit yes
+4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve
 5. Implement — chunk the checklist into small verifiable units, fan out to subagents, then gather and synthesize their reports; TDD applies
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:
    - **One task, one file, no dependency:** no plan file. The in-chat Mermaid diagram and the `[ ]` checklist are the plan. Writing a file here is ceremony the skill already promised to scale away.
@@ -198,10 +198,11 @@ Treat unknown elements according to their epistemic nature before asking the use
 ### 🧠 Architectural — Brainstorming → Design
 1. Phase 1 — Ground in Environment: Non-mutating exploration of project context, configs, dependencies, and architecture before asking questions.
 2. Phase 2 — Intent Chat: Clarify goal, success criteria, constraints, and tradeoffs using the Two Kinds of Unknowns protocol.
+   The phase closes with the intent-lock question (header `Intent`) asked through the Confirmation Protocol.
 3. Phase 3 — Implementation Chat: Detail decision-complete architecture (interfaces, data flow, failure modes, acceptance criteria). Must include at least one Mermaid diagram as visual companion (a `flowchart` showing tasks, dependencies, gates, and verification is MANDATORY; add `sequenceDiagram`, `stateDiagram-v2`, or `erDiagram` when they clarify interactions, lifecycle, or data).
 4. Propose 2-3 approaches — trade-offs, recommendation, YAGNI applied.
-5. Present design in sections — scale to complexity, approval after each section.
+5. Present the design in sections scaled to complexity, and ask approval after each section through the Confirmation Protocol (header `Section`).
 6. Write design doc — save to docs/code-plan/specs/YYYY-MM-DD-<topic>-design.md, commit.
 7. Spec self-review — placeholders, contradictions, ambiguity, scope.
-8. User reviews spec — wait for explicit approval before plan.
+8. User reviews spec: ask through the Confirmation Protocol (header `Spec`); no plan before the answer is Approve.
 9. Invoke writing-plans skill — generate decision-complete plan wrapped in `<proposed_plan>` block.

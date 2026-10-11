@@ -3,7 +3,7 @@
 <p align="center">
   <img alt="Vivera, the project's mascot: a smiling short-haired girl in a blue cyberpunk maid outfit with a holographic apron, holding a glowing clipboard tablet in a rainy neon city street." src="docs/images/vivera.jpg" width="100%">
   <br>
-  <em>Vivera, the mascot of this project. The name is fictional and inspired by Elli, a character in Harvest Moon: Back to Nature.</em>
+  <em>Vivera, a fictional name inspired by Elli from Harvest Moon: Back to Nature.</em>
 </p>
 
 Comprehensive, production-grade, all-in-one skill pipeline for AI coding agents. Designed to guide agents through the entire software engineering lifecycle: **Idea -> Design -> Plan -> Human Approval Gate -> TDD -> Systematic Debugging -> Subagent Orchestration -> Verification -> Finishing -> Session-Close Debt Sweep**.

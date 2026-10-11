@@ -2,11 +2,15 @@
 # Sourced by install.sh: --uninstall mode. It undoes the links the installer made, with the same
 # rule the installer used to place them (classify_dest in lib.sh): a link that is ok or ours-stale
 # is removed and the newest backup is put back; anything else at that spot is the user's and stays.
-# Sprite agents are not handled here.
+# A copy-mode install (a managed copy: see copy_managed in lib.sh) is removed too, but only while it
+# is still identical to its source; a modified copy stays and is reported as [KEEP]. This works with
+# or without --copy, since what is on disk decides. Sprite agents are not handled here.
 
 UNINSTALL_REMOVED=0
 UNINSTALL_RESTORED=0
 UNINSTALL_KEPT=0
+# "|dir|" for every directory that still holds a kept copy, so its marker is not removed.
+UNINSTALL_KEPT_DIRS=""
 
 # Prints the newest "<dest>.vivera-bak-<UTC stamp>[-N]" beside <dest>, or nothing. Newest means the
 # later stamp, then the larger N compared as a number: a name sort would put -10 before -2.
@@ -38,11 +42,56 @@ newest_backup() {
   fi
 }
 
+# A managed copy goes only while it is identical to its source (cmp, or diff -rq for a directory);
+# a modified one is the user's work now. A directory is deleted only through remove_replaced in
+# lib.sh, and only after that comparison says it holds exactly the installer's own bytes.
+uninstall_copy() {
+  local desired="$1"
+  local dest="$2"
+  local backup
+
+  if ! copy_tools_present; then
+    UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
+    UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
+    echo "[KEEP] $dest (cannot compare: cmp or diff is missing)"
+    return 0
+  fi
+  if ! content_equal "$desired" "$dest"; then
+    UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
+    UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
+    echo "[KEEP] $dest (modified copy)"
+    return 0
+  fi
+  backup="$(newest_backup "$dest")"
+  UNINSTALL_REMOVED=$((UNINSTALL_REMOVED + 1))
+  if [ -n "$backup" ]; then
+    UNINSTALL_RESTORED=$((UNINSTALL_RESTORED + 1))
+  fi
+  if [ "$DRY_RUN" = true ]; then
+    echo "[DRY-RUN] Would remove $dest"
+    if [ -n "$backup" ]; then
+      echo "[DRY-RUN] Would restore $backup"
+    fi
+  else
+    remove_replaced "$dest"
+    rm -f "$dest.vivera-managed"
+    echo "[REMOVED] $dest"
+    if [ -n "$backup" ]; then
+      mv "$backup" "$dest"
+      echo "[RESTORED] $dest from $backup"
+    fi
+  fi
+}
+
 uninstall_entry() {
   local desired="$1"
   local dest="$2"
   local state backup
 
+  if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
+    uninstall_copy "$desired" "$dest"
+    return 0
+  fi
   state="$(classify_dest "$dest" "$desired")"
   case "$state" in
     ok | ours-stale)
@@ -87,12 +136,13 @@ uninstall_empty_dirs() {
 }
 
 mode_uninstall() {
-  local selected id desired dest
+  local selected id desired dest dir
   local dirs=()
 
   UNINSTALL_REMOVED=0
   UNINSTALL_RESTORED=0
   UNINSTALL_KEPT=0
+  UNINSTALL_KEPT_DIRS=""
   selected="$(select_targets)"
   for id in $selected; do
     if [ "$(target_kind "$id")" = none ]; then
@@ -105,6 +155,13 @@ mode_uninstall() {
       dirs+=("$(dirname "$dest")")
     done 3< <(target_entries "$id")
     if [ "$(target_kind "$id")" = package ] && [ "$DRY_RUN" != true ]; then
+      # A marker stays only in a directory that still holds a kept (modified) copy.
+      for dir in "${dirs[@]}"; do
+        case "$UNINSTALL_KEPT_DIRS" in
+          *"|$dir|"*) ;;
+          *) rm -f "$dir/.vivera-managed" ;;
+        esac
+      done
       uninstall_empty_dirs "$(target_skills_dir "$id")" "${dirs[@]}"
     fi
   done

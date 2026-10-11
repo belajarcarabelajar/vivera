@@ -4,9 +4,10 @@
 # it prunes the phase skills this checkout no longer has.
 
 # A phase skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness, with
-# a SKILL.md link that dangles. Only an entry named sucp-* is looked at, and only when the directory is real, its SKILL.md is a symlink, and that
-# link is the installer's own (classify_dest ok or ours-stale). A user's real SKILL.md, a live link
-# to a file elsewhere, and a skill the checkout still has are never touched.
+# a SKILL.md link that dangles. Only an entry named sucp-* is looked at, and only when the directory is real
+# and either carries a .vivera-managed marker (a copy-mode directory) or has a SKILL.md symlink that
+# is the installer's own (classify_dest ok or ours-stale). A user's real SKILL.md without a marker, a
+# live link to a file elsewhere, and a skill the checkout still has are never touched.
 prune_stale_skills() {
   local id dir parent entry name skill_md state
   for id in $(select_targets); do
@@ -24,6 +25,17 @@ prune_stale_skills() {
         continue
       fi
       skill_md="$entry/SKILL.md"
+      if [ -f "$entry/.vivera-managed" ]; then
+        # A copy-mode directory: the marker says the whole directory is the installer's own.
+        if [ "$DRY_RUN" = true ]; then
+          echo "[DRY-RUN] Would prune $entry"
+        else
+          rm -f "$skill_md" "$entry/.vivera-managed"
+          rmdir "$entry" 2>/dev/null || true
+          echo "[PRUNED] $entry"
+        fi
+        continue
+      fi
       if [ ! -L "$skill_md" ]; then
         continue
       fi

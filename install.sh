@@ -6,6 +6,7 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MASTER_FILE="$REPO_DIR/Super Ultra Code Plan Implementation.md"
 DRY_RUN=false
+COPY_MODE=false
 TIER=standard
 MODE=install
 ONLY=""
@@ -27,23 +28,30 @@ SKIP=""
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--tier minimal|standard|full] [--only ID,ID] [--skip ID,ID] [--dry-run] [-h]
+Usage: ./install.sh [--tier minimal|standard|full] [--only ID,ID] [--skip ID,ID] [--copy] [--dry-run]
+                    [--check | --update | --uninstall] [-h]
   --tier T      prerequisite level, default standard. The tool table is scripts/install/tiers.tsv.
                   minimal   requires no tool; links the skills only (no sprite agents, no git hooks)
                   standard  requires git and bun
                   full      also requires gh and tgrep
   --only ID,ID  install only these targets, even when the harness is not detected
   --skip ID,ID  leave these targets out; wins over --only
+  --copy        copy the files instead of linking them, marked with .vivera-managed (needs cmp and diff)
   --dry-run     print what would be done and write nothing
+  --check       report whether the install is current and change nothing (exit 0 current, 1 problems)
+  --update      bring the install in line with this checkout: repoint stale links, refresh copies, prune
+  --uninstall   remove what the installer made and put the newest backup back
   -h, --help    print this text
 EOF
   echo "Targets, in install order: $(valid_target_list)"
   cat <<'EOF'
 Always installed: ~/.config/ai and ~/.agents/skills. Every other harness is installed when it is
 detected (its directory under your home or its CLI on PATH) or named with --only.
+A file or directory that is already there and is not the installer's is moved to <name>.vivera-bak-<time>.
 A tool the chosen tier does not require prints one warning naming what is lost and is skipped.
 TinyFish web-evidence rules ship inside the master skill; no extra skill is deployed.
-Exit codes: 0 success, 1 failure (a required tool is missing), 2 usage error.
+Exit codes: 0 success or current, 1 failure (a required tool is missing, or --check found a problem),
+2 usage error.
 EOF
 }
 
@@ -77,6 +85,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY_RUN=true
+      ;;
+    --copy)
+      COPY_MODE=true
       ;;
     --check)
       set_mode check
@@ -161,15 +172,34 @@ mode_install() {
   echo "==> Vivera farm planted: the Ultimate AI Coding Skill installation is complete!"
 }
 
-echo "==> Sowing Vivera: configuring the Ultimate All-in-One AI Coding Agent Skill..."
-echo "    Source: $MASTER_FILE"
-echo "    Tier: $TIER"
+# The banner follows the mode; check and uninstall have no source or tier to announce.
+case "$MODE" in
+  install)
+    echo "==> Sowing Vivera: configuring the Ultimate All-in-One AI Coding Agent Skill..."
+    echo "    Source: $MASTER_FILE"
+    echo "    Tier: $TIER"
+    ;;
+  check)
+    echo "==> Checking the Vivera install"
+    ;;
+  update)
+    echo "==> Updating Vivera"
+    echo "    Source: $MASTER_FILE"
+    echo "    Tier: $TIER"
+    ;;
+  uninstall)
+    echo "==> Removing the Vivera install"
+    ;;
+esac
 
 # 0. Prerequisites Check. Which tools are hard requirements depends on --tier and
 #    lives in scripts/install/tiers.tsv (standard: git and bun). Every other tool
 #    is optional: a missing one costs one capability, so install.sh warns (naming
 #    what is lost) and continues. It runs before every mode.
 check_tier_prereqs "$TIER" "$REPO_DIR/scripts/install/tiers.tsv"
+if [ "$COPY_MODE" = true ]; then
+  require_copy_tools
+fi
 
 case "$MODE" in
   install) mode_install ;;

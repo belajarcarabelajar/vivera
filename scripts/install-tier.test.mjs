@@ -178,11 +178,12 @@ describe('modes', () => {
     expect(sb.snapshot()).toEqual([]);
   });
 
-  test('modes: the usage text does not mention the unimplemented mode flags yet', () => {
+  // All three modes are implemented (T07 to T09), so the usage text documents them (changed in T10).
+  test('modes: the usage text documents --check, --update and --uninstall', () => {
     const sb = sandbox({ tools: [] });
     const r = sb.run(['-h']);
     expect(r.status).toBe(0);
-    for (const flag of ['--check', '--update', '--uninstall']) expect(r.stdout).not.toContain(flag);
+    for (const flag of ['--check', '--update', '--uninstall']) expect(r.stdout).toContain(flag);
   });
 
   test('modes: install.sh is split into the expected files and each stays within 500 lines', () => {

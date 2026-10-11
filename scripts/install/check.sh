@@ -33,6 +33,11 @@ mode_check() {
             problems=$((problems + 1))
           fi
           ;;
+        viadir)
+          # A real file of another tree, reached through a symlinked directory: not ours, left alone.
+          echo "[foreign] $dest (behind a symlinked directory; left alone)"
+          problems=$((problems + 1))
+          ;;
         absent)
           echo "[missing] $dest"
           problems=$((problems + 1))

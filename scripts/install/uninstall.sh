@@ -95,6 +95,14 @@ uninstall_entry() {
     echo "[KEEP] $dest (inside this checkout)"
     return 0
   fi
+  # A real file or directory behind a symlinked directory belongs to another tree (another checkout,
+  # the user's dotfiles): kept, and its directory keeps its marker.
+  if [ ! -L "$dest" ] && [ -e "$dest" ] && behind_symlinked_dir "$dest"; then
+    UNINSTALL_KEPT=$((UNINSTALL_KEPT + 1))
+    UNINSTALL_KEPT_DIRS="$UNINSTALL_KEPT_DIRS|$(dirname "$dest")|"
+    echo "[KEEP] $dest (behind a symlinked directory)"
+    return 0
+  fi
   if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
     uninstall_copy "$desired" "$dest"
     return 0
@@ -140,13 +148,14 @@ uninstall_empty_dirs() {
   shift 2
   local dir parent
   for dir in "$@"; do
-    # Never a directory of this checkout, empty or not.
-    if ! dest_in_repo "$dir/."; then
+    # Never a directory of this checkout, nor one that lives behind a symlinked directory (another
+    # tree's), empty or not.
+    if ! dest_in_repo "$dir/." && ! behind_symlinked_dir "$dir/."; then
       rmdir "$dir" 2>/dev/null || true
     fi
   done
   parent="$(dirname "$package_dir")"
-  if [ "$id" != antigravity-builtin ] && ! dest_in_repo "$parent/."; then
+  if [ "$id" != antigravity-builtin ] && ! dest_in_repo "$parent/." && ! behind_symlinked_dir "$parent/."; then
     rmdir "$parent" 2>/dev/null || true
   fi
 }

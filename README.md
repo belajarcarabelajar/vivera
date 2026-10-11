@@ -316,9 +316,10 @@ This section follows the PlayStation game *Harvest Moon: Back to Nature* (Victor
 Japan 16 December 1999, English release by Natsume on 22 November 2000), not *Friends of Mineral Town*,
 whose sprites work differently (see the [glossary](docs/vivera-glossary.md)). In it the seven Harvest
 Sprites (コロボックル, *Korobokkuru*) live in a small hut behind the Church. Talk to one twice to ask for
-help, once it likes you enough (at least 2 hearts), then hire it for 1 day, 3 days, or a week to water
-crops, harvest crops, or take care of animals. In Spring they only talk about their Tea Party, and you
-must talk to the same sprite five times to get any work out of it. They look identical except for the
+help (the better it likes you, the more likely it agrees), then hire it for 1 day, 3 days, or a week,
+starting the next day, to water crops, harvest crops, or take care of animals. In Spring they only talk
+about their Tea Party, and you must talk to the same sprite five times to get any work out of it. They
+look identical except for the
 color of their hat and shirt, and the seven colors together span the rainbow. In Vivera each sprite is a
 named subagent: the name and the color stay, but a sprite gets a fixed role in `agents/crew.json`
 instead of a free choice of job.
@@ -333,11 +334,13 @@ instead of a free choice of job.
 | **Staid** | Dark blue (the wiki also calls it indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
 | **Bold** | Purple. Birthday Spring 4. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
 
-Three things are worth knowing:
+Four things are worth knowing:
 
 - **The game tracks two numbers per sprite.** Affection rises one heart per 25 points and drops by 2
   for every day the sprite works for you. A hidden skill level per job starts at 0, rises by 1 each
   time it does that job, and tops out at 255.
+- **Weather and need both matter.** A hired sprite does not come on a blizzard or hurricane day, and
+  you cannot hire one for a job that has nothing to do that day.
 - **Jobs are a default, not a rule.** In the game any sprite can do any of the three jobs, one per
   request. In Vivera the role is fixed by the roster, while the affinity column is only the default
   for fan-out (watering is keep-alive work, animal care is long-lived assets, harvesting is
@@ -352,11 +355,14 @@ respective owners, as hosted on the
 Story). The scan edge was cropped, the print texture smoothed, and the image enlarged 2× with Real-ESRGAN
 (`realesr-animevideov3`) to 1796 × 1580 px, with no embedded metadata. It shows sprites at work rather
 than the seven by name: the wiki's per-sprite portraits come from *Friends of Mineral Town* and the
-Nintendo DS game, so they are not used here. Facts come from the
-[Back to Nature guide for the PS1](https://www.harvestmoonbacktonatureguide.com/characters.html) and the
-wiki's [Harvest Sprites (BTN)](https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)) page; the
-sources, and one conflict about hearts, are listed in the glossary. Vivera is an independent project and
-is not affiliated with the Harvest Moon franchise.</sub>
+Nintendo DS game, so they are not used here. Facts come from two PS1 guides (the
+[Back to Nature guide](https://www.harvestmoonbacktonatureguide.com/characters.html) and the
+[GameFAQs walkthrough](https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/26294))
+and the wiki's [Harvest Sprites (BTN)](https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)) page.
+No heart count is stated, because the PS1 guides give none and the wiki's "2 hearts" sits beside a
+storm claim the walkthrough contradicts. The 1-day and 3-day options and the Staid and Bold colors rest
+on the wiki alone. The glossary lists every source and what was rejected. Vivera is an independent
+project and is not affiliated with the Harvest Moon franchise.</sub>
 
 ### Claude Code agents
 
@@ -1727,7 +1733,7 @@ This glossary follows the PlayStation game only, not *Friends of Mineral Town* o
 | The seven Harvest Sprites | Chef, Nappy, Hoggy, Aqua, Bold, Timid, and Staid, each in a different color | Subagents. Fan-out sends sprites to separate fields, and each sprite owns one small chunk |
 | The Tea Party | A Spring gathering: on a sunny, non-festival day between 3:00 and 4:00 pm you give each of the seven sprites a gift they love (Flour is easiest) inside their hut, and they invite you; the reward is Relaxation Tea Leaves | The gather-and-synthesize checkpoint: reports are collected only when every dispatched sprite has reported |
 | Affection (heart levels) | Seven colors from black to red, tracked in points (blue is 20,000 to 29,999; green is 30,000 to 39,999) | Trust, measured: review findings, fresh evidence, and merged work accumulate points; nothing is approved on vibes |
-| Blue Feather | Sold at the Supermarket for 1,000G once a bachelorette reaches an orange heart; the marriage proposal item | A pull request. Opening one is the proposal, the owner's approval is the yes, and the merge is the wedding |
+| Blue Feather | Sold at the Supermarket for 1,000G once a bachelorette reaches an orange heart; the marriage proposal item, which also needs a red heart and the second house extension | A pull request. Opening one is the proposal, the owner's approval is the yes, and the merge is the wedding |
 | Ores and Saibara's Forge | Mythril, Orichalcum, and Adamantite dug from the mine; Saibara forges Orichalcum into an accessory for 1,000G and a three-day wait | Raw contributions are ore. The REFACTOR pass and the review forge them into tools, and forging has a cooldown on purpose |
 | The Shipping Bin and Zack | Produce goes in the bin and is collected and paid for each evening | The PR registry (`scripts/pr-registry.mjs`). Sessions toss verified work in, `order` computes the pickup route, and `merged` means shipped and paid |
 | Won | The traveling peddler who shows up with rare goods | The optional-tools bazaar: tgrep, rtk, context-mode, snipset, graphify. Powerful, oddly priced, and strictly opt-in |
@@ -1755,4 +1761,7 @@ seasons and the town names) are general game lore.
 - Harvest Moon: Back to Nature Guide (https://www.harvestmoonbacktonatureguide.com/girls.html), accessed 2026-10-03: heart level affection point ranges (blue 20,000 to 29,999; green 30,000 to 39,999).
 - Harvest Moon: Back to Nature Guide, Secrets page (https://www.harvestmoonbacktonatureguide.com/secrets.html), fetched 2026-10-11: Relaxation Tea Leaves come from the Spring tea party; on a sunny, non-festival day between 3:00 and 4:00 pm, give each sprite a gift they love (Flour is easiest) without leaving their house, and they invite you.
 - Harvest Moon: Back to Nature Guide, Characters page (https://www.harvestmoonbacktonatureguide.com/characters.html), a guide written for the PS1 game, fetched 2026-10-11: the sprites are in the small hut behind the church; talk to one twice to get work done, five times in Spring because of the tea party; hearts rise per 25 affection points; each working day costs 2 affection; a hidden skill per job starts at 0, rises 1 per job done, and maxes at 255; all sprites share likes and dislikes; birthdays Chef Fall 14, Nappy Winter 22, Hoggy Fall 10, Timid Summer 16, Aqua Spring 26, Staid Spring 15, Bold Spring 4. The page states no heart threshold. Its Girls page, same date: heart levels black, purple, blue, green, yellow, orange, red (red is 60,000 to 65,535).
-- Harvest Moon Wiki (Fandom), "Harvest Sprites (BTN)" (https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)), full page read 2026-10-11: at least 2 hearts; hire for 1 day, 3 days from tomorrow, or 1 week from tomorrow; only Summer, Fall, and Winter, while in Spring a sprite refuses unless you talk to it 5 times in a row; one job per request; harvesting ships crops instantly; animal care feeds, milks, and shears; identical apart from hat and shirt color; Chef red, Nappy orange, Hoggy yellow, Timid green, Aqua light blue, Staid dark blue (its trivia says indigo), Bold purple; a fourth-year event where Chef carries a lantern (the wiki's Back to Nature Screenshots category also holds `Chefevent.png`). The 2-heart threshold and the 1/3/7-day options rest on this page alone; the PS1 guide above does not contradict them. Staid's color varies between sources: the BTN table says dark blue, the BTN trivia and the FoMT page say indigo, and Ranch Story was recorded on 2026-10-04 as listing green.
+- Harvest Moon Wiki (Fandom), "Harvest Sprites (BTN)" (https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)), full page read 2026-10-11: hire for 1 day, 3 days from tomorrow, or 1 week from tomorrow; in Spring a sprite refuses unless you talk to it 5 times in a row; one job per request; harvesting ships crops instantly; animal care feeds, milks, and shears; identical apart from hat and shirt color; Chef red, Nappy orange, Hoggy yellow, Timid green, Aqua light blue, Staid dark blue (its trivia says indigo), Bold purple; a fourth-year event where Chef carries a lantern (the wiki's Back to Nature Screenshots category also holds `Chefevent.png`). Not used: its claim of "at least 2 hearts" and that sprites work through hurricanes and blizzards. The PS1 guide above gives no heart number and says storms keep the sprites away, so the page may mix versions or be wrong on both. The 1-day and 3-day options, and the Staid and Bold colors, rest on this page alone. Staid's color varies between sources: the BTN table says dark blue, the BTN trivia and the FoMT page say indigo, and Ranch Story says green.
+- GameFAQs, Harvest Moon: Back to Nature - Guide and Walkthrough - PlayStation, by Sky_Render (https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/26294), fetched 2026-10-11: the sprites are seven elfling brothers who live behind the church; the better they like you, the more likely they offer to help, and no heart number is given; jobs are watering, harvesting, or tending animals, and only when the job needs doing; they start the next day; a blizzard or hurricane keeps them away; hearts rise per 25 points, each working day costs 2 affection, and skill rises 1 per job per working day up to 255; the walkthrough hires them for 1 week; its calendar lists Hoggy Fall 10, Chef Fall 14, Timid Summer 16, and Nappy Winter 22.
+- GameFAQs, Harvest Moon: Back to Nature - Marriage FAQ - PlayStation, by Mateui N., 2001 (https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/13757), fetched 2026-10-11: marriage needs the second house extension, a girl with a red heart, and a Blue Feather bought at the Supermarket for 1,000G; orange means dating and red means in love. The PS1 guide's Girls page says "pink" once but its own table says red, so pink is treated as a slip.
+- Ranch Story wiki, Harvest Sprites (Harvest Moon: Back to Nature) (https://wiki.ranchstory.farm/index.php/Harvest_Sprites_(Harvest_Moon:_Back_to_Nature)), fetched 2026-10-11: a stub that lists different birthdays (Chef Spring 14, Nappy Summer 22, Hoggy Spring 10, Timid Spring 16) and colors (Staid green, Bold dark blue, which gives two greens and no purple). Two PS1 guides list Chef Fall 14, Hoggy Fall 10, Timid Summer 16, and Nappy Winter 22, so those dates and the page's Staid and Bold colors are not used.

@@ -1,7 +1,7 @@
-# The Vivera Farm Glossary
+# The Vivera Glossary
 
-Vivera is the name this repository goes by. The pipeline underneath is
-unchanged; the vocabulary around it borrows from *Harvest Moon: Back to
+Vivera is a fictional name inspired by Elli, one of the characters in
+*Harvest Moon: Back to Nature*. The pipeline underneath is unchanged; the vocabulary around it borrows from *Harvest Moon: Back to
 Nature* (Sony PlayStation, Victor Interactive Software, 1999; published in English by Natsume on 22 November 2000), a farming game
 about slow, patient work that pays off. The terms below are cosmetic labels
 for real pipeline concepts. When a document says "ship it", "dispatch the
@@ -16,9 +16,9 @@ This glossary follows the PlayStation game only. *Friends of Mineral Town* (a Ga
 | Power Berry | A hidden berry that permanently raises max stamina by 10; ten of them exist | A permanent capability upgrade: each merged skill or tooling change raises what the pipeline can do in a day |
 | Mystic Berry (Kappa's Berry) | Halves the fatigue rate; earned from Kappa after leaving three cucumbers in Mother Lake, one per spring day | Work that halves context fatigue: token frugality, graphify queries over raw dumps, `ctx_execute` over full output |
 | The seven Harvest Sprites | Chef, Nappy, Hoggy, Aqua, Bold, Timid, and Staid, each in a different color; they live in the hut behind the church and are hired for 1 day, 3 days, or a week, starting the next day, once they have at least 2 hearts | Subagents. Fan-out sends sprites to separate fields, and each sprite owns one small chunk. In Claude Code and OpenCode each sprite is a named agent, assigned a role in `agents/crew.json` |
-| Watering (menyiram) | One of the three farm jobs: ask a sprite to water crops, every planted square; skill is tracked per job and rises by 1 per task | Keep-alive work: rebase the session branch, rerun checks, keep in-progress crops alive until harvest |
-| Animal Care (merawat) | One of the three farm jobs: ask a sprite to feed, milk, and shear animals and ship what they give; same request rules | Long-lived assets: templates, the graph, the vault index, and docs that live across seasons, not one harvest |
-| Harvesting (memanen) | One of the three farm jobs: ask a sprite to harvest ripe crops and ship them instantly; same request rules | Shipping: gather reports, verify with fresh evidence, toss into the shipping bin (`scripts/pr-registry.mjs`), and propose the Blue Feather |
+| Watering | One of the three farm jobs: ask a sprite to water crops, every planted square; skill is tracked per job and rises by 1 per task | Keep-alive work: rebase the session branch, rerun checks, keep in-progress crops alive until harvest |
+| Animal Care | One of the three farm jobs: ask a sprite to feed, milk, and shear animals and ship what they give; same request rules | Long-lived assets: templates, the graph, the vault index, and docs that live across seasons, not one harvest |
+| Harvesting | One of the three farm jobs: ask a sprite to harvest ripe crops and ship them instantly; same request rules | Shipping: gather reports, verify with fresh evidence, toss into the shipping bin (`scripts/pr-registry.mjs`), and propose the Blue Feather |
 | Sprite dispatch affinity | Convention, not game fact: in BTN any sprite can do any of the three jobs. Default affinity only: Aqua and Bold to watering, Hoggy and Chef to harvesting, Nappy Timid and Staid to animal care; skill stays tracked per job as in the game | Dispatch default for fan-out: water-affinity sprites take keep-alive chunks, harvest-affinity sprites take gather-and-ship chunks, care-affinity sprites take long-lived asset chunks. The parent may reassign any sprite to any chunk |
 | The Tea Party | A Spring gathering: on a sunny, non-festival day between 3:00 and 4:00 pm you give each of the seven sprites a gift they love (Flour is easiest) inside their hut, and they invite you; the reward is Relaxation Tea Leaves | The gather-and-synthesize checkpoint: reports are collected only when every dispatched sprite has reported |
 | Affection (heart levels) | Seven colors black, purple, blue, green, yellow, orange, red (black 0 to 4,999; blue 20,000 to 29,999; green 30,000 to 39,999; max 65,535, bright red at 60,000); sprites separately need at least 2 hearts before they work, sprite hearts rise per 25 affection points, and each working day costs a sprite 2 affection | Trust, measured: black to blue is an unverified claim, green to yellow is evidenced work, orange opens the Blue Feather proposal, red is the merged wedding; no sprite report counts before the parent audit gate, the 2-heart rule for subagents |
@@ -33,9 +33,10 @@ This glossary follows the PlayStation game only. *Friends of Mineral Town* (a Ga
 
 ## Naming
 
-Vivera is a name the repository owner coined for this farm. It does not
-appear in Harvest Moon: Back to Nature; it is the umbrella the
-game-inspired vocabulary hangs under.
+Vivera is a fictional name inspired by Elli, one of the characters in
+Harvest Moon: Back to Nature. It is not the name of a farm or a place in the
+game, and the repository is only called the farm in the game-inspired
+vocabulary.
 
 ## Sources
 

@@ -166,7 +166,7 @@ uninstall_empty_dirs() {
 # dir prints nothing.
 clean_sprites() {
   local id="$1"
-  local dir
+  local dir why
 
   if ! sprite_target "$id" >/dev/null; then
     return 0
@@ -175,8 +175,8 @@ clean_sprites() {
   if [ ! -d "$dir" ]; then
     return 0
   fi
-  if sprite_dir_in_repo "$dir"; then
-    echo "[SKIP] $id sprites: $dir is inside this checkout; left alone"
+  if why="$(sprite_left_alone_why "$dir")"; then
+    echo "[SKIP] $id sprites: $dir $why; left alone"
     return 0
   fi
   if [ "$DRY_RUN" = true ]; then

@@ -181,17 +181,47 @@ describe('build-archive.sh', () => {
     fs.mkdirSync(notGit);
     const out = path.join(scratch, 'out-nogit');
     const r = build(['v0.1.0', out], notGit);
-    expect(r.status).not.toBe(0);
+    // The header promises exit 1 for any git failure, not git's own 128.
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('build-archive.sh:');
     const left = fs.existsSync(out) ? fs.readdirSync(out) : [];
     expect(left.filter((f) => f.includes('tar.gz'))).toEqual([]);
   });
 
-  test('an unknown ref fails and leaves no tarball', () => {
+  test('an unknown ref fails with exit 1 and a message, and leaves no tarball', () => {
     const out = path.join(scratch, 'out-badref');
     const r = build(['v0.1.0', out, 'no-such-ref'], repo);
-    expect(r.status).not.toBe(0);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('build-archive.sh:');
+    expect(r.stderr).toContain('no-such-ref');
     const left = fs.existsSync(out) ? fs.readdirSync(out) : [];
     expect(left.filter((f) => f.includes('tar.gz'))).toEqual([]);
+  });
+
+  test('no sha256sum and no shasum on PATH exits 1 with a message, before anything is written', () => {
+    const bin = path.join(scratch, 'bin-no-sha');
+    fs.mkdirSync(bin);
+    for (const tool of ['git', 'gzip', 'mkdir', 'rm', 'mv', 'cut', 'dirname']) {
+      fs.symlinkSync(Bun.which(tool), path.join(bin, tool));
+    }
+    const out = path.join(scratch, 'out-nosha');
+    const r = run('/usr/bin/bash', [BUILD, 'v0.1.0', out], { env: baseEnv({ PATH: bin, VIVERA_REPO_DIR: repo }) });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('build-archive.sh:');
+    expect(r.stderr).toMatch(/sha256sum|shasum/);
+    expect(fs.existsSync(out)).toBe(false);
+  });
+
+  test('shasum alone is enough: the checksum is the same as with sha256sum', () => {
+    const bin = path.join(scratch, 'bin-shasum');
+    fs.mkdirSync(bin);
+    for (const tool of ['git', 'gzip', 'mkdir', 'rm', 'mv', 'cut', 'dirname', 'shasum']) {
+      fs.symlinkSync(Bun.which(tool), path.join(bin, tool));
+    }
+    const out = path.join(scratch, 'out-shasum');
+    const r = run('/usr/bin/bash', [BUILD, 'v0.1.0', out], { env: baseEnv({ PATH: bin, VIVERA_REPO_DIR: repo }) });
+    expect(r.status).toBe(0);
+    expect(fs.readFileSync(`${tarball(out)}.sha256`, 'utf8')).toBe(`${sha256(tarball(out))}  vivera-v0.1.0.tar.gz\n`);
   });
 });
 

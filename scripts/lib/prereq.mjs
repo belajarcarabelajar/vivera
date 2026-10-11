@@ -16,18 +16,30 @@ export function tierRank(tier) {
   return TIER_RANK[tier];
 }
 
+// Spaces and tabs only, on purpose: the bash reader (scripts/install/prereq.sh) trims the same two
+// characters, and a different notion of "blank" is exactly how the two would disagree.
+const trimBlanks = (s) => s.replace(/^[ \t]+|[ \t]+$/g, '');
+
+// ONE normalization, mirrored line for line by check_tier_prereqs in scripts/install/prereq.sh:
+// drop a UTF-8 BOM at the start of a line and every CR, trim spaces and tabs from the line, skip a
+// blank line or one whose first character is #, then split at the first two tabs into tool,
+// required_from and loss (everything after the second tab, itself trimmed, and optional). A missing
+// tool or required_from, an unknown required_from and a duplicate tool are refused, naming the line.
 export function parseTierTable(text) {
   const rows = [];
   const seen = new Set();
   text.split('\n').forEach((raw, i) => {
-    const line = raw.replace(/\r$/, '');
-    if (line.trim() === '' || line.trimStart().startsWith('#')) return;
+    const line = trimBlanks(raw.replace(/^\uFEFF/, '').replaceAll('\r', ''));
+    if (line === '' || line.startsWith('#')) return;
     const n = i + 1;
-    const cols = line.split('\t');
-    if (cols.length < 3) {
-      throw new Error(`tiers.tsv line ${n}: expected 3 tab-separated columns, found ${cols.length}`);
+    const first = line.indexOf('\t');
+    const second = first === -1 ? -1 : line.indexOf('\t', first + 1);
+    const tool = trimBlanks(first === -1 ? line : line.slice(0, first));
+    const from = first === -1 ? '' : trimBlanks(second === -1 ? line.slice(first + 1) : line.slice(first + 1, second));
+    const loss = second === -1 ? '' : trimBlanks(line.slice(second + 1));
+    if (tool === '' || from === '') {
+      throw new Error(`tiers.tsv line ${n}: a row needs a tool and a required_from, separated by a tab`);
     }
-    const [tool, from, loss] = cols.map((c) => c.trim());
     if (!Object.hasOwn(FROM_RANK, from)) {
       throw new Error(`tiers.tsv line ${n}: unknown required_from "${from}" (expected ${Object.keys(FROM_RANK).join(', ')})`);
     }

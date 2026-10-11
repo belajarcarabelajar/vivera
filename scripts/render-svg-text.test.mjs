@@ -71,3 +71,66 @@ describe('svg_text in render-diagrams.sh', () => {
     expect(r.stdout).toBe('');
   });
 });
+
+// ---- Hardening round 2: a grep that cannot read the text nodes must not look like "unchanged" ------
+//
+// A grep without -E support prints nothing for both the staged and the committed SVG, and two empty
+// lists are equal, so a changed hero would have been kept. An empty result for a file that is not empty
+// is treated as a change instead.
+describe('svg_unchanged in render-diagrams.sh', () => {
+  const unchangedFn = SCRIPT.match(/^svg_unchanged\(\) \{\n[\s\S]*?\n\}$/m)?.[0];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-svgcmp-'));
+  const file = (name, text) => {
+    const p = path.join(dir, name);
+    fs.writeFileSync(p, text);
+    return p;
+  };
+  // A grep that prints nothing, as one without -E would, found first on PATH.
+  const shimDir = path.join(dir, 'shim');
+  fs.mkdirSync(shimDir);
+  fs.writeFileSync(path.join(shimDir, 'grep'), '#!/bin/sh\nexit 2\n', { mode: 0o755 });
+
+  const unchanged = (a, b, { shim = false } = {}) =>
+    spawnSync('/usr/bin/bash', ['-c', `${functionLine}\n${unchangedFn}\nsvg_unchanged "$1" "$2"`, 'bash', a, b], {
+      encoding: 'utf8',
+      env: { PATH: `${shim ? `${shimDir}:` : ''}/usr/bin:/bin`, LC_ALL: 'C' },
+    }).status;
+
+  const nodes = '<p>one</p><p>two<br />three</p>';
+  const a = file('a.svg', `<svg><path d="M0 0L1 1"/><foreignObject>${nodes}</foreignObject></svg>`);
+  const sameTextOtherPaths = file('b.svg', `<svg><path d="M0 0L9 9"/><foreignObject>${nodes}</foreignObject></svg>`);
+  const otherText = file('c.svg', '<svg><foreignObject><p>one</p><p>changed</p></foreignObject></svg>');
+
+  test('the function is in the script, and the publish loop calls it', () => {
+    expect(unchangedFn).toBeDefined();
+    expect(SCRIPT).toContain('svg_unchanged "$staged" "$dest"');
+  });
+
+  test('the same text nodes with other path data are unchanged', () => {
+    expect(unchanged(a, sameTextOtherPaths)).toBe(0);
+  });
+
+  test('other text nodes are changed', () => {
+    expect(unchanged(a, otherText)).toBe(1);
+  });
+
+  test('a grep that prints nothing makes two non-empty files changed, not unchanged', () => {
+    expect(unchanged(a, sameTextOtherPaths, { shim: true })).toBe(1);
+    expect(unchanged(a, a, { shim: true })).toBe(1);
+  });
+
+  test('a non-empty file with no text nodes at all is never unchanged', () => {
+    const plain = file('plain.svg', '<svg><path d="M0 0"/></svg>');
+    expect(unchanged(plain, plain)).toBe(1);
+  });
+
+  test('two empty files are equal, and an empty one against a real one is changed', () => {
+    const empty = file('empty.svg', '');
+    expect(unchanged(empty, file('empty2.svg', ''))).toBe(0);
+    expect(unchanged(empty, a)).toBe(1);
+  });
+
+  test('cleanup', () => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

@@ -1,0 +1,4 @@
+# A Windows clone with core.autocrlf would otherwise turn every installer script into CRLF, and
+# `set -euo pipefail` followed by a carriage return is not a valid bash command.
+*.sh text eol=lf
+scripts/install/tiers.tsv text eol=lf

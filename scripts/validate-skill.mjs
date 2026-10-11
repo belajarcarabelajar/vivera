@@ -162,8 +162,20 @@ const skip = (what, why) => {
 // `gh` is required because the PR delivery stage calls `gh pr create` and `gh pr view`.
 // Auth is not checked: `gh auth status` reaches the network and can prompt.
 {
-  const tierFlag = process.argv.indexOf('--tier');
-  const tier = tierFlag !== -1 ? process.argv[tierFlag + 1] : process.env.VIVERA_TIER || 'full';
+  // `--tier x` and `--tier=x` both count, and the last one given wins, as in install.sh.
+  let tierArg;
+  let tierGiven = false;
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--tier') {
+      tierGiven = true;
+      tierArg = argv[++i];
+    } else if (argv[i].startsWith('--tier=')) {
+      tierGiven = true;
+      tierArg = argv[i].slice('--tier='.length);
+    }
+  }
+  const tier = tierGiven ? tierArg : process.env.VIVERA_TIER || 'full';
   if (!TIERS.includes(tier)) {
     console.error(`❌ Invalid tier "${tier ?? ''}" (from --tier or VIVERA_TIER). Expected one of: ${TIERS.join(', ')}.`);
     process.exit(2);

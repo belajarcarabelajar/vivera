@@ -68,12 +68,23 @@ sha256_of() {
   fi
 }
 
+# Without either tool the shell would exit 127 from deep inside the command substitution below.
+if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+  echo "build-archive.sh: need sha256sum or shasum to write the checksum" >&2
+  exit 1
+fi
+
 mkdir -p "$outdir"
 tmp_archive="$outdir/.$archive.partial.$$"
 tmp_sum="$outdir/.$archive.sha256.partial.$$"
 trap 'rm -f -- "$tmp_archive" "$tmp_sum"' EXIT
 
-git -C "$repo" -c tar.umask=0002 archive --format=tar --prefix="vivera-$tag/" "$ref" | gzip -n > "$tmp_archive"
+# Tested as a condition so a failing git (128 for a bad ref or a non-repository) or gzip is reported
+# as this script's own exit 1, as the header says, instead of the raw status of the pipeline.
+if ! git -C "$repo" -c tar.umask=0002 archive --format=tar --prefix="vivera-$tag/" "$ref" | gzip -n > "$tmp_archive"; then
+  echo "build-archive.sh: could not archive $ref of $repo" >&2
+  exit 1
+fi
 digest="$(sha256_of "$tmp_archive")"
 [ -n "$digest" ] || { echo "build-archive.sh: could not compute the SHA-256 of $archive" >&2; exit 1; }
 printf '%s  %s\n' "$digest" "$archive" > "$tmp_sum"

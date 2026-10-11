@@ -165,15 +165,9 @@ test('tier: -h lists --tier on stdout and exits 0', () => {
 // not in the usage text and answer "not implemented yet" until T07 to T09 replace the stubs; those
 // tasks rewrite this block.
 describe('modes', () => {
-  for (const mode of ['check', 'update', 'uninstall']) {
-    test(`modes: --${mode} exits 2 as not implemented yet and writes nothing`, () => {
-      const sb = sandbox({ tools: ['git', 'bun'] });
-      const r = sb.run([`--${mode}`]);
-      expect(r.status).toBe(2);
-      expect(r.stderr).toContain(`${mode} is not implemented yet`);
-      expect(sb.snapshot()).toEqual([]);
-    });
-  }
+  // --check is implemented (T07, scripts/install-check.test.mjs); its stub assertion is gone.
+  // --update is implemented (T08, scripts/install-update.test.mjs); its stub assertion is gone.
+  // --uninstall is implemented (T09, scripts/install-uninstall.test.mjs); its stub assertion is gone.
 
   test('modes: a second mode flag exits 2 asking to choose one', () => {
     const sb = sandbox({ tools: ['git', 'bun'] });

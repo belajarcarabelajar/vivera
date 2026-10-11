@@ -26,7 +26,7 @@ The skill is four components in sequence — **Brainstorming → Writing Plans �
 </picture>
 
 <p align="center">
-  <em>Execution lifecycle. A request is classified as Spike, Bounded, or Architectural, passes the brainstorming and plan-approval gates, runs through TDD, debugging, or subagent orchestration, clears the verification gate, and closes with a debt sweep.</em>
+  <em>Execution lifecycle, from a request to a verified delivery and debt sweep.</em>
 </p>
 
 ---
@@ -253,7 +253,7 @@ successful `./install.sh` means the harness is not installed — it is not a fai
 <p align="center">
   <img alt="Official Back to Nature artwork of the Harvest Sprites: little elves in knit caps watering sprouts with a green can, carrying an egg, and riding a cow and a chicken." src="docs/images/btn-harvest-sprites.jpg" width="100%">
   <br>
-  <em>The seven Harvest Sprites at work on the farm: watering sprouts, carrying an egg, and riding a cow and a chicken. Official artwork from Harvest Moon: Back to Nature (PlayStation), © its respective owners.</em>
+  <em>The seven Harvest Sprites at work. Official Back to Nature artwork © its owners.</em>
 </p>
 
 This section follows the PlayStation game *Harvest Moon: Back to Nature* (Victor Interactive Software,

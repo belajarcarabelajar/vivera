@@ -16,6 +16,11 @@ import {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VALIDATOR = path.join(ROOT, 'scripts', 'validate-skill.mjs');
+// The validator runs on the real tree; its tier check exits first, but a throwaway HOME keeps the user's
+// own HOME out of the run if that early exit were ever lost.
+const throwawayHome = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-prereq-home-'));
+process.on('exit', () => fs.rmSync(throwawayHome, { recursive: true, force: true }));
+const validatorEnv = (extra = {}) => ({ ...process.env, HOME: throwawayHome, ...extra });
 
 const SAMPLE = [
   '# tool<TAB>required_from<TAB>capability lost',
@@ -207,7 +212,7 @@ describe('validate-skill tier flag', () => {
   // the slow Mermaid gates, so a bad value must exit 2 within seconds.
   test('--tier bogus exits 2 and names the value', () => {
     const r = spawnSync(process.execPath, [VALIDATOR, '--tier', 'bogus'], {
-      cwd: ROOT, encoding: 'utf8', timeout: 60_000,
+      cwd: ROOT, encoding: 'utf8', timeout: 60_000, env: validatorEnv(),
     });
     expect(r.status).toBe(2);
     expect(`${r.stdout}${r.stderr}`).toContain('bogus');
@@ -215,14 +220,14 @@ describe('validate-skill tier flag', () => {
 
   test('VIVERA_TIER=bogus exits 2 as well', () => {
     const r = spawnSync(process.execPath, [VALIDATOR], {
-      cwd: ROOT, encoding: 'utf8', timeout: 60_000, env: { ...process.env, VIVERA_TIER: 'bogus' },
+      cwd: ROOT, encoding: 'utf8', timeout: 60_000, env: validatorEnv({ VIVERA_TIER: 'bogus' }),
     });
     expect(r.status).toBe(2);
   }, 65_000);
 });
 
 describe('validate-skill --tier=<x> (the equals form)', () => {
-  const run = (args, env = {}) => spawnSync(process.execPath, [VALIDATOR, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 60_000, env: { ...process.env, ...env } });
+  const run = (args, env = {}) => spawnSync(process.execPath, [VALIDATOR, ...args], { cwd: ROOT, encoding: 'utf8', timeout: 60_000, env: validatorEnv(env) });
 
   test('--tier=bogus exits 2 and names the value, like --tier bogus', () => {
     const r = run(['--tier=bogus']);

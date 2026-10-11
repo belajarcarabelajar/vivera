@@ -304,7 +304,7 @@ Look before you install, and check afterwards:
 ```
 
 `--check` prints `check: CURRENT` and exits 0 when every selected target is in order, exits 1 when it found a
-problem, and exits 2 when no selected target has skills to check (for example `--only codex`); a machine with nothing installed exits 1. A bad flag, an unknown target id or an unset `HOME`
+problem, and exits 2 when no selected target has skills and no sprite directory can be checked (for example `--only codex` with `--tier minimal`, or on a machine without `bun`; with `bun` present, `--only codex` checks the sprite directory and exits 1 if it is missing). A machine with nothing installed exits 1. A bad flag, an unknown target id or an unset `HOME`
 exits 2.
 
 ### Install channels
@@ -320,7 +320,7 @@ column says how far each one was tested. "Verified" means run on Linux x86_64 (A
 | `scripts/bootstrap.sh` | `curl -fsSL <url>/bootstrap.sh \| bash -s -- --ref v1.2.3 -- --tier standard`. It accepts only a release tag (never a branch or a SHA), downloads the archive and its `.sha256`, checks the SHA-256 before it extracts anything, extracts into `${XDG_DATA_HOME:-$HOME/.local/share}/vivera/<tag>/` (`VIVERA_HOME` or `--dest` changes the place), then runs the extracted `install.sh` with the arguments after `--`. | Not verified against a real release: there are 0 tags, and the tests use `file://` fixtures plus loopback http and self-signed https servers (to prove a plain-http base and an https-to-http redirect are refused); nothing is fetched from github.com. `<url>` is a placeholder, because where `bootstrap.sh` will be served is not decided: do not run that line from this README. |
 | Release workflow | `.github/workflows/release.yml` runs only when a person dispatches it, with the inputs `tag` and `dry_run` (default true). A dry run runs the read-only `build` job and publishes nothing. `publish` runs only when `dry_run` is false, only on the default branch, and refuses a tag or release that already exists. | Not run. The first real publish is a human decision. |
 | Docker and devcontainer | `Dockerfile` (base `oven/bun:1.4.2-debian`, the base image's non-root `bun` user (uid 1000), runs `./install.sh --tier standard --only agents`) and `.devcontainer/devcontainer.json`, which builds the `base` stage. | Not verified: `docker` and `podman` are absent here, nothing was built, and the tests only read the files. |
-| `install.ps1` (Windows native) | A PowerShell installer: `install.ps1` in the repository root plus `scripts/install/windows-core.ps1` and `scripts/install/windows-ops.ps1`, which it loads from the checkout. It copies and never makes a symlink, installs the skills only (no sprite agents: use `./install.sh` from WSL or Git Bash), and takes `-Tier -Only -Skip -DryRun -Check -Update -Uninstall`. | Parsed and run under PowerShell 7.6.6 on Linux, by behaviour tests that run when `pwsh` is on `PATH` (or named in `PWSH`) and skip otherwise. **Not verified on Windows, on Windows PowerShell 5.1 or on NTFS junctions.** Start with `-DryRun`, then `-Check`. |
+| `install.ps1` (Windows native) | A PowerShell installer: `install.ps1` in the repository root plus `scripts/install/windows-core.ps1` and `scripts/install/windows-ops.ps1`, which it loads from the checkout. It copies and never makes a symlink, installs the skills only (no sprite agents: use `./install.sh` from WSL or Git Bash), and takes `-Only -Skip -DryRun -Check -Update -Uninstall -Help` (`-Tier` is accepted and ignored: skills only at every tier). Run it as `powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1 -DryRun`. | Parsed and run under PowerShell 7.6.6 on Linux, by behaviour tests that run when `pwsh` is on `PATH` (or named in `PWSH`) and skip otherwise. **Not verified on Windows, on Windows PowerShell 5.1 or on NTFS junctions.** Start with `-DryRun`, then `-Check`. |
 | Claude Code marketplace | The repository as a one-plugin marketplace. | **Parked**, see below. |
 | Antigravity plugin (`agy plugin`) | `agy plugin install` from a GitHub URL or a local path. | Adopt later: nothing was installed. See below. |
 
@@ -357,7 +357,7 @@ and the validator cannot disagree about a tier.
 | Tier | Needs on your machine | What it installs |
 |---|---|---|
 | `minimal` | Nothing beyond bash and `basename`, `dirname`, `head`, `ln`, `mkdir`, `readlink` and `uname` (`--copy` also needs `cmp` and `diff`). | The skills only: no sprite agents (they need `bun`) and no git hook (it needs `git`). Verified with `git` and `bun` absent from `PATH`: install exits 0 and `--check` prints `check: CURRENT` (with ` (sprite agents not verified: ...)` appended when a sprite harness is selected). |
-| `standard` (default) | `git`, `bun` | The skills, the sprite agents and the git hook. A missing `gh` or `tgrep` prints one warning each, and the run goes on. The other optional tools in the table below (`rtk`, `context-mode`, `opencode`, `snipset`, `graphify`) warn the same way, so a bare machine sees seven warnings. |
+| `standard` (default) | `git`, `bun` | The skills and the sprite agents, plus the git hook when `graphify` is installed and this is a git checkout. A missing `gh` or `tgrep` prints one warning each, and the run goes on. The other optional tools in the table below (`rtk`, `context-mode`, `opencode`, `snipset`, `graphify`) warn the same way, so a bare machine sees seven warnings. |
 | `full` | `git`, `bun`, `gh`, `tgrep` | The same files as `standard`. It only makes `gh` and `tgrep` mandatory. |
 
 The tools, from `scripts/install/tiers.tsv`:
@@ -374,7 +374,8 @@ The tools, from `scripts/install/tiers.tsv`:
 | `opencode` | never | The OpenCode harness. |
 | `snipset` | never | Snipset database and MCP tools. |
 
-- **A required tool that is missing exits 1.** At `standard` and `full`, a tool the chosen tier does not require prints one warning
+- **A required tool that is missing exits 1.** That is `git` and `bun` at `standard`, plus `gh` and `tgrep` at `full`.
+- **An optional tool that is missing warns.** At `standard` and `full`, a tool the chosen tier does not require prints one warning
   that names what is lost, and the run goes on. The installer finds a tool on `PATH`, then in
   `~/.local/bin`, then in `~/.bun/bin`.
 - **`--check` and `--uninstall` ask for no tool, at any tier.** The sprite agent directories are checked and
@@ -425,7 +426,7 @@ other target is installed only when its harness is detected, or when you name it
 | `antigravity-cli` | Antigravity CLI (`agy`) | `~/.gemini/antigravity-cli` exists, or `agy` is on `PATH` | `~/.gemini/antigravity-cli/skills/` | none | n/a |
 | `antigravity-builtin` | Antigravity CLI built-in skills dir | `~/.gemini/antigravity-cli/builtin/skills` exists | `~/.gemini/antigravity-cli/builtin/skills/` | none | n/a |
 | `gemini-cli` | Gemini CLI | `gemini` is on `PATH` | `~/.gemini/skills/` | none | n/a |
-| `opencode` | OpenCode | `~/.config/opencode` exists, or `opencode` is on `PATH` | `~/.config/opencode/skills/` | `~/.config/opencode/agents/<sprite>.md` | verified (OpenCode v2.0.24) |
+| `opencode` | OpenCode | `~/.config/opencode` exists, or `opencode` is on `PATH` | `~/.config/opencode/skills/` | `~/.config/opencode/agents/<sprite>.md` | listed in `opencode debug agents` (OpenCode v2.0.24), not run with a prompt |
 | `claude` | Claude Code | `~/.claude` exists (no CLI probe) | `~/.claude/skills/` | `~/.claude/agents/<sprite>.md` | not verified (Claude Code 2.1.296) |
 | `codex` | Codex | `~/.codex` exists, or `codex` is on `PATH` | none | `~/.codex/agents/<sprite>.toml` | not verified (CLI not installed here) |
 | `cursor` | Cursor | `~/.cursor` exists, or `cursor-agent` is on `PATH` | none | `~/.cursor/agents/<sprite>.md` | not verified (CLI not installed here) |

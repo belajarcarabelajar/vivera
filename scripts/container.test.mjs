@@ -12,6 +12,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { INSTALL_PAYLOAD } from './lib/install-sandbox.mjs';
@@ -64,9 +65,16 @@ function installerCalls(cmd) {
 }
 const flagsOf = (calls) => calls.flatMap((c) => c.match(/--[a-z][a-z-]*/g) ?? []);
 
+// -h exits before the installer acts, but this runs the real install.sh in the real checkout, so it gets a
+// throwaway HOME: if that early exit ever regressed, nothing of the user's would be touched.
 const help = (() => {
-  const r = Bun.spawnSync(['bash', './install.sh', '-h'], { cwd: ROOT });
-  return { status: r.exitCode, text: r.stdout.toString() };
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-container-help-'));
+  try {
+    const r = Bun.spawnSync(['bash', './install.sh', '-h'], { cwd: ROOT, env: { PATH: process.env.PATH ?? '', HOME: home } });
+    return { status: r.exitCode, text: r.stdout.toString() };
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true });
+  }
 })();
 const devcontainer = JSON.parse(read('.devcontainer/devcontainer.json'));
 

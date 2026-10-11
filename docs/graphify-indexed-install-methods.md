@@ -31,7 +31,7 @@ install Bun and git, run `./install.sh`". The Intent Lock fixed five areas:
 | Path | Role |
 |---|---|
 | `install.sh` | argument parsing and dispatch |
-| `scripts/install/` | `lib.sh`, `place.sh`, `prereq.sh`, `targets.sh`, `check.sh`, `update.sh`, `uninstall.sh`, `sprites.sh`, `tiers.tsv`, `windows-core.ps1`, `windows-ops.ps1` |
+| `scripts/install/` | `lib.sh`, `digest.sh`, `place.sh`, `prereq.sh`, `targets.sh`, `check.sh`, `update.sh`, `uninstall.sh`, `sprites.sh`, `tiers.tsv`, `windows-core.ps1`, `windows-ops.ps1` |
 | `install.ps1` | Windows installer entry point, copy mode |
 | `scripts/bootstrap.sh`, `scripts/release/build-archive.sh`, `.github/workflows/release.yml` | the tarball channel |
 | `Dockerfile`, `.dockerignore`, `.devcontainer/devcontainer.json` | the container channel (never built here) |
@@ -49,6 +49,8 @@ install Bun and git, run `./install.sh`". The Intent Lock fixed five areas:
 | AC-8, AC-9 | the sandbox never touches the real HOME; offline and dry-run are pure | `scripts/install-baseline.test.mjs`, `scripts/install-matrix.test.mjs` |
 | AC-10, AC-11 | bootstrap and release workflow | `scripts/bootstrap.test.mjs`, `scripts/release-archive.test.mjs` |
 | AC-13, AC-14 | container and Windows installer | `scripts/container.test.mjs`, `scripts/install-ps1.test.mjs`, `scripts/install-ps1-run.test.mjs` |
+| AC-12, AC-17 | the Claude Code marketplace and `agy plugin` were researched, not built: parked and adopt later, each with its reason | research notes in `docs/code-plan/research/` (not graph-indexed), summarized in `README.md` |
+| AC-18 | the maintainer's own machine is repaired from the merged checkout (`./install.sh --check`, then `--update`) | after the merge, not in this branch |
 | AC-15, AC-16 | README states every channel, tier and platform with a verified label; sprites for six harnesses | `README.md`, `scripts/sprite-agents/` |
 | AC-19, AC-20 | local verification and this index | plan task T29, this file |
 

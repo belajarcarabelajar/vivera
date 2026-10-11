@@ -15,6 +15,7 @@ import {
   hasStrictMermaidFence,
   extractMermaidBlocksStrict,
   renderMermaidBatch,
+  checkGateCatalog,
 } from './validate-lib.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -778,6 +779,10 @@ for (const snip of requiredSnippets) {
     { label: 'the root-cause row names its trigger', file: rules, needle: 'only where the debugging trigger requires an RCA gate' },
     { label: 'a late sweep answer is recorded in the handoff (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'is appended to the handoff' },
     { label: 'a late sweep answer is recorded in the handoff (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'is appended to the handoff' },
+    { label: 'an absent graphify is recorded in the handoff Evidence row', file: 'snippets/orkestrasi-overnight.md', needle: 'append one line saying so to the handoff Evidence row' },
+    { label: 'no question tool in an unattended run still lists the follow-ups (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'the final message lists them as a numbered list' },
+    { label: 'no question tool in an unattended run still lists the follow-ups (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'the final message lists them as a numbered list' },
+    { label: 'the sweep skill names the unattended backlog path', file: sweep, needle: 'also go to the plan backlog' },
     { label: 'anti-pattern row for a plain-text ask', file: rules, needle: '"Shall I proceed?" in plain text' },
     { label: 'orchestrator routes every gate through the protocol', file: orchestrator, needle: 'Every approval gate is asked through the Confirmation Protocol' },
     { label: 'brainstorm points at the protocol', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'Confirmation Protocol' },
@@ -820,6 +825,19 @@ for (const snip of requiredSnippets) {
     }
   }
   if (typedApprovalClean) console.log('✅ No typed-approval phrase remains');
+
+  // The needles above pin wording; this pins the table's shape (header cap, unique
+  // headers, safe-option-first). Logic and tests live in validate-lib.mjs.
+  const catalogFile = path.join(rootDir, rules);
+  const catalogProblems = checkGateCatalog(fs.existsSync(catalogFile) ? fs.readFileSync(catalogFile, 'utf8') : '');
+  if (catalogProblems.length === 0) {
+    console.log('✅ Gate catalog shape is valid');
+  } else {
+    for (const problem of catalogProblems) {
+      console.error(`❌ Gate catalog: ${problem}`);
+      errors++;
+    }
+  }
 }
 
 // 3e. The snippet manifest must stay consistent with the files it tracks.

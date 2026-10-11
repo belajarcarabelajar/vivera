@@ -14,6 +14,7 @@ triggers:
 Unified pipeline for AI coding agents: idea → design → plan → implementation → verification. Merges brainstorming, writing-plans, TDD, verification-before-completion.
 ## HARD GATE
 No implementation, no scaffolding, no code — until human partner approves stated intent. Applies to every path, every task. Ceremony scales with task size. Approval gate never scales down.
+Every approval gate is asked through the Confirmation Protocol in `sucp-rules`: a call to the harness's own question tool with ready-made options, never a plain-text question that makes the user type the answer.
 
 ## ⚖️ Instruction Precedence
 When instructions appear to conflict, resolve them in this order:

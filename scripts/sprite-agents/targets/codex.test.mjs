@@ -21,7 +21,10 @@ const CREW = path.join(ROOT, 'agents', 'crew.json');
 const PINNED_KEYS = ['name', 'description', 'developer_instructions', 'sandbox_mode'];
 const READ_ONLY = ['timid', 'aqua', 'staid'];
 const WRITERS = ['chef', 'nappy', 'hoggy', 'bold'];
-const SKILL_HOW = 'by naming it with a $ mention';
+// skills/src/selection.rs (rust-v0.162.1) collects $ mentions from UserInput::Text and
+// UserInput::Skill only, so the line cannot promise a preload: it asks for a best-effort
+// load and names the user route.
+const SKILL_HOW = 'if it is available to you (the user can also name it with a $ mention)';
 
 const plan = loadCrewPlan({ rolesDir: ROLES, crewFile: CREW });
 const render = (template, member = { sprite: 'chef', role: 'implementer', color: 'red' }) => codex.render(template, member, {});
@@ -91,6 +94,32 @@ describe('codex target', () => {
           expect(lines[0].startsWith(MARKER)).toBe(true);
           expect(lines[1]).toBe(proseGuard().comment);
         });
+
+        test('a read-only sprite says in a comment that sandbox_mode may not be enforced, and a writer has no such comment', () => {
+          const lines = text.split('\n');
+          const comments = lines.filter((l) => l.startsWith('#'));
+          if (READ_ONLY.includes(member.sprite)) {
+            const at = lines.indexOf('sandbox_mode = "read-only"');
+            expect(at).toBeGreaterThan(1);
+            // The explanation sits directly above the line it is about.
+            expect(lines[at - 1].startsWith('#')).toBe(true);
+            const note = comments.slice(2).join('\n');
+            expect(note).toContain('may not enforce sandbox_mode');
+            expect(note).toContain('prose guard');
+            expect(note).toContain("parent session's sandbox");
+            expect(note).toContain('role_tests.rs');
+            expect(note).toContain('#45482');
+            expect(note).toContain('#40130');
+            expect(note.toLowerCase()).toContain('reported, not verified');
+            expect(note).not.toMatch(/[^\x20-\x7e\n]/);
+            // The note is a TOML comment for the reader of the file, not text the agent is told.
+            expect(parsed.developer_instructions).not.toContain('role_tests.rs');
+          } else {
+            expect(comments).toEqual([lines[0], proseGuard().comment]);
+            expect(text).not.toContain('role_tests.rs');
+            expect('sandbox_mode' in parsed).toBe(false);
+          }
+        });
       });
     }
 
@@ -102,10 +131,20 @@ describe('codex target', () => {
   describe('output shape', () => {
     test('writes the keys in the documented order and closes the multi-line string', () => {
       const text = render(tpl('\nBody.\n', 'tools: Read\n'));
-      const lines = text.split('\n');
-      expect(lines.slice(2, 6).map((l) => l.split(' = ')[0])).toEqual(['name', 'description', 'sandbox_mode', 'developer_instructions']);
-      expect(lines[5]).toBe("developer_instructions = '''");
+      // Comment lines (the marker, the guard label, the sandbox note) are not keys.
+      const lines = text.split('\n').filter((l) => !l.startsWith('#'));
+      expect(lines.slice(0, 4).map((l) => l.split(' = ')[0])).toEqual(['name', 'description', 'sandbox_mode', 'developer_instructions']);
+      expect(lines[3]).toBe("developer_instructions = '''");
       expect(text.endsWith("Body.\n'''\n")).toBe(true);
+    });
+
+    test('words the skill line as best effort and never says the harness loads it', () => {
+      const inner = Bun.TOML.parse(render(tpl('\nBody.\n', 'skills:\n  - sucp-tdd-debug\n'))).developer_instructions;
+      const line = inner.split('\n')[0];
+      expect(line).toContain('Load the `sucp-tdd-debug` skill if it is available to you');
+      expect(line).toContain('the user can also name it with a $ mention');
+      expect(line).not.toContain('by naming it with a $ mention');
+      expect(line).not.toMatch(/preload|automatic|harness loads|codex loads/i);
     });
 
     test('puts the skill line, the guard, and the body in that order, one blank line apart', () => {

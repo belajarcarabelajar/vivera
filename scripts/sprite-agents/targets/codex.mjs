@@ -8,6 +8,18 @@ import { MARKER } from '../sync.mjs';
 const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
 // A TOML multi-line literal string cannot hold these, and has no escape for them.
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+// Written above a read-only sprite's sandbox_mode. The role.rs and role_tests.rs claims were read
+// in the source at the tag named; the two issues are user reports, read but not reproduced here.
+const SANDBOX_NOTE = [
+  '# sandbox_mode below is a request: Codex may not enforce sandbox_mode for a custom agent.',
+  '# In openai/codex at rust-v0.162.1 (read 2026-10-11), core/src/agent/role.rs gives',
+  '# AgentRoleOverrides no sandbox field, and role_tests.rs asserts that the role layer carries no',
+  "# sandbox_mode and that config.permissions equals the parent's.",
+  '# Reported, not verified here: issues #45482 and #40130 show a read-only agent writing under',
+  '# a workspace-write parent.',
+  '# The only controls are the prose guard in developer_instructions (instruction only) and the',
+  "# parent session's sandbox.",
+];
 
 export function renderCodexAgent(template, member, { templateLabel = `agents/roles/${member.role}.md` } = {}) {
   const { fm, body, description, readOnly, skills } = readTemplate(template, member, { allowedKeys: TEMPLATE_KEYS, target: 'codex', templateLabel });
@@ -17,7 +29,9 @@ export function renderCodexAgent(template, member, { templateLabel = `agents/rol
 
   const guard = proseGuard();
   const parts = [];
-  const skill = skillLine(skills, 'by naming it with a $ mention');
+  // skills/src/selection.rs (rust-v0.162.1) collects $ mentions from UserInput::Text and
+  // UserInput::Skill only, so this text cannot preload a skill. It asks for a best-effort load.
+  const skill = skillLine(skills, 'if it is available to you (the user can also name it with a $ mention)');
   if (skill !== '') parts.push(skill, '');
   parts.push(guard.paragraph, '', body.replace(/^\n+/, ''));
   const instructions = parts.join('\n');
@@ -40,8 +54,9 @@ export function renderCodexAgent(template, member, { templateLabel = `agents/rol
     `name = ${tomlString(member.sprite)}`,
     `description = ${tomlString(description)}`,
     // A writer leaves sandbox_mode out and inherits the parent's. The page also says
-    // the parent's live overrides (/permissions, --yolo) win over this file.
-    ...(readOnly ? ['sandbox_mode = "read-only"'] : []),
+    // the parent's live overrides (/permissions, --yolo) win over this file. The line stays for a
+    // read-only role because the page documents it; SANDBOX_NOTE says it may not be enforced.
+    ...(readOnly ? [...SANDBOX_NOTE, 'sandbox_mode = "read-only"'] : []),
     "developer_instructions = '''",
     `${instructions.endsWith('\n') ? instructions : `${instructions}\n`}'''`,
     '',

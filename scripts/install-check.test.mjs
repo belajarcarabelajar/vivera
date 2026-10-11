@@ -244,3 +244,62 @@ test('check: it writes nothing in the checkout, the bin dir or the temp dir, whe
   expect(bare.run(['--check']).status).toBe(1);
   expect(outsideHome(bare)).toEqual(beforeBare);
 });
+
+// ---- First-use walkthrough: a copy install checked in link mode ------------------------------------
+
+// Copy mode compares content with cmp and diff, which the sandbox PATH does not carry by default.
+function copySandbox() {
+  const sb = sandbox();
+  for (const tool of ['cmp', 'diff']) fs.symlinkSync(Bun.which(tool), path.join(sb.bin, tool));
+  return sb;
+}
+
+const COPY_HINT = '[hint] those are copies made by --copy: run ./install.sh --check --copy';
+const hintLines = (r) => r.stdout.split('\n').filter((l) => l.startsWith('[hint]'));
+
+test('check: copies checked without --copy get one [hint] naming --check --copy, after the entries and before the verdict', () => {
+  const sb = copySandbox();
+  expect(sb.run(['--copy']).status).toBe(0);
+  const r = sb.run(['--check']);
+  const stale = reportLines(r).filter((l) => l.includes('a managed copy; expected a link to'));
+  expect(stale.length).toBeGreaterThan(5);
+  // The exit code and the count are what they were: one problem per stale copy.
+  expect(r.status).toBe(1);
+  expect(r.stdout).toContain(`check: ${kinds(r).filter((k) => k !== 'ok').length} problem(s)`);
+  expect(hintLines(r)).toEqual([COPY_HINT]);
+  const lines = r.stdout.split('\n');
+  const lastEntry = Math.max(...lines.map((l, i) => (LINE.test(l) ? i : -1)));
+  expect(lines.indexOf(COPY_HINT)).toBeGreaterThan(lastEntry);
+  expect(lines.indexOf(COPY_HINT)).toBeLessThan(lines.findIndex((l) => l.startsWith('check: ')));
+  // The hint is true: the same install, checked the way it was made, is current.
+  expect(sb.run(['--check', '--copy']).stdout).toContain('check: CURRENT');
+});
+
+test('check: no [hint] when no stale entry was a managed copy seen in link mode', () => {
+  // A bare home, a live link to elsewhere, a foreign file, and a differing copy in --copy mode.
+  const bare = sandbox();
+  expect(hintLines(bare.run(['--check']))).toEqual([]);
+
+  const sb = sandbox();
+  expect(sb.run([]).status).toBe(0);
+  expect(hintLines(sb.run(['--check']))).toEqual([]);
+  const dest = at(sb, `${PKG}/SKILL.md`);
+  fs.rmSync(dest);
+  fs.symlinkSync(path.join(sb.repo, 'package.json'), dest);
+  const mine = at(sb, `${PKG}/mermaid.config.json`);
+  fs.rmSync(mine);
+  fs.writeFileSync(mine, 'mine');
+  const mixed = sb.run(['--check']);
+  expect(mixed.status).toBe(1);
+  expect(kinds(mixed)).toContain('stale');
+  expect(hintLines(mixed)).toEqual([]);
+
+  const copies = copySandbox();
+  expect(copies.run(['--copy']).status).toBe(0);
+  fs.rmSync(path.join(copies.repo, 'templates'), { recursive: true });
+  fs.mkdirSync(path.join(copies.repo, 'templates'));
+  fs.writeFileSync(path.join(copies.repo, 'templates/new.md'), 'changed source');
+  const copyMode = copies.run(['--check', '--copy']);
+  expect(copyMode.stdout).toContain('(copy differs from');
+  expect(hintLines(copyMode)).toEqual([]);
+});

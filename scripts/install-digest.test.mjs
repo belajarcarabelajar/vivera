@@ -114,7 +114,7 @@ describe('F1: an edited managed copy is moved aside, an outdated one is refreshe
     fs.appendFileSync(repoFile(sb, 'mermaid.config.json'), '\n');
     const r = sb.run(['--uninstall']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain(`[KEEP] ${at(sb, `${PKG}/SKILL.md`)} (modified copy)`);
+    expect(r.stdout).toContain(`[KEEP] ${at(sb, `${PKG}/SKILL.md`)} (modified copy: it stays as it is; ./install.sh --update --copy replaces it after backing yours up)`);
     expect(read(sb, `${PKG}/SKILL.md`).endsWith('my edit\n')).toBe(true);
     expect(exists(sb, `${PKG}/mermaid.config.json`)).toBe(false);
     expect(exists(sb, `${PKG}/templates`)).toBe(false);
@@ -313,7 +313,7 @@ describe('no cmp and diff, and other digest algorithms', () => {
     for (const tool of ['cmp', 'diff']) fs.rmSync(path.join(other.bin, tool));
     const r = other.run(['--uninstall']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain(`[KEEP] ${at(other, `${PKG}/SKILL.md`)} (modified copy)`);
+    expect(r.stdout).toContain(`[KEEP] ${at(other, `${PKG}/SKILL.md`)} (modified copy: it stays as it is; ./install.sh --update --copy replaces it after backing yours up)`);
     expect(exists(other, `${PKG}/mermaid.config.json`)).toBe(false);
   });
 

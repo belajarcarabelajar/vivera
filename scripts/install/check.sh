@@ -2,8 +2,10 @@
 # Sourced by install.sh: --check mode, a read-only report of every link the selected targets should have.
 #
 # One line per path: [ok], [missing], [stale], [dangling] or [foreign]; then `check: CURRENT` (exit 0)
-# or `check: N problem(s)` (exit 1). A phase-skill dir this checkout no longer has is reported as
-# [stale] too (--update prunes it). When nothing was checked at all (no selected target has skills) the
+# or `check: N problem(s)` (exit 1). Over a copy install checked without --copy, one `[hint]` line before
+# that verdict says to run --check --copy; it changes no count and no exit code. A phase-skill dir this
+# checkout no longer has is reported as [stale] too (--update prunes it). When nothing was checked at
+# all (no selected target has skills) the
 # answer is `check: nothing to check` and exit 2, never CURRENT. Nothing is created, moved or removed,
 # and --dry-run changes nothing here. With --copy the copies are compared by content instead of the
 # links by target. A harness with sprite agents also gets one line for its sprite dir, from the
@@ -20,6 +22,8 @@
 CHECK_PROBLEMS=0
 CHECK_CHECKED=0
 CHECK_UNVERIFIED=""
+# Set when a [stale] entry was a managed copy met in link mode, so the closing [hint] is printed once.
+CHECK_COPIES_SEEN=false
 
 # Remembers one reason a sprite check was skipped, once.
 sprite_unverified() {
@@ -105,6 +109,7 @@ mode_check() {
   CHECK_PROBLEMS=0
   CHECK_CHECKED=0
   CHECK_UNVERIFIED=""
+  CHECK_COPIES_SEEN=false
 
   selected="$(select_targets)"
   for id in $selected; do
@@ -161,6 +166,7 @@ mode_check() {
             echo "[stale] $dest (copy differs from $desired)"
           else
             echo "[stale] $dest (a managed copy; expected a link to $desired)"
+            CHECK_COPIES_SEEN=true
           fi
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           ;;
@@ -186,6 +192,9 @@ mode_check() {
     check_sprites "$id"
   done
 
+  if [ "$CHECK_COPIES_SEEN" = true ]; then
+    echo "[hint] those are copies made by --copy: run ./install.sh --check --copy"
+  fi
   note=""
   if [ -n "$CHECK_UNVERIFIED" ]; then
     note="sprite agents not verified: $CHECK_UNVERIFIED"

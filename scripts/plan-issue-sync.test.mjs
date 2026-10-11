@@ -252,6 +252,49 @@ test('the trailer does not disturb a plan that itself contains an HTML comment',
   assert.equal(parseTrailer(body).key, 'k');
 });
 
+// GitHub rejects an issue body over 65,536 characters (measured on Snipset,
+// 2026-10-12: "Body is too long (maximum is 65536 characters) (createIssue)").
+// Each LF is counted as CRLF here, the most a stored body can grow to.
+const GITHUB_BODY_LIMIT = 65536;
+const githubLength = (s) => s.length + (s.match(/\n/g) || []).length;
+const longPlan = (lines) => plan('Draft', Array.from({ length: lines }, (_, i) => `- step ${i} ${'x'.repeat(48)}`).join('\n'));
+const TRUNCATION_MARKER = /^\*\*Truncated:\*\* this issue shows the first (\d+) of (\d+) characters of the plan, cut at a line boundary to fit GitHub's 65,536-character body limit\. The full plan is `([^`]+)` in the repository\.$/m;
+
+test('a plan too long for one issue body keeps the longest verbatim line-boundary prefix that fits', () => {
+  const text = longPlan(1400);
+  assert.ok(githubLength(text) > GITHUB_BODY_LIMIT, 'fixture must exceed the GitHub limit');
+  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
+  assert.ok(githubLength(body) <= GITHUB_BODY_LIMIT - 256, `body counts ${githubLength(body)}, leaving no headroom`);
+  const m = body.match(TRUNCATION_MARKER);
+  assert.ok(m, 'a truncated body must say so in one explicit line');
+  const n = Number(m[1]);
+  assert.equal(body.slice(0, n), text.slice(0, n), 'the kept part is the plan verbatim, never a summary');
+  assert.equal(text[n], '\n', 'the cut falls on a line boundary');
+  assert.ok(n > 60000, `the prefix is the longest that fits, got ${n}`);
+});
+
+test('a truncated body names N of M characters and the plan repository path, then the unchanged trailer', () => {
+  const text = longPlan(1400);
+  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
+  const m = body.match(TRUNCATION_MARKER);
+  assert.ok(m);
+  assert.equal(Number(m[2]), text.length);
+  assert.equal(m[3], PLAN_REL);
+  assert.ok(body.indexOf(m[0]) < body.lastIndexOf('<!-- plan-sync:'), 'the marker precedes the trailer');
+  const t = parseTrailer(body);
+  assert.equal(t.key, PLAN_REL);
+  // The hash stays over the FULL plan, so drift detection does not change.
+  assert.equal(t.hash, hashOf(text));
+});
+
+test('a plan under the limit keeps the byte-for-byte body with no truncation marker', () => {
+  const text = longPlan(1000);
+  assert.ok(text.length > 55000 && githubLength(text) < GITHUB_BODY_LIMIT - 1024);
+  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
+  assert.ok(body.startsWith(`${text.replace(/\s*$/, '')}\n---\n`));
+  assert.doesNotMatch(body, /Truncated/);
+});
+
 // ---------- readLiveState: the one read that makes `current` falsifiable ----------
 
 test('the live state is read from the issue itself, with an explicit --json state', () => {
@@ -555,6 +598,42 @@ test('a project with no configured repository is refused, not guessed', () => {
     assert.throws(
       () => syncOne({ version: 1, projects: {}, issues: {} }, { planPath: f.full, repoRoot: f.repoRoot, run: stub() }),
       /no GitHub repository is configured for project/,
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+
+// pr-registry.mjs claim creates <repo-parent>/<repo-basename>-wt/<slot>, whose
+// directory name is the slot, never the project.
+function sessionWorktreePlan(rootName, slot) {
+  const base = mkdtempSync(path.join(tmpdir(), 'plan-issue-wt-'));
+  const repoRoot = path.join(base, `${rootName}-wt`, slot);
+  const full = path.join(repoRoot, PLAN_REL);
+  mkdirSync(path.dirname(full), { recursive: true });
+  writeFileSync(path.join(repoRoot, '.git'), `gitdir: ${path.join(base, rootName, '.git', 'worktrees', slot)}\n`, 'utf8');
+  writeFileSync(full, plan('Draft'), 'utf8');
+  return { repoRoot, full, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+}
+
+test('a plan in a <root>-wt/<slot> session worktree syncs to the project named after <root>', () => {
+  const f = sessionWorktreePlan('Snipset', 'feature-modules');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    const res = syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run: stub({ ok: true, out: '[]' }), dryRun: true });
+    assert.equal(res.repo, 'u/snippet');
+    assert.equal(res.key, PLAN_REL, 'the key matches the root checkout, so both share one issue');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a session worktree whose root project is not configured is refused, naming the root project', () => {
+  const f = sessionWorktreePlan('Snipset', 'feature-modules');
+  try {
+    assert.throws(
+      () => syncOne({ version: 1, projects: {}, issues: {} }, { planPath: f.full, repoRoot: f.repoRoot, run: stub() }),
+      /no GitHub repository is configured for project "Snipset"/,
     );
   } finally {
     f.cleanup();

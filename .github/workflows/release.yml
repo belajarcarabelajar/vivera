@@ -20,6 +20,12 @@ name: Release
 # its checkout keeps no credentials. `publish` is the only job with
 # `contents: write`, and it runs only for a real release.
 #
+# Known and left as they are (an independent review, 2026-10-11): the actions are pinned to mutable
+# major tags (checkout@v7, upload-artifact@v7, download-artifact@v7), the same as ci.yml, and not to
+# commit SHAs; and `gh release view` in the tag check treats any failure, not only "not found", as
+# "no release yet" (its output is discarded). The review judged the second low impact because
+# `gh release create` is expected to refuse an existing release; that was not run here.
+#
 # To revert: `git rm .github/workflows/release.yml`. A release that was already
 # published is not touched by that; delete it with `gh release delete <tag>`.
 # ---------------------------------------------------------------------------

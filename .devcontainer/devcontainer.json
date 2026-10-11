@@ -5,6 +5,6 @@
     "context": "..",
     "target": "base"
   },
-  "remoteUser": "vivera",
-  "postCreateCommand": "bun install --frozen-lockfile && ./install.sh --tier standard --update --only agents"
+  "remoteUser": "bun",
+  "postCreateCommand": "bun install --frozen-lockfile --ignore-scripts && ./install.sh --tier standard --update --only agents"
 }

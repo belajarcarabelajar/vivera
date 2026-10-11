@@ -94,7 +94,7 @@ Re-ran the focused suite: `[bun test src/routes/orders.test.ts] → [exit 0] →
 
 ## 7. Session-Close Debt Sweep
 
-Harvested during the session, ranked, and offered as one multi-select question:
+Harvested during the session, ranked, and offered as one question-tool call of multi-select groups:
 
 | # | Candidate | Class | Disposition |
 |---|---|---|---|

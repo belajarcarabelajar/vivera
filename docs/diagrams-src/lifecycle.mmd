@@ -1,0 +1,55 @@
+flowchart TD
+    accTitle: Super Ultra Code Plan execution lifecycle
+    accDescr: A request is classified as Spike, Bounded, or Architectural. All paths converge on brainstorming and a visual implementation plan gated by human approval, then route to TDD, systematic debugging, or subagent orchestration with chunk-fan-out-gather-audit loop, pass a verification gate and git hygiene, and close with a session-close debt sweep. A deep research path can inject evidence at any design phase. Compaction preserves state across context resets.
+
+    Start(["🎯 User Request / Intent"]) --> Classify{"1️⃣ Task\nClassification"}
+
+    Classify -->|Spike| PathSpike["🔬 Exploratory Spike\n& Hypothesis Testing"]
+    Classify -->|Bounded < 2 files| PathBounded["⚡ Bounded Direct Fix"]
+    Classify -->|Architectural| PathArch["🏗️ Architectural\nDesign & Brainstorming"]
+
+    PathSpike --> DesignReport["📋 Spike Report\n& Recommendations"]
+    PathArch --> Brainstorm["🧠 2️⃣ Brainstorming\nAlternatives · Trade-offs · Spec lock"]
+    PathBounded --> WritePlan
+
+    DesignReport --> Brainstorm
+    Brainstorm --> Gate1{{"⏸️ Gate 1\nHuman Approval"}}
+    Gate1 -->|Revisions| Brainstorm
+    Gate1 -->|Approved| ResearchDecision{"Deep Research\nneeded?"}
+
+    ResearchDecision -->|"External info required"| GraphPreflight["🕸️ Graphify Codebase\nPreflight (optional)"]
+    GraphPreflight --> DeepResearch["🔭 Deep Research\nSearch → Fetch → Synthesize\n(TinyFish / web)"]
+    DeepResearch --> WritePlan
+    ResearchDecision -->|"Codebase sufficient"| WritePlan
+
+    WritePlan["🗺️ 3️⃣ Visual Implementation Plan\nMermaid diagram · Todo checklist · skip_if"] --> HardGate{{"🛑 Gate 2\nHARD HUMAN APPROVAL GATE"}}
+
+    HardGate -->|Revisions Requested| WritePlan
+    HardGate -->|Approved| ExecRoute{"Execution\nStrategy"}
+
+    ExecRoute -->|New Feature / Refactor| TDD["4️⃣ Test-Driven Development\nRED → GREEN → REFACTOR\nFailing test first"]
+    ExecRoute -->|Bug Isolation| Debug["🐞 4.1 Systematic Debugging\nHypothesis → Probe → Observation\n4-Phase RCA Loop"]
+    ExecRoute -->|Parallel Workstreams| ChunkPlan["📦 Chunk into smallest\nindependently verifiable units"]
+
+    ChunkPlan --> FanOut["🚀 Fan-out: 10+ narrow\nsubagents dispatched"]
+    FanOut --> SubWork["🤖 Subagents execute\nin isolated workspaces"]
+    SubWork --> Gather["🔗 Gather & synthesize\nreports · dedup · re-verify"]
+    Gather --> AuditChunk{"Chunk\naudit OK?"}
+    AuditChunk -->|"❌ Red chunk"| ReChunk["Re-chunk &\nre-dispatch alone"]
+    ReChunk --> SubWork
+    AuditChunk -->|"✅ All green"| VerifyGate
+
+    TDD --> VerifyGate
+    Debug --> VerifyGate
+
+    VerifyGate["5️⃣ Verification Before Completion\nFresh log · exit 0 · test pass · VCS diff"] --> Gate3{{"⏸️ Gate 3\nEvidence confirmed?"}}
+    Gate3 -->|Evidence insufficient| TDD
+    Gate3 -->|Evidence confirmed| GitHygiene
+
+    GitHygiene["🧹 Finishing & Git Hygiene\nCommit · PR · no co-author trailers"] --> DebtSweep["6️⃣ Session-Close Debt Sweep\n3–5 ranked follow-ups harvested"]
+    DebtSweep --> AskGate{{"🙋 Multi-Select\nFollow-Up Question"}}
+    AskGate -->|"Items selected"| SweepFix["Execute as real work:\nchunk · subagents · TDD · verify · commit"]
+    AskGate -->|"Nothing selected"| Done
+    SweepFix --> Done(["✅ Zero-Debt Session\nor Documented Deferral"])
+
+    Compact["♻️ Compaction / Context Reset\nPersist: state · decisions · evidence\nResume from last verified checkpoint"] -.->|"Continuity"| WritePlan

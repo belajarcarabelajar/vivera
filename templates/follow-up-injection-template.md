@@ -45,6 +45,8 @@ Banned from the batch: destructive, externally visible, credential-touching, or 
 
 Present through the harness's structured question mechanism (the tool table is in the Confirmation Protocol) as one question-tool call placed after the final recap. Cap: multi-select questions of at most 4 options each, at most 4 questions per call, and the last option of the last group is `Nothing, close session`. If the runtime has no question tool, render the checkbox list below as the Confirmation Protocol fallback (the gate stays closed) and say plainly that the widget is missing.
 
+The description of the recommended option begins with `Why:` and the ranking factor that put it first.
+
 - [ ] **`<option label>`** — `<one line: surface touched + finish line>` (recommended)
 - [ ] **`<option label>`** — `<one line>`
 - [ ] **`<option label>`** — `<one line>`

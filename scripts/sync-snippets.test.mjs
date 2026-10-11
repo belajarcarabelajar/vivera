@@ -190,6 +190,10 @@ test('every trigger snippet carries the same confirmations paragraph', () => {
     'Unattended Continuation Rule',
     'no interactive client is attached',
     'with no `(Recommended)` tag',
+    'starts with `Why:`',
+    'one `Facts:` line',
+    'I am not sure',
+    'never approves a gate',
   ];
   for (const token of tokens) {
     assert.ok(first.includes(token), `shared paragraph lost "${token}"`);

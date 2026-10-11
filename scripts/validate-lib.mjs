@@ -286,22 +286,34 @@ const GATE_RISKY_HEADERS = new Set(['Publish', 'Merge', 'Destructive', 'Promote'
 // Rows that are not a fixed two-option question: Blocked lists one option per way
 // forward, Follow-ups is a multi-select.
 const GATE_UNMARKED_HEADERS = new Set(['Blocked', 'Follow-ups']);
-const GATE_TABLE_HEAD_RE = /^\|\s*Gate\s*\|\s*Header\s*\|\s*Options, in order\s*\|\s*$/;
+// Matches the first three columns only, so a table that lost its Basis column is still
+// found and reported as missing that column instead of as "not found".
+const GATE_TABLE_HEAD_RE = /^\|\s*Gate\s*\|\s*Header\s*\|\s*Options, in order\s*\|/;
 
 /**
  * Check the shape of the gate catalog table in skills/sucp-rules/SKILL.md.
  * Options are not counted: labels contain commas ("Cancel, do nothing"), so a
- * split would be unreliable. Returns problem strings; empty means fine.
+ * split would be unreliable. The fourth column, Basis, must exist and be non-empty
+ * in every row. Returns problem strings; empty means fine.
  */
 export function checkGateCatalog(text) {
   const lines = text.split('\n');
   const start = lines.findIndex((line) => GATE_TABLE_HEAD_RE.test(line));
   if (start === -1) return ['table: the gate catalog (| Gate | Header | Options, in order |) was not found'];
 
+  // An escaped pipe (`\|`) is cell text in GFM, so only an unescaped pipe separates cells.
+  const splitRow = (line) =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/(?<!\\)\|$/, '')
+      .split(/(?<!\\)\|/)
+      .map((cell) => cell.replace(/\\\|/g, '|').trim());
+
   // Line start + 1 is the separator; the table ends at the first line that is not a row.
   const rows = [];
   for (let i = start + 2; i < lines.length && lines[i].startsWith('|'); i++) {
-    rows.push(lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim()));
+    rows.push(splitRow(lines[i]));
   }
 
   const problems = [];
@@ -309,15 +321,24 @@ export function checkGateCatalog(text) {
     problems.push(`table: ${rows.length} data rows found, at least ${GATE_ROWS_MIN} are required`);
   }
 
+  // Without the column every row would also lack the cell, so only the table is reported.
+  const hasBasis = splitRow(lines[start])[3] === 'Basis';
+  if (!hasBasis) problems.push('table: the header has no Basis column');
+
   const seen = new Set();
   rows.forEach((cells, index) => {
     const header = (cells[1] ?? '').replace(/`/g, '').trim();
     const options = cells[2] ?? '';
     const label = header || `row ${index + 1}`;
 
+    const expectedCells = hasBasis ? 4 : 3;
     if (cells.length < 3) {
-      problems.push(`${label}: row has ${cells.length} cells, expected 3`);
+      problems.push(`${label}: row has ${cells.length} cells, expected ${expectedCells}`);
       return;
+    }
+    // A pipe inside a cell splits it, so a long Basis would otherwise be read as its first part only.
+    if (hasBasis && cells.length > expectedCells) {
+      problems.push(`${label}: row has ${cells.length} cells, expected ${expectedCells}`);
     }
     if (!header) problems.push(`${label}: header is empty`);
     if (header.length > GATE_HEADER_MAX) {
@@ -325,6 +346,7 @@ export function checkGateCatalog(text) {
     }
     if (header && seen.has(header)) problems.push(`${label}: duplicate header`);
     seen.add(header);
+    if (hasBasis && !(cells[3] ?? '')) problems.push(`${label}: the Basis cell is empty`);
     if (!options) {
       problems.push(`${label}: options cell is empty`);
       return;

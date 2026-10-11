@@ -324,9 +324,14 @@ export function checkGateCatalog(text) {
     const options = cells[2] ?? '';
     const label = header || `row ${index + 1}`;
 
+    const expectedCells = hasBasis ? 4 : 3;
     if (cells.length < 3) {
-      problems.push(`${label}: row has ${cells.length} cells, expected 3`);
+      problems.push(`${label}: row has ${cells.length} cells, expected ${expectedCells}`);
       return;
+    }
+    // A pipe inside a cell splits it, so a long Basis would otherwise be read as its first part only.
+    if (hasBasis && cells.length > expectedCells) {
+      problems.push(`${label}: row has ${cells.length} cells, expected ${expectedCells}`);
     }
     if (!header) problems.push(`${label}: header is empty`);
     if (header.length > GATE_HEADER_MAX) {

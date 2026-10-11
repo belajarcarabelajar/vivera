@@ -647,6 +647,14 @@ test('checkGateCatalog reports a row that has no fourth cell at all as an empty 
   assert.match(problems[0], /^Probe: the Basis cell is empty$/);
 });
 
+test('checkGateCatalog reports a row with more than four cells, such as a pipe inside the Basis', () => {
+  const problems = checkGateCatalog(
+    gateTable(withRow('Probe', '| A gate | `Probe` | Run the probe (Recommended), Change the probe | Spike: an answer | not kept code |')),
+  );
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /^Probe: row has 5 cells, expected 4$/);
+});
+
 test('checkGateCatalog reports a missing table', () => {
   const problems = checkGateCatalog('No gate catalog in this text.\n');
   assert.equal(problems.length, 1);

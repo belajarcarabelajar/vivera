@@ -35,3 +35,15 @@ diagrams
 **/*.pem
 **/id_rsa*
 **/id_ed25519*
+
+# Credential stores and key material (a denylist: it names the common ones, it cannot name every secret)
+**/.npmrc
+**/.netrc
+**/.git-credentials
+**/bunfig.toml
+**/.aws
+**/credentials.json
+**/*.key
+**/*.p12
+**/.claude/.credentials.json
+**/.opencode/auth.json

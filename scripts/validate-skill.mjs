@@ -776,6 +776,8 @@ for (const snip of requiredSnippets) {
     { label: 'dismissal quotes the HARD GATE accurately', file: rules, needle: 'no implementation, scaffolding or code, as the HARD GATE says' },
     { label: 'a typed approval on a risky question must name the action', file: rules, needle: 'on a risky question it must name the action' },
     { label: 'the root-cause row names its trigger', file: rules, needle: 'only where the debugging trigger requires an RCA gate' },
+    { label: 'a late sweep answer is recorded in the handoff (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'is appended to the handoff' },
+    { label: 'a late sweep answer is recorded in the handoff (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'is appended to the handoff' },
     { label: 'anti-pattern row for a plain-text ask', file: rules, needle: '"Shall I proceed?" in plain text' },
     { label: 'orchestrator routes every gate through the protocol', file: orchestrator, needle: 'Every approval gate is asked through the Confirmation Protocol' },
     { label: 'brainstorm points at the protocol', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'Confirmation Protocol' },

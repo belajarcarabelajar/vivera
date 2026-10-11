@@ -1,6 +1,6 @@
 # Session-Close Debt Sweep & Follow-Up Injection — Template
 
-> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched multi-select question, not a report. Default 3-5 items.
+> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
 
 ---
 

@@ -8,13 +8,17 @@ name: Release
 # policy as ci.yml applies (2026-09-28): GitHub Actions minutes are scarce and a
 # release is a human decision, not a side effect of a commit.
 #
-# `dry_run` defaults to true. A dry run builds the archive and uploads it as a
-# workflow artifact, and publishes nothing. The first real publish is a human
-# decision: dispatch with `dry_run` false only after explicit confirmation, and
-# only after reading the dry-run artifact.
+# `dry_run` defaults to true. A dry run runs the `build` job only: it builds the
+# archive and uploads it as a workflow artifact, from any branch, and publishes
+# nothing. The first real publish is a human decision: dispatch with `dry_run`
+# false only after explicit confirmation, and only after reading the dry-run
+# artifact. A real release is refused unless the run is on the default branch,
+# because it creates a public tag, and it is refused when that tag or a release
+# for it already exists.
 #
-# The only permission is `contents: write`, and it is set on the job, not on
-# the workflow, because creating a release is the one thing that needs it.
+# Permissions: the workflow sets none of its own. `build` can only read, and
+# its checkout keeps no credentials. `publish` is the only job with
+# `contents: write`, and it runs only for a real release.
 #
 # To revert: `git rm .github/workflows/release.yml`. A release that was already
 # published is not touched by that; delete it with `gh release delete <tag>`.
@@ -33,15 +37,16 @@ on:
         default: true
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
+      # git archive needs no history, so the default shallow checkout is enough.
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       # The tag reaches the script through env, never through ${{ }} inside the
       # script text, so a hostile tag value cannot become shell syntax.
@@ -57,9 +62,76 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-      - name: Publish the release
-        if: ${{ inputs.dry_run == false }}
+  publish:
+    needs: build
+    if: ${{ inputs.dry_run == false }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # gh creates a missing tag at --target, which makes a public tag. Keep that
+      # to the default branch; a dry run from another branch never reaches here.
+      - name: Check that the release is made from the default branch
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/${DEFAULT_BRANCH}" ]; then
+            echo "::error::A real release must be dispatched from the default branch (${DEFAULT_BRANCH}); this run is on ${GITHUB_REF}. Use dry_run to test another branch."
+            exit 1
+          fi
+
+      # The credentials this checkout keeps are what lets git ls-remote read a
+      # private repository. No repository code is run in this job.
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      # With an existing tag, gh would attach the new archive to the old tag and
+      # ship a build of one commit under the name of another.
+      - name: Check that the tag and the release do not exist yet
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
-        run: gh release create "$TAG" dist/* --title "$TAG" --generate-notes --target "$GITHUB_SHA"
+        run: |
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null || status=$?
+          case "$status" in
+            2) ;;
+            0)
+              echo "::error::The tag $TAG already exists; releasing it would attach this archive to an older commit. Pick a new tag."
+              exit 1
+              ;;
+            *)
+              echo "::error::Could not look up the tag $TAG (git ls-remote exit status $status)."
+              exit 1
+              ;;
+          esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::A release for $TAG already exists. Pick a new tag."
+            exit 1
+          fi
+
+      - name: Download the archive
+        uses: actions/download-artifact@v7
+        with:
+          name: vivera-release
+          path: dist
+
+      - name: Verify the downloaded archive
+        env:
+          TAG: ${{ inputs.tag }}
+        run: cd dist && sha256sum -c "vivera-$TAG.tar.gz.sha256"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          flags=(--title "$TAG" --generate-notes --target "$GITHUB_SHA")
+          # A tag with a hyphen (v1.2.3-rc.1) is a prerelease and must not become Latest.
+          # gh manual, gh release create: "-p, --prerelease: Mark the release as a prerelease";
+          # "--latest: Mark this release as "Latest" (default [automatic based on date and
+          # version]). --latest=false to explicitly NOT set as latest".
+          case "$TAG" in
+            *-*) flags+=(--prerelease --latest=false) ;;
+          esac
+          gh release create "$TAG" dist/* "${flags[@]}"

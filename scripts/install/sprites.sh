@@ -8,6 +8,9 @@
 # where $CLAUDE_PROJECT_DIR is that project and has no git guard hook, so the hook path is pinned to
 # this repository. Revert by hand: rm the files in the sprite dir that carry the marker line, or run
 # ./install.sh --uninstall.
+#
+# A sprite dir inside this checkout, or reached through a symlinked directory (dotfiles), is left alone by
+# every mode: the generator would write or delete files of another tree (sprite_left_alone_why).
 
 # Ids of the harnesses whose renderer failed during this run, space separated. install and update
 # finish everything else first and then exit 1 (sprites_exit_if_failed).
@@ -56,6 +59,27 @@ sprite_dir_in_repo() {
   dest_in_repo "$dir/x"
 }
 
+# Prints why the generator must not touch <dir> and returns 0, or returns 1 when it may. The words
+# complete "<id> sprites: <dir> ...". Like skills (behind_symlinked_dir in lib.sh), a symlinked directory
+# on the way down from $HOME means another tree's files; for a dir that does not exist yet the nearest
+# directory above it decides, so install never creates files there that uninstall would then leave alone.
+sprite_left_alone_why() {
+  local dir="$1"
+  local probe="$dir"
+  if sprite_dir_in_repo "$dir"; then
+    echo "is inside this checkout"
+    return 0
+  fi
+  while [ ! -d "$probe" ] && [ "$probe" != "/" ]; do
+    probe="$(dirname "$probe")"
+  done
+  if behind_symlinked_dir "$probe/x"; then
+    echo "is reached through a symlinked directory"
+    return 0
+  fi
+  return 1
+}
+
 # Sets SPRITE_ARGS to the generator arguments of one harness (the caller adds --check or --clean).
 set_sprite_args() {
   local id="$1"
@@ -69,14 +93,14 @@ set_sprite_args() {
 # one line that says so. A generator that fails is reported, remembered and does not stop the others.
 render_sprites() {
   local id="$1"
-  local dir
+  local dir why
 
   if ! sprite_target "$id" >/dev/null || [ "$TIER" = minimal ]; then
     return 0
   fi
   dir="$(sprite_out_dir "$id")"
-  if sprite_dir_in_repo "$dir"; then
-    left_alone "$id sprites: $dir is inside this checkout; left alone"
+  if why="$(sprite_left_alone_why "$dir")"; then
+    left_alone "$id sprites: $dir $why; left alone"
     return 0
   fi
   if [ "$DRY_RUN" = true ]; then

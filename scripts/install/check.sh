@@ -7,17 +7,75 @@
 # answer is `check: nothing to check` and exit 2, never CURRENT. Nothing is created, moved or removed,
 # and --dry-run changes nothing here. With --copy the copies are compared by content instead of the
 # links by target. A harness with sprite agents also gets one line for its sprite dir, from the
-# generator's own --check ([ok], [stale] or [missing]); without bun those are [skip] lines and count
-# for nothing.
+# generator's own --check: [ok]; [missing] when every file it would render is absent (dir empty, partly
+# filled or holding only the user's files); [stale] when a generated file differs or its sprite left the
+# crew; [FAIL] with the generator's first error line when it fails for another reason (a refused
+# hand-written file, a corrupt crew.json), since --update could not fix that. A sprite check that is
+# skipped (no bun, tier minimal, a dir inside this checkout or behind a symlinked directory) is a [skip]
+# line and counts for nothing; the last line then says "sprite agents not verified: <why>" instead of a
+# bare CURRENT.
 
-# The counters live in globals so check_sprites can add to them.
+# The counters live in globals so check_sprites can add to them. CHECK_UNVERIFIED lists, separated by
+# "; ", why some sprite check was skipped.
 CHECK_PROBLEMS=0
 CHECK_CHECKED=0
+CHECK_UNVERIFIED=""
+
+# Remembers one reason a sprite check was skipped, once.
+sprite_unverified() {
+  case "; $CHECK_UNVERIFIED;" in
+    *"; $1;"*) ;;
+    *) CHECK_UNVERIFIED="${CHECK_UNVERIFIED:+$CHECK_UNVERIFIED; }$1" ;;
+  esac
+}
+
+# Runs the generator's --check for one harness and prints one line. Its stderr says which it is: a
+# refusal line ("... left untouched") or an error that does not end in the "out of date" line is not
+# drift, so [FAIL] with that first line; otherwise each drift line ends in ": missing" (no such file) or
+# in another reason (the file exists and differs), and one existing file is enough for [stale].
+check_sprite_dir() {
+  local id="$1"
+  local dir="$2"
+  local errors line first="" refused="" last="" present=0
+  local code=0
+
+  set_sprite_args "$id"
+  errors="$(bun "$REPO_DIR/scripts/gen-sprite-agents.mjs" "${SPRITE_ARGS[@]}" --check 2>&1 >/dev/null)" || code=$?
+  if [ "$code" -eq 0 ]; then
+    echo "[ok] $dir (sprite agents)"
+    return 0
+  fi
+  while IFS= read -r line; do
+    if [ -z "$line" ]; then
+      continue
+    fi
+    if [ -z "$first" ]; then
+      first="$line"
+    fi
+    last="$line"
+    case "$line" in
+      *"left untouched") refused="${refused:-$line}" ;;
+      "sprite agents are out of date:"*) ;;
+      *": missing") ;;
+      *) present=$((present + 1)) ;;
+    esac
+  done <<< "$errors"
+  CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
+  if [ -n "$refused" ]; then
+    echo "[FAIL] $id sprites: $refused"
+  elif [ "${last#sprite agents are out of date:}" = "$last" ]; then
+    echo "[FAIL] $id sprites: ${first:-the generator exited $code without a message}"
+  elif [ "$present" -eq 0 ]; then
+    echo "[missing] $dir (sprite agents)"
+  else
+    echo "[stale] $dir (sprite agents are out of date or hand-edited; --update renders them again)"
+  fi
+}
 
 # One line for a harness's sprite dir. The generator runs with --check, which writes nothing.
 check_sprites() {
   local id="$1"
-  local dir
+  local dir why
 
   if ! sprite_target "$id" >/dev/null; then
     return 0
@@ -25,30 +83,28 @@ check_sprites() {
   dir="$(sprite_out_dir "$id")"
   if [ "$TIER" = minimal ]; then
     echo "[skip] $id sprites: tier minimal renders none"
-  elif sprite_dir_in_repo "$dir"; then
-    echo "[skip] $id sprites: $dir is inside this checkout"
+    sprite_unverified "tier minimal renders none"
+  elif why="$(sprite_left_alone_why "$dir")"; then
+    echo "[skip] $id sprites: $dir $why; left alone"
+    sprite_unverified "a sprite dir $why"
   elif ! tool_available bun; then
     echo "[skip] $id sprites: bun not found"
+    sprite_unverified "bun is missing"
   elif [ ! -d "$dir" ]; then
     echo "[missing] $dir (sprite agents)"
     CHECK_CHECKED=$((CHECK_CHECKED + 1))
     CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
   else
     CHECK_CHECKED=$((CHECK_CHECKED + 1))
-    set_sprite_args "$id"
-    if bun "$REPO_DIR/scripts/gen-sprite-agents.mjs" "${SPRITE_ARGS[@]}" --check >/dev/null 2>&1; then
-      echo "[ok] $dir (sprite agents)"
-    else
-      echo "[stale] $dir (sprite agents are out of date or hand-edited; --update renders them again)"
-      CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
-    fi
+    check_sprite_dir "$id" "$dir"
   fi
 }
 
 mode_check() {
-  local selected id desired dest state target expected stale
+  local selected id desired dest state target expected stale note
   CHECK_PROBLEMS=0
   CHECK_CHECKED=0
+  CHECK_UNVERIFIED=""
 
   selected="$(select_targets)"
   for id in $selected; do
@@ -130,12 +186,16 @@ mode_check() {
     check_sprites "$id"
   done
 
+  note=""
+  if [ -n "$CHECK_UNVERIFIED" ]; then
+    note="sprite agents not verified: $CHECK_UNVERIFIED"
+  fi
   if [ "$CHECK_CHECKED" -eq 0 ]; then
-    echo "check: nothing to check (no selected target has skills)"
+    echo "check: nothing to check (no selected target has skills)${note:+; $note}"
     exit 2
   fi
   if [ "$CHECK_PROBLEMS" -eq 0 ]; then
-    echo "check: CURRENT"
+    echo "check: CURRENT${note:+ ($note)}"
     exit 0
   fi
   echo "check: $CHECK_PROBLEMS problem(s)"

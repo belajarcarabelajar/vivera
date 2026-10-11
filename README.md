@@ -166,7 +166,7 @@ vivera/
 ├── docs/
 │   ├── images/
 │   │   ├── vivera.jpg                           # README mascot artwork (metadata stripped)
-│   │   └── sprites/                             # Seven Harvest Sprite portraits, 4x enlarged (chef.png ... bold.png)
+│   │   └── btn-harvest-sprites.jpg              # Back to Nature (PS1) Harvest Sprites illustration, 2x enlarged
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
@@ -308,37 +308,55 @@ successful `./install.sh` means the harness is not installed — it is not a fai
 
 ### The Harvest Sprites
 
-In *Harvest Moon: Back to Nature* the seven Harvest Sprites (コロボックル, *Korobokkuru*) live in a small
-hut behind the Church. You can hire one for 1 day, 3 days, or a week to water crops, harvest crops, or
-take care of animals. They look identical except for the color of their hat and shirt, and the seven
-colors together span the rainbow. In Vivera each sprite is a named subagent: the name and the color
-stay, but a sprite gets a fixed role in `agents/crew.json` instead of a free choice of job.
+<p align="center">
+  <img alt="Official Back to Nature artwork of the Harvest Sprites: little elves in knit caps watering sprouts with a green can, carrying an egg, and riding a cow and a chicken." src="docs/images/btn-harvest-sprites.jpg" width="560">
+</p>
 
-| Sprite | In the game (BTN) | Role in Vivera | Default affinity | What it does |
+This section follows the PlayStation game *Harvest Moon: Back to Nature* (Victor Interactive Software,
+Japan 16 December 1999, English release by Natsume on 22 November 2000), not *Friends of Mineral Town*,
+whose sprites work differently (see the [glossary](docs/vivera-glossary.md)). In it the seven Harvest
+Sprites (コロボックル, *Korobokkuru*) live in a small hut behind the Church. Talk to one twice to ask for
+help, once it likes you enough (at least 2 hearts), then hire it for 1 day, 3 days, or a week to water
+crops, harvest crops, or take care of animals. In Spring they only talk about their Tea Party, and you
+must talk to the same sprite five times to get any work out of it. They look identical except for the
+color of their hat and shirt, and the seven colors together span the rainbow. In Vivera each sprite is a
+named subagent: the name and the color stay, but a sprite gets a fixed role in `agents/crew.json`
+instead of a free choice of job.
+
+| Sprite | In the game (PlayStation) | Role in Vivera | Default affinity | What it does |
 |---|---|---|---|---|
-| <img src="docs/images/sprites/chef.png" alt="Chef, the red Harvest Sprite" width="96"><br>**Chef** | Red. Birthday Fall 14. In the fourth year he is found afraid of the dark, carrying a lantern. | `implementer` | harvesting | Implements one chunk of an approved plan, test first, inside the permitted files. |
-| <img src="docs/images/sprites/nappy.png" alt="Nappy, the orange Harvest Sprite" width="96"><br>**Nappy** | Orange. Birthday Winter 22. | `implementer` | animal care | Same role as Chef, on a different chunk. |
-| <img src="docs/images/sprites/hoggy.png" alt="Hoggy, the yellow Harvest Sprite" width="96"><br>**Hoggy** | Yellow. Birthday Fall 10. | `implementer` | harvesting | Same role as Chef, on a different chunk. |
-| <img src="docs/images/sprites/timid.png" alt="Timid, the green Harvest Sprite" width="96"><br>**Timid** | Green. Birthday Summer 16. | `researcher` | animal care | Investigates one narrow question about the code, the history, or the web, and edits no files. |
-| <img src="docs/images/sprites/aqua.png" alt="Aqua, the light blue Harvest Sprite" width="96"><br>**Aqua** | Light blue. Birthday Spring 26. | `researcher` | watering | Same role as Timid, on a different question. |
-| <img src="docs/images/sprites/staid.png" alt="Staid, the dark blue Harvest Sprite" width="96"><br>**Staid** | Dark blue (the wiki also calls it indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
-| <img src="docs/images/sprites/bold.png" alt="Bold, the purple Harvest Sprite" width="96"><br>**Bold** | Purple. Birthday Spring 4. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
+| **Chef** | Red. Birthday Fall 14. In the fourth year he is found afraid of the dark, carrying a lantern. | `implementer` | harvesting | Implements one chunk of an approved plan, test first, inside the permitted files. |
+| **Nappy** | Orange. Birthday Winter 22. | `implementer` | animal care | Same role as Chef, on a different chunk. |
+| **Hoggy** | Yellow. Birthday Fall 10. | `implementer` | harvesting | Same role as Chef, on a different chunk. |
+| **Timid** | Green. Birthday Summer 16. | `researcher` | animal care | Investigates one narrow question about the code, the history, or the web, and edits no files. |
+| **Aqua** | Light blue. Birthday Spring 26. | `researcher` | watering | Same role as Timid, on a different question. |
+| **Staid** | Dark blue (the wiki also calls it indigo). Birthday Spring 15. | `reviewer` | animal care | Audits a diff, a subagent report, or a completion claim against fresh evidence, and edits no files. |
+| **Bold** | Purple. Birthday Spring 4. | `debugger` | watering | Isolates the root cause of one failing test or reproducible bug by hypothesis and probe, then fixes it at the shared cause. |
 
-Two differences from the game are worth knowing:
+Three things are worth knowing:
 
+- **The game tracks two numbers per sprite.** Affection rises one heart per 25 points and drops by 2
+  for every day the sprite works for you. A hidden skill level per job starts at 0, rises by 1 each
+  time it does that job, and tops out at 255.
 - **Jobs are a default, not a rule.** In the game any sprite can do any of the three jobs, one per
-  request, and its skill is tracked per job. In Vivera the role is fixed by the roster, while the
-  affinity column is only the default for fan-out (watering is keep-alive work, animal care is
-  long-lived assets, harvesting is shipping). The parent may send any sprite to any chunk. See
+  request. In Vivera the role is fixed by the roster, while the affinity column is only the default
+  for fan-out (watering is keep-alive work, animal care is long-lived assets, harvesting is
+  shipping). The parent may send any sprite to any chunk. See
   [The Vivera Farm Glossary](docs/vivera-glossary.md).
 - **Agent colors differ for two sprites.** `agents/crew.json` gives Aqua `blue` and Staid `cyan`, while
   the game has Aqua light blue and Staid dark blue.
 
-<sub>Artwork: the sprite portraits are *Harvest Moon: Back to Nature* artwork, copyright their respective
-owners, taken from the [Harvest Moon Wiki](https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN))
-(files `Harvest Sprite <color> 1.png`, 86 × 105 px). Each was enlarged 4× to 344 × 420 px with Real-ESRGAN
-(`realesrgan-x4plus-anime`) and had its embedded metadata stripped. Birthdays and colors come from the same
-wiki page. Vivera is an independent project and is not affiliated with the Harvest Moon franchise.</sub>
+<sub>Artwork: official *Harvest Moon: Back to Nature* illustration (PlayStation), copyright its
+respective owners, as hosted on the
+[Harvest Moon Wiki](https://harvestmoon.fandom.com/wiki/File:BTN_Sprites.jpg) (credited there to Ranch
+Story). The scan edge was cropped, the print texture smoothed, and the image enlarged 2× with Real-ESRGAN
+(`realesr-animevideov3`) to 1796 × 1580 px, with no embedded metadata. It shows sprites at work rather
+than the seven by name: the wiki's per-sprite portraits come from *Friends of Mineral Town* and the
+Nintendo DS game, so they are not used here. Facts come from the
+[Back to Nature guide for the PS1](https://www.harvestmoonbacktonatureguide.com/characters.html) and the
+wiki's [Harvest Sprites (BTN)](https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)) page; the
+sources, and one conflict about hearts, are listed in the glossary. Vivera is an independent project and
+is not affiliated with the Harvest Moon franchise.</sub>
 
 ### Claude Code agents
 
@@ -1681,7 +1699,7 @@ cannot see. Run it locally when you own the vault.
 
 The graphify skill copy under `.opencode/skills/graphify/` and `.opencode/plugins/graphify.js` originate from the graphify project by Safi Shamsi, MIT licensed; full notices are in `THIRD-PARTY-NOTICES.md`.
 
-This project is an independent personal pipeline and is not affiliated with, endorsed by, or sponsored by any vendor whose tools it references, including Claude, OpenCode, Gemini, TinyFish, and graphify. The Harvest Sprite portraits are fan documentation of *Harvest Moon: Back to Nature* artwork whose copyright belongs to its respective owners; Vivera is not affiliated with the Harvest Moon franchise.
+This project is an independent personal pipeline and is not affiliated with, endorsed by, or sponsored by any vendor whose tools it references, including Claude, OpenCode, Gemini, TinyFish, and graphify. The Harvest Sprites illustration is *Harvest Moon: Back to Nature* artwork whose copyright belongs to its respective owners; Vivera is not affiliated with the Harvest Moon franchise.
 
 ---
 
@@ -1693,10 +1711,12 @@ This project is an independent personal pipeline and is not affiliated with, end
 
 Vivera is the name this repository goes by. The pipeline underneath is
 unchanged; the vocabulary around it borrows from *Harvest Moon: Back to
-Nature* (Sony PlayStation, published in English in 2000), a farming game
+Nature* (Sony PlayStation, Victor Interactive Software, 1999; published in English by Natsume on 22 November 2000), a farming game
 about slow, patient work that pays off. The terms below are cosmetic labels
 for real pipeline concepts. When a document says "ship it", "dispatch the
 sprites", or "offer the Blue Feather", this is what it means.
+
+This glossary follows the PlayStation game only, not *Friends of Mineral Town* or the Nintendo DS game.
 
 | Farm term | In Back to Nature | In Vivera |
 |---|---|---|
@@ -1705,7 +1725,7 @@ sprites", or "offer the Blue Feather", this is what it means.
 | Power Berry | A hidden berry that permanently raises max stamina by 10; ten of them exist | A permanent capability upgrade: each merged skill or tooling change raises what the pipeline can do in a day |
 | Mystic Berry (Kappa's Berry) | Halves the fatigue rate; earned from Kappa after leaving three cucumbers in Mother Lake, one per spring day | Work that halves context fatigue: token frugality, graphify queries over raw dumps, `ctx_execute` over full output |
 | The seven Harvest Sprites | Chef, Nappy, Hoggy, Aqua, Bold, Timid, and Staid, each in a different color | Subagents. Fan-out sends sprites to separate fields, and each sprite owns one small chunk |
-| The Tea Party | A spring gathering held only when all seven sprites are home | The gather-and-synthesize checkpoint: reports are collected only when every dispatched sprite has reported |
+| The Tea Party | A Spring gathering: on a sunny, non-festival day between 3:00 and 4:00 pm you give each of the seven sprites a gift they love (Flour is easiest) inside their hut, and they invite you; the reward is Relaxation Tea Leaves | The gather-and-synthesize checkpoint: reports are collected only when every dispatched sprite has reported |
 | Affection (heart levels) | Seven colors from black to red, tracked in points (blue is 20,000 to 29,999; green is 30,000 to 39,999) | Trust, measured: review findings, fresh evidence, and merged work accumulate points; nothing is approved on vibes |
 | Blue Feather | Sold at the Supermarket for 1,000G once a bachelorette reaches an orange heart; the marriage proposal item | A pull request. Opening one is the proposal, the owner's approval is the yes, and the merge is the wedding |
 | Ores and Saibara's Forge | Mythril, Orichalcum, and Adamantite dug from the mine; Saibara forges Orichalcum into an accessory for 1,000G and a three-day wait | Raw contributions are ore. The REFACTOR pass and the review forge them into tools, and forging has a cooldown on purpose |
@@ -1724,7 +1744,7 @@ game-inspired vocabulary hangs under.
 
 ### Sources
 
-Game facts above were checked against fan guides on 2026-10-03; rows backed
+Game facts above were checked against fan guides on 2026-10-03, and the Harvest Sprite rows were rechecked against Back to Nature sources on 2026-10-11 (the full list is in `docs/vivera-glossary.md`); rows backed
 by a listed source are covered by it, and the rest (such as the thirty-day
 seasons and the town names) are general game lore.
 
@@ -1733,4 +1753,6 @@ seasons and the town names) are general game lore.
 - Ranch Story wiki, Items List (Harvest Moon: Back to Nature) (https://ranchstory.miraheze.org/wiki/Items_List_(Harvest_Moon:_Back_to_Nature)), accessed 2026-10-03: Mythril ore 40G, Orichalcum 50G, Adamantite 50G.
 - GameFAQs, Harvest Moon: Back to Nature Guide and Walkthrough (faqs/10669, 2001-02-16), snippet: Saibara forges an Orichalcum accessory for 1,000G, ready after three days.
 - Harvest Moon: Back to Nature Guide (https://www.harvestmoonbacktonatureguide.com/girls.html), accessed 2026-10-03: heart level affection point ranges (blue 20,000 to 29,999; green 30,000 to 39,999).
-- Ushi No Tane forum, "Harvest Sprite Tea Party" (https://fogu.com/hmforum/viewtopic.php?t=174351), accessed 2026-10-03: the tea party requires all seven sprites at home.
+- Harvest Moon: Back to Nature Guide, Secrets page (https://www.harvestmoonbacktonatureguide.com/secrets.html), fetched 2026-10-11: Relaxation Tea Leaves come from the Spring tea party; on a sunny, non-festival day between 3:00 and 4:00 pm, give each sprite a gift they love (Flour is easiest) without leaving their house, and they invite you.
+- Harvest Moon: Back to Nature Guide, Characters page (https://www.harvestmoonbacktonatureguide.com/characters.html), a guide written for the PS1 game, fetched 2026-10-11: the sprites are in the small hut behind the church; talk to one twice to get work done, five times in Spring because of the tea party; hearts rise per 25 affection points; each working day costs 2 affection; a hidden skill per job starts at 0, rises 1 per job done, and maxes at 255; all sprites share likes and dislikes; birthdays Chef Fall 14, Nappy Winter 22, Hoggy Fall 10, Timid Summer 16, Aqua Spring 26, Staid Spring 15, Bold Spring 4. The page states no heart threshold. Its Girls page, same date: heart levels black, purple, blue, green, yellow, orange, red (red is 60,000 to 65,535).
+- Harvest Moon Wiki (Fandom), "Harvest Sprites (BTN)" (https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN)), full page read 2026-10-11: at least 2 hearts; hire for 1 day, 3 days from tomorrow, or 1 week from tomorrow; only Summer, Fall, and Winter, while in Spring a sprite refuses unless you talk to it 5 times in a row; one job per request; harvesting ships crops instantly; animal care feeds, milks, and shears; identical apart from hat and shirt color; Chef red, Nappy orange, Hoggy yellow, Timid green, Aqua light blue, Staid dark blue (its trivia says indigo), Bold purple; a fourth-year event where Chef carries a lantern (the wiki's Back to Nature Screenshots category also holds `Chefevent.png`). The 2-heart threshold and the 1/3/7-day options rest on this page alone; the PS1 guide above does not contradict them. Staid's color varies between sources: the BTN table says dark blue, the BTN trivia and the FoMT page say indigo, and Ranch Story was recorded on 2026-10-04 as listing green.

@@ -171,6 +171,12 @@ describe('proseGuard', () => {
     for (const word of ['status', 'diff', 'log', 'show']) expect(paragraph).toMatch(new RegExp(`\\b${word}\\b`));
     expect(paragraph).not.toContain(String.fromCharCode(0x2014));
   });
+
+  test('overrides the role template sentence that says a guard blocks the commands', () => {
+    // The role templates were written for Claude Code, where a hook does block them.
+    expect(paragraph).toMatch(/where this text says a guard blocks/i);
+    expect(paragraph).toMatch(/not the case in this harness/i);
+  });
 });
 
 describe('crew helpers', () => {
@@ -236,7 +242,8 @@ describe('crew helpers', () => {
 
     test('planOutputs rejects an unknown target and lists the valid ids', () => {
       crew([{ sprite: 'chef', role: 'implementer', color: 'red' }]);
-      expect(() => planOutputs({ rolesDir, crewFile, target: 'nope' })).toThrow(/claude, opencode/);
+      // The list comes from the registry, so adding a target must not need an edit here.
+      expect(() => planOutputs({ rolesDir, crewFile, target: 'nope' })).toThrow(targetIds().join(', '));
     });
   });
 });

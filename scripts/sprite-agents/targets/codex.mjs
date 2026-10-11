@@ -1,0 +1,53 @@
+// Codex custom agents: one TOML file per sprite in ~/.codex/agents. The subagents
+// page (read 2026-10-11) requires name, description, and developer_instructions,
+// and accepts other config.toml keys such as model and sandbox_mode.
+import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../common.mjs';
+import { proseGuard } from '../guard.mjs';
+import { MARKER } from '../sync.mjs';
+
+const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+// A TOML multi-line literal string cannot hold these, and has no escape for them.
+const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
+
+export function renderCodexAgent(template, member, { templateLabel = `agents/roles/${member.role}.md` } = {}) {
+  const { fm, body, description, readOnly, skills } = readTemplate(template, member, { allowedKeys: TEMPLATE_KEYS, target: 'codex', templateLabel });
+  // Codex has no hooks in an agent file, so the git guard can only be asked for in prose.
+  assertGitGuardHooks(fm, { templateLabel, target: 'codex' });
+  // maxTurns is dropped: the subagents page lists no turn limit key.
+
+  const guard = proseGuard();
+  const parts = [];
+  const skill = skillLine(skills, 'by naming it with a $ mention');
+  if (skill !== '') parts.push(skill, '');
+  parts.push(guard.paragraph, '', body.replace(/^\n+/, ''));
+  const instructions = parts.join('\n');
+  // A literal string (single quotes) takes backslashes as they are, so the body needs no escaping.
+  if (instructions.includes("'''")) {
+    throw new Error(`${templateLabel}: the text contains three single quotes ('''), which would end the TOML literal string of developer_instructions`);
+  }
+  if (CONTROL.test(instructions)) {
+    throw new Error(`${templateLabel}: the text contains a control character, which a TOML literal string cannot hold`);
+  }
+
+  return [
+    `${MARKER} from ${templateLabel} and agents/crew.json; edit those, then run ./install.sh.`,
+    guard.comment,
+    `name = ${tomlString(member.sprite)}`,
+    `description = ${tomlString(description)}`,
+    // A writer leaves sandbox_mode out and inherits the parent's. The page also says
+    // the parent's live overrides (/permissions, --yolo) win over this file.
+    ...(readOnly ? ['sandbox_mode = "read-only"'] : []),
+    "developer_instructions = '''",
+    `${instructions.endsWith('\n') ? instructions : `${instructions}\n`}'''`,
+    '',
+  ].join('\n');
+}
+
+export default {
+  id: 'codex',
+  ext: '.toml',
+  outName: (sprite) => `${sprite}.toml`,
+  // Nothing of Codex's is committed here, so there is no safe default directory.
+  requiresOut: true,
+  render: (template, member, ctx) => renderCodexAgent(template, member, ctx),
+};

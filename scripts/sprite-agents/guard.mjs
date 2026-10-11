@@ -4,6 +4,6 @@ export function proseGuard() {
   return {
     comment: '# guard: instruction only, not enforced by this harness',
     paragraph:
-      'Git is owned by the parent session and this harness cannot enforce that, so you must not run git add, commit, checkout, switch, merge, rebase, stash, reset, push or gh. Running git status, diff, log and show is allowed.',
+      'Git is owned by the parent session and this harness cannot enforce that, so you must not run git add, commit, checkout, switch, merge, rebase, stash, reset, push or gh. Running git status, diff, log and show is allowed. Where this text says a guard blocks a command, that is not the case in this harness: nothing will stop you, so the rule is yours to keep.',
   };
 }

@@ -8,18 +8,39 @@ MASTER_FILE="$REPO_DIR/Super Ultra Code Plan Implementation.md"
 DRY_RUN=false
 TIER=standard
 MODE=install
+ONLY=""
+SKIP=""
+
+# Sourced first because usage lists the target ids from the table in targets.sh.
+# shellcheck source=scripts/install/lib.sh
+. "$REPO_DIR/scripts/install/lib.sh"
+# shellcheck source=scripts/install/prereq.sh
+. "$REPO_DIR/scripts/install/prereq.sh"
+# shellcheck source=scripts/install/targets.sh
+. "$REPO_DIR/scripts/install/targets.sh"
+# shellcheck source=scripts/install/check.sh
+. "$REPO_DIR/scripts/install/check.sh"
+# shellcheck source=scripts/install/update.sh
+. "$REPO_DIR/scripts/install/update.sh"
+# shellcheck source=scripts/install/uninstall.sh
+. "$REPO_DIR/scripts/install/uninstall.sh"
 
 usage() {
   cat <<'EOF'
-Usage: ./install.sh [--tier minimal|standard|full] [--dry-run] [-h]
-  --tier T    prerequisite level, default standard. The tool table is scripts/install/tiers.tsv.
-                minimal   requires no tool; links the skills only (no sprite agents, no git hooks)
-                standard  requires git and bun
-                full      also requires gh and tgrep
-  --dry-run   print what would be done and write nothing
-  -h, --help  print this text
-Links the master skill into ~/.config/ai, ~/.agents/skills, ~/.gemini, and
-~/.config/opencode/skills, plus ~/.claude only when that harness is installed.
+Usage: ./install.sh [--tier minimal|standard|full] [--only ID,ID] [--skip ID,ID] [--dry-run] [-h]
+  --tier T      prerequisite level, default standard. The tool table is scripts/install/tiers.tsv.
+                  minimal   requires no tool; links the skills only (no sprite agents, no git hooks)
+                  standard  requires git and bun
+                  full      also requires gh and tgrep
+  --only ID,ID  install only these targets, even when the harness is not detected
+  --skip ID,ID  leave these targets out; wins over --only
+  --dry-run     print what would be done and write nothing
+  -h, --help    print this text
+EOF
+  echo "Targets, in install order: $(valid_target_list)"
+  cat <<'EOF'
+Always installed: ~/.config/ai and ~/.agents/skills. Every other harness is installed when it is
+detected (its directory under your home or its CLI on PATH) or named with --only.
 A tool the chosen tier does not require prints one warning naming what is lost and is skipped.
 TinyFish web-evidence rules ship inside the master skill; no extra skill is deployed.
 Exit codes: 0 success, 1 failure (a required tool is missing), 2 usage error.
@@ -34,6 +55,22 @@ set_mode() {
     exit 2
   fi
   MODE="$1"
+}
+
+# Repeated --only or --skip flags accumulate. An empty value is a usage error.
+add_target_list() {
+  local which="${1#--}"
+  local value="$2"
+  if [ -z "$value" ]; then
+    echo "Missing value for --$which" >&2
+    usage >&2
+    exit 2
+  fi
+  if [ "$which" = only ]; then
+    ONLY="${ONLY:+$ONLY,}$value"
+  else
+    SKIP="${SKIP:+$SKIP,}$value"
+  fi
 }
 
 while [ $# -gt 0 ]; do
@@ -62,6 +99,18 @@ while [ $# -gt 0 ]; do
     --tier=*)
       TIER="${1#--tier=}"
       ;;
+    --only | --skip)
+      if [ $# -lt 2 ]; then
+        echo "Missing value for $1" >&2
+        usage >&2
+        exit 2
+      fi
+      add_target_list "$1" "$2"
+      shift
+      ;;
+    --only=* | --skip=*)
+      add_target_list "${1%%=*}" "${1#*=}"
+      ;;
     -h|--help)
       usage
       exit 0
@@ -84,18 +133,26 @@ case "$TIER" in
     ;;
 esac
 
-# shellcheck source=scripts/install/lib.sh
-. "$REPO_DIR/scripts/install/lib.sh"
-# shellcheck source=scripts/install/prereq.sh
-. "$REPO_DIR/scripts/install/prereq.sh"
-# shellcheck source=scripts/install/targets.sh
-. "$REPO_DIR/scripts/install/targets.sh"
-# shellcheck source=scripts/install/check.sh
-. "$REPO_DIR/scripts/install/check.sh"
-# shellcheck source=scripts/install/update.sh
-. "$REPO_DIR/scripts/install/update.sh"
-# shellcheck source=scripts/install/uninstall.sh
-. "$REPO_DIR/scripts/install/uninstall.sh"
+# Every id must name a row of the target table; checked before any output.
+validate_target_list() {
+  local list="$1"
+  local id
+  local ids=()
+  if [ -z "$list" ]; then
+    return 0
+  fi
+  IFS=',' read -r -a ids <<< "$list"
+  for id in "${ids[@]}"; do
+    if ! is_target_id "$id"; then
+      echo "Unknown target: $id" >&2
+      echo "Valid targets: $(valid_target_list)" >&2
+      usage >&2
+      exit 2
+    fi
+  done
+}
+validate_target_list "$ONLY"
+validate_target_list "$SKIP"
 
 mode_install() {
   install_targets

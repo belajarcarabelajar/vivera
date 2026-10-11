@@ -134,10 +134,11 @@ write_marker() {
 }
 
 # Link mode: nothing is managed, so a marker left by an earlier copy install goes. Only a plain file
-# is removed; a directory or anything else of that name was never ours.
+# is removed; a directory or anything else of that name was never ours, and neither is a marker behind a
+# symlinked directory: it describes a copy in the other tree, whose digests must stay.
 drop_marker() {
   local marker="$1"
-  if dest_in_repo "$marker"; then
+  if dest_in_repo "$marker" || behind_symlinked_ancestor "$marker"; then
     return 0
   fi
   if marker_regular "$marker"; then
@@ -145,9 +146,10 @@ drop_marker() {
   fi
 }
 
-# Clears what is at <dest> so a fresh link or copy can take its place. Only callers that know <dest>
-# is the installer's own use it (classified ours-stale, or a managed copy judged identical or pristine
-# by uninstall): a managed copy directory is the one real directory removed with rm -r.
+# Clears what is at <dest> so a fresh link or copy can take its place. Callers use it only on what is
+# the installer's own: an ours-stale dest, a managed copy that uninstall judged identical or pristine,
+# a .vivera-tmp-* name of its own, and (restore_backup) what its own failed placement left. A real
+# directory is removed with rm -r only in those cases.
 remove_replaced() {
   local dest="$1"
   if [ -d "$dest" ] && [ ! -L "$dest" ]; then
@@ -269,6 +271,11 @@ copy_entry() {
   else
     cp "$src" "$tmp" || copied=false
   fi
+  if [ "$copied" = true ]; then
+    # cp keeps the source's modes: a read-only checkout would give a copy that refresh and uninstall
+    # cannot remove. The digests only look at the owner exec bit, so they do not change.
+    chmod -R u+w "$tmp" 2>/dev/null || true
+  fi
   if [ "$copied" = true ] && mv "$tmp" "$dest"; then
     return 0
   fi
@@ -375,7 +382,9 @@ link_target() {
   local sidecar="$target_file.vivera-managed"
 
   if [ "$DRY_RUN" = true ]; then
-    echo "[DRY-RUN] Would create directory: $target_dir"
+    if [ ! -d "$target_dir" ]; then
+      echo "[DRY-RUN] Would create directory: $target_dir"
+    fi
     place_entry "$MASTER_FILE" "$target_file"
     return 0
   fi
@@ -393,6 +402,7 @@ link_target() {
 link_skill_package() {
   local target_skill_dir="$1"
   local sibling_dir desired dest marked_dir word
+  local total=0
   local placed=()
   local dirs=()
   local unique=$'\n'
@@ -416,6 +426,7 @@ link_skill_package() {
 
   # The dirs the entries live in: the package dir and one dir per phase skill.
   while IFS=$'\t' read -r -u 3 desired dest; do
+    total=$((total + 1))
     marked_dir="$(dirname "$dest")"
     case "$unique" in
       *$'\n'"$marked_dir"$'\n'*) ;;
@@ -463,7 +474,11 @@ link_skill_package() {
       if [ "$PLACE_SKIPPED" -eq 1 ]; then
         word="entry"
       fi
-      echo "[WARN] skill package in: $target_skill_dir: $PLACE_SKIPPED $word left alone, the rest is in place"
+      if [ "$PLACE_SKIPPED" -ge "$total" ]; then
+        echo "[WARN] skill package in: $target_skill_dir: every entry was left alone, nothing was placed"
+      else
+        echo "[WARN] skill package in: $target_skill_dir: $PLACE_SKIPPED $word left alone, the rest is in place"
+      fi
     elif [ "$PLACE_CHANGED" -eq 0 ]; then
       echo "[OK] Already current: skill package in: $target_skill_dir"
     elif [ "${COPY_MODE:-false}" = true ]; then

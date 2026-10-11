@@ -7,19 +7,20 @@
 
 tool_available() {
   # Single source of truth for "can we call $cmd". Beyond the current PATH it
-  # probes the two standard fallback dirs and, when found there, prepends that
-  # dir to PATH so every later `$cmd` invocation works. Optional-tool warnings
-  # fire only when all three probes fail.
+  # probes the two standard fallback dirs and, when found there, APPENDS that
+  # dir to PATH so every later `$cmd` invocation works. Appended, never prepended:
+  # a same-named wrapper of the user's there (cp, mv, rm) must not shadow the system
+  # tool. Optional-tool warnings fire only when all three probes fail.
   local cmd="$1"
   if command -v "$cmd" &>/dev/null; then
     return 0
   fi
   if [ -x "$HOME/.local/bin/$cmd" ]; then
-    export PATH="$HOME/.local/bin:$PATH"
+    export PATH="$PATH:$HOME/.local/bin"
     return 0
   fi
   if [ -x "$HOME/.bun/bin/$cmd" ]; then
-    export PATH="$HOME/.bun/bin:$PATH"
+    export PATH="$PATH:$HOME/.bun/bin"
     return 0
   fi
   return 1
@@ -90,7 +91,7 @@ abs_path() {
 # mkdir -p that fails with an installer line instead of coreutils' own. That message names the first
 # component it could not create ("mkdir: cannot create directory '/x/.config': Permission denied") and
 # starts with no installer prefix, so only its reason (after the last ": ") is kept. Every directory
-# the installer makes is under HOME, which is why the hint names it.
+# the installer makes is under HOME, so the hint names it, but only for a permission problem.
 make_dir() {
   local dir="$1"
   local err reason
@@ -101,7 +102,10 @@ make_dir() {
   if [ -z "$reason" ]; then
     reason="mkdir failed"
   fi
-  echo "[FAIL] cannot create $dir: $reason (is HOME writable?)" >&2
+  case "$reason" in
+    *"Permission denied"* | *"Read-only file system"*) reason="$reason (is HOME writable?)" ;;
+  esac
+  echo "[FAIL] cannot create $dir: $reason" >&2
   exit 1
 }
 
@@ -390,12 +394,13 @@ classify_link() {
 #   viadir     <dest> lives behind a symlinked directory (see behind_symlinked_dir), so it belongs to
 #              another tree (another checkout, the user's dotfiles) and is never moved, removed or
 #              retargeted. That is: an existing real file or directory; a link there that classify_link
-#              calls foreign (live or dangling, not the installer's own); and, in copy mode only, an
-#              absent dest, even when its directory is absent too (see behind_symlinked_ancestor): a copy
-#              is a real file written into the other tree, which check, update and uninstall would then
-#              leave alone for good, so the second run would refuse what the first one wrote. In link
-#              mode an absent dest stays absent: the link is the installer's own, and check, update and
-#              uninstall manage it. An ok or ours-stale link there is judged as anywhere else
+#              calls foreign (live or dangling); in copy mode ANY link there, the installer's own
+#              included, since a copy would replace it by a real file in the other tree; and, in copy
+#              mode only, an absent dest, even when its directory is absent too (see
+#              behind_symlinked_ancestor): a copy written there would be left alone for good by check,
+#              update and uninstall, so the second run would refuse what the first one wrote. In link
+#              mode an absent dest stays absent (the link is the installer's own, and check, update and
+#              uninstall manage it), and an ok or ours-stale link there is judged as anywhere else
 #   ok         what is wanted is there: a link to <desired>, or in copy mode a managed copy with the
 #              same content as <desired>
 #   ours-stale the installer's own and wrong: a link as classify_link says, or a managed copy that is
@@ -416,10 +421,12 @@ classify_dest() {
     echo "viadir"
   elif [ -L "$dest" ]; then
     state="$(classify_link "$dest" "$desired")"
-    if [ "$state" = "ok" ] && [ "${COPY_MODE:-false}" = true ]; then
-      state="ours-stale"
-    elif [ "$state" = "foreign" ] && behind_symlinked_dir "$dest"; then
+    # Behind a symlinked directory: any link in copy mode (a copy would be a real file in the other
+    # tree), only a foreign one in link mode.
+    if behind_symlinked_dir "$dest" && { [ "$state" = "foreign" ] || [ "${COPY_MODE:-false}" = true ]; }; then
       state="viadir"
+    elif [ "$state" = "ok" ] && [ "${COPY_MODE:-false}" = true ]; then
+      state="ours-stale"
     fi
     echo "$state"
   elif [ -e "$dest" ]; then

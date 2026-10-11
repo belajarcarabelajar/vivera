@@ -267,7 +267,7 @@ install_targets() {
     echo "[SKIP] sprite agents: tier minimal needs no bun"
   fi
 
-  # 6b. Retired 2026-10-01 — the vendored `use-tinyfish` skill is gone.
+  # Retired 2026-10-01: the vendored `use-tinyfish` skill is gone.
   #     TinyFish is now documented inline in the master skill
   #     ("Super Ultra Code Plan Implementation.md", section
   #     "Web Evidence & Retrieval — TinyFish"), so the whole super-ultra-code-plan
@@ -284,7 +284,7 @@ install_targets() {
   #     them without touching real content.
 }
 
-# 7. Local Repo Self-Check
+# Local repo self-check: the relative links inside this checkout's own skill package.
 install_selfcheck() {
   # Copy mode installs files, not links into this checkout, so its own relative links are not part of it.
   if [ "${COPY_MODE:-false}" = true ]; then
@@ -335,7 +335,7 @@ repo_is_own_checkout() {
   [ "$(cd -P "$top" 2>/dev/null && pwd -P)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]
 }
 
-# 8. Enable the committed git hooks. `.githooks/pre-commit` keeps the repo's
+# Enable the committed git hooks. `.githooks/pre-commit` keeps the repo's
 #    graph consistent with each commit: when code changed it runs
 #    `graphify update .` (local AST), then `bun run graphify:sync` adds the
 #    Markdown's structural nodes last. A Markdown-only commit pays only for the

@@ -1,5 +1,5 @@
 // OpenCode v2 agent files, which skip a Claude Code file without a message.
-import { readTemplate, skillLine } from '../common.mjs';
+import { assertGitGuardHooks, readTemplate, skillLine } from '../common.mjs';
 import { MARKER } from '../sync.mjs';
 
 // OpenCode v2 takes a six-digit hex color and skips the whole agent, without a
@@ -15,7 +15,6 @@ export const OPENCODE_COLORS = {
   cyan: '#00a2c7',
 };
 
-const GUARD_SCRIPT = 'block-git-writes.mjs';
 const OPENCODE_TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
 
 // OpenCode has no hooks, so the git guard becomes shell permission rules. The
@@ -49,13 +48,7 @@ function openCodeShellRules() {
 
 export function renderOpenCodeAgent(template, member, { templateLabel = `agents/roles/${member.role}.md` } = {}) {
   const { fm, body, description, readOnly, skills } = readTemplate(template, member, { allowedKeys: OPENCODE_TEMPLATE_KEYS, target: 'opencode', templateLabel });
-  for (const entries of Object.values(fm.hooks ?? {})) {
-    for (const hook of entries.flatMap((e) => e.hooks ?? [])) {
-      if (!String(hook.command ?? '').includes(GUARD_SCRIPT)) {
-        throw new Error(`${templateLabel}: OpenCode has no hooks and only the git guard has a permission translation, not ${hook.command}`);
-      }
-    }
-  }
+  assertGitGuardHooks(fm, { templateLabel, target: 'opencode' });
 
   const permissions = fm.hooks ? openCodeShellRules() : [];
   if (readOnly) permissions.push({ action: 'edit', resource: '*', effect: 'deny' });

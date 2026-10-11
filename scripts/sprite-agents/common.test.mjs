@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { EDIT_TOOLS, readTemplate, skillLine, tomlString } from './common.mjs';
+import { EDIT_TOOLS, assertGitGuardHooks, readTemplate, skillLine, tomlString } from './common.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const role = (name) => fs.readFileSync(path.join(ROOT, 'agents', 'roles', `${name}.md`), 'utf8');
@@ -130,5 +130,35 @@ describe('tomlString', () => {
 
   test('refuses a value that is not a string', () => {
     expect(() => tomlString(5)).toThrow(/string/);
+  });
+});
+
+describe('assertGitGuardHooks', () => {
+  const hook = (command) => ({ PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command }] }] });
+  const check = (fm) => assertGitGuardHooks(fm, { templateLabel: 'agents/roles/implementer.md', target: 'codex' });
+
+  test('accepts the git guard command', () => {
+    expect(() => check({ hooks: hook('bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs') })).not.toThrow();
+  });
+
+  test('accepts a template with no hooks', () => {
+    expect(() => check({})).not.toThrow();
+    expect(() => check({ hooks: {} })).not.toThrow();
+    expect(() => check({ hooks: { PreToolUse: [{ matcher: 'Bash' }] } })).not.toThrow();
+  });
+
+  test('throws for any other command and names the command, the file, and the target', () => {
+    expect(message(() => check({ hooks: hook('bun lint.mjs') }))).toBe(
+      'agents/roles/implementer.md: codex has no hooks and only the git guard has a translation, not bun lint.mjs',
+    );
+  });
+
+  test('checks every hook of every event, not only the first', () => {
+    const fm = { hooks: { ...hook('bun x/block-git-writes.mjs'), PostToolUse: [{ hooks: [{ command: 'bun ok/block-git-writes.mjs' }, { command: 'rm -rf x' }] }] } };
+    expect(message(() => check(fm))).toContain('not rm -rf x');
+  });
+
+  test('treats a hook without a command as not the guard', () => {
+    expect(() => check({ hooks: { PreToolUse: [{ hooks: [{ type: 'command' }] }] } })).toThrow(/not undefined/);
   });
 });

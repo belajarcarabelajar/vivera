@@ -33,6 +33,20 @@ export function readTemplate(template, member, { allowedKeys, target, templateLa
   };
 }
 
+const GUARD_SCRIPT = 'block-git-writes.mjs';
+
+// A target without hooks can only translate the git guard (into permission
+// rules or into prose). Any other hook would be dropped, so it throws instead.
+export function assertGitGuardHooks(fm, { templateLabel, target }) {
+  for (const entries of Object.values(fm.hooks ?? {})) {
+    for (const hook of entries.flatMap((e) => e.hooks ?? [])) {
+      if (!String(hook.command ?? '').includes(GUARD_SCRIPT)) {
+        throw new Error(`${templateLabel}: ${target} has no hooks and only the git guard has a translation, not ${hook.command}`);
+      }
+    }
+  }
+}
+
 // `how` completes "Load the ... skill <how> before anything else".
 export function skillLine(skills, how) {
   if (skills.length === 0) return '';

@@ -23,9 +23,9 @@ STAGE_DIR="$TEMP_DIR/stage"
 LIGHT_CONFIG="$REPO_DIR/mermaid.config.json"
 DARK_CONFIG="$REPO_DIR/mermaid.dark.config.json"
 
-# Hero: the first mermaid block in the README, committed to the repo.
-HERO_FILE="README.md"
-HERO_BLOCK=1
+# Hero: the README lifecycle diagram. Its source is a standalone .mmd file, because
+# a mermaid fence in the README is always drawn by GitHub and cannot show raw text.
+HERO_SRC="docs/diagrams-src/lifecycle.mmd"
 HERO_NAME="lifecycle"
 
 # ---- Resolve mmdc ----------------------------------------------------------
@@ -75,12 +75,6 @@ extract_blocks() {
 }
 
 while IFS= read -r -d '' mdfile; do
-  # The hero file is rendered separately (light + dark) under its canonical name,
-  # so it is staged in its own directory and never picked up by the bulk loop.
-  if [ "$mdfile" = "$REPO_DIR/$HERO_FILE" ]; then
-    extract_blocks "$mdfile" "$(slugify "$mdfile")" "$STAGE_DIR/hero-src"
-    continue
-  fi
   extract_blocks "$mdfile" "$(slugify "$mdfile")" "$STAGE_DIR"
 done < <(find "$REPO_DIR" -name "*.md" -type f \
   -not -path "*/node_modules/*" \
@@ -112,9 +106,9 @@ rendered=$((rendered + BASH_REMATCH[1]))
 errors=$((errors + BASH_REMATCH[2]))
 
 # ---- Hero: light + dark ----------------------------------------------------
-hero_mmd="$STAGE_DIR/hero-src/$(slugify "$REPO_DIR/$HERO_FILE")-block${HERO_BLOCK}.mmd"
+hero_mmd="$REPO_DIR/$HERO_SRC"
 if [ ! -f "$hero_mmd" ]; then
-  echo "  ❌ Hero block not found: $HERO_FILE block $HERO_BLOCK" >&2
+  echo "  ❌ Hero source not found: $HERO_SRC" >&2
   exit 1
 fi
 if ! "$MMDC" $PUPPETEER_FLAG -c "$LIGHT_CONFIG" -b transparent --quiet \

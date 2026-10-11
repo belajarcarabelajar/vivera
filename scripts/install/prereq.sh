@@ -103,10 +103,14 @@ read_tier_table() {
   done < "$table"
 }
 
+# Optional tools whose missing-warning a later step prints, together with what that step gives up as
+# well (install_hooks owns graphify's), so the user reads it once and not once per step.
+OPTIONAL_WARNED_LATER="graphify"
+
 check_tier_prereqs() {
   local tier="$1"
   local table="$2"
-  local hint have need i count
+  local hint have need i count quiet
 
   have="$(rank_of_tier "$tier")" || {
     echo "❌ Unknown tier: $tier" >&2
@@ -130,7 +134,16 @@ check_tier_prereqs() {
       fi
       check_prereq "${TIER_TOOLS[$i]}" "${TIER_LOSSES[$i]}" "$hint"
     else
-      check_optional "${TIER_TOOLS[$i]}" "${TIER_LOSSES[$i]}"
+      # Tier minimal asks for no tool, so naming what a missing one costs is noise there (and --check
+      # and --uninstall run at minimal). A tool a later step warns about stays quiet here.
+      quiet=false
+      if [ "$have" -eq 0 ]; then
+        quiet=true
+      fi
+      case " $OPTIONAL_WARNED_LATER " in
+        *" ${TIER_TOOLS[$i]} "*) quiet=true ;;
+      esac
+      check_optional "${TIER_TOOLS[$i]}" "${TIER_LOSSES[$i]}" "$quiet"
     fi
     i=$((i + 1))
   done

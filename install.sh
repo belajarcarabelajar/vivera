@@ -214,7 +214,7 @@ mode_install() {
   install_selfcheck
   install_hooks
   sprites_exit_if_failed
-  echo "==> Vivera farm planted: the Ultimate AI Coding Skill installation is complete!"
+  finish_line "==> Vivera farm planted: the Ultimate AI Coding Skill installation is complete!"
 }
 
 # The banner follows the mode; check and uninstall have no source or tier to announce.

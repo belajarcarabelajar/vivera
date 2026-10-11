@@ -53,12 +53,16 @@ check_prereq() {
 
 # Optional tool: warn once with the lost capability named, then move on. A tool that is present is
 # only reported as found: it is never run, because an optional tool owes this installer nothing.
+# The third argument "true" keeps a missing tool silent, for a run that does not need the tool at all.
 check_optional() {
   local cmd="$1"
   local loss="$2"
+  local quiet="${3:-false}"
 
   if ! tool_available "$cmd"; then
-    echo "⚠️  WARNING: optional tool '$cmd' not found; $loss" >&2
+    if [ "$quiet" != true ]; then
+      echo "⚠️  WARNING: optional tool '$cmd' not found; $loss" >&2
+    fi
     return 0
   fi
   echo "[OK] Optional tool found: $cmd"
@@ -78,6 +82,24 @@ abs_path() {
   else
     echo "$path"
   fi
+}
+
+# mkdir -p that fails with an installer line instead of coreutils' own. That message names the first
+# component it could not create ("mkdir: cannot create directory '/x/.config': Permission denied") and
+# starts with no installer prefix, so only its reason (after the last ": ") is kept. Every directory
+# the installer makes is under HOME, which is why the hint names it.
+make_dir() {
+  local dir="$1"
+  local err reason
+  if err="$(mkdir -p "$dir" 2>&1)"; then
+    return 0
+  fi
+  reason="${err##*: }"
+  if [ -z "$reason" ]; then
+    reason="mkdir failed"
+  fi
+  echo "[FAIL] cannot create $dir: $reason (is HOME writable?)" >&2
+  exit 1
 }
 
 # Copy mode compares content with cmp (files) and diff (directories).

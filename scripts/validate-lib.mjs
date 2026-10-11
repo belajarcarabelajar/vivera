@@ -301,7 +301,14 @@ export function checkGateCatalog(text) {
   const start = lines.findIndex((line) => GATE_TABLE_HEAD_RE.test(line));
   if (start === -1) return ['table: the gate catalog (| Gate | Header | Options, in order |) was not found'];
 
-  const splitRow = (line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+  // An escaped pipe (`\|`) is cell text in GFM, so only an unescaped pipe separates cells.
+  const splitRow = (line) =>
+    line
+      .trim()
+      .replace(/^\|/, '')
+      .replace(/(?<!\\)\|$/, '')
+      .split(/(?<!\\)\|/)
+      .map((cell) => cell.replace(/\\\|/g, '|').trim());
 
   // Line start + 1 is the separator; the table ends at the first line that is not a row.
   const rows = [];

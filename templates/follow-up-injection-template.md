@@ -39,6 +39,8 @@ Rank by `leftover risk x blast radius x cheapness to close`. Everything below th
 2. `[short label]` — ...
 3. `[short label]` — ...
 
+In the list above and the checklist below, the description of the recommended option starts with `Why: <ranking factor>`, then the one line shown.
+
 Banned from the batch: destructive, externally visible, credential-touching, or scope-expanding items (ask each on its own through the Confirmation Protocol, safe option first); already-completed items; cosmetic preferences with no code outcome.
 
 ## 4. The Question (single batched multi-select call)

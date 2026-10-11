@@ -159,7 +159,9 @@ vivera/
 │   │   ├── windows-core.ps1                     # install.ps1 helpers: paths, digests, markers, judging a destination
 │   │   └── windows-ops.ps1                      # install.ps1 target choice, install, -Update, -Check, -Uninstall
 │   ├── bootstrap.sh                             # Pinned-release bootstrap: tag only, SHA-256 checked before extraction
-│   ├── bootstrap.test.mjs                       # Bootstrap tests against file:// fixtures
+│   ├── bootstrap-install.test.mjs               # Bootstrap: a good release, refusals, cleanup, resume hint
+│   ├── bootstrap-validation.test.mjs            # Bootstrap: tag rule, checksum file, truncated and hostile archives
+│   ├── bootstrap-network.test.mjs               # Bootstrap: https only, redirects with curl and wget (loopback servers)
 │   ├── release/
 │   │   └── build-archive.sh                     # Deterministic git archive plus .sha256 for a release tag
 │   ├── install-*.test.mjs                       # Installer tests (baseline, targets, check, update, uninstall, copy, sprites, ps1, ...)

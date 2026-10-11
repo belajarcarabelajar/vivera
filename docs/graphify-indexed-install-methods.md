@@ -47,7 +47,7 @@ install Bun and git, run `./install.sh`". The Intent Lock fixed five areas:
 | AC-6 | harness flags and detection | `scripts/install-targets.test.mjs` |
 | AC-7 | `--copy` | `scripts/install-copy.test.mjs` |
 | AC-8, AC-9 | the sandbox never touches the real HOME; offline and dry-run are pure | `scripts/install-baseline.test.mjs`, `scripts/install-matrix.test.mjs` |
-| AC-10, AC-11 | bootstrap and release workflow | `scripts/bootstrap.test.mjs`, `scripts/release-archive.test.mjs` |
+| AC-10, AC-11 | bootstrap and release workflow | `scripts/bootstrap-{install,validation,network}.test.mjs`, `scripts/release-archive.test.mjs` |
 | AC-13, AC-14 | container and Windows installer | `scripts/container.test.mjs`, `scripts/install-ps1.test.mjs`, `scripts/install-ps1-run.test.mjs` |
 | AC-12, AC-17 | the Claude Code marketplace and `agy plugin` were researched, not built: parked and adopt later, each with its reason | research notes in `docs/code-plan/research/` (not graph-indexed), summarized in `README.md` |
 | AC-18 | the maintainer's own machine is repaired from the merged checkout (`./install.sh --check`, then `--update`) | after the merge, not in this branch |

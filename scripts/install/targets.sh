@@ -167,6 +167,10 @@ report_unusual_stale_names() {
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
   for entry in "$parent"/sucp-*; do
+    # Only a real directory is a phase dir, as in stale_phase_dirs: a file or a link of that name is not.
+    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
+      continue
+    fi
     name="$(basename "$entry")"
     case "$name" in
       *$'\n'* | *$'\t'*) left_alone "$(printf '%q' "$name"): unusual name" ;;
@@ -303,11 +307,11 @@ install_selfcheck() {
       "mermaid.dark.config.json|../../mermaid.dark.config.json"
     )
     mkdir -p "$package_dir"
-    for entry in "${internal_links[@]}"; do
+    for entry in ${internal_links[@]+"${internal_links[@]}"}; do
       place_repo_link "${entry#*|}" "$package_dir/${entry%%|*}"
     done
     # Verify before claiming it: each link must resolve and carry the expected relative target.
-    for entry in "${internal_links[@]}"; do
+    for entry in ${internal_links[@]+"${internal_links[@]}"}; do
       name="${entry%%|*}"
       relative_target="${entry#*|}"
       if [ ! -e "$package_dir/$name" ] || [ "$(readlink "$package_dir/$name")" != "$relative_target" ]; then
@@ -317,6 +321,17 @@ install_selfcheck() {
     done
     echo "[OK] Internal repo skill package symlinks verified."
   fi
+}
+
+# True when REPO_DIR is the top of a git checkout of its own (install_hooks writes core.hooksPath only there).
+repo_is_own_checkout() {
+  local top
+  # git may spell the toplevel differently from bash (a trailing slash, a path through a symlink; a
+  # Windows drive spelling is the case that was expected on Git Bash and has not been run there), so both
+  # sides go through the same cd -P and pwd -P. No toplevel at all is never a match.
+  top="$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$top" ] || return 1
+  [ "$(cd -P "$top" 2>/dev/null && pwd -P)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]
 }
 
 # 8. Enable the committed git hooks. `.githooks/pre-commit` keeps the repo's
@@ -338,7 +353,7 @@ install_hooks() {
   elif ! tool_available graphify; then
     # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
     echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable, so skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
-  elif [ "$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]; then
+  elif repo_is_own_checkout; then
     if [ "$DRY_RUN" = true ]; then
       echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
       echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"

@@ -23,9 +23,12 @@ export function capitalize(s) {
 export function checkHookRoot(hookRoot) {
   // The root lands inside a double-quoted YAML string that the hook runner hands
   // to a shell, so a quote, a backslash, or an expansion character would change
-  // the command instead of naming a directory.
-  if (!path.isAbsolute(hookRoot) || /["\\$`\n]/.test(hookRoot)) {
-    throw new Error(`hook root must be an absolute path without quotes, backslashes, "$", backticks, or newlines (got ${JSON.stringify(hookRoot)})`);
+  // the command instead of naming a directory. Control characters (C0 and DEL)
+  // are refused as a class: Bun.YAML fails to parse a CR, an LF, or a NUL inside
+  // the string and drops a DEL without a message, so the hook would name another
+  // directory. A tab, an ESC and the rest parse but never belong in a path here.
+  if (!path.isAbsolute(hookRoot) || /["\\$`\u0000-\u001f\u007f]/.test(hookRoot)) {
+    throw new Error(`hook root must be an absolute path without quotes, backslashes, "$", backticks, or control characters (got ${JSON.stringify(hookRoot)})`);
   }
 }
 

@@ -138,7 +138,7 @@ describe('install', () => {
   // installer's own. A copy with no record (this marker holds only `source=`) is not vouched for, even
   // when it has the source's bytes, so it is backed up before the link goes in; one with other bytes and
   // no record is backed up too. A copy WITH a matching record is refreshed without a backup (see
-  // install-digest-hardening.test.mjs).
+  // install-digest-hardening-refresh.test.mjs).
   test('copy: link mode without cmp and diff judges a copy by its record: with no record, equal bytes and different bytes are both backed up', () => {
     const identical = sandbox({ compare: false });
     fs.mkdirSync(at(identical, PKG), { recursive: true });

@@ -187,6 +187,9 @@ test('every trigger snippet carries the same confirmations paragraph', () => {
     'never end a turn on a plain-text question',
     'A dismissed question is not an approval',
     'At most 4 questions per call',
+    'Unattended Continuation Rule',
+    'no interactive client is attached',
+    'with no `(Recommended)` tag',
   ];
   for (const token of tokens) {
     assert.ok(first.includes(token), `shared paragraph lost "${token}"`);

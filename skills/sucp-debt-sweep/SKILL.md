@@ -42,7 +42,7 @@ The same sweep that mines code debt also mines the session for the agent's **own
 
 ### 🧮 6.3 Rank & Cap — default 3 to 5 questions
 - Default to **3-5 follow-up questions**, ranked by `(leftover risk × blast radius × cheapness to close)`. Cap at 5 so the user can answer in one glance; rank below that always go to a written follow-up backlog in the plan or progress log, not to an extra question batch.
-- The follow-ups go into multi-select questions of at most 4 options each, at most 4 questions in the single call, because the Claude Code question tool caps a call at 4 questions and 4 options per question. Group by surface (for example Code, and Docs and tests). The lowest-ranked overflow goes to the written backlog. The last option of the last group is `Nothing, close session`, so a zero-selection submit is never required.
+- The follow-ups go into multi-select questions of at most 4 options each, at most 4 questions in the single call, because the Claude Code question tool caps a call at 4 questions and 4 options per question. Group by surface (for example Code, and Docs and tests). The lowest-ranked overflow goes to the written backlog. The last option of the last group is `Nothing, close session`, so a zero-selection submit is never required. The 3 to 5 default counts follow-up items, not tool questions. Every group has 2 to 4 options, so a lone leftover item joins another group. If `Nothing, close session` is ticked together with items, the items run.
 - Expand beyond 5 only when the harvested debt is itself more than 5 genuinely independent items, and then state explicitly why the cap was raised. Under-filling is also a defect: never ask a single trivial question when three real ones exist.
 - Every candidate is classified `NOW` (closes fully inside this session, no new approval, no destructive action, no external dependency) or `LATER`. `NOW` items become selectable questions. `LATER` items are recorded in the plan's follow-up backlog with an owner-less `defer: <ceiling>, <upgrade-trigger>` line so they survive the session instead of evaporating.
 - Banned from the batch: anything destructive, externally visible, credential-touching, or scope-expanding. Each such item is asked on its own, outside the sweep call, through the Confirmation Protocol with the safe option first, never as a quick-select chip.
@@ -121,7 +121,7 @@ flowchart TD
     accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one multi-select question, executed as real work, and swept again until no new debt appears.
     Gate["Plan tasks Done 100%\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
     Harvest --> Rank["Classify NOW vs LATER\nrank by risk x blast radius x cost\ndefault 3-5 items"]
-    Rank --> Ask["Inject ONE multi-select\nquestion via harness prompt\ncheckboxes, not prose"]
+    Rank --> Ask["Inject one question-tool call\nof multi-select groups,\ncheckboxes, not prose"]
     Ask -->|User selects items| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|User selects nothing| Backlog["Record LATER items in backlog\nwith defer markers\nclose session"]
     Reopen --> Exec["Execute as real work:\nchunk, subagent fan-out,\nTDD, verify, diff audit, commit"]

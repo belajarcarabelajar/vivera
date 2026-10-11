@@ -20,7 +20,7 @@ Every line must hold. If one does not, STOP, name the line, and write nothing. A
 | 3 | `gh auth status` succeeds and `git fetch origin main` succeeds | 5.3: a token problem found after twenty commits is the worst place to find it. |
 | 4 | The user's limits are recorded in the plan | Optional deadline ("no new chunk after 06:00"), paid services allowed, paths that are off limits. Absent means none. |
 
-Collect this gate while the user is present, as one question-tool call through the Confirmation Protocol (header `Overnight`, options `Start the overnight run` and `Not yet`) once the four checks hold. After the user leaves, nothing is asked: a decision needed mid-run is a stop written to the handoff, and the debt-sweep question stays the last act.
+Collect this gate while the user is present, as one question-tool call through the Confirmation Protocol (header `Overnight`, options `Start the overnight run (Recommended)` and `Not yet`) once the four checks hold. After the user leaves, nothing is asked: a mid-run decision follows the Unattended Continuation Rule (section 3), and the debt-sweep question stays the last act (section 5), asked only when the harness has an interactive client.
 
 When every line holds, the first file the run writes is the handoff (path in section 5) with `Result: running`, the start time as ISO 8601 with its UTC offset, and `Last update: <time> <checklist item>`. A run that dies (usage limit, sleep, crash) then leaves a record on disk instead of nothing. A failed check still writes nothing.
 
@@ -58,8 +58,8 @@ When every line holds, the first file the run writes is the handoff (path in sec
 ## 5. Close
 
 1. `verified`, then the PR from `templates/pull-request-template.md`, then `pr-registry pr <session> --number <N>`.
-2. Run the debt sweep (`sucp-debt-sweep`) as usual, with one change: **no follow-up executes unselected**. The multi-select question is the last act of the run. If no structured question tool exists or no answer arrives, every follow-up goes to the plan backlog with its `defer: <ceiling>, <upgrade-trigger>` marker. That is the sweep's own degrade path, so the session is complete either way.
-3. Finish the handoff started at the entry gate, as a sibling of the plan (never inside it, plans stay small): `<plan-dir>/<plan-id>-overnight-handoff.md`. Replace `Result: running` with the final result.
+2. Finish the handoff started at the entry gate, as a sibling of the plan (never inside it, plans stay small): `<plan-dir>/<plan-id>-overnight-handoff.md`. Replace `Result: running` with the final result and list the sweep question under `Waiting on a human`, so the record is complete before anything that can block is called.
+3. Run the debt sweep (`sucp-debt-sweep`) as usual, with one change: **no follow-up executes unselected**. The multi-select question is the last act of the run, asked only when the harness has an interactive client. If no structured question tool exists, no client is attached, or no answer arrives, every follow-up goes to the plan backlog with its `defer: <ceiling>, <upgrade-trigger>` marker. That is the sweep's own degrade path, so the session is complete either way.
 
 | Handoff section | Content |
 |---|---|

@@ -5,6 +5,17 @@ import { MARKER } from '../sync.mjs';
 
 const PROJECT_DIR = /\$(?:\{CLAUDE_PROJECT_DIR\}|CLAUDE_PROJECT_DIR\b)/g;
 
+// Only the description line is moved, so a value that goes on over the next
+// lines (plain or quoted) would leave its continuation behind, after `color:`.
+// The line read alone must give the whole value.
+function readsAsOneLine(line, whole) {
+  try {
+    return Bun.YAML.parse(line)?.description === whole;
+  } catch {
+    return false;
+  }
+}
+
 export function renderAgent(template, member, { hookRoot, templateLabel = `agents/roles/${member.role}.md` } = {}) {
   if (hookRoot !== undefined) checkHookRoot(hookRoot);
   const { head, body } = splitFrontmatter(template, templateLabel);
@@ -16,7 +27,7 @@ export function renderAgent(template, member, { hookRoot, templateLabel = `agent
     throw new Error(`${templateLabel}: "description" is required`);
   }
   const descLine = head.findIndex((l) => l.startsWith('description:'));
-  if (descLine === -1 || /^description:\s*[|>]/.test(head[descLine])) {
+  if (descLine === -1 || /^description:\s*[|>]/.test(head[descLine]) || !readsAsOneLine(head[descLine], fm.description)) {
     throw new Error(`${templateLabel}: "description" must be a single line`);
   }
 

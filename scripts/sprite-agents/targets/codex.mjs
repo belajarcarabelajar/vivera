@@ -25,6 +25,11 @@ export function renderCodexAgent(template, member, { templateLabel = `agents/rol
   if (instructions.includes("'''")) {
     throw new Error(`${templateLabel}: the text contains three single quotes ('''), which would end the TOML literal string of developer_instructions`);
   }
+  // splitFrontmatter has already turned every CRLF into LF, so a carriage return left here is a bare one.
+  // TOML rejects it in a string, and CONTROL lets it through.
+  if (instructions.includes('\r')) {
+    throw new Error(`${templateLabel}: the text contains a bare carriage return, which TOML rejects in a string`);
+  }
   if (CONTROL.test(instructions)) {
     throw new Error(`${templateLabel}: the text contains a control character, which a TOML literal string cannot hold`);
   }

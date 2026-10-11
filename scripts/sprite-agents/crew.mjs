@@ -5,9 +5,12 @@ import path from 'node:path';
 import { ENUMS } from '../validate-agents.mjs';
 
 const SPRITE_NAME = /^[a-z][a-z0-9-]*$/;
+// A key outside this list is a typo or a field no renderer reads, so it throws instead of being ignored.
+const CREW_KEYS = ['sprite', 'role', 'color'];
 
 export function splitFrontmatter(text, label) {
-  const lines = text.split('\n');
+  // A CRLF template would otherwise fail the "---" comparison and report no frontmatter.
+  const lines = text.replaceAll('\r\n', '\n').split('\n');
   const end = lines.indexOf('---', 1);
   if (lines[0] !== '---' || end === -1) throw new Error(`${label}: no frontmatter between two "---" lines`);
   return { head: lines.slice(1, end), body: lines.slice(end + 1).join('\n') };
@@ -40,6 +43,9 @@ export function parseCrew(json) {
     seen.add(m.sprite);
     if (typeof m.role !== 'string' || !SPRITE_NAME.test(m.role)) throw new Error(`${at}: "role" must name a template in agents/roles`);
     if (!ENUMS.color.includes(m.color)) throw new Error(`${at}: "color" must be one of ${ENUMS.color.join(', ')}`);
+    for (const key of Object.keys(m)) {
+      if (!CREW_KEYS.includes(key)) throw new Error(`crew: unknown key "${key}" for sprite "${m.sprite}"`);
+    }
   });
   return crew;
 }

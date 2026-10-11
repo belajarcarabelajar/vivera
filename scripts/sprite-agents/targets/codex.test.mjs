@@ -157,13 +157,28 @@ describe('codex target', () => {
       expect(message(() => render(tpl('\nbell\u0007\n')))).toContain('control character');
     });
 
+    test('throws for a lone carriage return, which TOML rejects, and names the template', () => {
+      const msg = message(() => render(tpl('\nline one\rline two\n')));
+      expect(msg).toContain('agents/roles/implementer.md');
+      expect(msg).toContain('carriage return');
+      expect(message(() => render(tpl('\nline one\r\r\nline two\n')))).toContain('carriage return');
+    });
+
+    test('turns CRLF line endings into LF, so the file parses as TOML', () => {
+      const text = render(tpl('\nline one\r\nline two\r\n'));
+      expect(text).not.toContain('\r');
+      expect(Bun.TOML.parse(text).developer_instructions.endsWith('line one\nline two\n')).toBe(true);
+      const whole = render(tpl('\nline one\nline two\n').replaceAll('\n', '\r\n'));
+      expect(Bun.TOML.parse(whole).developer_instructions.endsWith('line one\nline two\n')).toBe(true);
+    });
+
     test('throws for a hook that is not the git guard', () => {
       const head = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun lint.mjs\n';
       expect(message(() => render(tpl('\nBody.\n', head)))).toMatch(/codex has no hooks.*lint\.mjs/);
     });
 
     test('accepts the git guard hook and writes the prose guard for it', () => {
-      const head = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun x/block-git-writes.mjs\n';
+      const head = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs\n';
       expect(Bun.TOML.parse(render(tpl('\nBody.\n', head))).developer_instructions).toContain(proseGuard().paragraph);
     });
 

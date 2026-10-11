@@ -176,9 +176,52 @@ report_unusual_stale_names() {
 
 # --- Install ----------------------------------------------------------------------------------
 
+# How many targets install_targets acted on in this run; finish_line reads it.
+SELECTED_COUNT=0
+
+# One line naming the harnesses a run left out only because they were not detected. Nothing is said when
+# the user named targets with --only (those are installed whether detected or not), and a harness the
+# user skipped with --skip was left out by them, not for this reason.
+report_undetected() {
+  local id
+  local missing=""
+  if [ -n "${ONLY:-}" ]; then
+    return 0
+  fi
+  while IFS= read -r id; do
+    if target_detected "$id"; then
+      continue
+    fi
+    if [ -n "${SKIP:-}" ] && list_has "$SKIP" "$id"; then
+      continue
+    fi
+    missing="${missing:+$missing, }$id"
+  done <<< "$(target_ids)"
+  if [ -n "$missing" ]; then
+    echo "[INFO] not detected, skipped: $missing (name one with --only to install anyway)"
+  fi
+}
+
+# The last line of install and update: it says only what the run did. $1 is the line for a run that
+# did its work. A dry run wrote nothing, and a selection that came out empty installed nothing; both
+# still exit 0, as they always did.
+finish_line() {
+  local verb="installed"
+  if [ "$MODE" = update ]; then
+    verb="updated"
+  fi
+  if [ "$SELECTED_COUNT" -eq 0 ]; then
+    echo "==> Nothing was selected: --only and --skip left no target, so no skills or sprite agents were $verb"
+  elif [ "$DRY_RUN" = true ]; then
+    echo "==> Dry run finished: nothing was written (run again without --dry-run to apply it)"
+  else
+    echo "$1"
+  fi
+}
+
 install_one_target() {
   local id="$1"
-  local dir dest
+  local dir dest note
   dir="$(target_skills_dir "$id")"
   case "$(target_kind "$id")" in
     file)
@@ -189,7 +232,15 @@ install_one_target() {
       link_skill_package "$dir"
       ;;
     none)
-      echo "[SKIP] $id: its skills come from ~/.agents/skills; no skills target"
+      # Only the sprite agents are done for these, and not even those at tier minimal.
+      if [ "$TIER" = minimal ]; then
+        note="no sprite agents at tier minimal, so nothing to install"
+      elif [ "$DRY_RUN" = true ]; then
+        note="would install its sprite agents only"
+      else
+        note="installing its sprite agents only"
+      fi
+      echo "[INFO] $id: no skills target of its own (its skills come from ~/.agents/skills); $note"
       ;;
   esac
   # Sprite agents are a separate artifact, so a harness without a skills dir of its own gets them too.
@@ -199,7 +250,10 @@ install_one_target() {
 install_targets() {
   local selected id
   selected="$(select_targets)"
+  SELECTED_COUNT=0
+  report_undetected
   for id in $selected; do
+    SELECTED_COUNT=$((SELECTED_COUNT + 1))
     install_one_target "$id"
   done
   # One line covers every harness that would have rendered sprites; it prints at tier minimal
@@ -282,7 +336,8 @@ install_hooks() {
   if [ "$TIER" = minimal ]; then
     echo "[SKIP] git hooks: tier minimal needs no git"
   elif ! tool_available graphify; then
-    echo "⚠️  WARNING: optional tool 'graphify' not found; skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
+    # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
+    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable, so skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
   elif [ "$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]; then
     if [ "$DRY_RUN" = true ]; then
       echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"

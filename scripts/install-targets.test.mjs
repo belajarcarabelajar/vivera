@@ -197,7 +197,7 @@ describe('--only and --skip', () => {
     const sb = sandbox();
     const r = sb.run(['--only', 'codex']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain('[SKIP] codex');
+    expect(r.stdout).toContain('[INFO] codex: no skills target of its own (its skills come from ~/.agents/skills)');
     expect(entries(sb)).toEqual(['.codex']);
     expect(entries(sb, '.codex')).toEqual(['agents']);
   });

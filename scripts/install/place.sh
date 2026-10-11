@@ -68,7 +68,7 @@ marker_begin() {
   if [ -e "$marker" ]; then
     return 0
   fi
-  mkdir -p "$(dirname "$marker")" || place_fail "$(dirname "$marker")" mkdir
+  make_dir "$(dirname "$marker")"
   printf 'source=%s\n' "$REPO_DIR" > "$marker"
 }
 
@@ -92,7 +92,7 @@ write_marker() {
   if marker_regular "$marker" && [ "$(cat "$marker")" = "$content" ]; then
     return 0
   fi
-  mkdir -p "$(dirname "$marker")" || place_fail "$(dirname "$marker")" mkdir
+  make_dir "$(dirname "$marker")"
   printf '%s\n' "$content" > "$marker"
 }
 
@@ -160,7 +160,7 @@ place_link() {
           echo "[DRY-RUN] Would link: $dest -> $desired"
         fi
       else
-        mkdir -p "$(dirname "$dest")" || place_fail "$dest" mkdir
+        make_dir "$(dirname "$dest")"
         ln -s "$desired" "$dest" || place_fail "$dest" ln
         if [ "$PLACE_QUIET" != true ]; then
           echo "[OK] Linked: $dest -> $desired"
@@ -203,7 +203,7 @@ place_link() {
 copy_entry() {
   local src="$1"
   local dest="$2"
-  mkdir -p "$(dirname "$dest")" || return 1
+  make_dir "$(dirname "$dest")"
   if [ -d "$src" ]; then
     cp -RL "$src" "$dest"
   else

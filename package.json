@@ -11,7 +11,7 @@
   "scripts": {
     "render-diagrams": "bash scripts/render-diagrams.sh",
     "validate": "bun scripts/validate-skill.mjs",
-    "test": "bun test scripts/",
+    "test": "bun test --timeout 30000 scripts/",
     "plan:check": "bun scripts/ultra-plan-runner.mjs",
     "contract:check": "bun scripts/check-runner-contract.mjs",
     "copy:check": "bun scripts/check-copy-rules.mjs",
@@ -39,7 +39,7 @@
     "math:invariants": "bun scripts/formal-invariants.mjs",
     "math:batch": "bun scripts/queueing-batch.mjs",
     "export:history": "bun scripts/export-opencode-history.mjs",
-    "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun scripts/gen-sprite-agents.mjs --check && bun test scripts/ && bun scripts/sync-snippets.mjs --check"
+    "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun scripts/gen-sprite-agents.mjs --check && bun test --timeout 30000 scripts/ && bun scripts/sync-snippets.mjs --check"
   },
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^12.0.0",

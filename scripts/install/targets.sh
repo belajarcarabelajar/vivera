@@ -1,0 +1,369 @@
+# shellcheck shell=bash
+# Sourced by install.sh: the target table, the target selection, and the install steps.
+
+# --- The target table -------------------------------------------------------------------------
+# One row per harness, in install order. A harness is "present" when its dir exists under HOME or
+# its CLI is on PATH. ai-config and agents are the baseline every machine gets; the rest are
+# installed only when present or named with --only. codex, cursor and copilot read their skills
+# from ~/.agents/skills, so they have no skills dir of their own; they get sprite agents only (see
+# sprite_target in sprites.sh).
+
+target_ids() {
+  printf '%s\n' ai-config agents antigravity antigravity-cli antigravity-builtin gemini-cli opencode claude codex cursor copilot
+}
+
+target_skills_dir() {
+  case "$1" in
+    ai-config) echo "$HOME/.config/ai" ;;
+    agents) echo "$HOME/.agents/skills/super-ultra-code-plan" ;;
+    antigravity) echo "$HOME/.gemini/config/skills/super-ultra-code-plan" ;;
+    antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/super-ultra-code-plan" ;;
+    antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/super-ultra-code-plan" ;;
+    gemini-cli) echo "$HOME/.gemini/skills/super-ultra-code-plan" ;;
+    opencode) echo "$HOME/.config/opencode/skills/super-ultra-code-plan" ;;
+    claude) echo "$HOME/.claude/skills/super-ultra-code-plan" ;;
+    codex | cursor | copilot) echo "" ;;
+    *) return 1 ;;
+  esac
+}
+
+# file: one master-file link; package: the skill package dir; none: no skills target.
+target_kind() {
+  case "$1" in
+    ai-config) echo "file" ;;
+    codex | cursor | copilot) echo "none" ;;
+    agents | antigravity | antigravity-cli | antigravity-builtin | gemini-cli | opencode | claude) echo "package" ;;
+    *) return 1 ;;
+  esac
+}
+
+# Exit 0 when the harness is present on this machine.
+target_detected() {
+  case "$1" in
+    ai-config | agents) return 0 ;;
+    antigravity) [ -d "$HOME/.gemini" ] || tool_available agy ;;
+    antigravity-cli) [ -d "$HOME/.gemini/antigravity-cli" ] || tool_available agy ;;
+    antigravity-builtin) [ -d "$HOME/.gemini/antigravity-cli/builtin/skills" ] ;;
+    gemini-cli) tool_available gemini ;;
+    opencode) [ -d "$HOME/.config/opencode" ] || tool_available opencode ;;
+    claude) [ -d "$HOME/.claude" ] ;;
+    codex) [ -d "$HOME/.codex" ] || tool_available codex ;;
+    cursor) [ -d "$HOME/.cursor" ] || tool_available cursor-agent ;;
+    copilot) [ -d "$HOME/.copilot" ] || tool_available copilot ;;
+    *) return 1 ;;
+  esac
+}
+
+# The links a target makes, one "<desired><TAB><dest>" line each (see package_entries in lib.sh):
+# one line for ai-config, the whole package for a package target, nothing for a target without skills.
+target_entries() {
+  local id="$1"
+  local dir
+  dir="$(target_skills_dir "$id")"
+  case "$(target_kind "$id")" in
+    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/Super Ultra Code Plan Implementation.md" ;;
+    package) package_entries "$dir" ;;
+    none) ;;
+  esac
+}
+
+is_target_id() {
+  local want="$1"
+  local id
+  while IFS= read -r id; do
+    if [ "$id" = "$want" ]; then
+      return 0
+    fi
+  done <<< "$(target_ids)"
+  return 1
+}
+
+# "ai-config, agents, ..." for messages.
+valid_target_list() {
+  local id
+  local out=""
+  while IFS= read -r id; do
+    out="${out:+$out, }$id"
+  done <<< "$(target_ids)"
+  echo "$out"
+}
+
+# ONLY and SKIP are comma lists set by install.sh (SKIP wins over ONLY).
+list_has() {
+  case ",$1," in
+    *",$2,"*) return 0 ;;
+  esac
+  return 1
+}
+
+# The ids to act on, one per line, in table order: exactly the --only ids when given (even if the
+# harness is absent), otherwise every present harness; then the --skip ids are removed.
+select_targets() {
+  local id
+  while IFS= read -r id; do
+    if [ -n "${ONLY:-}" ]; then
+      list_has "$ONLY" "$id" || continue
+    elif ! target_detected "$id"; then
+      continue
+    fi
+    if [ -n "${SKIP:-}" ] && list_has "$SKIP" "$id"; then
+      continue
+    fi
+    echo "$id"
+  done <<< "$(target_ids)"
+}
+
+# The phase-skill dirs of a package target that this checkout no longer has, one per line. A phase
+# skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness. Only a sucp-*
+# entry that is a real directory is considered, and only when it is the installer's own: it carries a
+# .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
+# ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
+# link to a file elsewhere, and a skill the checkout still has are never listed. A name with a newline
+# or a tab would break this one-per-line list, so it is never listed (report_unusual_stale_names says so).
+# Both --check (which reports them) and --update (which prunes them) read this one list.
+stale_phase_dirs() {
+  local id="$1"
+  local parent entry name skill_md state
+  if [ "$(target_kind "$id")" != package ]; then
+    return 0
+  fi
+  parent="$(dirname "$(target_skills_dir "$id")")"
+  for entry in "$parent"/sucp-*; do
+    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
+      continue
+    fi
+    name="$(basename "$entry")"
+    case "$name" in
+      *$'\n'* | *$'\t'*) continue ;;
+    esac
+    if [ -e "$REPO_DIR/skills/$name" ]; then
+      continue
+    fi
+    skill_md="$entry/SKILL.md"
+    if dest_in_repo "$skill_md"; then
+      continue
+    fi
+    if marker_regular "$entry/.vivera-managed"; then
+      echo "$entry"
+      continue
+    fi
+    if [ ! -L "$skill_md" ]; then
+      continue
+    fi
+    state="$(classify_dest "$skill_md" "$REPO_DIR/skills/$name/SKILL.md")"
+    case "$state" in
+      ok | ours-stale) echo "$entry" ;;
+    esac
+  done
+}
+
+# One "[SKIP] <name>: unusual name" line for every sucp-* dir of a package target whose name holds a
+# newline or a tab: it is left alone, because nothing that reads names a line at a time can be trusted
+# with it.
+report_unusual_stale_names() {
+  local id="$1"
+  local parent entry name
+  if [ "$(target_kind "$id")" != package ]; then
+    return 0
+  fi
+  parent="$(dirname "$(target_skills_dir "$id")")"
+  for entry in "$parent"/sucp-*; do
+    # Only a real directory is a phase dir, as in stale_phase_dirs: a file or a link of that name is not.
+    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
+      continue
+    fi
+    name="$(basename "$entry")"
+    case "$name" in
+      *$'\n'* | *$'\t'*) left_alone "$(printf '%q' "$name"): unusual name" ;;
+    esac
+  done
+}
+
+# --- Install ----------------------------------------------------------------------------------
+
+# How many targets install_targets acted on in this run; finish_line reads it.
+SELECTED_COUNT=0
+
+# One line naming the harnesses a run left out only because they were not detected. Nothing is said when
+# the user named targets with --only (those are installed whether detected or not), and a harness the
+# user skipped with --skip was left out by them, not for this reason.
+report_undetected() {
+  local id
+  local missing=""
+  if [ -n "${ONLY:-}" ]; then
+    return 0
+  fi
+  while IFS= read -r id; do
+    if target_detected "$id"; then
+      continue
+    fi
+    if [ -n "${SKIP:-}" ] && list_has "$SKIP" "$id"; then
+      continue
+    fi
+    missing="${missing:+$missing, }$id"
+  done <<< "$(target_ids)"
+  if [ -n "$missing" ]; then
+    echo "[INFO] not detected, skipped: $missing (name one with --only to install anyway)"
+  fi
+}
+
+# The last line of install and update: it says only what the run did. $1 is the line for a run that
+# did its work. A dry run wrote nothing, and a selection that came out empty installed nothing; both
+# still exit 0, as they always did.
+finish_line() {
+  local verb="installed"
+  if [ "$MODE" = update ]; then
+    verb="updated"
+  fi
+  if [ "$SELECTED_COUNT" -eq 0 ]; then
+    echo "==> Nothing was selected: --only and --skip left no target, so no skills or sprite agents were $verb"
+  elif [ "$DRY_RUN" = true ]; then
+    echo "==> Dry run finished: nothing was written (run again without --dry-run to apply it)"
+  else
+    echo "$1"
+  fi
+}
+
+install_one_target() {
+  local id="$1"
+  local dir dest note
+  dir="$(target_skills_dir "$id")"
+  case "$(target_kind "$id")" in
+    file)
+      IFS=$'\t' read -r _ dest <<< "$(target_entries "$id")"
+      link_target "$(dirname "$dest")" "$dest"
+      ;;
+    package)
+      link_skill_package "$dir"
+      ;;
+    none)
+      # Only the sprite agents are done for these, and not even those at tier minimal.
+      if [ "$TIER" = minimal ]; then
+        note="no sprite agents at tier minimal, so nothing to install"
+      elif [ "$DRY_RUN" = true ]; then
+        note="would install its sprite agents only"
+      else
+        note="installing its sprite agents only"
+      fi
+      echo "[INFO] $id: no skills target of its own (its skills come from ~/.agents/skills); $note"
+      ;;
+  esac
+  # Sprite agents are a separate artifact, so a harness without a skills dir of its own gets them too.
+  render_sprites "$id"
+}
+
+install_targets() {
+  local selected id
+  selected="$(select_targets)"
+  SELECTED_COUNT=0
+  report_undetected
+  for id in $selected; do
+    SELECTED_COUNT=$((SELECTED_COUNT + 1))
+    install_one_target "$id"
+  done
+  # One line covers every harness that would have rendered sprites; it prints at tier minimal
+  # whether or not such a harness was selected, as it always has.
+  if [ "$TIER" = minimal ]; then
+    echo "[SKIP] sprite agents: tier minimal needs no bun"
+  fi
+
+  # Retired 2026-10-01: the vendored `use-tinyfish` skill is gone.
+  #     TinyFish is now documented inline in the master skill
+  #     ("Super Ultra Code Plan Implementation.md", section
+  #     "Web Evidence & Retrieval — TinyFish"), so the whole super-ultra-code-plan
+  #     package carries the escalation ladder wherever it is deployed. A separate
+  #     skill created drift: two sources of truth documenting different tool
+  #     surfaces, and the CLI copy never described the MCP tools agents actually call.
+  #     Revert: restore this block, restore `skills/use-tinyfish/SKILL.md` from git
+  #     history at the pre-2026-10-01 commit, and re-run ./install.sh. Cleanup for
+  #     already-deployed copies: `rm -f` the SKILL.md symlinks under
+  #     ~/.agents/skills/use-tinyfish/, ~/.config/opencode/skills/use-tinyfish/,
+  #     ~/.gemini/config/skills/use-tinyfish/ and
+  #     ~/.gemini/antigravity-cli/builtin/skills/use-tinyfish/, then `rmdir` the
+  #     empty dirs. They are symlinks into this repo, so removing the target breaks
+  #     them without touching real content.
+}
+
+# Local repo self-check: the relative links inside this checkout's own skill package.
+install_selfcheck() {
+  # Copy mode installs files, not links into this checkout, so its own relative links are not part of it.
+  if [ "${COPY_MODE:-false}" = true ]; then
+    echo "[SKIP] internal repo links: copy mode"
+  elif [ "$DRY_RUN" = true ]; then
+    echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/super-ultra-code-plan"
+    echo "[DRY-RUN]   - SKILL.md -> ../../Super Ultra Code Plan Implementation.md"
+    echo "[DRY-RUN]   - templates -> ../../templates"
+    echo "[DRY-RUN]   - examples -> ../../examples"
+    echo "[DRY-RUN]   - mermaid.config.json -> ../../mermaid.config.json"
+    echo "[DRY-RUN]   - mermaid.dark.config.json -> ../../mermaid.dark.config.json"
+  else
+    local package_dir="$REPO_DIR/skills/super-ultra-code-plan"
+    local entry name relative_target
+    # name|relative target, in the order the dry-run block above lists them.
+    local internal_links=(
+      "SKILL.md|../../Super Ultra Code Plan Implementation.md"
+      "templates|../../templates"
+      "examples|../../examples"
+      "mermaid.config.json|../../mermaid.config.json"
+      "mermaid.dark.config.json|../../mermaid.dark.config.json"
+    )
+    mkdir -p "$package_dir"
+    for entry in ${internal_links[@]+"${internal_links[@]}"}; do
+      place_repo_link "${entry#*|}" "$package_dir/${entry%%|*}"
+    done
+    # Verify before claiming it: each link must resolve and carry the expected relative target.
+    for entry in ${internal_links[@]+"${internal_links[@]}"}; do
+      name="${entry%%|*}"
+      relative_target="${entry#*|}"
+      if [ ! -e "$package_dir/$name" ] || [ "$(readlink "$package_dir/$name")" != "$relative_target" ]; then
+        echo "[FAIL] internal repo skill package link $name does not resolve" >&2
+        exit 1
+      fi
+    done
+    echo "[OK] Internal repo skill package symlinks verified."
+  fi
+}
+
+# True when REPO_DIR is the top of a git checkout of its own (install_hooks writes core.hooksPath only there).
+repo_is_own_checkout() {
+  local top
+  # git may spell the toplevel differently from bash (a trailing slash, a path through a symlink; a
+  # Windows drive spelling is the case that was expected on Git Bash and has not been run there), so both
+  # sides go through the same cd -P and pwd -P. No toplevel at all is never a match.
+  top="$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" || return 1
+  [ -n "$top" ] || return 1
+  [ "$(cd -P "$top" 2>/dev/null && pwd -P)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]
+}
+
+# Enable the committed git hooks. `.githooks/pre-commit` keeps the repo's
+#    graph consistent with each commit: when code changed it runs
+#    `graphify update .` (local AST), then `bun run graphify:sync` adds the
+#    Markdown's structural nodes last. A Markdown-only commit pays only for the
+#    sync. core.hooksPath is repo-local config, so this changes nothing outside
+#    this checkout and is undone with one unset. The hook itself never blocks a
+#    commit: every path exits 0, because the graph is derived state.
+#    graphify is an optional tool, so when it is absent install.sh skips this
+#    setup entirely: the hook would only print its one-line "graphify CLI not
+#    found" note, the same no-op it already performs on machines without it.
+#    Tier minimal skips the step: it needs git, which that tier does not require. A copy of this
+#    repo inside some other git repo (no .git of its own) is skipped too: core.hooksPath would be
+#    written into the outer repo's config, which is not this installer's to change.
+install_hooks() {
+  if [ "$TIER" = minimal ]; then
+    echo "[SKIP] git hooks: tier minimal needs no git"
+  elif ! tool_available graphify; then
+    # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
+    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable, so skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
+  elif repo_is_own_checkout; then
+    if [ "$DRY_RUN" = true ]; then
+      echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
+      echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"
+    else
+      git -C "$REPO_DIR" config core.hooksPath .githooks
+      echo "[OK] Enabled git hooks: core.hooksPath=.githooks"
+      echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
+    fi
+  else
+    echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
+  fi
+}

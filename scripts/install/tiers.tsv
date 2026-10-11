@@ -1,0 +1,11 @@
+# Columns, TAB separated: tool, required_from (standard, full or never), capability lost when the tool is absent.
+# The minimal tier requires nothing; a tool is required when the chosen tier ranks at or above required_from, and never means no tier requires it.
+git	standard	repo self-check and core.hooksPath setup
+bun	standard	every script, sprite rendering and tests
+gh	full	plan issue sync and PR creation
+tgrep	full	trigram-indexed code search and the validate gate
+graphify	never	knowledge-graph query and the pre-commit graph refresh
+rtk	never	output-compressing proxy
+context-mode	never	token-efficient output routing
+opencode	never	the OpenCode harness
+snipset	never	Snipset database and MCP tools

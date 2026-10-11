@@ -109,7 +109,7 @@ function checkSkills(skills, label, skillsDir, errors) {
       errors.push(`${label}: "skills" entry "${skill}" must be a bare skill name and must not contain "/", "\\" or ".."`);
     } else if (!fs.existsSync(path.join(skillsDir, skill, 'SKILL.md'))) {
       errors.push(
-        `${label}: skill "${skill}" has no skills/${skill}/SKILL.md in this repository (Claude Code resolves skills from installed locations; run ./install.sh)`,
+        `${label}: skill "${skill}" has no skills/${skill}/SKILL.md in this repository (fix the skill name in the agent file or add skills/${skill}/SKILL.md; ./install.sh then installs it where Claude Code resolves skills)`,
       );
     }
   }

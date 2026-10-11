@@ -74,9 +74,23 @@ verify() {
   fi
 }
 
+# The same rule as scripts/release/build-archive.sh: the regex runs under LC_ALL=C because a UTF-8
+# locale can widen a range such as A-Z, and the names git refuses are turned away too. build-archive.sh
+# asks `git check-ref-format`; here git is not required (tier minimal has none), and for the
+# characters the regex allows, those rules come down to the three patterns below.
+is_release_tag() {
+  local tag_re='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'
+  case "$1" in
+    *..* | *. | *.lock) return 1 ;;
+  esac
+  (
+    LC_ALL=C
+    [[ "$1" =~ $tag_re ]]
+  )
+}
+
 main() {
   local ref="" dest="" have_ref=false
-  local tag_re='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -107,7 +121,7 @@ main() {
   # What is left in "$@" is for install.sh.
 
   [ "$have_ref" = true ] || bad_usage "--ref is required"
-  if ! [[ "$ref" =~ $tag_re ]]; then
+  if ! is_release_tag "$ref"; then
     bad_usage "--ref must be a release tag like v1.2.3 (got \"$ref\"); branches and SHAs are not accepted"
   fi
 

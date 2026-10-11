@@ -220,7 +220,9 @@ describe('bootstrap: a release that cannot be trusted is refused before anything
 describe('bootstrap: only a release tag is accepted', () => {
   const never = 'file:///nonexistent';
 
-  for (const ref of ['main', 'v1', 'v1.0.0;rm -rf x', '0.1.0', '', 'a1b2c3d4e5f6', 'v1.0.0/../x']) {
+  // The last five match a plain [0-9A-Za-z.] pattern but are not valid git ref names, or are not ASCII.
+  const badRefs = ['main', 'v1', 'v1.0.0;rm -rf x', '0.1.0', '', 'a1b2c3d4e5f6', 'v1.0.0/../x', 'v1.0.0..', 'v1.0.0.lock', 'v1.0.0-.', 'v1.0.0-rc..1', 'v1.0.0-é'];
+  for (const ref of badRefs) {
     test(`--ref ${JSON.stringify(ref)} exits 2 with the usage text and attempts nothing`, () => {
       const { sb, dest } = setup();
       const r = boot(sb, ['--ref', ref, '--dest', dest], { base: never });
@@ -231,6 +233,27 @@ describe('bootstrap: only a release tag is accepted', () => {
       expectUntouched(sb, dest);
     });
   }
+
+  test('a non-ASCII tag is refused whatever the locale says a letter is', () => {
+    const { sb, dest } = setup();
+    for (const locale of ['en_US.UTF-8', 'C.UTF-8']) {
+      const r = boot(sb, ['--ref', 'v1.0.0-é', '--dest', dest], { base: never, env: { LC_ALL: locale } });
+      expect(r.status).toBe(2);
+    }
+    expectUntouched(sb, dest);
+  });
+
+  test('bootstrap.sh and build-archive.sh accept and refuse the same tags', () => {
+    const { sb, dest } = setup();
+    const accepted = ['v1.0.0', 'v1.0.0-rc.1', 'v1.0.0.1', 'v1.0.0-.1', 'v10.20.30', 'v1.2.3-rc.1.2'];
+    const buildEnv = { PATH: process.env.PATH, HOME: sb.home, GIT_CONFIG_GLOBAL: '/dev/null', VIVERA_REPO_DIR: path.join(sb.root, 'no-such-repo') };
+    for (const tag of [...accepted, ...badRefs.filter((r) => r !== '' && r !== 'a1b2c3d4e5f6')]) {
+      const built = Bun.spawnSync(['bash', BUILD, tag, path.join(sb.root, 'parity-out')], { env: buildEnv });
+      const booted = boot(sb, ['--ref', tag, '--dest', dest], { base: never });
+      // Exit 2 is the usage refusal; any other status means the tag got past the check.
+      expect({ tag, build: built.exitCode === 2, bootstrap: booted.status === 2 }).toEqual({ tag, build: !accepted.includes(tag), bootstrap: !accepted.includes(tag) });
+    }
+  });
 
   test('a missing --ref exits 2 with the usage text', () => {
     const { sb, dest } = setup();

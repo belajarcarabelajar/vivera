@@ -8,10 +8,17 @@
 # Exit 0 on success, 1 on any git or hashing failure, 2 on a bad argument.
 # Neither file is left behind unless the whole build succeeded.
 #
-# Reproducible: git stamps every entry with the commit time and `gzip -n`
-# drops the name and timestamp from the gzip header, so the same commit gives
-# the same bytes. tar.umask is pinned because a user-level setting would change
-# the stored file modes.
+# What is and is not reproducible: git stamps every entry with the commit time,
+# and tar.umask is pinned because a user-level setting (or the umask) would
+# change the stored file modes, so the tar stream does not depend on the clock
+# or on the builder's git config. The compressed bytes are only as stable as the
+# gzip that runs: another gzip implementation or level gives a different hash,
+# so compare hashes only between builds that share it. `gzip -n` drops the file
+# name and timestamp from the gzip header, which only matters when gzip reads a
+# file; here it reads a pipe and stores neither anyway, so `-n` is a guard.
+#
+# The .sha256 detects a damaged or swapped archive. It is not an attestation:
+# it says nothing about who built the archive or from which commit.
 #
 # VIVERA_REPO_DIR overrides the repository to archive (default: two levels
 # above this script).
@@ -31,7 +38,16 @@ outdir="$2"
 ref="${3:-HEAD}"
 
 tag_re='^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'
-if ! [[ "$tag" =~ $tag_re ]] || [ -z "$outdir" ]; then
+# The match runs under LC_ALL=C because in a UTF-8 locale a range such as A-Z can
+# admit letters outside ASCII. The pattern also accepts names git refuses
+# (v1.0.0.., v1.0.0.lock, a trailing dot), so the tag must be a valid ref name too.
+is_release_tag() {
+  (
+    LC_ALL=C
+    [[ "$1" =~ $tag_re ]]
+  ) && git check-ref-format "refs/tags/$1"
+}
+if ! is_release_tag "$tag" || [ -z "$outdir" ]; then
   usage
   exit 2
 fi

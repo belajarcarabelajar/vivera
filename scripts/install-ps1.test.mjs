@@ -54,9 +54,11 @@ describe('install.ps1: file hygiene', () => {
     expect(header).toContain('NOT VERIFIED ON WINDOWS');
     expect(header).toContain('never been executed on Windows');
     expect(header).toContain('Known limits');
-    for (const limit of ['OneDrive', 'put back only for the entry being placed', 'ALWAYS moved to a backup', 'tiers.tsv is not read', 'exit 1 (PowerShell', 'ps-sha256']) {
+    for (const limit of ['OneDrive', 'put back only for the entry being placed', 'pristine', 'refreshes a pristine copy with no backup', '~\\.bun\\bin', 'tiers.tsv is not read', 'exit 1 (PowerShell', 'ps-sha256']) {
       expect({ limit, said: header.includes(limit) }).toEqual({ limit, said: true });
     }
+    // The old bullet said a differing managed copy is always moved aside; that stopped being true with W2.
+    expect(header).not.toContain('ALWAYS moved to a backup');
   });
 
   test('install.ps1 dot-sources both parts from beside itself ($PSScriptRoot), with two-argument Join-Path', () => {
@@ -290,6 +292,56 @@ describe('install.ps1: the fixes F1, F2, F3 and F6, read from the text', () => {
   test('F6: a dry run says so at the end, for install and for -Update', () => {
     expect(code).toContain("'==> Vivera dry run: nothing was written'");
     expect(code).toContain("'==> Vivera update dry run: nothing was written'");
+  });
+
+  test('W1 and W2: a managed copy is identical, pristine or modified by the recorded digest, and install, check and uninstall all read that', () => {
+    const state = fn('Get-ManagedState');
+    expect(state).toContain('identical');
+    expect(state).toMatch(/Get-EntryDigest/);
+    expect(state).toMatch(/-ceq \(Get-RecordedDigest/);
+    expect(state).toMatch(/\(\$current -ne ''\)/);
+    expect(fn('Get-DestState')).toContain('Get-ManagedState');
+    const un = fn('Uninstall-Entry');
+    expect(un).toContain('Get-ManagedState');
+    expect(un).not.toContain('Test-SameContent');
+    expect(un).toContain('modified copy: it stays as it is; .\\install.ps1 -Update replaces it after backing yours up');
+    expect(read('scripts/install/uninstall.sh')).toContain('modified copy: it stays as it is; ./install.sh --update --copy replaces it after backing yours up');
+    const place = fn('Invoke-Place');
+    expect(place).toContain("'pristine'");
+    expect(place.indexOf("'pristine'")).toBeLessThan(place.indexOf('Get-BackupPath'));
+    expect(fn('Invoke-Check')).toContain("'pristine'");
+    expect(fn('Get-RecordedDigest')).toMatch(/\$count -eq 1/);
+  });
+
+  test('W3: an absent destination behind a linked directory, and a link behind one, are viadir; the skips are counted for the last line', () => {
+    expect(fn('Test-BehindLinkedAncestor')).toMatch(/Test-BehindLinkedDir \(Join-Path \$p 'x'\)/);
+    const state = fn('Get-DestState');
+    expect(state).toContain('Test-BehindLinkedAncestor');
+    expect(state.indexOf('Test-BehindLinkedDir $Dest')).toBeLessThan(state.indexOf('Test-Reparse'));
+    expect(state).not.toMatch(/-not \(Test-Reparse \$item\)\) -and \(Test-BehindLinkedDir/);
+    expect(fn('Uninstall-Entry')).not.toMatch(/-not \(Test-Reparse \$item\)\) -and \(Test-BehindLinkedDir/);
+    expect(fn('Invoke-Place').match(/Add-Skipped/g)?.length).toBe(2);
+    expect(fn('Write-FinalLine')).toContain('Vivera finished with');
+    expect(read('scripts/install/place.sh')).toContain('Vivera finished with $LEFT_ALONE $word left alone (see the [SKIP] lines above)');
+  });
+
+  test('W4: Get-ItemOrNull returns $null only for a plain not-found, and fails with "cannot inspect <path>: <reason>" for anything else', () => {
+    const get = fn('Get-ItemOrNull');
+    expect(get).not.toMatch(/catch \{ return \$null \}/);
+    expect(get).toContain('ObjectNotFound');
+    expect(get).toContain('Test-EntryPresent');
+    expect(get).toContain('throw "cannot inspect ${Path}: $($err.Exception.Message)"');
+    // The .NET attribute lookup does not follow links, so a link Get-Item cannot read still counts as present.
+    expect(fn('Test-EntryPresent')).toContain('[System.IO.File]::GetAttributes($Path)');
+    expect(fn('Test-EntryPresent')).toContain('FileNotFoundException');
+    expect(fn('Test-EntryPresent')).toContain('DirectoryNotFoundException');
+    expect(ps1).toContain('"[FAIL] $reason"');
+  });
+
+  test('W5: an empty id is refused with exit 2 by name, and one trailing empty piece is dropped as read -a does in bash', () => {
+    expect(fn('Split-List')).toMatch(/\$parts\.Count -gt 1/);
+    expect(code).toContain('Unknown target: <empty id in -$name ');
+    expect(read('install.sh')).toContain('IFS=\',\' read -r -a ids');
   });
 
   test('Test-UnderPath reads both separators, so the guards also work on a Linux run', () => {

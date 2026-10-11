@@ -9,10 +9,14 @@ function Test-Detected($T) {
 }
 
 # Every id of a list, each element split on commas: -Only claude,opencode (an array, as typed at a prompt) and
-# -File install.ps1 -Only "claude,opencode" (one string) both work.
+# -File install.ps1 -Only "claude,opencode" (one string) both work. One empty piece after a trailing comma is
+# dropped, as read -a does in install.sh ("claude," is claude); an empty id anywhere else stays, and is refused.
 function Split-List($List) {
     foreach ($item in @($List)) {
-        if ($null -ne $item) { foreach ($part in ([string]$item).Split(',')) { $part.Trim() } }
+        if ($null -eq $item) { continue }
+        $parts = @(([string]$item).Split(','))
+        if (($parts.Count -gt 1) -and ($parts[$parts.Count - 1].Trim() -eq '')) { $parts = @($parts[0..($parts.Count - 2)]) }
+        foreach ($part in $parts) { $part.Trim() }
     }
 }
 
@@ -91,12 +95,26 @@ function Set-Marker([string]$Path, [string[]]$Dests) {
 function Invoke-Place($Entry) {
     $dest = $Entry.Dest
     $state = Get-DestState $Entry.Src $dest $Entry.IsDir
-    if ($state -eq 'inrepo') { Write-Host "[SKIP] $dest is inside this checkout; left alone"; return }
-    if ($state -eq 'viadir') { Write-Host "[SKIP] $dest is reached through a symlinked directory; left alone"; return }
+    if ($state -eq 'inrepo') { Write-Host "[SKIP] $dest is inside this checkout; left alone"; Add-Skipped; return }
+    if ($state -eq 'viadir') { Write-Host "[SKIP] $dest is reached through a symlinked directory; left alone"; Add-Skipped; return }
     if ($state -eq 'ok') { $script:Placed.Add($dest); return }
     $script:Changed++
     if ($state -eq 'absent') {
         if (Test-Proceed $dest 'copy') { Copy-Entry $Entry.Src $dest $Entry.IsDir; $script:Placed.Add($dest); Write-Host "[OK] Copied: $dest" }
+        return
+    }
+    # pristine: what the installer placed, only outdated. Nothing of the user's is in it, so no backup.
+    if ($state -eq 'pristine') {
+        if (Test-Proceed $dest 'refresh') {
+            try {
+                Remove-Tree $dest
+                Copy-Entry $Entry.Src $dest $Entry.IsDir
+            } catch {
+                throw "could not refresh $dest ($($_.Exception.Message))"
+            }
+            $script:Placed.Add($dest)
+            Write-Host "[OK] Refreshed: $dest"
+        }
         return
     }
     # modified or foreign: it is moved aside first, then the copy goes in; if the copy fails it is put back.
@@ -116,10 +134,26 @@ function Invoke-Place($Entry) {
     Write-Host "[OK] Copied: $dest"
 }
 
+# One entry left alone: counted for the package line and for the last line of the run.
+function Add-Skipped { $script:Skipped++; $script:TargetSkipped++ }
+
+# The last line of install and -Update: a dry run says so, and a run that left entries alone says how many
+# instead of claiming the package is planted (the bash installer does the same).
+function Write-FinalLine([string]$Done, [string]$DryDone) {
+    if ($script:DryRunOn) { Write-Host $DryDone; return }
+    if ($script:Skipped -gt 0) {
+        $word = if ($script:Skipped -eq 1) { 'entry' } else { 'entries' }
+        Write-Host "==> Vivera finished with $($script:Skipped) $word left alone (see the [SKIP] lines above)"
+        return
+    }
+    Write-Host $Done
+}
+
 function Install-Target($T) {
     if ($T.Kind -eq 'none') { Write-Host "[SKIP] $($T.Id): its skills come from the .agents\skills directory; no skills target"; return }
     $entries = @(Get-TargetEntries $T)
     $script:Changed = 0
+    $script:TargetSkipped = 0
     $script:Placed.Clear()
     foreach ($e in $entries) { Invoke-Place $e }
     if ($script:DryRunOn) { Write-Host "[DRY-RUN] Would mark each directory it filled for $($T.Id) with $MarkerName"; return }
@@ -134,7 +168,10 @@ function Install-Target($T) {
         if (Test-InsideCheckout $m) { continue }
         Set-Marker $m @($byMarker[$m])
     }
-    if ($script:Changed -eq 0) { Write-Host "[OK] Already current: $($T.Id)" } else { Write-Host "[OK] Copied skill package: $($T.Id)" }
+    if ($script:TargetSkipped -gt 0) {
+        $word = if ($script:TargetSkipped -eq 1) { 'entry' } else { 'entries' }
+        Write-Host "[WARN] skill package $($T.Id): $($script:TargetSkipped) $word left alone, the rest is in place"
+    } elseif ($script:Changed -eq 0) { Write-Host "[OK] Already current: $($T.Id)" } else { Write-Host "[OK] Copied skill package: $($T.Id)" }
 }
 
 function Invoke-InstallAll($Selected) {
@@ -194,6 +231,7 @@ function Invoke-Check($Selected) {
             }
             $problems++
             if ($state -eq 'absent') { Write-Host "[missing] $($e.Dest)" }
+            elseif ($state -eq 'pristine') { Write-Host "[stale] $($e.Dest) (outdated: it is exactly what was installed before, not what this checkout has; -Update refreshes it)" }
             elseif ($state -eq 'modified') { Write-Host "[stale] $($e.Dest) (the copy differs from $($e.Src); -Update moves it aside)" }
             elseif ($state -eq 'inrepo') { Write-Host "[foreign] $($e.Dest) (inside this checkout, not the expected file)" }
             elseif ($state -eq 'viadir') { Write-Host "[foreign] $($e.Dest) (behind a symlinked directory; left alone)" }
@@ -216,16 +254,20 @@ function Add-Kept([string]$Dest, [string]$Why) {
     Write-Host "[KEEP] $Dest ($Why)"
 }
 
-# A copy goes only while it is identical to its source; one that differs is yours now.
+# A copy goes while it is the installer's own bytes: identical to its source, or pristine (exactly what it placed,
+# merely outdated: judged by the recorded digest, not by the current source). A modified one is yours now.
 function Uninstall-Entry($Entry) {
     $dest = $Entry.Dest
     if (Test-InsideCheckout $dest) { $script:Kept++; Write-Host "[KEEP] $dest (inside this checkout)"; return }
     $item = Get-ItemOrNull $dest
     if ($null -eq $item) { return }
-    # A real file of another tree, reached through a symlinked directory: never removed through the link.
-    if ((-not (Test-Reparse $item)) -and (Test-BehindLinkedDir $dest)) { Add-Kept $dest 'behind a symlinked directory'; return }
+    # Anything of another tree, reached through a symlinked directory (a link there too): never removed through it.
+    if (Test-BehindLinkedDir $dest) { Add-Kept $dest 'behind a symlinked directory'; return }
     if ((Test-Reparse $item) -or (-not (Test-Managed $dest))) { Add-Kept $dest 'not a vivera copy'; return }
-    if (-not (Test-SameContent $Entry.Src $dest $Entry.IsDir)) { Add-Kept $dest 'modified copy'; return }
+    if ((Get-ManagedState $Entry.Src $dest $Entry.IsDir) -eq 'modified') {
+        Add-Kept $dest 'modified copy: it stays as it is; .\install.ps1 -Update replaces it after backing yours up'
+        return
+    }
     $backup = Get-NewestBackup $dest
     $script:Removed++
     if ($backup) { $script:Restored++ }

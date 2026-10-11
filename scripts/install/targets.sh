@@ -53,6 +53,19 @@ target_detected() {
   esac
 }
 
+# The links a target makes, one "<desired><TAB><dest>" line each (see package_entries in lib.sh):
+# one line for ai-config, the whole package for a package target, nothing for a target without skills.
+target_entries() {
+  local id="$1"
+  local dir
+  dir="$(target_skills_dir "$id")"
+  case "$(target_kind "$id")" in
+    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/Super Ultra Code Plan Implementation.md" ;;
+    package) package_entries "$dir" ;;
+    none) ;;
+  esac
+}
+
 is_target_id() {
   local want="$1"
   local id
@@ -140,11 +153,12 @@ install_sprites() {
 
 install_one_target() {
   local id="$1"
-  local dir
+  local dir dest
   dir="$(target_skills_dir "$id")"
   case "$(target_kind "$id")" in
     file)
-      link_target "$dir" "$dir/Super Ultra Code Plan Implementation.md"
+      IFS=$'\t' read -r _ dest <<< "$(target_entries "$id")"
+      link_target "$(dirname "$dest")" "$dest"
       ;;
     package)
       link_skill_package "$dir"

@@ -68,6 +68,11 @@ marker_begin() {
   if [ -e "$marker" ]; then
     return 0
   fi
+  # Copy mode places nothing behind a symlinked directory (classify_dest says viadir), so no marker
+  # is made there either: it would land in the other tree with nothing to describe.
+  if behind_symlinked_ancestor "$marker"; then
+    return 0
+  fi
   make_dir "$(dirname "$marker")"
   printf 'source=%s\n' "$REPO_DIR" > "$marker"
 }
@@ -87,6 +92,11 @@ write_marker() {
     return 0
   fi
   marker_check "$marker"
+  # Nothing is placed behind a symlinked directory in copy mode, so there is nothing to record, and
+  # a marker that is there is the other tree's to keep as it is.
+  if behind_symlinked_ancestor "$marker"; then
+    return 0
+  fi
   dir="$(dirname "$marker")"
   for dest in "$@"; do
     placed="$placed$(basename "$dest")"$'\n'

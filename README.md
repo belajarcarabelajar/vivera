@@ -87,7 +87,7 @@ vivera/
 ├── install.ps1                                  # Windows installer: copy mode, skills only (run under pwsh 7.6.6 on Linux; not verified on Windows)
 ├── Dockerfile                                   # Container image on oven/bun:1.4.2-debian, non-root user, standard tier (never built)
 ├── .dockerignore                                # Keeps private state out of the image
-├── .gitattributes                               # Forces LF for *.sh and scripts/install/tiers.tsv (a CRLF checkout breaks the installer)
+├── .gitattributes                               # Forces LF for *.sh, .githooks/* and scripts/install/tiers.tsv (a CRLF checkout breaks the installer)
 ├── .devcontainer/
 │   └── devcontainer.json                        # Builds the Dockerfile base stage and links the mounted workspace
 ├── mermaid.config.json                          # Light theme: palette + embedded-font stack
@@ -193,8 +193,8 @@ vivera/
 │   ├── vault-index-cluster.mjs                  # Leiden clustering pass for knowledge graph
 │   └── plan-mirror-check.sh                     # Local drift watchdog (systemd --user timer, check only)
 ├── snippets.manifest.json                      # Maps trigger prompts to Snipset database slots
-├── plans.publish.json                          # Vault path, destination template, and project roots for the plan mirror
-├── plan.issues.json                            # Project -> owner/repo for the plan-issue mirror (committed config)
+├── plans.publish.json                          # Vault path, destination template, and project roots for the plan mirror (local config, gitignored; plans.publish.example.json is the committed template)
+├── plan.issues.json                            # Project -> owner/repo for the plan-issue mirror (local config, gitignored; plan.issues.example.json is the committed template)
 ├── pr.registry.json                            # Live PR session slots (gitignored; per-machine coordination state)
 ├── snippets/                                    # Copy-paste trigger prompts
 │   ├── orkestrasi-brainstorm.md                # Brainstorm intent lock (keyword: brn)
@@ -292,7 +292,7 @@ A plain `./install.sh` runs the `standard` tier (see Prerequisites) and does thi
 | Step | What it does |
 |---|---|
 | Links the skills | The skill package (`SKILL.md`, the seven `sucp-*` phase skills, `templates/`, `examples/` and the two Mermaid configs) is linked into each target with absolute paths into this checkout, so keep the checkout where it is. `--copy` copies the files instead. |
-| Picks the targets | `~/.config/ai` and `~/.agents/skills` always. Every other harness only when it is detected (its directory under your home, or its CLI on `PATH`, `~/.local/bin` or `~/.bun/bin`; the table gives the exact rule per target) or named with `--only ID,ID`. A bare home gets just those two. |
+| Picks the targets | `~/.config/ai` and `~/.agents/skills` always. Every other harness only when it is detected (its directory under your home, or its CLI on `PATH`, `~/.local/bin` or `~/.bun/bin`; the table below names the directory and the CLI of each target, and the CLI is looked for in all three places for every row) or named with `--only ID,ID`. A bare home gets just those two. |
 | Renders the sprite agents | The seven Harvest Sprite subagent files are generated, not linked, for each detected harness among Claude Code, OpenCode, Codex, Cursor, Copilot and Antigravity. This needs `bun`, so tier `minimal` skips it. |
 | Enables the git hook | Sets `core.hooksPath=.githooks` in this checkout, only when `graphify` is installed and the checkout has its own `.git`. Undo it with `git -C <checkout> config --unset core.hooksPath`. |
 | Protects your files | A file or directory already at a destination that is not the installer's own is moved to `<name>.vivera-bak-<UTC time>` first (a `[BACKUP]` line), so nothing is overwritten. |
@@ -358,8 +358,8 @@ and the validator cannot disagree about a tier.
 
 | Tier | Needs on your machine | What it installs |
 |---|---|---|
-| `minimal` | Nothing beyond bash and `basename`, `dirname`, `head`, `ln`, `mkdir`, `readlink` and `uname` (`--copy` also needs `cmp` and `diff`). | The skills only: no sprite agents (they need `bun`) and no git hook (it needs `git`). Verified with `git` and `bun` absent from `PATH`: install exits 0 and `--check` prints `check: CURRENT` (with ` (sprite agents not verified: ...)` appended when a sprite harness is selected). |
-| `standard` (default) | `git`, `bun` | The skills and the sprite agents, plus the git hook when `graphify` is installed and this is a git checkout. A missing `gh` or `tgrep` prints one warning each, and the run goes on. The other optional tools in the table below (`rtk`, `context-mode`, `opencode`, `snipset`, `graphify`) warn the same way, so a bare machine sees seven warnings. |
+| `minimal` | Nothing beyond bash and `basename`, `dirname`, `head`, `ln`, `mkdir`, `readlink` and `uname` for a first install, `--dry-run`, `--check` and an `--update` that moves nothing aside. Moving a file aside also needs `date` and `mv`, `--uninstall` needs `rm` (and `mv` to put a backup back), and `--copy` needs `cmp`, `diff`, `cp`, `mv` and `find`. | The skills only: no sprite agents (they need `bun`) and no git hook (it needs `git`). Verified with `git` and `bun` absent from `PATH`: install exits 0 and `--check` prints `check: CURRENT` (with ` (sprite agents not verified: ...)` appended when a sprite harness is selected). |
+| `standard` (default) | `git`, `bun` | The skills and the sprite agents, plus the git hook when `graphify` is installed and this is a git checkout. A missing `gh` or `tgrep` prints one warning each, and the run goes on. The other optional tools in the table below (`rtk`, `context-mode`, `opencode`, `snipset`, `graphify`) warn the same way, so a machine that has only `git` and `bun` sees seven warnings (`gh`, `tgrep`, `graphify`, `rtk`, `context-mode`, `opencode`, `snipset`); a machine without `git` or `bun` stops with exit 1 at the first missing one, before any warning. |
 | `full` | `git`, `bun`, `gh`, `tgrep` | The same files as `standard`. It only makes `gh` and `tgrep` mandatory. |
 
 The tools, from `scripts/install/tiers.tsv`:
@@ -392,7 +392,7 @@ The tools, from `scripts/install/tiers.tsv`:
   (`scripts/render-diagrams.sh` and the Mermaid part of `scripts/validate-skill.mjs`): `mmdc` from
   `@mermaid-js/mermaid-cli` starts with `#!/usr/bin/env node`, and `package.json` asks for Node >= 22.13.0.
   The only lockfile is `bun.lock`.
-- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited. `tgrep` is required only at tier `full`: at `standard` install.sh prints one warning when it is missing (none at `minimal`) and the skill falls back to plain `rg`.
+- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited. `tgrep` is required only at tier `full`: at `standard` install.sh prints one warning when it is missing (none at `minimal`) and the skill's search rule (`skills/sucp-rules/SKILL.md`) accepts `rg` or `tgrep`, so `rg` alone satisfies it.
 
 ### Platform matrix
 
@@ -403,7 +403,7 @@ throwaway home, exit code checked. Anything else is "not verified".
 |---|---|---|---|---|---|
 | `./install.sh`, `minimal` | Verified (no `git`, no `bun` on `PATH`: exit 0, and `check: CURRENT` with the sprite-agents note appended when a sprite harness is selected) | Not verified | Not verified | Not verified | Not verified |
 | `./install.sh`, `standard` | Verified (install, `--check`, `--update`, `--uninstall`, `--copy` and backups, all exit 0) | Not verified | Not verified | Not verified | Not verified |
-| `./install.sh`, `full` | Not verified in this pass (the repo's install tests cover the exit 1 when `gh` or `tgrep` is missing) | Not verified | Not verified | Not verified | Not verified |
+| `./install.sh`, `full` | Verified (real `git`, `gh`, `bun` and `tgrep` on `PATH`: install, `--check`, `--update` and `--uninstall` all exit 0; with `gh` or `tgrep` missing, install exits 1) | Not verified | Not verified | Not verified | Not verified |
 | `./install.sh` in Git Bash, MSYS or Cygwin | n/a | n/a | n/a | Defaults to `--copy` and prints a `[NOTE]`. Seen only with a stub `uname`, not on Windows: not verified | n/a |
 | Release tarball, any tier | Verified for an install from a `git archive` tree (exit 0); no release exists to download | Not verified | Not verified | Not verified | Not verified |
 | `scripts/bootstrap.sh` | Not verified against a real release (`file://` and loopback test servers only) | Not verified | Not verified | Not verified | Not verified |
@@ -436,9 +436,8 @@ other target is installed only when its harness is detected, or when you name it
 
 Every skills directory above except `~/.config/ai` holds `super-ultra-code-plan/` (`SKILL.md`, `templates/`, `examples/` and the two
 Mermaid configs) next to the seven phase skills, `sucp-<name>/SKILL.md`. Runs on Linux in a throwaway home
-checked the directory-based detection and the skills and sprite paths of every target except
-`antigravity-builtin` and `gemini-cli`. Detection by a CLI on `PATH`, and those two rows, come from reading
-`scripts/install/targets.sh` and were not run.
+checked the directory-based and the CLI-based detection and the skills and sprite paths of all 11 targets,
+using stub CLIs for detection.
 
 - **Detected, not installed.** A target that is absent after a successful `./install.sh` means its harness
   was not detected, not that the install failed. The installer does not create an empty config tree for a
@@ -501,12 +500,12 @@ so an install made by an older version, or by hand, is judged by the same rules.
 | `ours-stale` | The installer's own and wrong: a link into this checkout that points elsewhere or dangles, or a link into the items of the old `ai-skills` repository, live or dangling. | Replace it, with no backup, because nothing you wrote is in it. |
 | `foreign` | Anything the installer cannot show is its own: a real file or directory without a marker, or a link that points anywhere else (even a dangling one). | Move it to a backup, then place. |
 | `inrepo` | The destination is a file of this checkout itself (for example `~/.claude/skills/sucp-rules` linked to `<checkout>/skills/sucp-rules`). | Skip. |
-| `viadir` | An existing real file behind a symlinked directory (for example `~/.claude/skills -> ~/dotfiles/skills`). | Skip. |
+| `viadir` | An existing real file behind a symlinked directory (for example `~/.claude/skills -> ~/dotfiles/skills`), or a link there that is not the installer's own; in `--copy` mode also the installer's own links and any absent entry. | Skip. |
 
 | Operation | What it does | Tags you will see |
 |---|---|---|
 | Backup | The colliding file is moved with `mv` to `<dest>.vivera-bak-<UTC YYYYmmddTHHMMSSZ>`, for example `SKILL.md.vivera-bak-20261011T080000Z`. If that name is taken, `-1`, `-2` and so on are appended. If placing the link or copy then fails, your file is moved back and the run exits 1. | `[BACKUP]` |
-| `--check` | Read-only: it creates, moves and removes nothing, also with `--dry-run`, with `--copy` and on a read-only `HOME`. One line per path, then a verdict. | `[ok]`, `[missing]`, `[stale]`, `[dangling]`, `[foreign]`, `[skip]` |
+| `--check` | Read-only: it creates, moves and removes nothing of the installer's, also with `--dry-run`, with `--copy` and on a read-only `HOME` (when it runs `bun` for the sprite check, `bun` itself may create its transpiler cache under `~/.bun`; `BUN_RUNTIME_TRANSPILER_CACHE_PATH=0` stops that). One line per path, then a verdict. | `[ok]`, `[missing]`, `[stale]`, `[dangling]`, `[foreign]`, `[skip]` |
 | `--update` | Runs every step of a plain install, then prunes. A dangling link into the old `ai-skills` path is repointed with no backup. A `sucp-*` directory that this checkout no longer has is pruned, but only when it is a real directory that is the installer's own (it holds a marker, or its `SKILL.md` is a link the installer judges `ok` or `ours-stale`). Your own directory and a live link elsewhere are never pruned. In a directory that also holds other files, only the installer's link (or its `SKILL.md` and marker) is removed and the directory stays; the directory itself goes only when that leaves it empty. An edited `SKILL.md`, or a `SKILL.md` that is a symlink, is kept with a `[KEEP]` line. `--check` lists the same set as `[stale]`. | `[PRUNED]` |
 | `--uninstall` | Removes every `ok` or `ours-stale` link and then puts the newest backup back: the later UTC stamp wins, then the larger `-N` as a number (`-10` beats `-2`); names that only look like a backup are ignored and older backups stay. It removes a directory with `rmdir` only when it is empty, with one exception: a managed copy directory (`templates/`, `examples/`) that is identical to its source, or still matches its recorded digest, is removed whole. A modified copy is kept, so your files survive. It never removes harness roots such as `~/.claude` or `~/.gemini`, `~/.config/ai` itself, the `antigravity-builtin` skills directory, or the `core.hooksPath` setting (undo it with `git -C <checkout> config --unset core.hooksPath`). It removes the generated sprite files too, when `bun` is present. | `[REMOVED]`, `[RESTORED]`, `[KEEP]` |
 | `--dry-run` | Prints the plan and writes nothing, in install, `--update` and `--uninstall` alike. | `[DRY-RUN]` lines |
@@ -550,7 +549,7 @@ away. The cost is that a copy does not follow the checkout: run `./install.sh --
 |---|---|
 | The marker | Each package directory (`super-ultra-code-plan/` and every `sucp-<name>/`) gets a `.vivera-managed` file. Its first line is `source=<checkout>`, and then one line `entry <name> <algo>:<digest>` per entry the installer placed. The digest is `sha256sum`, else `shasum -a 256`, else `cksum`; a directory's digest is built from a sorted listing of its directories (empty ones too), its symlinks (by target name, not followed) and its files (by content, plus the owner exec bit), with a plain file named `.DS_Store` left out. A digest that cannot be computed (no working hash tool, an unreadable entry, a FIFO) is empty and matches nothing, so such a copy counts as modified. The `ai-config` file gets a sidecar `Super Ultra Code Plan Implementation.md.vivera-managed`. |
 | No links | Directories are copied with `cp -RL`, so no copy holds a link into the checkout, and the checkout's own internal link check is skipped. |
-| Needs | `cmp` and `diff`. Without them `--copy` exits 1 naming the missing tool. `--uninstall` without `--copy` still runs and judges each copy by its recorded digest alone: a copy that still matches its record is removed, any other copy is kept. |
+| Needs | `cmp` and `diff`. Without them `--copy` exits 1 naming the missing tool. `find` is needed too but is not checked for: without it every directory copy (`templates/`, `examples/`) is judged modified, so each `--update --copy` moves it to a backup. `--uninstall` without `--copy` still runs and judges each copy by its recorded digest alone: a copy that still matches its record is removed, any other copy is kept. |
 
 Every managed copy is judged against the source and against its recorded digest:
 
@@ -573,7 +572,7 @@ Other rules:
 - `install.ps1` always copies and follows the same identical, pristine and modified rule, with its own digests
   (`ps-sha256` entries in the marker): a digest recorded by `install.sh` (`sha256:`) is never trusted, so such a copy
   counts as modified. One difference: behind a linked directory it leaves ANY link alone, including the installer's
-  own, where `install.sh` still repoints its own links. It was run under PowerShell 7.6.6 on Linux only, not on Windows.
+  own, where `install.sh` in link mode still repoints its own links (`install.sh --copy`, the mode `install.ps1` corresponds to, leaves them alone too). It was run under PowerShell 7.6.6 on Linux only, not on Windows.
 
 ### Offline mode and the minimal tier
 
@@ -594,17 +593,17 @@ Other rules:
 | A backup moves the colliding entry itself: a file such as `SKILL.md`, or a whole directory of yours that sits at the path of `templates/` or `examples/`. | The package directory and your other files beside the installer's links stay where they are. Uninstall puts each moved entry back. | Copy the directory yourself first if you want a full snapshot. |
 | Copy mode with Claude Code keeps the agents' hook path pointing into the checkout. | The sprite files carry `bun "<checkout>"/.claude/hooks/block-git-writes.mjs`. If you delete the checkout, the git guard hook is gone and the guard stops working. | Keep the checkout while the sprites are installed, or re-render after moving it. |
 | `--uninstall` removes a sprite directory only when it ends up empty. | That can remove an empty `~/.cursor/agents` or `~/.codex/agents` that you created yourself. No file is lost. | Recreate it with `mkdir` if you want it back. |
-| A file named `.DS_Store` inside a copied directory is treated as Finder litter. | It is left out of the digest and of the comparison, so adding content to a file with that name does not count as an edit, and `--update --copy` and `--uninstall` delete it without a backup. | Do not keep your own content in a file with that name. |
+| A file named `.DS_Store` inside a copied directory is treated as Finder litter. | It is left out of the digest and of the comparison, so adding content to a file with that name does not count as an edit. `--uninstall` deletes it with its directory, without a backup; `--update --copy` deletes it without a backup only when it refreshes that directory (an otherwise identical copy is left as it is, `.DS_Store` included). | Do not keep your own content in a file with that name. |
 | The marker is a trust boundary. | Anyone who can edit `.vivera-managed` can make the installer treat an edited file as untouched, and `--update` then replaces it with no backup. | Keep your harness directories writable only by you. The marker is bookkeeping, not a security control. |
-| An interrupted run leaves a temporary copy. | A copy is made under `<dest>.vivera-tmp-<pid>` and renamed into place only when it is complete, so a killed run never leaves a partial copy at the destination. The next install, update or uninstall removes a leftover temporary name of exactly that shape. | Nothing, unless you keep your own file named `<dest>.vivera-tmp-<digits>` beside an installer destination: it would be removed. |
-| A change that keeps the bytes (a `chmod`, a new modification time). | It is not an edit: `cmp` and `diff` call the copy identical, so `--update`, a link-mode install and `--uninstall` replace or remove it and the change is lost. The bytes still exist in the checkout. | Keep permission changes in the checkout, not in an installed copy. |
+| An interrupted run leaves a temporary copy. | A copy is made under `<dest>.vivera-tmp-<pid>` and renamed into place only when it is complete, so a killed run never leaves a partial copy at the destination. The next run that copies that destination, and every `--uninstall`, removes a leftover temporary name of exactly that shape. | Nothing, unless you keep your own file named `<dest>.vivera-tmp-<digits>` beside an installer destination: `--uninstall` removes it, and so does an install or update that copies that destination again. |
+| A change that keeps the bytes (a `chmod`, a new modification time). | It is not an edit: `cmp` and `diff` call the copy identical, so `--update` without `--copy`, a link-mode install and `--uninstall` replace or remove it and the change is lost; `--update --copy` finds the copy already current and leaves it as it is. The bytes still exist in the checkout. | Keep permission changes in the checkout, not in an installed copy. |
 | A generated sprite file you edited by hand (its `# Generated by` marker line is still there). | The installer treats it as its own: `--check` reports `[stale]`, and the next install or `--update` rewrites it with no backup. | Edit `agents/roles/<role>.md` or `agents/crew.json` instead, or delete the marker line to make the file yours (then the generator refuses to touch it and the run exits 1). |
-| A clone or copy of an installed skill directory carries the marker. | An unedited clone is treated as the installer's own: `--update` replaces it and `--uninstall` removes it, with no backup. | Delete the `.vivera-managed` file in the clone. |
+| A clone or copy of an installed skill directory carries the marker. | An unedited clone at a path the installer manages (for example another harness's skills directory) is treated as the installer's own: `--update` refreshes it when its source changed and `--uninstall` removes it, with no backup. A clone under a new `sucp-<name>` is pruned by `--update` when unedited (kept with `[KEEP]` when edited or when its `SKILL.md` is a symlink) and `--uninstall` never touches it. | Delete the `.vivera-managed` file in the clone. |
 | Without `sha256sum` and `shasum`, a 32-bit `cksum` is used. | The digest is weaker, so a changed copy is more likely to be judged untouched. With no working hash tool at all every digest is empty: the marker holds only `source=`, and every outdated copy counts as modified and is backed up on `--update --copy`, never deleted. | Install `sha256sum` or `shasum` (coreutils). |
 | A hand-written file that has a sprite's name. | The generator refuses to overwrite it and leaves it untouched, still writes the other six sprites of that harness, the other targets still finish, and the run exits 1. | Rename or move your file. |
 | A read-only `HOME`. | The run exits 1 and writes nothing. | Make `HOME` writable. |
 | macOS, WSL, Windows native and Docker are not verified. | Everything on those platforms is untested, not known to fail. `install.ps1` was run only under PowerShell 7.6.6 on Linux, and the Dockerfile was never built. | Start with `--dry-run`, then `--check`. |
-| bash 3.2 and BusyBox were never run. | The code avoids bash 4 features, by reading and by a grep for them, not by a run. `shellcheck` is also run, but it does not check the bash version. | Report a failure with the output of `--dry-run`. |
+| bash 3.2 and BusyBox were never run. | The code avoids bash 4 features, by reading and by a grep for them, not by a run. `shellcheck -S warning` was also run by hand (it is not part of `bun run ci`), but it does not check the bash version. | Report a failure with the output of `--dry-run`. |
 
 <h3 align="center" id="the-harvest-sprites">The Harvest Sprites</h3>
 
@@ -684,7 +683,7 @@ the git subcommands that write state (`commit`, `add`, `push`, `checkout`, `swit
 `git branch --show-current` pass. It enforces the parent-only git rule from the subagent contract.
 The hook looks at the command word of each segment, matches `git` and `gh` by basename, and reads one level
 into `sh -c` strings, so `/usr/bin/git commit` and `sh -c "git commit"` are blocked. An alias, a command
-substitution, a nested `-c`, `eval`, or script text piped into a shell still get past it: it is a second
+substitution that is not the value of an assignment (`x=$(git commit)` is blocked), a nested `-c`, `eval`, or script text piped into a shell still get past it: it is a second
 line behind the contract text, not the only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
 rule of the researcher and the reviewer is a contract, not an enforced limit.
 
@@ -734,8 +733,8 @@ templates in `agents/roles/` and the roster in `agents/crew.json`. Each harness 
 
 | Harness | File and path | How read-only roles are restricted | Git guard | Verification |
 |---|---|---|---|---|
-| Claude Code | `~/.claude/agents/<sprite>.md`, Markdown with YAML frontmatter | `tools: Read, Grep, Glob, Bash`, so no edit tools; `Bash` can still write a file | A frontmatter `PreToolUse` hook (`block-git-writes.mjs`, exit 2) on git writes and any `gh` call; an alias, `eval` or a deeper `sh -c` get past it | Not verified: `claude agents --json` (Claude Code 2.1.296) lists background sessions, not agent definitions, and the interactive `/agents` panel was not run (it needs sign-in). The hook has its own test suite. |
-| OpenCode | `~/.config/opencode/agents/<sprite>.md`, Markdown with a `permissions` list | `edit: deny`; the shell is not restricted beyond git | Shell `permissions`: every `git` and `gh` command denied, common read forms allowed again, each `git` and `gh` rule also in an `rtk` form (the path forms `*/git *` and `*/gh *` have none) | **Verified (listing only):** OpenCode v2.0.24 listed all seven sprites and a hand-written control agent in `opencode debug agents`. The first call returned `[]` and the second a partial list; calls 5 to 8 were stable. |
+| Claude Code | `~/.claude/agents/<sprite>.md`, Markdown with YAML frontmatter | `tools: Read, Grep, Glob, Bash` (timid and aqua also get `mcp__tinyfish`), so no edit tools; `Bash` can still write a file | A frontmatter `PreToolUse` hook (`block-git-writes.mjs`, exit 2) on git writes and any `gh` call; an alias, `eval` or a deeper `sh -c` get past it | Not verified: `claude agents --json` (Claude Code 2.1.296) lists background sessions, not agent definitions, and the interactive `/agents` panel was not run (it needs sign-in). The hook has its own test suite. |
+| OpenCode | `~/.config/opencode/agents/<sprite>.md`, Markdown with a `permissions` list | `edit: deny`; the shell is not restricted beyond git | Shell `permissions`: every `git` and `gh` command denied, common read forms allowed again, each `git` rule and `gh *` rule also in an `rtk` form (the bare `gh` rule and the path forms `*/git *` and `*/gh *` have none) | **Verified (listing only):** OpenCode v2.0.24 listed all seven sprites and a hand-written control agent in `opencode debug agents`. The first call returned `[]` and the second a partial list; calls 5 to 8 were stable. |
 | Codex | `~/.codex/agents/<sprite>.toml`, TOML with the instructions in `developer_instructions` | `sandbox_mode = "read-only"` | Prose guard only | Not run (CLI not installed). Codex may not enforce `sandbox_mode` for a custom agent (read in the Codex source at rust-v0.162.1, issues #45482 and #40130 reported, not reproduced), and a `$` skill mention in the instructions is not scanned, so the file asks for a best-effort load. |
 | Cursor | `~/.cursor/agents/<sprite>.md`, Markdown with YAML frontmatter | `readonly: true`; Cursor has no per-agent tool list | Prose guard only | Not run (CLI not installed). A YAML comment in the frontmatter and a quoted `description` are unverified. |
 | Copilot | `~/.copilot/agents/<sprite>.agent.md`, Markdown with YAML frontmatter, prompt capped at 30,000 characters | `tools: ["read","search","execute"]`; `execute` is the whole shell | Prose guard only: with `execute` the shell is all or nothing, so "no git" is a request, not a limit | Not run (CLI not installed). The `tools` list may not be enforced (issue #2638 is open), and a user-level `~/.copilot/agents` outranks a project agent with the same id. |

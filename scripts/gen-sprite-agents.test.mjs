@@ -114,6 +114,22 @@ describe('renderAgent', () => {
   test('rejects a template without frontmatter', () => {
     expect(() => renderAgent('just text\n', chef)).toThrow(/frontmatter/);
   });
+
+  test('rejects a description spread over two lines, plain or quoted, instead of emitting invalid YAML', () => {
+    const one = 'description: Implements one chunk of an approved plan, test first.';
+    for (const spread of ['description: Implements one chunk\n  of an approved plan.', 'description: "Implements one chunk\n  of an approved plan."', 'description: Implements one chunk\n\n  of an approved plan.']) {
+      expect(() => renderAgent(TEMPLATE.replace(one, spread), chef)).toThrow(/"description" must be a single line/);
+    }
+  });
+
+  test('still takes a quoted one-line description, a trailing comment line, and a blank line before the next key', () => {
+    const one = 'description: Implements one chunk of an approved plan, test first.';
+    for (const ok of ['description: "Implements one chunk: test first."', `${one}\n  # a note`, `${one}\n`]) {
+      const fm = frontmatter(renderAgent(TEMPLATE.replace(one, ok), chef));
+      expect(fm.description).toStartWith('Chef, a Harvest Sprite on the implementer crew. Implements one chunk');
+      expect(fm.color).toBe('red');
+    }
+  });
 });
 
 describe('renderOpenCodeAgent', () => {
@@ -182,6 +198,19 @@ describe('renderOpenCodeAgent', () => {
     expect(() => renderOpenCodeAgent(TEMPLATE.replace('maxTurns: 40', 'model: sonnet'), chef)).toThrow(/"model"/);
   });
 
+  test('emits no deny rules and no guard sentence for a template whose hooks object is empty', () => {
+    for (const hooks of ['hooks: {}', 'hooks:\n  PreToolUse: []']) {
+      const out = renderOpenCodeAgent(`---\ndescription: Does one thing.\n${hooks}\n---\nbody\n`, chef);
+      expect('permissions' in frontmatter(out)).toBe(false);
+      expect(out).not.toContain('blocks `git -C`');
+    }
+  });
+
+  test('rejects a hook command that only mentions the guard script', () => {
+    const sneaky = TEMPLATE.replace('bun \\"$CLAUDE_PROJECT_DIR\\"/.claude/hooks/block-git-writes.mjs', 'rm -rf ~ # block-git-writes.mjs');
+    expect(() => renderOpenCodeAgent(sneaky, chef)).toThrow(/rm -rf/);
+  });
+
   test('has a hex color for every Claude Code color', () => {
     for (const c of ENUMS.color) expect(OPENCODE_COLORS[c]).toMatch(/^#[0-9a-f]{6}$/);
   });
@@ -199,6 +228,11 @@ describe('parseCrew', () => {
     expect(() => parseCrew('[{"sprite":"chef","color":"red"}]')).toThrow(/role/);
     expect(() => parseCrew('{}')).toThrow(/array/);
     expect(() => parseCrew('[]')).toThrow(/empty/);
+  });
+
+  test('rejects a key that is not sprite, role, or color, so a misspelled key is not ignored', () => {
+    expect(() => parseCrew('[{"sprite":"chef","role":"a","color":"red","colour":"blue"}]')).toThrow('crew: unknown key "colour" for sprite "chef"');
+    expect(() => parseCrew('[{"sprite":"hoggy","role":"a","color":"red","model":"opus"}]')).toThrow('crew: unknown key "model" for sprite "hoggy"');
   });
 });
 
@@ -326,6 +360,33 @@ describe('CLI', () => {
 
   test('rejects an unknown target', () => {
     expect(run('--target', 'gemini').exitCode).toBe(1);
+  });
+
+  describe('an empty flag value', () => {
+    // Run in a directory of its own: an empty path used to resolve to the working directory.
+    const inCwd = (cwd, ...args) => Bun.spawnSync(['bun', SCRIPT, ...args], { cwd });
+    const base = () => ['--roles', rolesDir, '--crew', crewFile, '--out', outDir];
+    const without = (flag) => base().filter((_, i, a) => a[i] !== flag && a[i - 1] !== flag);
+
+    for (const flag of ['--out', '--roles', '--crew', '--hook-root']) {
+      test(`${flag} "" fails with a clear message and writes nothing`, () => {
+        const cwd = path.join(tmp, 'cwd');
+        fs.mkdirSync(cwd);
+        const r = inCwd(cwd, ...without(flag), flag, '');
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr.toString()).toContain(`${flag} needs a non-empty value`);
+        expect(fs.readdirSync(cwd)).toEqual([]);
+        expect(fs.existsSync(outDir)).toBe(false);
+      });
+    }
+
+    test('--clean --out "" removes nothing from the working directory', () => {
+      expect(run().exitCode).toBe(0);
+      const r = inCwd(outDir, '--clean', '--out', '');
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr.toString()).toContain('--out needs a non-empty value');
+      expect(fs.readdirSync(outDir).sort()).toEqual(['chef.md', 'hoggy.md', 'staid.md']);
+    });
   });
 
   test('exits 1 when it refused to overwrite a hand-written file', () => {

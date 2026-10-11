@@ -222,7 +222,7 @@ describe('copilot target', () => {
     });
 
     test('accepts the git guard hook and writes the prose guard for it', () => {
-      const head = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun x/block-git-writes.mjs\n';
+      const head = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs\n';
       expect(split(render(tpl('\nBody.\n', head))).body).toContain(proseGuard().paragraph);
     });
 

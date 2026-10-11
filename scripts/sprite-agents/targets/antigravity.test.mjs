@@ -45,7 +45,7 @@ const split = (text) => {
   return { head: lines.slice(1, end), body: lines.slice(end + 1).join('\n') };
 };
 const frontmatter = (text) => Bun.YAML.parse(split(text).head.join('\n'));
-const guardHook = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun x/block-git-writes.mjs\n';
+const guardHook = 'hooks:\n  PreToolUse:\n    - matcher: Bash\n      hooks:\n        - type: command\n          command: bun "$CLAUDE_PROJECT_DIR"/.claude/hooks/block-git-writes.mjs\n';
 
 let tmp;
 let out;

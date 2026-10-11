@@ -145,10 +145,13 @@ describe('syncDir with nested keys', () => {
 });
 
 describe('isGenerated', () => {
-  test('is true for a marker at the start of any line, false otherwise or when the file is absent', () => {
-    put('yes.toml', `name = "x"\n${MARKER} from t.\n`);
+  // The full rules (body, fence, BOM, CRLF) are in sync.test.mjs.
+  test('is true for a marker on line 1 or inside the frontmatter, false otherwise or when the file is absent', () => {
+    put('yes.toml', `${MARKER} from t.\nname = "x"\n`);
+    put('yes.md', md('x'));
     put('no.toml', `name = "x" ${MARKER}\n`);
     expect(isGenerated(at('yes.toml'))).toBe(true);
+    expect(isGenerated(at('yes.md'))).toBe(true);
     expect(isGenerated(at('no.toml'))).toBe(false);
     expect(isGenerated(at('absent.toml'))).toBe(false);
   });
@@ -183,6 +186,17 @@ describe('crew helpers', () => {
   test('splitFrontmatter separates the head lines from the body and names the label on failure', () => {
     expect(splitFrontmatter('---\na: 1\n---\nbody\n', 'x')).toEqual({ head: ['a: 1'], body: 'body\n' });
     expect(() => splitFrontmatter('text', 'agents/roles/x.md')).toThrow(/agents\/roles\/x\.md: no frontmatter/);
+  });
+
+  test('splitFrontmatter reads a CRLF template as the LF one, instead of reporting no frontmatter', () => {
+    expect(splitFrontmatter('---\r\na: 1\r\n---\r\nbody\r\nmore\r\n', 'x')).toEqual({ head: ['a: 1'], body: 'body\nmore\n' });
+  });
+
+  test('a CRLF template renders byte for byte like the LF one in the Claude and OpenCode targets', () => {
+    const crlf = TEMPLATE.replaceAll('\n', '\r\n');
+    const chef = { sprite: 'chef', role: 'implementer', color: 'red' };
+    expect(renderAgent(crlf, chef)).toBe(renderAgent(TEMPLATE, chef));
+    expect(renderOpenCodeAgent(crlf, chef)).toBe(renderOpenCodeAgent(TEMPLATE, chef));
   });
 
   test('capitalize uppercases the first letter only', () => {

@@ -99,6 +99,32 @@ Inline execution exists only as a documented exception, not a default.
 
 ---
 
+## Confirmations Without Typing
+
+Every point where the pipeline pauses for a human decision, from the Step 1 intent lock to the Step 6 debt sweep, is a call to the harness's own question tool with ready-made options, so the answer is a tap or an Enter. No gate asks "proceed?" as plain chat text, and typing stays possible through the tool's own free-form input. This changes how a gate is asked, never whether it exists.
+
+| Harness | Tool | Limits | Free-form answer |
+|---|---|---|---|
+| Claude Code | `AskUserQuestion` | 1 to 4 questions, 2 to 4 options each, header up to 12 characters, `multiSelect` | the tool adds "Other" |
+| OpenCode v2 | `question` | header, prompt, choices, `multiple`; dismissing cancels | always available |
+| Gemini CLI | `ask_user` | 1 to 4 questions, 2 to 4 options each, header up to 16 characters, `multiSelect` | types `text` and `yesno` exist; not stated for `choice` |
+
+Verified 2026-10-11: Claude Code against the tool schema, OpenCode v2 against <https://opencode.ai/v2/docs/tools/>, Gemini CLI against <https://geminicli.com/docs/tools/ask-user/>. Any other harness (Antigravity included) is not verified: the agent looks for a question tool by name, reads its schema, and uses the closest equivalent. With no tool, a tool error, or no interactive client, it renders a numbered list in the final message, says the prompt widget is missing, and keeps the gate closed.
+
+What a question looks like:
+
+- The artifact (draft intent, design, plan summary, diff stat, exact comment text) is shown in chat first, then asked about.
+- 2 to 4 options. The recommended one comes first, labelled `(Recommended)`, so Enter accepts it. Labels are five words or fewer, each with a one-line description.
+- At most 4 questions per call and at most 4 options per question. The debt sweep groups its follow-ups into multi-select questions of at most 4 options.
+- Destructive, hard-to-reverse, externally visible, or shared-system actions (force push, delete, merge, publish, deploy) put the safe option first, `Cancel, do nothing`, and the go-ahead second, naming the exact action. Enter never runs the action, so no option carries `(Recommended)`, and such a question is asked alone, never batched.
+- A dismissed question is not an approval. The gate stays closed, one line says what is pending, and the same question is not asked again in that session. A clarifying question that is not a gate takes its recommended default and records it as an assumption.
+- Unattended runs ask nothing mid-run. The overnight entry gate is collected while the user is present, and a decision needed mid-run is a stop written to the handoff. The debt-sweep question is the one exception, as the last act of the run.
+- Question text follows the user's language preference, never a hardcoded language. Subagents never ask: a question goes into their report and the parent asks.
+
+The full rule is the `### ⏸️ Confirmation Protocol` section of [`skills/sucp-rules/SKILL.md`](skills/sucp-rules/SKILL.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
+
+---
+
 ## Repository Structure
 
 ```
@@ -1083,6 +1109,8 @@ contaminating the others. The PR delivery variant adds derived isolation, parent
 the PR body contract (`--body-file`), and topological batch merge. The PR review variant enforces
 line-anchored review contracts and gates merging behind green local checks and a `correct` verdict.
 
+All 16 snippets (six entry points and ten command snippets) carry one identical `CONFIRMATIONS:` paragraph right after the `PROGRESS METER:` paragraph, because a session started from a snippet never loads `sucp-rules`, and a test in [`scripts/sync-snippets.test.mjs`](scripts/sync-snippets.test.mjs) fails if one is missing, duplicated, or drifts. The Snipset database copy only catches up when the user runs `bun run snippets:push`.
+
 ### Keeping the database in sync
 
 The markdown files are the source of truth. The Snipset database holds a copy, because
@@ -1593,6 +1621,7 @@ Verifies:
 - The committed README hero exists in light and dark.
 - `ultra-plan-runner` enforces the visual map: task headings, task nodes, and `depends_on` matching the Mermaid edges in both directions.
 - Trigger snippets carry the mandatory subagent contract and use Bun rather than the prohibited runtimes.
+- The Confirmation Protocol is pinned (block 3l of `scripts/validate-skill.mjs`): `sucp-rules` holds the section and its key rules, the orchestrator and every phase skill point at it by name, the debt sweep and its follow-up template state the 4-option cap, and the old typed-approval phrases (`wait for explicit yes`, `nod sufficient`, `wait for explicit approval before plan`) are gone. The `CONFIRMATIONS:` paragraph in every trigger snippet is pinned by `bun test scripts/`.
 - `snippets.manifest.json` is consistent: valid, complete, no duplicate uuid or keyword, and every trigger snippet is tracked.
 - The plan-publishing contract is documented: publisher CLI reference, idempotency marker, and a valid `plans.publish.json`.
 

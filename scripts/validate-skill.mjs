@@ -5,6 +5,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { checkRunnerContract } from './check-runner-contract.mjs';
+import { TIERS, checkPrereqs, hasTool, loadTierTable } from './lib/prereq.mjs';
 import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
 import {
   SUBAGENT_CONTRACT_TERMS as subagentContractTerms,
@@ -154,32 +155,37 @@ const skip = (what, why) => {
   }
 }
 
-// 0. Check Mandatory Prerequisites: tgrep
-try {
-  const tgrepOut = execSync('tgrep --version 2>&1 || ~/.local/bin/tgrep --version 2>&1', { encoding: 'utf8' }).trim().split('\n')[0];
-  console.log(`✅ Prerequisite verified: ${tgrepOut}`);
-} catch (err) {
-  console.error('❌ Prerequisite missing: tgrep (microsoft/tgrep) is mandatory.');
-  errors++;
-}
-
-// 0b-bis. `gh` is the tool the PR delivery stage calls, so it is checked here for
-// the same reason tgrep is. This block did not exist while `gh` was an unused
-// prerequisite in install.sh, which is exactly how a mandatory dependency rots
-// into a decorative one: nothing referenced it, so nothing noticed it was
-// missing. Now the skill names `gh pr create` and `gh pr view`, so a machine
-// without it cannot finish a session.
+// 0. Prerequisites for the chosen tier (scripts/install/tiers.tsv). The default
+// tier is `full`, so the CI gate keeps a missing tgrep or gh a hard error; a
+// lower tier records a counted SKIP instead.
 //
-// Auth is deliberately NOT checked. `gh auth status` reaches the network and can
-// prompt, and a validation script that blocks on a credential is a script that
-// fails for a reason unrelated to the repository. The skill tells the agent to
-// run `gh auth status` once at the start of a session, where a human is present.
-try {
-  const ghOut = execSync('gh --version 2>&1', { encoding: 'utf8' }).trim().split('\n')[0];
-  console.log(`✅ Prerequisite verified: ${ghOut}`);
-} catch (err) {
-  console.error('❌ Prerequisite missing: gh (GitHub CLI). The PR delivery stage calls `gh pr create`; without it a session cannot open its PR.');
-  errors++;
+// `gh` is required because the PR delivery stage calls `gh pr create` and `gh pr view`.
+// Auth is not checked: `gh auth status` reaches the network and can prompt.
+{
+  const tierFlag = process.argv.indexOf('--tier');
+  const tier = tierFlag !== -1 ? process.argv[tierFlag + 1] : process.env.VIVERA_TIER || 'full';
+  if (!TIERS.includes(tier)) {
+    console.error(`❌ Invalid tier "${tier ?? ''}" (from --tier or VIVERA_TIER). Expected one of: ${TIERS.join(', ')}.`);
+    process.exit(2);
+  }
+  const tierRows = loadTierTable();
+  // The wording these two checks printed before the tier table existed; kept verbatim.
+  const missingMessage = {
+    tgrep: '❌ Prerequisite missing: tgrep (microsoft/tgrep) is mandatory.',
+    gh: '❌ Prerequisite missing: gh (GitHub CLI). The PR delivery stage calls `gh pr create`; without it a session cannot open its PR.',
+  };
+  for (const tool of ['tgrep', 'gh']) {
+    const version = hasTool(tool);
+    const verdict = checkPrereqs({ tier, rows: tierRows.filter((r) => r.tool === tool), has: () => version });
+    if (version) {
+      console.log(`✅ Prerequisite verified: ${version}`);
+    } else if (verdict.errors.length > 0) {
+      console.error(missingMessage[tool]);
+      errors++;
+    } else {
+      skip(`prerequisite ${tool} at tier ${tier}`, `${verdict.warnings[0]}.`);
+    }
+  }
 }
 
 // 1. Check Master File & Frontmatter

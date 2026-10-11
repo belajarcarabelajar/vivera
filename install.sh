@@ -3,7 +3,20 @@
 # This file parses arguments and dispatches; the work lives in scripts/install/*.sh (sourced below).
 set -euo pipefail
 
+# A CDPATH would make every `cd` below print or resolve somewhere else.
+unset CDPATH
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The entry lists are TAB separated, one per line, so a HOME or checkout path holding a tab or a newline
+# cannot be told apart from the list around it. Refused before anything is printed or touched.
+case "$HOME$REPO_DIR" in
+  *$'\n'* | *$'\t'*)
+    echo "install.sh: HOME and the checkout path must not contain a newline or a tab" >&2
+    exit 2
+    ;;
+esac
+
 MASTER_FILE="$REPO_DIR/Super Ultra Code Plan Implementation.md"
 DRY_RUN=false
 COPY_MODE=false
@@ -15,6 +28,8 @@ SKIP=""
 # Sourced first because usage lists the target ids from the table in targets.sh.
 # shellcheck source=scripts/install/lib.sh
 . "$REPO_DIR/scripts/install/lib.sh"
+# shellcheck source=scripts/install/place.sh
+. "$REPO_DIR/scripts/install/place.sh"
 # shellcheck source=scripts/install/prereq.sh
 . "$REPO_DIR/scripts/install/prereq.sh"
 # shellcheck source=scripts/install/targets.sh
@@ -38,9 +53,10 @@ Usage: ./install.sh [--tier minimal|standard|full] [--only ID,ID] [--skip ID,ID]
   --skip ID,ID  leave these targets out; wins over --only
   --copy        copy the files instead of linking them, marked with .vivera-managed (needs cmp and diff)
   --dry-run     print what would be done and write nothing
-  --check       report whether the install is current and change nothing (exit 0 current, 1 problems)
+  --check       report whether the install is current and change nothing (exit 0 current, 1 problems,
+                2 nothing to check); needs no bun and no git
   --update      bring the install in line with this checkout: repoint stale links, refresh copies, prune
-  --uninstall   remove what the installer made and put the newest backup back
+  --uninstall   remove what the installer made and put the newest backup back; needs no bun and no git
   -h, --help    print this text
 EOF
   echo "Targets, in install order: $(valid_target_list)"
@@ -51,7 +67,8 @@ A file or directory that is already there and is not the installer's is moved to
 A tool the chosen tier does not require prints one warning naming what is lost and is skipped.
 TinyFish web-evidence rules ship inside the master skill; no extra skill is deployed.
 Exit codes: 0 success or current, 1 failure (a required tool is missing, or --check found a problem),
-2 usage error.
+2 usage error (or --check had nothing to check). --check and --uninstall ask for no tool, whatever the
+--tier; install and --update ask for the tools of the chosen tier.
 EOF
 }
 
@@ -74,6 +91,13 @@ add_target_list() {
     usage >&2
     exit 2
   fi
+  case "$value" in
+    *$'\n'* | *$'\t'*)
+      echo "Invalid value for --$which: it contains a newline or a tab" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
   if [ "$which" = only ]; then
     ONLY="${ONLY:+$ONLY,}$value"
   else
@@ -196,7 +220,13 @@ esac
 #    lives in scripts/install/tiers.tsv (standard: git and bun). Every other tool
 #    is optional: a missing one costs one capability, so install.sh warns (naming
 #    what is lost) and continues. It runs before every mode.
-check_tier_prereqs "$TIER" "$REPO_DIR/scripts/install/tiers.tsv"
+# --check and --uninstall read and remove links and need neither bun nor git, so they ask for the
+# minimal tier whatever --tier says; install and update keep the tier they were given.
+PREREQ_TIER="$TIER"
+case "$MODE" in
+  check | uninstall) PREREQ_TIER=minimal ;;
+esac
+check_tier_prereqs "$PREREQ_TIER" "$REPO_DIR/scripts/install/tiers.tsv"
 if [ "$COPY_MODE" = true ]; then
   require_copy_tools
 fi

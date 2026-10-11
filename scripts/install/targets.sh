@@ -112,6 +112,46 @@ select_targets() {
   done <<< "$(target_ids)"
 }
 
+# The phase-skill dirs of a package target that this checkout no longer has, one per line. A phase
+# skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness. Only a sucp-*
+# entry that is a real directory is considered, and only when it is the installer's own: it carries a
+# .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
+# ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
+# link to a file elsewhere, and a skill the checkout still has are never listed. Both --check (which
+# reports them) and --update (which prunes them) read this one list.
+stale_phase_dirs() {
+  local id="$1"
+  local parent entry name skill_md state
+  if [ "$(target_kind "$id")" != package ]; then
+    return 0
+  fi
+  parent="$(dirname "$(target_skills_dir "$id")")"
+  for entry in "$parent"/sucp-*; do
+    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
+      continue
+    fi
+    name="$(basename "$entry")"
+    if [ -e "$REPO_DIR/skills/$name" ]; then
+      continue
+    fi
+    skill_md="$entry/SKILL.md"
+    if dest_in_repo "$skill_md"; then
+      continue
+    fi
+    if [ -f "$entry/.vivera-managed" ]; then
+      echo "$entry"
+      continue
+    fi
+    if [ ! -L "$skill_md" ]; then
+      continue
+    fi
+    state="$(classify_dest "$skill_md" "$REPO_DIR/skills/$name/SKILL.md")"
+    case "$state" in
+      ok | ours-stale) echo "$entry" ;;
+    esac
+  done
+}
+
 # --- Install ----------------------------------------------------------------------------------
 
 # Sprite agents exist for two harnesses so far. Tier minimal renders none (the generator needs bun).
@@ -249,13 +289,15 @@ install_selfcheck() {
 #    graphify is an optional tool, so when it is absent install.sh skips this
 #    setup entirely: the hook would only print its one-line "graphify CLI not
 #    found" note, the same no-op it already performs on machines without it.
-#    Tier minimal skips the step: it needs git, which that tier does not require.
+#    Tier minimal skips the step: it needs git, which that tier does not require. A copy of this
+#    repo inside some other git repo (no .git of its own) is skipped too: core.hooksPath would be
+#    written into the outer repo's config, which is not this installer's to change.
 install_hooks() {
   if [ "$TIER" = minimal ]; then
     echo "[SKIP] git hooks: tier minimal needs no git"
   elif ! tool_available graphify; then
     echo "⚠️  WARNING: optional tool 'graphify' not found; skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
-  elif git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  elif [ "$(git -C "$REPO_DIR" rev-parse --show-toplevel 2>/dev/null)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]; then
     if [ "$DRY_RUN" = true ]; then
       echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
       echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"
@@ -265,6 +307,6 @@ install_hooks() {
       echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
     fi
   else
-    echo "[SKIP] Not a git checkout; skipping core.hooksPath (the hook is opt-in)."
+    echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
   fi
 }

@@ -182,8 +182,10 @@ test('overwrite: classify_dest names each destination state', () => {
   expect(state('l/missing')).toEqual({ status: 0, out: 'absent' });
   expect(state('l/ok').out).toBe('ok');
   expect(state('l/rel').out).toBe('ok');
-  expect(state('l/dangling').out).toBe('ours-stale');
-  expect(state('l/ai').out).toBe('ours-stale');
+  // Changed in T10b (H2): a link that dangles somewhere else, or runs into a dir called ai-skills
+  // without being one of the old repo's items, is the user's: moved aside, not silently replaced.
+  expect(state('l/dangling').out).toBe('foreign');
+  expect(state('l/ai').out).toBe('foreign');
   expect(state('l/inrepo').out).toBe('ours-stale');
   expect(state('l/elsewhere').out).toBe('foreign');
   expect(state('isfile').out).toBe('foreign');

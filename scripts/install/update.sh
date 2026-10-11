@@ -3,56 +3,28 @@
 # repointed, a user's own file is moved aside and a changed sprite agent is rendered again, and then
 # it prunes the phase skills this checkout no longer has.
 
-# A phase skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness, with
-# a SKILL.md link that dangles. Only an entry named sucp-* is looked at, and only when the directory is real
-# and either carries a .vivera-managed marker (a copy-mode directory) or has a SKILL.md symlink that
-# is the installer's own (classify_dest ok or ours-stale). A user's real SKILL.md without a marker, a
-# live link to a file elsewhere, and a skill the checkout still has are never touched.
+# Prunes what stale_phase_dirs (targets.sh) lists, the same list --check reports. The link (or, for a
+# copy-mode directory, the SKILL.md and the marker) is removed, and the directory only when that left
+# it empty: rmdir refuses a directory that still holds something, which is what keeps the user's files.
 prune_stale_skills() {
-  local id dir parent entry name skill_md state
+  local id entry skill_md
   for id in $(select_targets); do
-    if [ "$(target_kind "$id")" != package ]; then
-      continue
-    fi
-    dir="$(target_skills_dir "$id")"
-    parent="$(dirname "$dir")"
-    for entry in "$parent"/sucp-*; do
-      if [ ! -d "$entry" ] || [ -L "$entry" ]; then
-        continue
-      fi
-      name="$(basename "$entry")"
-      if [ -e "$REPO_DIR/skills/$name" ]; then
+    while IFS= read -r -u 3 entry; do
+      if [ -z "$entry" ]; then
         continue
       fi
       skill_md="$entry/SKILL.md"
-      if [ -f "$entry/.vivera-managed" ]; then
-        # A copy-mode directory: the marker says the whole directory is the installer's own.
-        if [ "$DRY_RUN" = true ]; then
-          echo "[DRY-RUN] Would prune $entry"
-        else
-          rm -f "$skill_md" "$entry/.vivera-managed"
-          rmdir "$entry" 2>/dev/null || true
-          echo "[PRUNED] $entry"
-        fi
-        continue
-      fi
-      if [ ! -L "$skill_md" ]; then
-        continue
-      fi
-      state="$(classify_dest "$skill_md" "$REPO_DIR/skills/$name/SKILL.md")"
-      case "$state" in
-        ok | ours-stale) ;;
-        *) continue ;;
-      esac
       if [ "$DRY_RUN" = true ]; then
         echo "[DRY-RUN] Would prune $entry"
-      else
-        rm -f "$skill_md"
-        # rmdir refuses a directory that still holds something, which is what keeps the user's files.
-        rmdir "$entry" 2>/dev/null || true
-        echo "[PRUNED] $entry"
+        continue
       fi
-    done
+      rm -f "$skill_md" "$entry/.vivera-managed"
+      if rmdir "$entry" 2>/dev/null; then
+        echo "[PRUNED] $entry"
+      else
+        echo "[PRUNED] link removed from $entry; the directory stays because it holds other files"
+      fi
+    done 3<<< "$(stale_phase_dirs "$id")"
   done
 }
 

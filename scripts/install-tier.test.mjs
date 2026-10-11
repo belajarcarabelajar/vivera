@@ -189,7 +189,8 @@ describe('modes', () => {
   test('modes: install.sh is split into the expected files and each stays within 500 lines', () => {
     const dir = path.join(WORKTREE, 'scripts/install');
     const parts = fs.readdirSync(dir).filter((f) => f.endsWith('.sh')).sort();
-    expect(parts).toEqual(['check.sh', 'lib.sh', 'prereq.sh', 'targets.sh', 'uninstall.sh', 'update.sh']);
+    // place.sh joined the list in T10b, when the placement helpers left lib.sh to keep it under 500 lines.
+    expect(parts).toEqual(['check.sh', 'lib.sh', 'place.sh', 'prereq.sh', 'targets.sh', 'uninstall.sh', 'update.sh']);
     for (const file of ['install.sh', ...parts.map((f) => `scripts/install/${f}`)]) {
       const lines = fs.readFileSync(path.join(WORKTREE, file), 'utf8').split('\n').length - 1;
       expect({ file, ok: lines <= 500 }).toEqual({ file, ok: true });

@@ -150,9 +150,20 @@ test('check: --only claude checks just the Claude Code package and --skip agents
   expect(skip.stdout).not.toContain(`${sb.home}/.agents`);
 });
 
-test('check: a target without skills is reported as skipped and is not a problem', () => {
+// Changed in T10b (H4): a check that looked at nothing is exit 2, never CURRENT.
+test('check: a target without skills is reported as skipped, and with nothing else to check the answer is exit 2', () => {
   const sb = sandbox();
   const r = sb.run(['--check', '--only', 'codex']);
+  expect(r.status).toBe(2);
+  expect(r.stdout).toContain('[skip] codex: no skills target');
+  expect(r.stdout).toContain('check: nothing to check (no selected target has skills)');
+  expect(r.stdout).not.toContain('CURRENT');
+});
+
+test('check: a target without skills next to a real one is not a problem', () => {
+  const sb = sandbox();
+  expect(sb.run([]).status).toBe(0);
+  const r = sb.run(['--check', '--only', 'codex,agents']);
   expect(r.status).toBe(0);
   expect(r.stdout).toContain('[skip] codex: no skills target');
   expect(r.stdout).toContain('check: CURRENT');

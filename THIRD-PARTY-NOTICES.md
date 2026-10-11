@@ -45,7 +45,7 @@ the copies listed above.
 - Modification: edge of the scan cropped (898 x 790 px), print texture smoothed with a
   vertical 1x5 convolution, enlarged 3x with Real-ESRGAN `realesr-animevideov3-x3`
   (realesrgan-ncnn-vulkan 20220424), then resized to 1796 x 1580 px and saved as JPEG
-  quality 90 with no embedded metadata.
+  quality 90.
 - Facts in the README (hut, hiring, birthdays, colors, personality, affection, skill) come from
   https://www.harvestmoonbacktonatureguide.com/characters.html (PS1),
   https://fogu.com/hm/btn/harvestsprites.php (PS1),

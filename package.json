@@ -11,7 +11,7 @@
   "scripts": {
     "render-diagrams": "bash scripts/render-diagrams.sh",
     "validate": "bun scripts/validate-skill.mjs",
-    "test": "bun test scripts/",
+    "test": "bun test --timeout 30000 scripts/",
     "plan:check": "bun scripts/ultra-plan-runner.mjs",
     "contract:check": "bun scripts/check-runner-contract.mjs",
     "copy:check": "bun scripts/check-copy-rules.mjs",

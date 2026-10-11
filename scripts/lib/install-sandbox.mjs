@@ -12,11 +12,17 @@
 // the PATH the installer sees, not simulated, so those two are linked only when
 // a test names them.
 
+import { setDefaultTimeout } from 'bun:test';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// Every suite that runs install.sh spawns bash, git and bun many times. bun test's default of 5 s is
+// too short on a loaded machine, and `bun test <file>` does not read the --timeout of the npm test
+// script, so the helper sets it for every suite that imports it.
+setDefaultTimeout(30_000);
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

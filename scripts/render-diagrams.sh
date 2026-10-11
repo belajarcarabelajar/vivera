@@ -141,6 +141,18 @@ rendered=$((rendered + 2))
 # `.*` span swallows the path data between the first and last node. LC_ALL=C
 # keeps the sort order the same on every machine.
 svg_text() { grep -oE '<p>([^<]|<br ?/>)*</p>' "$1" 2>/dev/null | LC_ALL=C sort || true; }
+# True when two SVGs have the same text nodes. An empty result for a file that is not empty means grep
+# could not read the nodes (a grep without -E support prints nothing for both files, and two empty lists
+# are equal), so it is never "unchanged": a changed hero must not be kept because grep failed.
+svg_unchanged() {
+  local a b
+  a="$(svg_text "$1")"
+  b="$(svg_text "$2")"
+  if { [ -z "$a" ] && [ -s "$1" ]; } || { [ -z "$b" ] && [ -s "$2" ]; }; then
+    return 1
+  fi
+  [ "$a" = "$b" ]
+}
 mkdir -p "$OUTPUT_DIR"
 pruned=0
 kept=0
@@ -157,7 +169,7 @@ for staged in "$STAGE_DIR"/*.svg; do
   base="$(basename "$staged")"
   dest="$OUTPUT_DIR/$base"
   if [ -f "$dest" ] && ! git check-ignore -q "$dest" 2>/dev/null; then
-    if [ "$(svg_text "$staged")" = "$(svg_text "$dest")" ]; then
+    if svg_unchanged "$staged" "$dest"; then
       kept=$((kept + 1))
       continue
     fi

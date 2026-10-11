@@ -76,7 +76,7 @@ flowchart TD
     accDescr: Harvest debt candidates, classify and rank them, inject one multi-select question, execute the selected items through the full pipeline, then re-sweep for any new debt they created.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
-    Rank --> Ask["ONE multi-select question\nvia harness prompt"]
+    Rank --> Ask["One question-tool call\nof multi-select groups"]
     Ask -->|"User selects"| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]

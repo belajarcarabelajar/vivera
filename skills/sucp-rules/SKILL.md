@@ -296,7 +296,7 @@ flowchart TD
 - After the user approves the intent or plan, complete every requested reversible step that follows from that approval. Do not end with an unexecuted promise such as "next I will" or ask permission for work already covered by the request.
 - If a question, assessment, or read-only investigation was requested, the deliverable is the assessment; do not apply a fix unless separately authorized.
 - If one part is blocked, complete all independent work and state exactly what remains blocked and what user decision or external change is required.
-- Authorization Persistence: authorization and stated preferences from earlier in the session persist across turns. Never re-request permission for an action already authorized, and never end a turn on a confirmation question while approved work is still outstanding. Batch genuinely required confirmations into one request, and state the concrete risk and mechanism once instead of re-warning.
+- Authorization Persistence: authorization and stated preferences from earlier in the session persist across turns. Never re-request permission for an action already authorized, and never end a turn on a confirmation question while approved work is still outstanding. Batch genuinely required confirmations into one request (a risky action is never part of the batch), and state the concrete risk and mechanism once instead of re-warning.
 - Stop for destructive actions, hard-to-reverse actions, genuine scope changes, or ambiguity where different interpretations would materially change the result.
 - Autonomous Completion Bias (approved work only): After approval of intent or plan, bias toward carrying the intended task to full completion and persist until the goal is done. Do not stop to re-ask permission for reversible steps already covered by the approved scope; complete all independent work while blocked items await a user decision. Do not treat an isolated difficulty as an excuse to abandon approved work.
 - Isolated Worktree & Merge-Conflict Handling: When approved work touches files the user may be actively using, or the change is large, experimental, or risky, carry it out in an isolated worktree/checkout or feature branch so the user's tree stays usable. Resolve merge conflicts arising from approved changes locally and reversibly, and remove the temporary worktree or branch after integration.
@@ -342,7 +342,7 @@ flowchart LR
   Verified 2026-10-11 against the tool schema (Claude Code) and the vendor documentation (OpenCode v2, Gemini CLI). For any other harness, look for a `question` or `ask` tool, or an AskUserQuestion-style prompt, by name, read its schema, and use the closest equivalent. Never assume a tool name that was not seen.
 - **Show, then ask.** Render the artifact the question is about (draft intent, design, plan summary, diff stat, the exact comment text) in chat first. The question names it, and no option points at content the user has not seen.
 - **Shape of a question.** 2 to 4 options. The recommended option comes first with ` (Recommended)` on its label, so Enter accepts it. Labels are five words or fewer, each option has a one-line description of what happens next. Do not add an "Other" or "Type my own" option when the tool already provides free-form input (Claude Code and OpenCode do); if a harness's schema offers none, add `Something else` as the last option.
-- **Revise is a question, not a prompt to type.** A "revise" option leads to a follow-up question whose options are the parts of the artifact (sections, tasks, files). Free-form input stays available through the tool for anything the options miss.
+- **Revise is a question, not a prompt to type.** A "revise" option leads to a follow-up question whose options are the parts of the artifact (sections, tasks, files). Free-form input stays available through the tool for anything the options miss. If the parts exceed 4 options, group them (for example by section) and ask in two steps.
 - **Safe option first for risky actions.** For anything destructive, hard to reverse, externally visible, or touching a shared system (force push, delete, merge into the base branch, publish, deploy, spend money, write to a global file), the first option is the safe one (`Cancel, do nothing`) and the go-ahead is second, naming the exact action, target and effect. Enter must never run the action. No option carries `(Recommended)` here, because the safe option is first for Enter's sake and not because it is advised. Such a question is its own call: never batched with other questions and never a chip in a debt-sweep list.
 - **Batch independent decisions** into one call, at most 4 questions per call and at most 4 options per question. A larger set, such as the debt sweep, is grouped into multi-select questions of at most 4 options; what does not fit goes to the written backlog.
 - **Language.** Question text follows the user's own language preference (their `AGENTS.md` or equivalent), otherwise the language of their latest message. It is never hardcoded.
@@ -351,11 +351,11 @@ flowchart LR
 | Answer | What the pipeline does |
 |---|---|
 | An option | Continue. At a gate, record the answer in the plan's approval section. |
-| Free-form text | Treat it as the user's own answer. If it changes scope, restate it in one line and ask once more, because a changed decision is a new question. |
-| Dismissed or cancelled | **A dismissed question is not an approval.** The gate stays closed, one line says what is pending and what unblocks it, independent work continues, and the same question is not asked again in this session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption in the plan. |
+| Free-form text | Treat it as the user's own answer. If it changes scope, restate it in one line and ask once more, because a changed decision is a new question. On a risky question, text that does not name the go-ahead is not approval: ask again with the exact action. |
+| Dismissed or cancelled | **A dismissed question is not an approval.** The gate stays closed, one line says what is pending and what unblocks it, independent work continues (before Gate 1 or Gate 2 only read-only work, as the HARD GATE says), a later typed approval in chat is the user's own answer and ends the pending state, and the same question is not asked again in this session unless the user asks. A clarifying question that is not a gate takes its recommended default and records it as an assumption in the plan. |
 | No tool, a tool error, or no interactive client | Render a numbered list in the final message with one line saying the runtime lacks a prompt widget. The gate stays closed. Never skip the ask and never proceed as if it were approved. |
 
-- **Unattended runs ask nothing mid-run.** The entry gate (`sucp-overnight`) is collected while the user is present. A decision needed mid-run is a stop written to the handoff, except the debt-sweep question, which is the last act of the run.
+- **Unattended runs ask nothing mid-run.** The entry gate (`sucp-overnight`) is collected while the user is present. After that a mid-run decision follows the Unattended Continuation Rule: a reversible one takes the most reasonable reading and continues, and an irreversible one that could go either way is parked in the handoff under `Waiting on a human` with a recommended answer while independent work goes on. The only question asked is the debt-sweep question, as the last act of the run, and only when the harness has an interactive client.
 - **Not a question:** a fact the repository can answer (Homework-First), a preference with no outcome, and reversible work the approved scope already covers (Authorization Persistence).
 
 | Gate | Header | Options, in order |
@@ -368,13 +368,17 @@ flowchart LR
 | Plan (Gate 2) | `Plan` | Approve and execute (Recommended), Revise the plan |
 | TDD exception | `TDD waiver` | Keep test-first (Recommended), Waive for this change |
 | Wider scope or heavier path | `Scope` | Keep the approved scope (Recommended), Accept the new scope |
-| Blocker that needs a decision | `Blocked` | One option per concrete way forward, the recommended one first |
+| Blocker that needs a decision | `Blocked` | One option per concrete way forward, the recommended one first; a risky way forward follows the safe-option-first rule |
 | Credential hand-off finished | `Hand-off` | Done, continue (Recommended), Skip this step |
 | Publication outside the approved scope (push, PR, posted comment) | `Publish` | Cancel, do nothing; Publish (names the exact text or target) |
 | Merge into the base branch | `Merge` | Do not merge; Merge the PR (names the number and the head commit) |
 | Destructive action | `Destructive` | Cancel, do nothing; the exact action |
 | Promote a rule to a global file | `Promote` | Keep in the repository only; Promote this rule (names the file) |
+| Overnight run start | `Overnight` | Start the overnight run (Recommended), Not yet |
+| Root-cause fix (debugging) | `Root cause` | Approve the fix (Recommended), Revise the diagnosis |
 | Debt sweep (Step 6) | `Follow-ups` | Multi-select groups, see `sucp-debt-sweep` |
+
+- A `Hand-off` answer is a claim, not proof: verify the result (for example `gh auth status`) before relying on it.
 
 ### 🧠 Continuous Learning & Memory Lifecycle
 - Maintain knowledge persistence across sessions via two distinct memory phases:
@@ -438,7 +442,7 @@ flowchart LR
 | "Here are 8 follow-ups, pick the important ones" | Rank then cap: default 3-5 ranked follow-ups; the tail goes to the written backlog with `defer:` markers instead of a longer question list |
 | "You declined, so let me re-ask at the end" | A declined follow-up is closed. Record it in the backlog and finish; never re-ask the same question in one session |
 | "Ending the turn with a summary that announces the next step" | A turn with no tool call and checklist items still open is a report. With no blocker written, take the next step in the same message (see `sucp-overnight`, section 4) |
-| "Asking again for permission already granted" | Authorization Persistence: approval and preferences carry across turns; batch any genuinely new confirmation into one request |
+| "Asking again for permission already granted" | Authorization Persistence: approval and preferences carry across turns; batch any genuinely new confirmation into one request, but a risky action is never part of the batch |
 | "Shall I proceed?" in plain text | Confirmation Protocol: every human pause is a question-tool call with the recommended option first. A prose question makes the user type the answer |
 | "I'll ask them to type what they want changed" | A revise option leads to a follow-up question whose options are the parts of the artifact. Free-form input stays available through the tool itself |
 | "The dialog was dismissed, so I'll take the default" | A dismissed question is not an approval. A gate stays closed, one line says what is pending, independent work continues, and the question is not re-asked |

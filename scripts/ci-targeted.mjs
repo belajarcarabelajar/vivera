@@ -206,11 +206,12 @@ function testsForOther(p, sources) {
   return tests;
 }
 
-function fullPlan(base, reasons) {
+function fullPlan(base, reasons, ignored = []) {
   return {
     full: true,
     suites: [...FULL_CI.map((s) => ({ ...s, cmd: [...s.cmd], reasons: [...reasons] })), copySuite(base)],
     skipped: [],
+    ignored,
   };
 }
 
@@ -240,16 +241,23 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
   const mermaidChanged = new Set(index.mermaidChanged ?? []);
   // A new or edited script entry changes no dependency or toolchain, so it does not need the full ci.
   const scriptsOnly = new Set(index.packageScriptsOnly ?? []);
-  const paths = [...new Set(changed.map((p) => p.replace(/^\.\//, '')))]
+  const untracked = new Set(index.untracked ?? []);
+  const all = [...new Set(changed.map((p) => p.replace(/^\.\//, '')))]
     .filter((p) => p && !p.startsWith('graphify-out/'))
     .sort();
+  // An untracked non-code file outside the recognized paths (a stray backup, a local export) cannot be imported
+  // or read by any test, so it is reported instead of forcing the full ci.
+  const ignored = all
+    .filter((p) => untracked.has(p) && !recognized(p) && !CODE_EXT.test(p) && !toolchainReason(p))
+    .map((p) => ({ path: p, reason: 'untracked local file outside the repository paths' }));
+  const paths = all.filter((p) => !ignored.some((i) => i.path === p));
 
   const fullReasons = [];
   for (const p of paths) {
     const why = scriptsOnly.has(p) ? null : toolchainReason(p) ?? (recognized(p) ? null : 'unrecognized path');
     if (why) fullReasons.push(`${p}: ${why}`);
   }
-  if (fullReasons.length) return fullPlan(base, fullReasons);
+  if (fullReasons.length) return fullPlan(base, fullReasons, ignored);
 
   const graph = buildGraph(sources);
   const selectedTests = new Set();
@@ -262,7 +270,7 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
     if (tests.size) testReasons.push(`${p} -> ${[...tests].sort().join(', ')}`);
     for (const t of tests) selectedTests.add(t);
   }
-  if (fullReasons.length) return fullPlan(base, fullReasons);
+  if (fullReasons.length) return fullPlan(base, fullReasons, ignored);
 
   const categoryReasons = new Map();
   const addReason = (suite, reason) => {
@@ -298,7 +306,7 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
     }
   }
   suites.push(copySuite(base));
-  return { full: false, suites, skipped };
+  return { full: false, suites, skipped, ignored };
 }
 
 /** Fenced mermaid blocks, delimited the way render-diagrams.sh extracts them. */
@@ -348,7 +356,7 @@ export function changedFiles(root, base) {
     git(root, ['ls-files', '--others', '--exclude-standard', '-z']),
   ];
   const files = [...new Set(lists.flatMap((s) => s.split('\0').filter(Boolean)))].sort();
-  return { mergeBase, files };
+  return { mergeBase, files, untracked: lists[2].split('\0').filter(Boolean) };
 }
 
 function readSources(root) {
@@ -388,10 +396,11 @@ function packageScriptsOnlyFiles(root, files, mergeBase) {
   });
 }
 
-export function buildIndex(root, files, mergeBase) {
+export function buildIndex(root, files, mergeBase, untracked = []) {
   return {
     sources: readSources(root),
     mermaidChanged: mermaidChangedFiles(root, files, mergeBase),
+    untracked,
     packageScriptsOnly: packageScriptsOnlyFiles(root, files, mergeBase),
   };
 }
@@ -408,6 +417,11 @@ function printPlan(log, { base, mergeBase, files, plan }) {
   }
   log(`skipped (${plan.skipped.length}):`);
   for (const s of plan.skipped) log(`  ${s.name}: ${s.reason}`);
+  const ignored = plan.ignored ?? [];
+  if (ignored.length) {
+    log(`ignored (${ignored.length}):`);
+    for (const i of ignored) log(`  ${i.path}: ${i.reason}`);
+  }
 }
 
 function defaultSpawn(cmd, { cwd }) {
@@ -454,10 +468,10 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
   }
   try {
     const root = path.resolve(opts.root ?? git(process.cwd(), ['rev-parse', '--show-toplevel']).trim());
-    const { mergeBase, files } = changedFiles(root, opts.base);
+    const { mergeBase, files, untracked } = changedFiles(root, opts.base);
     const plan = opts.full
       ? fullPlan(opts.base, ['--full requested'])
-      : planChecks(files, buildIndex(root, files, mergeBase), { base: opts.base });
+      : planChecks(files, buildIndex(root, files, mergeBase, untracked), { base: opts.base });
     printPlan(log, { base: opts.base, mergeBase, files, plan });
     if (opts.plan) return 0;
     return runSuites(plan.suites, { root, log }).code;

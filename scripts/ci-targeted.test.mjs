@@ -310,3 +310,21 @@ describe('package.json limited to scripts', () => {
     expect(planChecks(['package.json'], { sources: {} }).full).toBe(true);
   });
 });
+
+describe('untracked local file', () => {
+  const BAK = 'plan.issues.json.bak-20261012-other-session';
+
+  test('an untracked non-code file outside the recognized paths is ignored, not a reason for the full ci', () => {
+    const plan = planChecks([BAK, 'docs/note.md'], { sources: {}, untracked: [BAK] });
+    expect(plan.full).toBe(false);
+    expect(plan.ignored.map((i) => i.path)).toEqual([BAK]);
+  });
+
+  test('the same file tracked still forces the full ci', () => {
+    expect(planChecks([BAK], { sources: {} }).full).toBe(true);
+  });
+
+  test('an untracked code file at an unknown path still forces the full ci', () => {
+    expect(planChecks(['tools/new.mjs'], { sources: {}, untracked: ['tools/new.mjs'] }).full).toBe(true);
+  });
+});

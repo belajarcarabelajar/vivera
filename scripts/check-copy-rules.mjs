@@ -28,6 +28,12 @@
 // Checked: the session's commit messages, and any file passed on the command
 // line (typically the PR body, or a changed user-visible doc).
 //
+// WHICH REPOSITORY. The one the command runs in: `--diff` and `--commits` check
+// the git toplevel of the current directory and exit 2 outside a repository,
+// never this checkout as a fallback, and a relative file path resolves against
+// the current directory. The exported functions keep this checkout as their
+// default, because validate-skill.mjs passes paths relative to it.
+//
 // NOT checked: every line of the codebase. The master skill legitimately contains
 // em dashes inside code comments and inside this very rule's quoted examples, and
 // a scan that flagged those would train people to ignore the scan. Pass the
@@ -161,8 +167,8 @@ export function checkText(text, { where, emDashApplies = true } = {}) {
 }
 
 /** Check a file on disk. A missing file is a violation, not a silent skip. */
-export function checkFile(rel) {
-  const abs = path.resolve(ROOT, rel);
+export function checkFile(rel, { root = ROOT } = {}) {
+  const abs = path.resolve(root, rel);
   if (!fs.existsSync(abs)) {
     return [{ where: rel, rule: 'missing-file', detail: 'file not found', line: '' }];
   }
@@ -173,8 +179,8 @@ export function checkFile(rel) {
  * Check commit messages, because an attribution trailer rides along there too and
  * `git log` is where a reviewer looks first.
  */
-export function checkCommits(count = 20) {
-  const r = checkCommitRange([`-${count}`], ROOT);
+export function checkCommits(count = 20, { cwd = ROOT } = {}) {
+  const r = checkCommitRange([`-${count}`], cwd);
   if (r.error) {
     return [{ where: 'git log', rule: 'git-failed', detail: r.error, line: '' }];
   }
@@ -286,7 +292,8 @@ export function checkDiff({ base, cwd = ROOT } = {}) {
   let files = 0;
   for (const [rel, lines] of parseAddedLines(diff.stdout)) {
     const abs = path.resolve(cwd, rel);
-    if (lines.size === 0 || !fs.existsSync(abs)) continue;
+    // A submodule pointer (a directory) or an added symlink has no text of its own to check.
+    if (lines.size === 0 || !fs.existsSync(abs) || !fs.lstatSync(abs).isFile()) continue;
     files += 1;
     addedLines += lines.size;
     // The whole file is checked so the rule-statement neighbour window still sees
@@ -320,6 +327,21 @@ export function checkDiff({ base, cwd = ROOT } = {}) {
 
 const USAGE = 'usage: check-copy-rules.mjs <file>... | --commits [N] | --both <file>... | --diff <base>';
 
+/** The git toplevel of `cwd`, or null outside a repository or when git fails. */
+function repoRoot(cwd) {
+  const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  if (r.error || r.status !== 0) return null;
+  return r.stdout.trim() || null;
+}
+
+// No fallback to ROOT: checking this checkout instead of the caller's repository is
+// the false clean this guards against.
+function cwdRepoRoot() {
+  const root = repoRoot(process.cwd());
+  if (root === null) console.error(`not inside a git repository: ${process.cwd()}\n${USAGE}`);
+  return root;
+}
+
 function report(violations) {
   console.error(`❌ ${violations.length} copy-rule violation(s):\n`);
   for (const v of violations) {
@@ -337,9 +359,11 @@ function mainDiff(args) {
     console.error(USAGE);
     return 2;
   }
+  const root = cwdRepoRoot();
+  if (root === null) return 2;
   let r;
   try {
-    r = checkDiff({ base });
+    r = checkDiff({ base, cwd: root });
   } catch (err) {
     console.error(`${err.message}\n${USAGE}`);
     return 2;
@@ -382,6 +406,8 @@ export function main(args) {
     console.error(USAGE);
     return 2;
   }
+  const root = wantCommits ? cwdRepoRoot() : null;
+  if (wantCommits && root === null) return 2;
 
   const violations = [];
   for (const f of files) {
@@ -389,9 +415,9 @@ export function main(args) {
     if (ext && !ARTIFACT_EXTENSIONS.has(ext)) {
       console.warn(`  note: ${f} is not a .md/.txt artifact; checked anyway, but the em-dash rule targets prose`);
     }
-    violations.push(...checkFile(f));
+    violations.push(...checkFile(f, { root: process.cwd() }));
   }
-  if (wantCommits) violations.push(...checkCommits(count));
+  if (wantCommits) violations.push(...checkCommits(count, { cwd: root }));
 
   if (violations.length === 0) {
     console.log(`✅ Copy rules clean: ${files.length} file(s)` + (wantCommits ? ` and the last ${count} commit message(s)` : '') + '.');
@@ -403,5 +429,8 @@ export function main(args) {
 const isMain = process.argv[1] && process.argv[1].endsWith('check-copy-rules.mjs');
 if (isMain) process.exit(main(process.argv.slice(2)));
 
-// REVERT: delete this file, drop the `checkCopyRules` call from validate-skill.mjs,
-// and drop `copy-rules` from package.json scripts. Nothing else imports it.
+// REVERT: delete this file and scripts/check-copy-rules.test.mjs; remove the
+// `import('./check-copy-rules.mjs')` block in validate-skill.mjs and its checkFile
+// calls; drop `copy:check` from package.json scripts; drop the copy-rules suite
+// (copySuite) from ci-targeted.mjs and its expectations in ci-targeted.test.mjs;
+// drop the command from agents/roles/reviewer.md, then `bun run agents:gen`.

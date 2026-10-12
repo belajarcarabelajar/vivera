@@ -1407,6 +1407,12 @@ bun run copy:check <file>...        # check an artifact (a PR body, a doc)
 bun run copy:check --commits [N]    # check the last N commit messages
 ```
 
+The checker reads the repository the command runs in: `--diff` and `--commits`
+use the git toplevel of the current directory and exit 2 outside a repository,
+and file paths resolve against the current directory. `bun run copy:check`
+always runs from this repository's root, so to check another repository call the
+script there: `cd <repo> && bun <vivera>/scripts/check-copy-rules.mjs --diff origin/main`.
+
 | Rule | Pattern |
 |---|---|
 | No em dash | U+2014 in user-visible prose |

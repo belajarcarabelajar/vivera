@@ -28,6 +28,12 @@
 // Checked: the session's commit messages, and any file passed on the command
 // line (typically the PR body, or a changed user-visible doc).
 //
+// WHICH REPOSITORY. The one the command runs in: `--diff` and `--commits` check
+// the git toplevel of the current directory and exit 2 outside a repository,
+// never this checkout as a fallback, and a relative file path resolves against
+// the current directory. The exported functions keep this checkout as their
+// default, because validate-skill.mjs passes paths relative to it.
+//
 // NOT checked: every line of the codebase. The master skill legitimately contains
 // em dashes inside code comments and inside this very rule's quoted examples, and
 // a scan that flagged those would train people to ignore the scan. Pass the
@@ -423,4 +429,5 @@ const isMain = process.argv[1] && process.argv[1].endsWith('check-copy-rules.mjs
 if (isMain) process.exit(main(process.argv.slice(2)));
 
 // REVERT: delete this file, drop the `checkCopyRules` call from validate-skill.mjs,
-// and drop `copy-rules` from package.json scripts. Nothing else imports it.
+// and drop `copy-rules` from package.json scripts. It is also imported by its own
+// test file and run by ci-targeted.mjs (the copy-rules suite), so drop those too.

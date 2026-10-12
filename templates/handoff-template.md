@@ -57,6 +57,7 @@
 
 - [ ] [Decision 1: e.g. "Should rate limit apply per IP or per API key? User hasn't specified."]
 - [ ] [Decision 2]
+- [ ] `Close plan` parked: [plan path], readiness verdict [READY / NOT-READY / NEEDS-HUMAN] from `bun scripts/plan-closeout.mjs --readiness`, open items [list], recommended answer [Mark Complete only on READY, else Keep it open]
 
 ## Blockers
 

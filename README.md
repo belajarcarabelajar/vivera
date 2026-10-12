@@ -60,6 +60,7 @@ What a question looks like:
 - The artifact (draft intent, design, plan summary, diff stat, exact comment text) is shown in chat first, then asked about.
 - 2 to 4 options. The recommended one comes first, labelled `(Recommended)`, so Enter accepts it. Labels are five words or fewer, each with a one-line description.
 - At most 4 questions per call and at most 4 options per question. The debt sweep groups its follow-ups into multi-select questions of at most 4 options.
+- The debt sweep ends with the `Close plan` gate: `bun scripts/plan-closeout.mjs --readiness <plan.md>` runs each task's `skip_if` and reports `READY`, `NOT-READY` or `NEEDS-HUMAN`, and `Mark Complete` is the recommended option only on `READY`. A plan kept open gets a `## Closeout status` section with what remains. `bun scripts/plan-closeout.mjs --audit` lists plans whose sessions all merged while the plan is still open.
 - Destructive, hard-to-reverse, externally visible, or shared-system actions (force push, delete, merge, publish, deploy) put the safe option first, `Cancel, do nothing`, and the go-ahead second, naming the exact action. Enter never runs the action, so no option carries `(Recommended)`, and such a question is asked alone, never batched.
 - Every recommended option says why: its description starts with `Why:` and one line of basis (a repository fact, a measured result, or the pipeline rule behind the gate), then the usual one line of what happens next, or `Why: my judgment` when that is the only basis. A judgment is never presented as a best practice that was not checked.
 - A risky question carries no tag, but its question text carries one `Facts:` line, for example the PR number, head commit, mergeable state and checks. It is evidence to weigh, not a nudge toward either option.
@@ -180,7 +181,8 @@ vivera/
 │   ├── plan-publish-registry.test.mjs           # Config, project resolution, enumeration tests
 │   ├── plan-publish-frontmatter.mjs             # Pure ultra-plan/v1 -> PARA frontmatter transform
 │   ├── plan-publish-frontmatter.test.mjs        # Merge rules, related-link, title fallback tests
-│   ├── pr-registry.mjs                          # PR session slots: derived branch/worktree, state machine, merge order
+│   ├── plan-closeout.mjs                        # Close-out gaps, --readiness from skip_if, --audit of merged plans left open
+│   ├── pr-registry.mjs                          # PR session slots: derived branch/worktree, recorded repo, state machine, merge order
 │   ├── pr-registry.test.mjs                     # Collision, terminal-state, and merge-order guards
 │   ├── plan-issue-sync.mjs                      # Plan -> GitHub issue mirror (one-way, hash-keyed)
 │   ├── plan-issue-sync.test.mjs                 # Action-matrix and real-argv/stdin guards
@@ -235,7 +237,7 @@ vivera/
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
     ├── sucp-verify-deliver/SKILL.md             # Phase skill: Step 5 verification and PR delivery
-    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep and learning harvest
+    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep, plan closeout decision, learning harvest
     └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
 

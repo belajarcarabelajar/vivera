@@ -129,6 +129,9 @@ each carries a ceiling and a trigger.
       named the way the code names it.
 - [ ] PR body written to a file and posted with `--body-file`, never `--body`.
 - [ ] Registered in the registry: `bun scripts/pr-registry.mjs pr <session> --number <N>`.
+- [ ] Plan closeout decided before the merge: `Complete` with the
+      `plan-closeout.mjs --readiness` output recorded in the plan, or kept open
+      with a `## Closeout status` section naming what remains.
 
 ```mermaid
 flowchart TD

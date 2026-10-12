@@ -895,6 +895,40 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3n. Plan closeout gate (2026-10-12, plan 2026-10-12-vivera-plan-closeout-gate).
+// A plan whose work is merged must not stay at Approved unnoticed: Step 6 asks the
+// `Close plan` gate from the readiness verdict of scripts/plan-closeout.mjs. These needles
+// are the plan's Contract table, one entry per row.
+// Revert: `git revert` the commits that added this block with their skill, template, and README edits.
+{
+  const rules = 'skills/sucp-rules/SKILL.md';
+  const orchestrator = 'Super Ultra Code Plan Implementation.md';
+  const sweep = 'skills/sucp-debt-sweep/SKILL.md';
+  const verify = 'skills/sucp-verify-deliver/SKILL.md';
+  const overnight = 'skills/sucp-overnight/SKILL.md';
+  const closeoutContract = [
+    { label: 'sweep has the closeout decision step', file: sweep, needle: '### ✅ 6.5.5 Plan Closeout Decision' },
+    { label: 'sweep runs the readiness check', file: sweep, needle: 'bun scripts/plan-closeout.mjs --readiness' },
+    { label: 'gate catalog covers the plan closeout', file: rules, needle: '`Close plan` | Mark Complete (Recommended), Keep it open' },
+    { label: 'anti-pattern row for a finished plan left open', file: rules, needle: 'A finished plan left at Approved' },
+    { label: 'verify-deliver requires the closeout answer', file: verify, needle: 'answered the `Close plan` gate' },
+    { label: 'overnight parks the closeout gate', file: overnight, needle: '`Close plan`' },
+    { label: 'orchestrator names the closeout decision', file: orchestrator, needle: 'plan closeout decision' },
+    { label: 'follow-up template has the closeout section', file: 'templates/follow-up-injection-template.md', needle: '## 7. Plan Closeout Decision' },
+    { label: 'PR template records the closeout decision', file: 'templates/pull-request-template.md', needle: 'Plan closeout decided' },
+  ];
+  for (const c of closeoutContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Plan closeout gate present: ${c.label}`);
+    } else {
+      console.error(`❌ Plan closeout gate missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

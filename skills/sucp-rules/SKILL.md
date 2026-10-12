@@ -380,6 +380,7 @@ Every row below is a gate; a question without a row is a clarifying question.
 | Overnight run start | `Overnight` | Start the overnight run (Recommended), Not yet | Entry gate: the plan is `Approved`, the PR is the named deliverable, `gh auth` and `git fetch` pass, and limits are recorded |
 | Root-cause fix (only where the debugging trigger requires an RCA gate) | `Root cause` | Approve the fix (Recommended), Revise the diagnosis | RCA gate: the fix follows a verified cause with a failing reproduction, not a plausible guess |
 | Debt sweep (Step 6) | `Follow-ups` | Multi-select groups, see `sucp-debt-sweep` | Ranked by leftover risk times blast radius times cheapness to close; the top item of each group is the recommendation |
+| Plan closeout (Step 6) | `Close plan` | Mark Complete (Recommended), Keep it open | The recommended option follows `plan-closeout.mjs --readiness`: Mark Complete only on `READY`; on `NOT-READY` or `NEEDS-HUMAN`, Keep it open comes first and is recommended, naming the open tasks |
 
 - `Basis` is the `Why:` line for a recommended gate and the facts to state for a risky gate. The validator fails a missing column or an empty cell, so a gate cannot be added without its reason.
 - A `Hand-off` answer is a claim, not proof: verify the result (for example `gh auth status`) before relying on it.
@@ -441,7 +442,8 @@ Every row below is a gate; a question without a row is a clarifying question.
 | "It's blocked, so I'll stop here" | Blocked Audit: the same blocker must recur across three consecutive turns before it counts as blocked; until then keep completing independent work |
 | "Updating the plan instead of running it" | A plan update is not progress. Keep it current, then execute; trivial single-step work needs no plan at all |
 | "I left a few TODOs, I'll clean them later" | Session-Close Debt Sweep: every noticed-but-unclosed item becomes a selectable follow-up now, so nothing survives the handoff as debt |
-| "Plan says done, so the session is over" | Plan Completion Saturation: tasks reach `Done 100%` with evidence, and the Step 6 sweep runs before the plan flips to `Complete` |
+| "Plan says done, so the session is over" | Plan Completion Saturation: tasks reach `Done 100%` with evidence, and the Step 6 sweep runs before the `Close plan` gate decides whether the plan flips to `Complete` |
+| "A finished plan left at Approved is harmless, the PR merged" | Plan closeout decision: the plan status drives the issue, so a merged plan nobody closed keeps its issue open and hides real open work. Step 6 runs `plan-closeout.mjs --readiness` and asks the `Close plan` gate; keeping it open writes a `## Closeout status` section with what remains |
 | "I'll list the follow-ups at the end so you can read them" | Ask, don't narrate: one question-tool call of multi-select checkboxes, batched after the recap, so the user taps instead of retyping |
 | "Here are 8 follow-ups, pick the important ones" | Rank then cap: default 3-5 ranked follow-ups; the tail goes to the written backlog with `defer:` markers instead of a longer question list |
 | "You declined, so let me re-ask at the end" | A declined follow-up is closed. Record it in the backlog and finish; never re-ask the same question in one session |

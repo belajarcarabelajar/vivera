@@ -3,12 +3,15 @@
 // Guards for the close-out gap check behind `pr-registry state <session> merged`.
 // Local files only: no gh, no network. Every fixture lives in a temp directory.
 
-import { test, afterEach } from 'node:test';
+import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { closeoutGaps, checkCloseout as checkCloseoutRaw } from './plan-closeout.mjs';
+import { fileURLToPath } from 'node:url';
+import * as closeout from './plan-closeout.mjs';
+
+const { closeoutGaps, checkCloseout: checkCloseoutRaw } = closeout;
 
 // The mirror check reads the machine's publish config by default, so the issue
 // tests stub it as fresh and only the mirror tests below choose a verdict.
@@ -69,7 +72,7 @@ test('Verification status raises PLAN_NOT_COMPLETE with the literal plan path in
   assert.deepEqual(codes(gaps), ['PLAN_NOT_COMPLETE']);
   assert.ok(gaps[0].message.includes('Verification'));
   assert.equal(gaps[0].fix,
-    `set "status: Complete" in ${PLAN}, then run: bun scripts/plan-publish.mjs ${PLAN} && bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`,
+    `check bun scripts/plan-closeout.mjs --readiness ${PLAN}, then set "status: Complete" in ${PLAN} and run: bun scripts/plan-publish.mjs ${PLAN} && bun scripts/plan-issue-sync.mjs --project vivera ${PLAN}`,
   );
 });
 
@@ -281,4 +284,284 @@ test('mirror: a multi-line config error is reduced to its first line in the skip
   const root = repo({ planText: plan('Complete'), config: cfgWith(closedEntry) });
   const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('UNROUTABLE', 'cannot load: missing\n\nCopy the template\n  cp a b') });
   assert.equal(r.skipped, 'vault mirror not checked: cannot load: missing');
+});
+
+describe('closeout readiness', () => {
+  const t = (id, state) => ({ id, state });
+  const verdict = (tasks, openNow = 0) => closeout.readinessVerdict({ tasks, openNow });
+
+  test('readiness: every task DONE and no open NOW row is READY with exit 0', () => {
+    const r = verdict([t('T1', 'DONE'), t('T2', 'DONE')]);
+    assert.equal(r.verdict, 'READY');
+    assert.equal(r.exit, 0);
+    assert.deepEqual(r.counts, { DONE: 2, OPEN: 0, UNREAD: 0, UNPROVEN: 0 });
+  });
+
+  test('readiness: an OPEN task is NOT-READY with exit 1, even beside UNPROVEN', () => {
+    const r = verdict([t('T1', 'DONE'), t('T2', 'OPEN'), t('T3', 'UNPROVEN')]);
+    assert.equal(r.verdict, 'NOT-READY');
+    assert.equal(r.exit, 1);
+  });
+
+  test('readiness: an UNREAD task is NOT-READY, a timeout is not proof', () => {
+    const r = verdict([t('T1', 'DONE'), t('T2', 'UNREAD')]);
+    assert.equal(r.verdict, 'NOT-READY');
+    assert.equal(r.exit, 1);
+  });
+
+  test('readiness: UNPROVEN with nothing OPEN is NEEDS-HUMAN with exit 3', () => {
+    const r = verdict([t('T1', 'DONE'), t('T2', 'UNPROVEN')]);
+    assert.equal(r.verdict, 'NEEDS-HUMAN');
+    assert.equal(r.exit, 3);
+  });
+
+  test('readiness: an open NOW row forces NOT-READY when every task is DONE', () => {
+    const r = verdict([t('T1', 'DONE')], 1);
+    assert.equal(r.verdict, 'NOT-READY');
+    assert.equal(r.exit, 1);
+  });
+
+  test('readiness: an open NOW row beats NEEDS-HUMAN', () => {
+    assert.equal(verdict([t('T1', 'UNPROVEN')], 2).verdict, 'NOT-READY');
+  });
+
+  test('readiness: zero tasks is NEEDS-HUMAN with exit 3, nothing was measured', () => {
+    const r = verdict([]);
+    assert.equal(r.verdict, 'NEEDS-HUMAN');
+    assert.equal(r.exit, 3);
+  });
+
+  test('readiness: zero tasks with an open NOW row is still NOT-READY', () => {
+    assert.equal(verdict([], 1).verdict, 'NOT-READY');
+  });
+
+  const fixturePlan = (tasks) => [
+    '---',
+    'schema: ultra-plan/v1',
+    'plan_id: demo',
+    'status: Verification',
+    'tasks:',
+    ...tasks.flatMap(({ id, skipIf }) => [
+      `  - id: ${id}`,
+      '    depends_on: []',
+      ...(skipIf === undefined ? [] : [`    skip_if: ${JSON.stringify(skipIf)}`]),
+      '    run:',
+      `      - cmd: "run-step-${id}"`,
+      '        expect_exit: 0',
+    ]),
+    '---',
+    '',
+    '# Demo',
+    '',
+  ].join('\n');
+
+  function fakeRun(results) {
+    const calls = [];
+    const run = (cmd, opts) => {
+      calls.push({ cmd, opts });
+      return results[cmd] ?? { exit: 0, timedOut: false };
+    };
+    return { run, calls };
+  }
+
+  test('readiness: skip_if exit 0 is DONE, non-zero OPEN, timeout UNREAD', () => {
+    const text = fixturePlan([
+      { id: 'T1', skipIf: 'probe-done' },
+      { id: 'T2', skipIf: 'probe-open' },
+      { id: 'T3', skipIf: 'probe-slow' },
+    ]);
+    const { run, calls } = fakeRun({
+      'probe-open': { exit: 1, timedOut: false },
+      'probe-slow': { exit: null, timedOut: true },
+    });
+    const rows = closeout.taskReadiness(text, { run, cwd: '/repo', timeoutMs: 1234 });
+    assert.deepEqual(rows.map((r) => [r.id, r.state, r.skipIf]), [
+      ['T1', 'DONE', 'probe-done'],
+      ['T2', 'OPEN', 'probe-open'],
+      ['T3', 'UNREAD', 'probe-slow'],
+    ]);
+    assert.deepEqual(calls[0].opts, { cwd: '/repo', timeoutMs: 1234 });
+  });
+
+  test('readiness: the false sentinel and a missing skip_if are UNPROVEN and never executed', () => {
+    const text = fixturePlan([{ id: 'T1', skipIf: 'false' }, { id: 'T2' }, { id: 'T3', skipIf: '' }]);
+    const { run, calls } = fakeRun({});
+    const rows = closeout.taskReadiness(text, { run, cwd: '/repo', timeoutMs: 1000 });
+    assert.deepEqual(rows.map((r) => r.state), ['UNPROVEN', 'UNPROVEN', 'UNPROVEN']);
+    assert.equal(calls.length, 0);
+  });
+
+  test('readiness: run[] steps are never executed', () => {
+    const text = fixturePlan([{ id: 'T1', skipIf: 'probe-done' }]);
+    const { run, calls } = fakeRun({});
+    closeout.taskReadiness(text, { run, cwd: '/repo', timeoutMs: 1000 });
+    assert.deepEqual(calls.map((c) => c.cmd), ['probe-done']);
+  });
+
+  test('readiness: openNowRows counts rows with a NOW cell and an OPEN cell', () => {
+    const body = [
+      '| Item | Class | State |',
+      '|---|---|---|',
+      '| a | NOW | OPEN |',
+      '| b | `NOW` | ` OPEN ` |',
+      '| c | NOW | DONE |',
+      '| d | LATER | OPEN |',
+      '| NOW is mentioned in OPEN prose | x | y |',
+    ].join('\n');
+    assert.equal(closeout.openNowRows(body), 2);
+  });
+
+  test('readiness: openNowRows counts NOW and OPEN cells followed by prose', () => {
+    const body = [
+      '| Item | Class | State |',
+      '|---|---|---|',
+      '| a | `NOW` bila sempat | OPEN |',
+      '| b | `NOW` untuk Produk | OPEN, menunggu pemilik |',
+      '| c | NOW | `OPEN` sejak T3 |',
+    ].join('\n');
+    assert.equal(closeout.openNowRows(body), 3);
+  });
+
+  test('readiness: openNowRows ignores NOW and OPEN that only appear later in prose', () => {
+    const body = [
+      '| Item | Class | State |',
+      '|---|---|---|',
+      '| a | later, NOW maybe | still OPEN |',
+      '| b | NOWHERE | OPENED |',
+      '| c | NOW | DONE, was OPEN |',
+    ].join('\n');
+    assert.equal(closeout.openNowRows(body), 0);
+  });
+});
+
+describe('closeout audit', () => {
+  const s = (session, plan, state, repo) => ({ session, plan, state, ...(repo ? { repo } : {}) });
+  const statusFrom = (map) => (session) => (session.plan in map ? map[session.plan] : null);
+
+  test('audit: all sessions terminal with one merged and the plan not Complete is debt', () => {
+    const rows = closeout.auditCloseout({
+      sessions: [s('a', 'p1', 'merged', '/r'), s('b', 'p1', 'closed', '/r')],
+      planStatusOf: statusFrom({ p1: 'Verification' }),
+    });
+    assert.deepEqual(rows, [{ plan: 'p1', status: 'Verification', sessions: ['a', 'b'], repo: '/r' }]);
+  });
+
+  test('audit: a plan with a session still open is not debt', () => {
+    const rows = closeout.auditCloseout({
+      sessions: [s('a', 'p1', 'merged'), s('b', 'p1', 'active')],
+      planStatusOf: statusFrom({ p1: 'Verification' }),
+    });
+    assert.deepEqual(rows, []);
+  });
+
+  test('audit: a Complete plan is not debt', () => {
+    const rows = closeout.auditCloseout({
+      sessions: [s('a', 'p1', 'merged')],
+      planStatusOf: statusFrom({ p1: 'Complete' }),
+    });
+    assert.deepEqual(rows, []);
+  });
+
+  test('audit: a plan with only closed sessions is not debt', () => {
+    const rows = closeout.auditCloseout({
+      sessions: [s('a', 'p1', 'closed')],
+      planStatusOf: statusFrom({ p1: 'Verification' }),
+    });
+    assert.deepEqual(rows, []);
+  });
+
+  test('audit: a missing plan file is debt with status null', () => {
+    const rows = closeout.auditCloseout({
+      sessions: [s('a', 'gone', 'merged')],
+      planStatusOf: statusFrom({}),
+    });
+    assert.deepEqual(rows, [{ plan: 'gone', status: null, sessions: ['a'], repo: null }]);
+  });
+});
+
+describe('closeout CLI', () => {
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
+  const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe' });
+
+  test('readiness CLI: unknown arguments print usage on stderr and exit 2', () => {
+    const r = cli(['--bogus']);
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr.toString(), /usage/i);
+  });
+
+  test('readiness CLI: a missing plan file exits 2 with a message, not a stack trace', () => {
+    const r = cli(['--readiness', path.join(tmpdir(), 'plan-closeout-no-such-plan.md')]);
+    assert.equal(r.exitCode, 2);
+    assert.match(r.stderr.toString(), /cannot read plan/);
+    assert.doesNotMatch(r.stderr.toString(), /at readinessCli/);
+  });
+
+  test('readiness CLI: runs skip_if in --cwd and prints rows, open NOW count and verdict', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
+    dirs.push(root);
+    writeFileSync(path.join(root, 'marker'), '');
+    const file = path.join(root, 'plan.md');
+    writeFileSync(file, [
+      '---', 'schema: ultra-plan/v1', 'plan_id: demo', 'tasks:',
+      '  - id: T1', '    depends_on: []', '    skip_if: "test -f marker"',
+      '---', '', '| Item | Class | State |', '|---|---|---|', '| x | NOW | DONE |', '',
+    ].join('\n'));
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
+    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nreadiness: READY\n');
+    assert.equal(r.exitCode, 0);
+  });
+
+  test('readiness CLI: a timed-out skip_if is UNREAD and leaves no child process alive', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
+    dirs.push(root);
+    const file = path.join(root, 'plan.md');
+    writeFileSync(file, [
+      '---', 'schema: ultra-plan/v1', 'plan_id: demo', 'tasks:',
+      '  - id: T1', '    depends_on: []', `    skip_if: ${JSON.stringify('sleep 7 & echo $! > child.pid; wait')}`,
+      '---', '',
+    ].join('\n'));
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '1']);
+    const pid = Number(readFileSync(path.join(root, 'child.pid'), 'utf8'));
+    assert.ok(pid > 0);
+    // A killed child is a zombie until init reaps it, and signal 0 still finds a zombie.
+    const deadline = Date.now() + 2000;
+    let alive = true;
+    while (alive && Date.now() < deadline) {
+      try {
+        process.kill(pid, 0);
+        Bun.sleepSync(50);
+      } catch (e) {
+        assert.equal(e.code, 'ESRCH');
+        alive = false;
+      }
+    }
+    if (alive) process.kill(pid, 'SIGKILL');
+    assert.equal(alive, false, `sleep ${pid} outlived the timed-out skip_if`);
+    assert.match(r.stdout.toString(), /^T1\tUNREAD\t/);
+    assert.equal(r.exitCode, 1);
+  });
+
+  test('audit CLI: reads the registry and always exits 0', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-audit-'));
+    dirs.push(root);
+    mkdirSync(path.join(root, 'docs/code-plan/plans'), { recursive: true });
+    writeFileSync(path.join(root, 'docs/code-plan/plans/p1.md'), plan('Verification'));
+    const reg = path.join(root, 'pr.registry.json');
+    writeFileSync(reg, JSON.stringify({ version: 1, sessions: [{ session: 'a', plan: 'p1', state: 'merged', repo: root }] }));
+    const r = cli(['--audit', '--registry', reg]);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout.toString(), /p1/);
+    assert.match(r.stdout.toString(), /closeout debt: 1 plan\(s\)\n$/);
+  });
+
+  test('audit CLI: a plan file that cannot be found is reported as not read, never as debt', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-audit-'));
+    dirs.push(root);
+    const reg = path.join(root, 'pr.registry.json');
+    writeFileSync(reg, JSON.stringify({ version: 1, sessions: [{ session: 'b', plan: 'hilang', state: 'merged', repo: root }] }));
+    const r = cli(['--audit', '--registry', reg]);
+    assert.equal(r.exitCode, 0);
+    assert.match(r.stdout.toString(), /closeout debt: 0 plan\(s\)/);
+    assert.match(r.stdout.toString(), /not read: 1 plan file\(s\) not found/);
+  });
 });

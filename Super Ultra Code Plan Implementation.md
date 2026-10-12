@@ -69,7 +69,7 @@ The universal rules must adapt at runtime to the repository, package, applicatio
 | 3 | 🧪 **Test-Driven Development** | Does the test prove the behavior before production code exists? | RED → GREEN → REFACTOR cycle | Failing test before implementation |
 | 4 | ✅ **Verification** | What fresh evidence proves the completion claim? | Commands, output, exit status, diff | Evidence before completion claim |
 
-Verification is the last gate, never the last step. A mandatory **🧹 Session-Close Debt Sweep** (Step 6) runs after the evidence gate, converts every observation made during planning and execution into a selectable follow-up, and drives it to completion inside the same session so no coding debt survives the handoff.
+Verification is the last gate, never the last step. A mandatory **🧹 Session-Close Debt Sweep** (Step 6) runs after the evidence gate, converts every observation made during planning and execution into a selectable follow-up, and drives it to completion inside the same session so no coding debt survives the handoff. It ends with the plan closeout decision: a readiness verdict from `bun scripts/plan-closeout.mjs --readiness`, then the `Close plan` gate, so a merged plan is either marked `Complete` or kept open with a written reason.
 
 ```mermaid
 flowchart LR
@@ -110,7 +110,7 @@ This file is the orchestrator. The phase rules live in separate skills, and each
 | Step 3 — 🗺️ Writing plans (architectural path) and visual implementation map | `sucp-plan` | After the human approves the design |
 | Step 4 — 🧪 TDD and 🐞 systematic debugging | `sucp-tdd-debug` | Before the first RED test or bug reproduction |
 | Step 5 — ✅ Verification, professional engineering gates, 📤 PR delivery | `sucp-verify-deliver` | Before any completion claim or PR |
-| Step 6 — 🧹 Session-close debt sweep and learning harvest | `sucp-debt-sweep` | After the plan is Done 100% and the evidence gate is green |
+| Step 6: 🧹 Session-close debt sweep, learning harvest, and plan closeout decision | `sucp-debt-sweep` | After the plan is Done 100% and the evidence gate is green |
 | Overnight run (user leaves, plan to verified PR) | `sucp-overnight` | After the plan is Approved and the user says they are leaving. Loaded in addition to the phase skills, never instead of them |
 
 - Load the phase skill before entering its phase. Do not reconstruct its rules from memory.

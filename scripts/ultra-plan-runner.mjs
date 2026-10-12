@@ -915,7 +915,7 @@ function idempotencyMismatch(t) {
 // after a short grace period.
 const GROUP_KILL_GRACE_MS = 500;
 
-function reapGroup(pid, { log } = {}) {
+export function reapGroup(pid, { log } = {}) {
   if (!pid) return false;
   let killed = false;
   for (const signal of ['SIGTERM', 'SIGKILL']) {

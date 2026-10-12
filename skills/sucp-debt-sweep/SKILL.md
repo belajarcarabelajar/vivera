@@ -19,6 +19,7 @@ A SESSION ENDS WITH ZERO UNEXAMINED CODING DEBT
 - The Verification gate passed with fresh evidence, git hygiene is done, and the final diff has been audited. Starting the sweep on unverified work converts a completion claim into a bigger unverified claim.
 - The session's pull request exists and its number is recorded in the registry (`bun scripts/pr-registry.mjs pr <session> --number <N>`). A follow-up selected in the sweep is a new chunk of work on the same branch, so an unrecorded PR means the follow-up work has nowhere to land.
 - Anything that is genuinely `Blocked` by an external dependency is excluded from follow-up candidates and instead reported with the exact unblock condition. A blocked item is not a follow-up question; asking the user to "also fix" it is noise.
+- Order of the close: the sweep (6.2 to 6.5), then the plan closeout decision (6.5.5), then the graphify sync (6.6). The plan reaches `Complete` only through 6.5.5.
 
 ### 🔍 6.2 Harvest — collect debt candidates from the whole session
 Sweep the session record, not just the last command, for anything that was noticed but not closed. Candidate sources, in priority order:
@@ -60,10 +61,26 @@ The same sweep that mines code debt also mines the session for the agent's **own
 
 ### 🛠️ 6.5 Execute — selected follow-ups run as real work
 - A selected follow-up is a task, not a favor. It enters the same pipeline as plan work: chunk it, fan out to subagents, TDD when behavior changes, verification with fresh evidence, diff audit, and commit. No reduced standard, no "quick fix" exemption.
-- Re-open the plan status to `In Progress` for the duration, add the item as a numbered follow-up task with its own acceptance criterion and `skip_if`, and return it to `Complete` when the evidence is green. The plan file, not the chat, is the record.
+- Re-open the plan status to `In Progress` for the duration, add the item as a numbered follow-up task with its own acceptance criterion and `skip_if`, and close that task when the evidence is green; the plan itself reaches `Complete` only through the closeout decision (6.5.5). The plan file, not the chat, is the record.
 - After the batch closes, run the sweep's own short pass once more: did executing item A create new debt in the surface it touched? Any new candidate goes to the same ranked list, and the user is asked again only for genuinely new items.
 - A candidate the re-pass finds adds a star to the meter (see Progress stars below).
 - Batch the selections into one round. Sequentially asking about each follow-up's sub-steps reproduces the low-value prompting this stage exists to eliminate.
+
+### ✅ 6.5.5 Plan Closeout Decision
+> ✅ **Closing stage: the plan status is a decision, not a side effect.** Measured 2026-10-12 in bcb: 14 issues stayed open while nine plans with merged work were still `Approved`, `InProgress` or `Draft`, because nothing asked the owner to close them.
+
+This step is mandatory once the follow-ups are executed or declined, including when the user picked `Nothing, close session`. It runs before the graphify sync (6.6) so the graph indexes the final plan status.
+
+1. **Measure.** Run `bun scripts/plan-closeout.mjs --readiness <plan.md>`. It runs each task's `skip_if` in the plan's repository with a timeout and marks the task `DONE` (exit 0), `OPEN` (non-zero), `UNREAD` (timed out) or `UNPROVEN` (`false` sentinel or no `skip_if`). Backlog rows classed `NOW` and still open count against the plan. Verdict: `READY` exit 0, `NOT-READY` exit 1, `NEEDS-HUMAN` exit 3 (nothing open, but some task has no machine proof).
+2. **Show.** Put the verdict and every `OPEN`, `UNREAD` and `UNPROVEN` item in the chat before the question, so the owner decides on evidence.
+3. **Ask the `Close plan` gate** through the Confirmation Protocol. The recommended option follows the verdict: `Mark Complete` is first and recommended only on `READY`. On `NOT-READY` or `NEEDS-HUMAN`, `Keep it open` is first and recommended, and its description names the open tasks. One question per plan, at most 4 plans per call.
+4. **Apply the answer.**
+   - `Mark Complete`: set `status: Complete`, record the readiness output (command, verdict, date) in the plan, then run `plan-publish.mjs` and `plan-issue-sync.mjs` so the published copy updates and the issue closes.
+   - `Keep it open`: write a `## Closeout status` section in the plan with the verdict, what remains, and the trigger that reopens the question (for example "when V6 passes" or "after the owner checks the live site"). An open plan is visible, never silent.
+   - Dismissed: the status stays unchanged and the `## Closeout status` section says `pending`, with the verdict.
+5. **Unattended runs** (`sucp-overnight`) never ask and never flip the status: they park the `Close plan` decision with the readiness verdict in the handoff.
+
+Across sessions, run `bun scripts/plan-closeout.mjs --audit` during the sweep for the repository. It reports every plan whose registry sessions are all finished with at least one merged while the plan is not `Complete`. Each plan it lists gets the same `Close plan` question in this step.
 
 ### 📇 6.6 Sync Session Artifacts to Graphify — local, no model (mandatory when the repo has a graph)
 > 📇 **Closing stage — the documents you generated are part of the deliverable, so they belong in the knowledge graph.** A plan, batch manifest, spike report, handoff, progress log or learning ledger that only exists on disk is invisible to `graphify query`, `path` and `explain`. `graphify update .` cannot fix this: its help reads "re-extract code files and update the graph (no LLM needed)" and it parses code, so Markdown is never ingested by it.
@@ -115,11 +132,12 @@ The meter line during the sweep (`sucp-rules`, Output) is one star per debt the 
 - Turning a follow-up question into a new scope decision. The user picking an item is approval to close known debt inside the same goal, not approval to redesign the feature.
 - Re-asking the declined items, or treating "no" as a reason to reopen the verified plan.
 - Doing the follow-ups silently without asking, which violates the check-first contract, or asking and then not doing them, which is worse.
+- Closing the session without the plan closeout decision. A plan whose work merged but whose status nobody decided stays `Approved` and its issue stays open; run `--readiness` and ask the `Close plan` gate every time.
 
 ```mermaid
 flowchart TD
     accTitle: Session-close debt sweep and follow-up injection
-    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one question-tool call of multi-select groups, executed as real work, and swept again until no new debt appears.
+    accDescr: Once the plan is done at one hundred percent, harvested debt is classified and ranked into three to five follow-ups, injected as one question-tool call of multi-select groups, executed as real work, and swept again until no new debt appears. Then the readiness verdict drives the Close plan gate, which marks the plan Complete or records why it stays open, and only after that the graphify sync runs.
     Gate["Plan tasks Done 100%\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
     Harvest --> Rank["Classify NOW vs LATER\nrank by risk x blast radius x cost\ndefault 3-5 items"]
     Rank --> Ask["Inject one question-tool call\nof multi-select groups,\ncheckboxes, not prose"]
@@ -128,7 +146,13 @@ flowchart TD
     Reopen --> Exec["Execute as real work:\nchunk, subagent fan-out,\nTDD, verify, diff audit, commit"]
     Exec --> SweepAgain{"Did the fix create\nnew debt?"}
     SweepAgain -->|"Yes"| Rank
-    SweepAgain -->|"No"| Close(["🏁 Zero-debt session\nor documented deferral"])
-    Backlog --> Close
+    SweepAgain -->|"No"| Readiness["6.5.5 plan-closeout.mjs --readiness\nshow verdict and open items"]
+    Backlog --> Readiness
+    Readiness --> CloseGate{"Close plan gate"}
+    CloseGate -->|"Mark Complete"| Complete["status Complete,\npublish, issue sync"]
+    CloseGate -->|"Keep it open or dismissed"| KeepOpen["Closeout status section:\nverdict, what remains, trigger"]
+    Complete --> Graph["6.6 graphify update, then sync"]
+    KeepOpen --> Graph
+    Graph --> Close(["🏁 Zero-debt session\nor documented deferral"])
 ```
 

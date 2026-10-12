@@ -1189,3 +1189,93 @@ test('an "issues" field that is not an object is a load error', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// ---------- a Complete plan without an issue ----------
+
+// Reproduced on belajarcarabelajar/vivera#80: the create left the issue open and
+// only a second run closed it.
+
+function cliRun(f, cfgPath, ...flags) {
+  return spawnSync(process.execPath, [
+    SCRIPT, ...flags, f.full, '--config', cfgPath,
+    '--repo-root', f.repoRoot, '--project', path.basename(f.repoRoot),
+  ], { encoding: 'utf8' });
+}
+
+test('Complete plan without an issue: one run creates and closes, sidecar says closed', () => {
+  const f = tmpPlan(plan(CLOSED_STATUS));
+  try {
+    const run = ghAnswers();
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.deepEqual(verbs(run), ['issue list', 'issue create', 'issue close']);
+    assert.deepEqual(run.calls[2].args, ['issue', 'close', '11', '--repo', 'u/snippet']);
+    assert.equal(res.action, 'create+close');
+    assert.equal(res.cfg.issues[PLAN_REL].number, 11);
+    assert.equal(res.cfg.issues[PLAN_REL].state, 'closed');
+    assert.equal(res.cfg.issues[PLAN_REL].status, CLOSED_STATUS);
+    assert.match(syncModule.resultLine(res), /create\+close/);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('Complete plan without an issue: --check shows the planned create+close and writes nothing', () => {
+  const f = tmpPlan(plan(CLOSED_STATUS));
+  const dir = mkdtempSync(path.join(tmpdir(), 'plan-issue-cc-'));
+  const cfgPath = path.join(dir, 'plan.issues.json');
+  try {
+    const before = JSON.stringify(cfgFor(f.repoRoot));
+    writeFileSync(cfgPath, before, 'utf8');
+    withFakeGh(RECORD_AND_ECHO_URL, (g) => {
+      const r = cliRun(f, cfgPath, '--check');
+      assert.equal(r.status, 1, `${r.stdout}${r.stderr}`);
+      assert.match(r.stdout, /would create\+close on u\/snippet/);
+      assert.doesNotMatch(g.argv(), /issue create|issue close/);
+    });
+    assert.equal(readFileSync(cfgPath, 'utf8'), before, 'a check writes nothing');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    f.cleanup();
+  }
+});
+
+test('Complete plan without an issue: a failed close after create records open and exits non-zero', () => {
+  const f = tmpPlan(plan(CLOSED_STATUS));
+  const dir = mkdtempSync(path.join(tmpdir(), 'plan-issue-cf-'));
+  const cfgPath = path.join(dir, 'plan.issues.json');
+  const failingClose = `echo "$@" >> "$CAPTURE_ARGV"; cat >> "$CAPTURE_STDIN"; if [ "$1 $2" = "issue list" ]; then
+  echo '[]'
+elif [ "$1 $2" = "issue close" ]; then
+  echo "HTTP 502: Bad Gateway" >&2; exit 1
+else
+  echo "$FAKE_ISSUE_URL"
+fi`;
+  try {
+    writeFileSync(cfgPath, JSON.stringify(cfgFor(f.repoRoot)), 'utf8');
+    withFakeGh(failingClose, (g) => {
+      const r = cliRun(f, cfgPath);
+      assert.notEqual(r.status, 0, `${r.stdout}${r.stderr}`);
+      assert.match(r.stderr, /u\/snippet#11/, 'the error names the issue that is still open');
+      assert.match(g.argv(), /issue close 11/);
+    });
+    const saved = loadConfig(cfgPath).issues[PLAN_REL];
+    assert.equal(saved.number, 11, 'the created issue is recorded so the next run does not create it again');
+    assert.equal(saved.state, 'open', 'only the acknowledged create is evidence, so the row says open');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    f.cleanup();
+  }
+});
+
+test('Complete plan without an issue: a non-Complete plan still creates open', () => {
+  const f = tmpPlan(plan('InProgress'));
+  try {
+    const run = ghAnswers();
+    const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
+    assert.deepEqual(verbs(run), ['issue list', 'issue create']);
+    assert.equal(res.action, 'create');
+    assert.equal(res.cfg.issues[PLAN_REL].state, 'open');
+  } finally {
+    f.cleanup();
+  }
+});

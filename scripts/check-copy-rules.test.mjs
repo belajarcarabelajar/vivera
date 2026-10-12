@@ -325,5 +325,8 @@ test('the CLI --diff outside a git repository working directory is a usage error
   // The ceiling stops git from finding a repository above the temp directory.
   const r = cli(dir, ['--diff', 'main'], { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) });
   assert.equal(r.status, 2, r.stdout + r.stderr);
+  // The old fallback also exits 2 with the usage line when its own checkout has no local
+  // `main`, so the message is what tells the fix from the bug.
+  assert.match(r.stderr, /not inside a git repository/);
   assert.match(r.stderr, /--diff <base>/);
 });

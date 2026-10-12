@@ -428,6 +428,8 @@ export function main(args) {
 const isMain = process.argv[1] && process.argv[1].endsWith('check-copy-rules.mjs');
 if (isMain) process.exit(main(process.argv.slice(2)));
 
-// REVERT: delete this file, drop the `checkCopyRules` call from validate-skill.mjs,
-// and drop `copy-rules` from package.json scripts. It is also imported by its own
-// test file and run by ci-targeted.mjs (the copy-rules suite), so drop those too.
+// REVERT: delete this file and scripts/check-copy-rules.test.mjs; remove the
+// `import('./check-copy-rules.mjs')` block in validate-skill.mjs and its checkFile
+// calls; drop `copy:check` from package.json scripts; drop the copy-rules suite
+// (copySuite) from ci-targeted.mjs and its expectations in ci-targeted.test.mjs;
+// drop the command from agents/roles/reviewer.md, then `bun run agents:gen`.

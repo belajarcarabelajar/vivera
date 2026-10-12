@@ -263,6 +263,7 @@ comment. Test files (`*.test.mjs`) sit next to the script they cover and are omi
 | Script | What it does |
 |---|---|
 | `install-skill-links.mjs` | Links every skill in `skills/` into `~/.config/opencode/skills/`, the only place the OpenCode skill tool reads. Never overwrites a real file or a foreign symlink. `install.sh` links the phase skills too; this is the standalone way to re-run or verify just that. `bun run skills:link` applies, `bun run skills:check` exits 1 on a missing or stale link, `--dry-run` prints the actions. |
+| `ci-targeted.mjs` | `bun run ci:targeted`, the default commit and PR gate. Selects checks from the files changed against `origin/main`: the import graph over `scripts/`, `validate` for skills and templates, the agents and snippets checks only when those change, `render-diagrams` only for diagram sources, and the copy rules always. Root config and toolchain files (`package.json` unless only its `scripts` changed, `bun.lock`, installers) or an unrecognized path select the full `bun run ci`. `--rencana` (`--plan`) prints the chosen checks with their reasons; `--penuh` (`--full`) runs the full `bun run ci`. |
 | `frontmatter-strict.mjs` | Runs plan frontmatter through a strict YAML check. The runner's own parser is a lenient subset, so a plan can pass it and still not be valid YAML. |
 | `validate-lib.mjs` | The pure, importable part of `validate-skill.mjs`, plus `renderMermaidBatch`, so unit tests can pin the checks. |
 | `mermaid-batch.mjs` | Renders a list of `.mmd` files from stdin with a batch-and-bisect fallback, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
@@ -2033,7 +2034,7 @@ bun scripts/vault-index-verify.mjs --no-graphify
 bun run export:history --dry-run --limit 1
 ```
 
-Or run the whole gate in order with `bun run ci`.
+Or run the whole gate in order with `bun run ci`. For a commit or PR, run `bun run ci:targeted` instead and quote its `--rencana` plan; it chooses the full CI itself when the change needs it.
 
 Verifies:
 - YAML frontmatter syntax (`name`, `description`, `triggers`).

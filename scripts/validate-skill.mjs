@@ -916,6 +916,8 @@ for (const snip of requiredSnippets) {
     { label: 'orchestrator names the closeout decision', file: orchestrator, needle: 'plan closeout decision' },
     { label: 'follow-up template has the closeout section', file: 'templates/follow-up-injection-template.md', needle: '## 7. Plan Closeout Decision' },
     { label: 'PR template records the closeout decision', file: 'templates/pull-request-template.md', needle: 'Plan closeout decided' },
+    { label: 'sweep asks the closeout gate before the final merge', file: sweep, needle: "before the merge of the session's final PR" },
+    { label: 'verify-deliver asks the closeout gate before the final merge', file: verify, needle: "asked before the session's final merge" },
   ];
   for (const c of closeoutContract) {
     const target = path.join(rootDir, c.file);
@@ -924,6 +926,27 @@ for (const snip of requiredSnippets) {
       console.log(`✅ Plan closeout gate present: ${c.label}`);
     } else {
       console.error(`❌ Plan closeout gate missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
+// 3o. Targeted gate by default (2026-10-12).
+// The owner asked that verification during pipeline execution be targeted by default and the
+// full CI run only when needed. These needles keep the rule in both skills and the command in the README.
+{
+  const targetedContract = [
+    { label: 'rules state the targeted gate rule', file: 'skills/sucp-rules/SKILL.md', needle: 'Targeted Gate by Default' },
+    { label: 'verify-deliver makes the targeted gate the default', file: 'skills/sucp-verify-deliver/SKILL.md', needle: 'the targeted gate is the default' },
+    { label: 'README documents the targeted command', file: 'README.md', needle: 'bun run ci:targeted' },
+  ];
+  for (const c of targetedContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Targeted gate present: ${c.label}`);
+    } else {
+      console.error(`❌ Targeted gate missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
       errors++;
     }
   }

@@ -387,7 +387,10 @@ export function deriveAction({ entry, liveState, planText, status, key, id, repo
   const wanted = issueBody(planText, { planId: id, key, sourcePath: entry?.source ?? null, status, generatedBy: repo });
 
   if (!entry || !entry.number) {
-    return { kind: 'create', title: id, body: wanted, hash: hashOf(planText), repo };
+    // gh can only create an open issue, so a Complete plan needs the close in the
+    // same run or the issue stays open until a second run notices the drift.
+    const close = status === CLOSED_STATUS ? { close: true } : {};
+    return { kind: 'create', title: id, body: wanted, hash: hashOf(planText), repo, ...close };
   }
 
   // Without the read there is nothing to compare, and `entry.state` is exactly the
@@ -452,7 +455,13 @@ export function applyAction(action, run) {  switch (action.kind) {
       const r = run(['issue', 'create', '--repo', action.repo, '--title', action.title, '--body-file', '-'], action.body);
       if (!r.ok) return { ok: false, error: r.err };
       const number = r.url ? Number(r.url.split('/').pop()) || null : null;
-      return { ok: true, created: true, number, url: r.url };
+      if (!action.close) return { ok: true, created: true, number, url: r.url };
+      // A failed close keeps `created`, so the caller still records the issue and
+      // the next run closes it instead of creating a duplicate.
+      if (!number) return { ok: false, created: true, number, url: r.url, closed: false, error: `gh printed no issue URL to close (output: ${r.url || 'nothing'})` };
+      const c = setIssueState({ ...action, number }, run);
+      if (!c.ok) return { ok: false, created: true, number, url: r.url, closed: false, error: c.err };
+      return { ok: true, created: true, number, url: r.url, closed: true };
     }
     case 'update-body': {
       // Title and body in ONE call. Two calls would mean two chances to
@@ -535,7 +544,9 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   const action = deriveAction({ entry, liveState, planText, status, key, id, repo });
   // An adopted issue is recorded even when current: the row is what makes the next
   // run read it by number instead of looking it up again.
-  const reported = adopted && action.kind === 'current' ? 'adopt' : action.kind;
+  const reported = adopted && action.kind === 'current' ? 'adopt'
+    : action.kind === 'create' && action.close ? 'create+close'
+      : action.kind;
   const mark = adopted ? { adopted: true } : {};
 
   if (action.kind === 'current' && !adopted) {
@@ -546,7 +557,7 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   }
 
   const result = applyAction(action, run);
-  if (!result.ok) throw new Error(`${key}: ${action.kind} failed: ${result.error}`);
+  if (!result.ok && !result.created) throw new Error(`${key}: ${action.kind} failed: ${result.error}`);
 
   // What gets recorded must be something GitHub said. Two admissible sources, and
   // no third: the state read from GitHub before the write, for a write that did
@@ -555,8 +566,10 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   // answer, not a local intention). `status` is a wish and `entry.state` is an old
   // opinion; neither may be written back as if it were an observation.
   // A create has no issue to read beforehand, and `gh issue create` only ever
-  // creates an open issue, so the acknowledged create is that row's evidence.
-  const closedNow = action.close === undefined ? liveState === 'closed' : action.close;
+  // creates an open issue, so the acknowledged create is that row's evidence,
+  // and only an acknowledged close after it may turn the row closed.
+  const closedNow = action.kind === 'create' ? result.closed === true
+    : action.close === undefined ? liveState === 'closed' : action.close;
 
   const next = {
     ...cfg.issues,
@@ -570,6 +583,13 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
       synced_at: new Date().toISOString(),
     },
   };
+  if (!result.ok) {
+    // Thrown with the row attached: the caller must save it, or the issue that
+    // now exists is forgotten and the next run creates a second one.
+    const err = new Error(`${key}: created ${repo}#${next[key].number ?? '?'} but could not close it: ${result.error}. Recorded as open, so the next run retries the close.`);
+    err.cfg = { ...cfg, issues: next };
+    throw err;
+  }
   return { key, action: reported, number: next[key].number, url: next[key].url, repo, status, written: true, cfg: { ...cfg, issues: next }, ...mark };
 }
 
@@ -697,6 +717,7 @@ function main(argv) {
       if (res.cfg) next = res.cfg;
     } catch (e) {
       failed++;
+      if (e.cfg) next = e.cfg;
       console.error(`❌ ${plan}: ${e.message}`);
     }
   }

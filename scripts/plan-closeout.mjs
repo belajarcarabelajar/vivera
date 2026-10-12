@@ -14,7 +14,7 @@
 // runs each task's `skip_if` (never `run[]`) with a timeout. `--audit` lists
 // plans whose sessions all landed while the plan file never reached Complete.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -130,7 +130,18 @@ export function readinessVerdict({ tasks, openNow = 0 }) {
   return { verdict: 'READY', exit: 0, counts };
 }
 
-export function taskReadiness(planText, { run, cwd, timeoutMs }) {
+const TAIL_LINES = 5;
+const TAIL_COLS = 200;
+
+// ledgerTrace in ultra-plan-runner.mjs joins and escapes lines into one table
+// cell; here each line is printed on its own row, so it gets a plain list.
+export function outputTail({ stdout, stderr }) {
+  const raw = stderr && String(stderr).trim() ? stderr : (stdout || '');
+  const lines = String(raw).replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
+  return lines.slice(-TAIL_LINES).map((l) => (l.length > TAIL_COLS ? `${l.slice(0, TAIL_COLS)}…` : l));
+}
+
+export function taskReadiness(planText, { run, cwd, timeoutMs, onOutput }) {
   const { frontmatter } = extractFrontmatter(planText);
   const { tasks } = parseUltraPlanYaml(frontmatter);
   return tasks.map((t) => {
@@ -140,7 +151,8 @@ export function taskReadiness(planText, { run, cwd, timeoutMs }) {
     if (kind === 'empty' || kind === 'sentinel') return { id: t.id, state: 'UNPROVEN', skipIf };
     const r = run(skipIf, { cwd, timeoutMs });
     const state = r.timedOut ? 'UNREAD' : r.exit === 0 ? 'DONE' : 'OPEN';
-    return { id: t.id, state, skipIf };
+    if (onOutput) onOutput(t.id, r);
+    return { id: t.id, state, skipIf, tail: outputTail(r) };
   });
 }
 
@@ -176,23 +188,37 @@ export function auditCloseout({ sessions, planStatusOf }) {
   return rows;
 }
 
+// Gate runs can be chatty, so the cap is generous; past it the run is stopped
+// and has no exit status, which reads as UNREAD rather than a guessed state.
+const MAX_OUTPUT = 16 * 1024 * 1024;
+
 function bashRunner(cmd, { cwd, timeoutMs }) {
   // Own process group, so a timeout reaches the step's children and not only bash.
-  const r = spawnSync('bash', ['-c', cmd], { cwd, timeout: timeoutMs, stdio: 'ignore', detached: true });
-  const timedOut = r.error?.code === 'ETIMEDOUT' || r.signal != null;
+  const r = spawnSync('bash', ['-c', cmd], {
+    cwd, timeout: timeoutMs, stdio: ['ignore', 'pipe', 'pipe'], detached: true, maxBuffer: MAX_OUTPUT,
+  });
+  const timedOut = r.error?.code === 'ETIMEDOUT' || r.error?.code === 'ENOBUFS' || r.signal != null;
   if (timedOut) reapGroup(r.pid);
-  return { exit: r.status, timedOut };
+  let stderr = r.stderr ? r.stderr.toString() : '';
+  if (r.error?.code === 'ENOBUFS') stderr += `\n(output passed ${MAX_OUTPUT} bytes, the run was stopped)\n`;
+  return { exit: r.status, timedOut, stdout: r.stdout ? r.stdout.toString() : '', stderr };
+}
+
+function writeTaskLog(dir, id, r) {
+  // An id is plan text, so a slash or dots in it must not escape the log dir.
+  const name = String(id).replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '_');
+  writeFileSync(path.join(dir, `${name}.log`),`--- stdout ---\n${r.stdout ?? ''}\n--- stderr ---\n${r.stderr ?? ''}\n`);
 }
 
 const USAGE = [
-  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--timeout-s <n>]',
+  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--timeout-s <n>] [--log <dir>]',
   '       bun scripts/plan-closeout.mjs --audit [--registry <path>]',
 ].join('\n');
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
   const opts = { mode };
-  const allowed = mode === '--readiness' ? ['--cwd', '--timeout-s'] : mode === '--audit' ? ['--registry'] : null;
+  const allowed = mode === '--readiness' ? ['--cwd', '--timeout-s', '--log'] :mode === '--audit' ? ['--registry'] : null;
   if (!allowed) return null;
   if (mode === '--readiness') {
     opts.plan = rest.shift();
@@ -226,9 +252,25 @@ function readinessCli(opts) {
   }
   const cwd = opts['--cwd'] ? path.resolve(opts['--cwd']) : defaultCwd(planFile);
   const timeoutMs = Number(opts['--timeout-s'] ?? 300) * 1000;
-  const tasks = taskReadiness(text, { run: bashRunner, cwd, timeoutMs });
+  const logDir = opts['--log'] ? path.resolve(opts['--log']) : null;
+  if (logDir) {
+    try {
+      mkdirSync(logDir, { recursive: true });
+    } catch (e) {
+      console.error(`cannot create log dir ${logDir}: ${e.message}`);
+      return 2;
+    }
+  }
+  const onOutput = logDir ? (id, r) => writeTaskLog(logDir, id, r) : undefined;
+  const tasks = taskReadiness(text, { run: bashRunner, cwd, timeoutMs, onOutput });
   const openNow = openNowRows(extractFrontmatter(text).body);
-  for (const t of tasks) console.log(`${t.id}\t${t.state}\t${t.skipIf}`);
+  for (const t of tasks) {
+    console.log(`${t.id}\t${t.state}\t${t.skipIf}`);
+    if (t.state !== 'OPEN' && t.state !== 'UNREAD') continue;
+    const lines = t.tail?.length ? t.tail : ['(no output)'];
+    for (const l of lines) console.log(`    ${t.id}> ${l}`);
+  }
+  if (logDir) console.log(`log: ${logDir}`);
   console.log(`open NOW follow-ups: ${openNow}`);
   const v = readinessVerdict({ tasks, openNow });
   console.log(`readiness: ${v.verdict}`);

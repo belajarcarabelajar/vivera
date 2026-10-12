@@ -5,7 +5,7 @@
 
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -383,6 +383,30 @@ describe('closeout readiness', () => {
     assert.deepEqual(calls[0].opts, { cwd: '/repo', timeoutMs: 1234 });
   });
 
+  test('failure output: taskReadiness adds the stderr tail, or stdout when stderr is empty', () => {
+    const text = fixturePlan([
+      { id: 'T1', skipIf: 'probe-err' },
+      { id: 'T2', skipIf: 'probe-out' },
+      { id: 'T3', skipIf: 'false' },
+    ]);
+    const { run } = fakeRun({
+      'probe-err': { exit: 1, timedOut: false, stdout: 'ignored\n', stderr: 'e1\n\ne2\n' },
+      'probe-out': { exit: 0, timedOut: false, stdout: 'o1\n', stderr: '' },
+    });
+    const rows = closeout.taskReadiness(text, { run, cwd: '/repo', timeoutMs: 1000 });
+    assert.deepEqual(rows.map((r) => r.tail), [['e1', 'e2'], ['o1'], undefined]);
+  });
+
+  test('failure output: outputTail keeps the last 5 lines, each cut to 200 chars', () => {
+    const lines = Array.from({ length: 12 }, (_, i) => `line${i + 1}`);
+    lines[11] = 'x'.repeat(500);
+    const tail = closeout.outputTail({ stdout: '', stderr: lines.join('\n') });
+    assert.equal(tail.length, 5);
+    assert.equal(tail[0], 'line8');
+    assert.ok(tail[4].length <= 201, `last line is ${tail[4].length} chars`);
+    assert.deepEqual(closeout.outputTail({ stdout: '', stderr: '' }), []);
+  });
+
   test('readiness: the false sentinel and a missing skip_if are UNPROVEN and never executed', () => {
     const text = fixturePlan([{ id: 'T1', skipIf: 'false' }, { id: 'T2' }, { id: 'T3', skipIf: '' }]);
     const { run, calls } = fakeRun({});
@@ -509,6 +533,77 @@ describe('closeout CLI', () => {
     const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
     assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nreadiness: READY\n');
     assert.equal(r.exitCode, 0);
+  });
+
+  const planWith = (root, tasks) => {
+    const file = path.join(root, 'plan.md');
+    writeFileSync(file, [
+      '---', 'schema: ultra-plan/v1', 'plan_id: demo', 'tasks:',
+      ...tasks.flatMap(({ id, skipIf }) => [`  - id: ${id}`, '    depends_on: []', `    skip_if: ${JSON.stringify(skipIf)}`]),
+      '---', '',
+    ].join('\n'));
+    return file;
+  };
+  const tmpRoot = () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
+    dirs.push(root);
+    return root;
+  };
+
+  test('failure output: an OPEN task prints its stderr tail under its row', () => {
+    const root = tmpRoot();
+    const file = planWith(root, [
+      { id: 'T1', skipIf: 'echo from-stdout; echo from-stderr >&2; exit 1' },
+      { id: 'T2', skipIf: 'exit 1' },
+    ]);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
+    const out = r.stdout.toString().split('\n');
+    const i = out.findIndex((l) => l.startsWith('T1\tOPEN\t'));
+    assert.ok(i >= 0, r.stdout.toString());
+    assert.equal(out[i + 1], '    T1> from-stderr');
+    assert.ok(out[i + 2].startsWith('T2\tOPEN\t'), r.stdout.toString());
+    assert.equal(out[i + 3], '    T2> (no output)');
+    assert.doesNotMatch(r.stdout.toString(), /> from-stdout/);
+    assert.equal(r.exitCode, 1);
+  });
+
+  test('failure output: an UNREAD task prints what it wrote before the timeout', () => {
+    const root = tmpRoot();
+    const file = planWith(root, [{ id: 'T1', skipIf: 'echo started >&2; exec sleep 5' }]);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '1']);
+    assert.match(r.stdout.toString(), /^T1\tUNREAD\t.*\n    T1> started\n/);
+  });
+
+  test('failure output: a DONE task prints nothing extra', () => {
+    const root = tmpRoot();
+    const file = planWith(root, [{ id: 'T1', skipIf: 'echo noisy; echo noisy-err >&2; true' }]);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
+    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nreadiness: READY\n`);
+  });
+
+  test('failure output: a task printing many lines shows at most 5', () => {
+    const root = tmpRoot();
+    const file = planWith(root, [{ id: 'T1', skipIf: 'for i in $(seq 1 40); do echo err$i >&2; done; exit 2' }]);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
+    const shown = r.stdout.toString().split('\n').filter((l) => l.startsWith('    T1> '));
+    assert.deepEqual(shown, ['err36', 'err37', 'err38', 'err39', 'err40'].map((l) => `    T1> ${l}`));
+  });
+
+  test('failure output: --log writes one file per executed task and prints the dir once', () => {
+    const root = tmpRoot();
+    const logDir = path.join(root, 'logs', 'nested');
+    const file = planWith(root, [
+      { id: 'T1', skipIf: 'echo one-out; echo one-err >&2; exit 1' },
+      { id: 'T2', skipIf: 'echo two-out' },
+      { id: 'T3', skipIf: 'false' },
+    ]);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10', '--log', logDir]);
+    assert.deepEqual(readdirSync(logDir).sort(), ['T1.log', 'T2.log']);
+    const one = readFileSync(path.join(logDir, 'T1.log'), 'utf8');
+    assert.match(one, /one-out/);
+    assert.match(one, /one-err/);
+    assert.match(readFileSync(path.join(logDir, 'T2.log'), 'utf8'), /two-out/);
+    assert.equal(r.stdout.toString().split('\n').filter((l) => l === `log: ${logDir}`).length, 1);
   });
 
   test('readiness CLI: a timed-out skip_if is UNREAD and leaves no child process alive', () => {

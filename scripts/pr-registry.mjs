@@ -277,8 +277,21 @@ export function claimSlot(registry, { plan, session, repoRoot, dependsOn = [] })
   const sessionSlug = slugify(session, 'session id');
   const branch = branchFor(planSlug, sessionSlug);
   const worktree = worktreeFor(repoRoot, sessionSlug);
+  const repo = path.resolve(repoRoot);
 
   const existing = registry.sessions.find((s) => s.session === sessionSlug);
+  if (existing && !existing.repo) {
+    // Entries claimed before the repository was recorded get it on re-claim, so
+    // a later `state <s> merged` reads the plan from the right place. Only when
+    // repoRoot derives the recorded worktree: --repo defaults to the current
+    // directory, which is often not the repository the session was claimed in.
+    if (worktree !== existing.worktree) {
+      return { session: existing, created: false, registry, repoMismatch: { repo, derived: worktree, recorded: existing.worktree } };
+    }
+    const backfilled = { ...existing, repo };
+    const sessions = registry.sessions.map((s) => (s === existing ? backfilled : s));
+    return { session: backfilled, created: false, registry: { ...registry, sessions } };
+  }
   if (existing) {
     // Re-claiming the same session id is idempotent rather than an error: a
     // retried claim after a crashed session must not need a manual edit, and
@@ -306,6 +319,7 @@ export function claimSlot(registry, { plan, session, repoRoot, dependsOn = [] })
     plan: planSlug,
     branch,
     worktree,
+    repo,
     base: 'main',
     state: 'isolated',
     pr: null,
@@ -496,10 +510,26 @@ export function parseFlags(argv) {
 // Decides whether `state <session> merged` may be recorded. The check is
 // injected so the line shapes are testable without a repository; the caller
 // prints `lines` and refuses when `proceed` is false.
-export function closeoutVerdict(session, { repoRoot, allowOpenPlan = false, check = checkCloseout }) {
+export function closeoutVerdict(session, { repoRoot, repoFromFlag = false, allowOpenPlan = false, check = checkCloseout }) {
   const { skipped, gaps } = check({ repoRoot, planSlug: session.plan });
   const lines = [];
-  if (skipped) lines.push(`note: close-out not fully checked: ${skipped}`);
+  // Matches the reason `checkCloseout` gives for a missing plan file. Without a
+  // known repository the lookup fell back to this repository, so the miss most
+  // likely means the wrong place was searched, not that the change had no plan.
+  const guessedRepo = Boolean(skipped) && skipped.startsWith('no plan file at ') && !session.repo && !repoFromFlag;
+  if (guessedRepo) {
+    lines.push(
+      `warning: close-out not fully checked: ${skipped}`,
+      // The merge is recorded by this same call, so a rerun with --repo would be
+      // refused; the hints name what still works afterwards.
+      `  hint: the merge is recorded. "${session.session}" records no repository; if plan ${session.plan} lives in another repository, measure it with`,
+      `    bun scripts/plan-closeout.mjs --readiness <repository>/docs/code-plan/plans/${session.plan}.md`,
+      `  hint: record the repository for future commands by re-claiming the session:`,
+      `    bun scripts/pr-registry.mjs claim --plan ${session.plan} --session ${session.session} --repo <repository>`,
+    );
+  } else if (skipped) {
+    lines.push(`note: close-out not fully checked: ${skipped}`);
+  }
   if (gaps.length === 0) return { proceed: true, lines };
 
   lines.push(allowOpenPlan
@@ -508,8 +538,17 @@ export function closeoutVerdict(session, { repoRoot, allowOpenPlan = false, chec
   for (const g of gaps) {
     lines.push(`  - [${g.code}] ${g.message}`, `    fix: ${g.fix}`);
   }
+  const planFile = path.resolve(repoRoot, 'docs', 'code-plan', 'plans', `${session.plan}.md`);
+  lines.push(`readiness: bun scripts/plan-closeout.mjs --readiness ${planFile}`);
   if (!allowOpenPlan) lines.push('Override with --allow-open-plan to record it anyway.');
   return { proceed: allowOpenPlan, lines };
+}
+
+// Where `state <s> merged` looks for the plan: the flag, then the repository the
+// session was claimed in, then this repository for entries that predate `repo`.
+export function resolveMergeRepo(session, flagRepo) {
+  if (flagRepo) return path.resolve(flagRepo);
+  return session.repo ?? rootDir;
 }
 
 function printSession(s) {
@@ -538,7 +577,10 @@ function main(argv) {
         repoRoot,
         dependsOn: flags['depends-on'] ? flags['depends-on'].split(',').map((d) => d.trim()).filter(Boolean) : [],
       }), { registryPath });
-      const { session, created } = result;
+      const { session, created, repoMismatch } = result;
+      if (repoMismatch) {
+        console.error(`warning: repository not recorded for "${session.session}": ${repoMismatch.repo} derives worktree ${repoMismatch.derived}, but the session's worktree is ${repoMismatch.recorded}; pass --repo <the repository that holds ${repoMismatch.recorded}>`);
+      }
       console.log(`${created ? '✅ claimed' : '♻️  already claimed'}: ${session.session}`);
       printSession(session);
       if (created) {
@@ -571,7 +613,8 @@ function main(argv) {
         const session = loadRegistry(registryPath).sessions.find((s) => s.session === target);
         if (session && !TERMINAL_STATES.includes(session.state)) {
           const verdict = closeoutVerdict(session, {
-            repoRoot: flags.repo ? path.resolve(flags.repo) : rootDir,
+            repoRoot: resolveMergeRepo(session, flags.repo),
+            repoFromFlag: Boolean(flags.repo),
             allowOpenPlan: flags['allow-open-plan'] === true,
           });
           for (const line of verdict.lines) console.error(line);

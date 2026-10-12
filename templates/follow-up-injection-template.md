@@ -62,7 +62,11 @@ Never ask one call per item. Never re-ask a declined item in the same session.
 |---|---|---|---|---|---|
 | | `F1` | | | | `IN PROGRESS` / `DONE` / `DEFERRED` |
 
-Selected follow-ups run the full pipeline: chunk, subagent fan-out, TDD for behavior changes, fresh verification, parent diff audit, conventional commit. Plan status returns to `In Progress` for the duration and back to `Complete` when green.
+Selected follow-ups run the full pipeline: chunk, subagent fan-out, TDD for behavior changes, fresh verification, parent diff audit, conventional commit. Plan status returns to `In Progress` for the duration; whether it becomes `Complete` is decided in section 7.
+
+### Second Sweep Pass
+
+Did executing a selected item create new debt in the surface it touched? List new candidates and re-ask only for genuinely new items.
 
 ## 6. Deferred Backlog (`LATER`)
 
@@ -70,14 +74,24 @@ Selected follow-ups run the full pipeline: chunk, subagent fan-out, TDD for beha
 |---|---|---|
 | | | |
 
-## 7. Second Sweep Pass
+## 7. Plan Closeout Decision
 
-Did executing a selected item create new debt in the surface it touched? List new candidates and re-ask only for genuinely new items.
+Mandatory after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
+
+| Field | Value |
+|---|---|
+| Readiness command | `bun scripts/plan-closeout.mjs --readiness <plan.md>` |
+| Verdict and exit code | `READY` 0 / `NOT-READY` 1 / `NEEDS-HUMAN` 3 |
+| Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, and each open `NOW` backlog row |
+| Question asked | `Close plan`: Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise) |
+| Answer | `Mark Complete` / `Keep it open` / dismissed / parked in the handoff (unattended run) |
+| Evidence | Readiness output recorded in the plan; `plan-publish.mjs` and `plan-issue-sync.mjs` exit codes when completed |
+| Resulting status | `Complete`, or unchanged with a `## Closeout status` section (verdict, what remains, the trigger that reopens the question; `pending` when dismissed or parked) |
 
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups, execute the selected items through the full pipeline, then re-sweep for any new debt they created.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups, execute the selected items through the full pipeline, then re-sweep for any new debt they created. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
     Rank --> Ask["One question-tool call\nof multi-select groups"]
@@ -86,6 +100,10 @@ flowchart TD
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]
     Exec --> Check{"New debt created?"}
     Check -->|"Yes"| Rank
-    Check -->|"No"| Close(["🏁 Zero-debt session"])
-    Backlog --> Close
+    Check -->|"No"| Ready["Readiness verdict"]
+    Backlog --> Ready
+    Ready --> Gate2{"Close plan gate"}
+    Gate2 -->|"Mark Complete"| Close(["🏁 Zero-debt session"])
+    Gate2 -->|"Keep it open"| Status["Closeout status section"]
+    Status --> Close
 ```

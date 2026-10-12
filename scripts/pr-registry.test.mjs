@@ -34,6 +34,11 @@ import {
   parseFlags,
   SESSION_STATES,
 } from './pr-registry.mjs';
+import * as registryModule from './pr-registry.mjs';
+
+// Through the namespace, so a missing export fails its own test instead of the
+// whole file at link time.
+const resolveMergeRepo = (...a) => registryModule.resolveMergeRepo(...a);
 
 // A registry file in a temp dir, so save/load round-trips are exercised for real
 // rather than against a stub.
@@ -599,7 +604,7 @@ test('closeoutVerdict proceeds silently when nothing is open and nothing was ski
 });
 
 test('closeoutVerdict proceeds with a note when the check was partial', () => {
-  const verdict = closeoutVerdict(SESSION, {
+  const verdict = closeoutVerdict({ ...SESSION, repo: '/r' }, {
     repoRoot: '/r',
     check: () => ({ skipped: 'no plan file at /r/x.md', gaps: [] }),
   });
@@ -619,6 +624,7 @@ test('closeoutVerdict refuses with exact lines, one message and one fix per gap'
     `    fix: ${GAP.fix}`,
     `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
     `    fix: ${GAP2.fix}`,
+    'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
     'Override with --allow-open-plan to record it anyway.',
   ]);
 });
@@ -646,6 +652,7 @@ test('closeoutVerdict with allowOpenPlan proceeds, warns, and still lists every 
     `    fix: ${GAP.fix}`,
     `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
     `    fix: ${GAP2.fix}`,
+    'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
   ]);
 });
 
@@ -734,6 +741,195 @@ test('CLI: merged on an already merged session keeps the existing error, not the
     assert.ok(!r.err.includes('refusing to record'), r.err);
     assert.match(r.err, /only a session in open can merge/);
   } finally { f.cleanup(); }
+});
+
+// ---------- the session records its repository ----------
+//
+// `claim --repo` used to drop the path once the worktree name was derived, so
+// `state <s> merged` for another repository's session read the plan from this
+// repository, found nothing, and recorded the merge behind a quiet note.
+
+test('claim records the repository as an absolute path', () => {
+  const { session } = claimSlot({ version: 1, sessions: [] }, { plan: 'p', session: 'w1', repoRoot: 'rel/repo' });
+  assert.equal(session.repo, path.resolve('rel/repo'));
+  assert.ok(path.isAbsolute(session.repo));
+});
+
+test('re-claim records the repository on an entry that was claimed without one', () => {
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: '/home/u/Proyek/snippet-wt/w1', base: 'main', state: 'active', pr: null, depends_on: [] };
+  const { session, created, registry } = claimSlot({ version: 1, sessions: [old] }, { plan: 'p', session: 'w1', repoRoot: REPO });
+  assert.equal(created, false);
+  assert.equal(session.repo, REPO);
+  assert.equal(registry.sessions[0].repo, REPO);
+  assert.equal(registry.sessions[0].state, 'active', 'only the repository is backfilled');
+  assert.equal(old.repo, undefined, 'the caller\'s object is not mutated');
+});
+
+test('re-claim from a repository whose derived worktree differs leaves the entry unchanged and reports both paths', () => {
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: '/x/bcb-wt/old', base: 'main', state: 'active', pr: null, depends_on: [] };
+  const before = { version: 1, sessions: [old] };
+  const { session, created, registry, repoMismatch } = claimSlot(before, { plan: 'p', session: 'w1', repoRoot: REPO });
+  assert.equal(created, false);
+  assert.equal(session, old);
+  assert.equal(session.repo, undefined);
+  assert.equal(registry, before);
+  assert.deepEqual(repoMismatch, { repo: REPO, derived: '/home/u/Proyek/snippet-wt/w1', recorded: '/x/bcb-wt/old' });
+});
+
+test('re-claim whose derived worktree matches reports no mismatch', () => {
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: '/home/u/Proyek/snippet-wt/w1', base: 'main', state: 'active', pr: null, depends_on: [] };
+  const { repoMismatch } = claimSlot({ version: 1, sessions: [old] }, { plan: 'p', session: 'w1', repoRoot: REPO });
+  assert.equal(repoMismatch, undefined);
+});
+
+test('CLI: re-claim from a non-matching repository warns with both paths and does not record repo', () => {
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: '/x/bcb-wt/old', base: 'main', state: 'merged', pr: 3, depends_on: [] };
+  const reg = registryFile('mismatch', { version: 1, sessions: [old] });
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-mismatch-repo-'));
+  try {
+    const r = runCli('claim', '--plan', 'p', '--session', 'w1', '--registry', reg.file, '--repo', repo);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.err, /^warning: /m);
+    assert.ok(r.err.includes(worktreeFor(repo, 'w1')), r.err);
+    assert.ok(r.err.includes('/x/bcb-wt/old'), r.err);
+    assert.equal(loadRegistry(reg.file).sessions[0].repo, undefined);
+  } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('CLI: re-claim from the matching repository backfills repo without a warning', () => {
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-match-repo-'));
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: worktreeFor(repo, 'w1'), base: 'main', state: 'merged', pr: 3, depends_on: [] };
+  const reg = registryFile('match', { version: 1, sessions: [old] });
+  try {
+    const r = runCli('claim', '--plan', 'p', '--session', 'w1', '--registry', reg.file, '--repo', repo);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(!r.err.includes('warning'), r.err);
+    assert.equal(loadRegistry(reg.file).sessions[0].repo, repo);
+  } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('re-claim keeps a repository that is already recorded', () => {
+  const first = claimSlot({ version: 1, sessions: [] }, { plan: 'p', session: 'w1', repoRoot: REPO });
+  const again = claimSlot(first.registry, { plan: 'p', session: 'w1', repoRoot: '/elsewhere' });
+  assert.equal(again.created, false);
+  assert.equal(again.session.repo, REPO);
+  assert.deepEqual(again.registry, first.registry);
+});
+
+test('a registry written before the session records the repository still loads', () => {
+  const old = { session: 'w1', plan: 'p', branch: 'p/w1', worktree: '/x-wt/w1', base: 'main', state: 'open', pr: 3, depends_on: [] };
+  const reg = registryFile('norepo', { version: 1, sessions: [old] });
+  try {
+    const loaded = loadRegistry(reg.file);
+    assert.equal(loaded.sessions[0].repo, undefined);
+    assert.equal(setState(loaded, 'w1', 'closed').session.state, 'closed');
+  } finally { reg.cleanup(); }
+});
+
+test('CLI: claim records the repository given with --repo', () => {
+  const reg = registryFile('claimrepo');
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-claim-repo-'));
+  try {
+    const r = runCli('claim', '--plan', 'p', '--session', 'w1', '--registry', reg.file, '--repo', repo);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(loadRegistry(reg.file).sessions[0].repo, repo);
+  } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('resolveMergeRepo prefers --repo, then the recorded repository, then this repository', () => {
+  const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  assert.equal(resolveMergeRepo({ repo: '/recorded' }, 'given'), path.resolve('given'));
+  assert.equal(resolveMergeRepo({ repo: '/recorded' }, undefined), '/recorded');
+  assert.equal(resolveMergeRepo({}, undefined), ROOT);
+});
+
+// Writes `plan` at `status` into a fresh temp repository.
+function planRepo(plan, status) {
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-planrepo-'));
+  const plansDir = path.join(repo, 'docs', 'code-plan', 'plans');
+  mkdirSync(plansDir, { recursive: true });
+  writeFileSync(path.join(plansDir, `${plan}.md`), `---\nstatus: ${status}\n---\n\n# ${plan}\n`, 'utf8');
+  return repo;
+}
+
+function openSessionIn(repo) {
+  let reg = claimSlot({ version: 1, sessions: [] }, { plan: 'p', session: 'w1', repoRoot: repo }).registry;
+  reg = setState(reg, 'w1', 'active').registry;
+  reg = setState(reg, 'w1', 'verified').registry;
+  return setPr(reg, 'w1', 42).registry;
+}
+
+test('CLI: state merged reads the plan from the recorded repository when --repo is absent', () => {
+  const repo = planRepo('p', 'Verification');
+  const reg = registryFile('recorded', openSessionIn(repo));
+  try {
+    const r = runCli('state', 'w1', 'merged', '--registry', reg.file);
+    assert.equal(r.code, 1, r.err);
+    assert.match(r.err, /refusing to record "w1" as merged: plan p is not closed out\./);
+    assert.equal(loadRegistry(reg.file).sessions[0].state, 'open');
+  } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
+});
+
+test('CLI: --repo wins over the recorded repository for state merged', () => {
+  const recorded = planRepo('p', 'Verification');
+  const given = planRepo('p', 'Complete');
+  const reg = registryFile('flagwins', openSessionIn(recorded));
+  try {
+    const r = runCli('state', 'w1', 'merged', '--registry', reg.file, '--repo', given);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(loadRegistry(reg.file).sessions[0].state, 'merged');
+  } finally {
+    reg.cleanup();
+    rmSync(recorded, { recursive: true, force: true });
+    rmSync(given, { recursive: true, force: true });
+  }
+});
+
+test('CLI: a session without a recorded repository and no --repo warns with hints that work after the merge is recorded', () => {
+  const s = { session: 'w1', plan: 'no-such-plan-xyz', branch: 'no-such-plan-xyz/w1', worktree: '/x-wt/w1', base: 'main', state: 'open', pr: 9, depends_on: [] };
+  const reg = registryFile('legacy', { version: 1, sessions: [s] });
+  try {
+    const r = runCli('state', 'w1', 'merged', '--registry', reg.file);
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.err, /^warning: close-out not fully checked: no plan file at /m);
+    assert.ok(!r.err.includes('rerun'), r.err);
+    assert.match(r.err, /merge is recorded/);
+    assert.ok(r.err.includes('bun scripts/plan-closeout.mjs --readiness <repository>/docs/code-plan/plans/no-such-plan-xyz.md'), r.err);
+    assert.ok(r.err.includes('claim --plan no-such-plan-xyz --session w1 --repo <repository>'), r.err);
+    assert.equal(loadRegistry(reg.file).sessions[0].state, 'merged');
+  } finally { reg.cleanup(); }
+});
+
+const NO_PLAN = 'no plan file at /r/docs/code-plan/plans/my-plan.md (a one-task change has no plan file)';
+
+test('closeoutVerdict warns with readiness and re-claim hints when the plan is missing and no repository is known', () => {
+  const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', check: () => ({ skipped: NO_PLAN, gaps: [] }) });
+  assert.equal(verdict.proceed, true);
+  assert.equal(verdict.lines[0], `warning: close-out not fully checked: ${NO_PLAN}`);
+  const hints = verdict.lines.slice(1).join('\n');
+  assert.ok(!hints.includes('rerun'), hints);
+  assert.match(hints, /merge is recorded/);
+  assert.ok(hints.includes('bun scripts/plan-closeout.mjs --readiness <repository>/docs/code-plan/plans/my-plan.md'), hints);
+  assert.ok(hints.includes('bun scripts/pr-registry.mjs claim --plan my-plan --session w1 --repo <repository>'), hints);
+});
+
+test('closeoutVerdict keeps the note when the missing plan was looked up in a known repository', () => {
+  const recorded = closeoutVerdict({ ...SESSION, repo: '/r' }, { repoRoot: '/r', check: () => ({ skipped: NO_PLAN, gaps: [] }) });
+  assert.deepEqual(recorded.lines, [`note: close-out not fully checked: ${NO_PLAN}`]);
+  const flagged = closeoutVerdict(SESSION, { repoRoot: '/r', repoFromFlag: true, check: () => ({ skipped: NO_PLAN, gaps: [] }) });
+  assert.deepEqual(flagged.lines, [`note: close-out not fully checked: ${NO_PLAN}`]);
+});
+
+test('closeoutVerdict keeps the note for other skip reasons even without a known repository', () => {
+  const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', check: () => ({ skipped: 'plan.issues.json not found', gaps: [] }) });
+  assert.deepEqual(verdict.lines, ['note: close-out not fully checked: plan.issues.json not found']);
+});
+
+test('closeoutVerdict names the readiness command with the absolute plan file when gaps exist', () => {
+  for (const allowOpenPlan of [false, true]) {
+    const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', allowOpenPlan, check: () => ({ skipped: null, gaps: [GAP] }) });
+    assert.ok(verdict.lines.includes('readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md'), verdict.lines.join('\n'));
+  }
 });
 
 test('CLI: other target states ignore the plan status', () => {

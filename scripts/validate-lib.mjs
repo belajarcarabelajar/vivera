@@ -60,7 +60,8 @@ export const SNIPPET_CONTRACTS = {
     '--body-file',
     'pr-registry.mjs order',
     'pr-review-template.md',
-    'plan-issue-sync.mjs', // the plan's issue closes after the debt sweep, not before
+    'plan-issue-sync.mjs', // the plan's issue closes after the merge, from the plan's status
+    'plan-closeout.mjs --readiness', // the plan is decided before the session's final merge
     'session-learning-ledger-template.md',
     'MEMORY.md',
     'graphify:sync',

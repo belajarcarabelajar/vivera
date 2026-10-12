@@ -42,7 +42,9 @@ test('every task in every local plan declares at least one impact', {
 
 test('an impact entry that names a module names a REAL consumer of it', () => {
   // The assertion that would have caught the `.mjs` bug directly: every entry
-  // claiming N consumers must have N importable files, not zero.
+  // claiming N consumers must have at least N importable files, not zero. A
+  // claim is a snapshot from when the plan was written, so a consumer added
+  // later must not fail an old plan; only an over-claim does.
   if (plans().length === 0) return;
   const lying = [];
   for (const f of plans()) {
@@ -61,7 +63,7 @@ test('an impact entry that names a module names a REAL consumer of it', () => {
           const re = new RegExp(`from\\s+['"][^'"]*${stem}\\.[cm]?js['"]`);
           if (re.test(src)) found++;
         }
-        if (found !== claimed) lying.push(`${f} ${t.id}: claims ${claimed} consumer(s) of ${stem}, found ${found}`);
+        if (found < claimed) lying.push(`${f} ${t.id}: claims ${claimed} consumer(s) of ${stem}, found ${found}`);
       }
     }
   }

@@ -152,7 +152,9 @@ test('every watermark pattern names itself, so a hit is actionable', () => {
     'no bare vendor-name pattern: README legitimately names these tools');
 });
 // --diff <base>: only what a branch adds. A temp repository stands in for a real
-// branch because the module resolves its own ROOT, which is this checkout.
+// branch. The exported functions default to this checkout, so these calls pass the
+// fixture as `cwd`; the CLI checks its working directory's repository, which the
+// `working directory` tests at the end of this file cover.
 
 // Hooks and signing are disabled per call so a global git config cannot make the
 // fixture depend on this host.
@@ -277,6 +279,51 @@ test('--diff without a base is a usage error', () => {
 test('the CLI exits 2 for an unknown --diff base', () => {
   const script = path.join(ROOT, 'scripts', 'check-copy-rules.mjs');
   const r = spawnSync(process.execPath, [script, '--diff', 'no-such-ref-for-test'], { encoding: 'utf8' });
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /--diff <base>/);
+});
+
+// The CLI checks the repository it is run from. Measured before this was fixed: run
+// from another repository, `--diff origin/main` reported vivera's merge base as
+// clean and a relative README.md reported vivera's README.
+function cli(cwd, args, env = process.env) {
+  const script = path.join(ROOT, 'scripts', 'check-copy-rules.mjs');
+  return spawnSync(process.execPath, [script, ...args], { cwd, env, encoding: 'utf8' });
+}
+
+test('the CLI --diff checks the working directory repository', () => {
+  const r = cli(fixtureRepo(), ['--diff', 'main']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /doc\.md:4\s+\[em-dash\]/);
+});
+
+test('the CLI --diff from a subdirectory checks the working directory repository', () => {
+  const dir = fixtureRepo();
+  fs.mkdirSync(path.join(dir, 'sub'));
+  const r = cli(path.join(dir, 'sub'), ['--diff', 'main']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /doc\.md:4\s+\[em-dash\]/);
+});
+
+test('the CLI --commits reads the working directory repository log', () => {
+  const dir = fixtureRepo();
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const r = cli(dir, ['--commits', '1']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stderr.includes(`commit ${head.slice(0, 8)}`), r.stdout + r.stderr);
+});
+
+test('the CLI resolves a relative file argument in the working directory', () => {
+  const r = cli(fixtureRepo(), ['doc.md']);
+  assert.match(r.stderr, /doc\.md:2\s+\[em-dash\]/, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stderr, /missing-file/);
+});
+
+test('the CLI --diff outside a git repository working directory is a usage error', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-rules-nogit-'));
+  fixtureDirs.push(dir);
+  // The ceiling stops git from finding a repository above the temp directory.
+  const r = cli(dir, ['--diff', 'main'], { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) });
   assert.equal(r.status, 2, r.stdout + r.stderr);
   assert.match(r.stderr, /--diff <base>/);
 });

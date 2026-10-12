@@ -292,7 +292,8 @@ export function checkDiff({ base, cwd = ROOT } = {}) {
   let files = 0;
   for (const [rel, lines] of parseAddedLines(diff.stdout)) {
     const abs = path.resolve(cwd, rel);
-    if (lines.size === 0 || !fs.existsSync(abs)) continue;
+    // A submodule pointer (a directory) or an added symlink has no text of its own to check.
+    if (lines.size === 0 || !fs.existsSync(abs) || !fs.lstatSync(abs).isFile()) continue;
     files += 1;
     addedLines += lines.size;
     // The whole file is checked so the rule-statement neighbour window still sees

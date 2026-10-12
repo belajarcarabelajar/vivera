@@ -330,3 +330,14 @@ test('the CLI --diff outside a git repository working directory is a usage error
   assert.match(r.stderr, /not inside a git repository/);
   assert.match(r.stderr, /--diff <base>/);
 });
+
+test('checkDiff skips a submodule pointer instead of reading the directory as a file', () => {
+  const dir = fixtureRepo();
+  // A gitlink (mode 160000) is what `git submodule add` records; diff lists it as `Subproject commit <sha>`.
+  fs.mkdirSync(path.join(dir, 'sub'));
+  git(dir, 'update-index', '--add', '--cacheinfo', `160000,${git(dir, 'rev-parse', 'HEAD')},sub`);
+  git(dir, 'commit', '-q', '-m', 'add a submodule pointer');
+  const r = checkDiff({ base: 'main', cwd: dir });
+  assert.ok(r.violations.some((v) => v.where === 'doc.md:4'), 'the rest of the diff was not checked');
+  assert.deepEqual(r.violations.filter((v) => v.where.startsWith('sub')), []);
+});

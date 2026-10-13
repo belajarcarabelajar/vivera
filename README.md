@@ -682,7 +682,9 @@ formats (see Sprite agents on six harnesses below). The sprites then exist in ev
 path pinned to this repository because `$CLAUDE_PROJECT_DIR` in another project has no guard script. It
 writes and removes only files that carry the marker. Staid's
 color varies between sources (see `docs/vivera-glossary.md`), and Claude Code has no indigo, so cyan
-is a stand-in.
+is a stand-in. Claude Code draws the agent name on its color with no padding, so each `name:` is the
+sprite wrapped in a no-break space (U+00A0), unquoted, which YAML keeps and plain spaces would lose.
+The label then reads ` chef ` instead of `chef`, and a call with plain `chef` still resolves.
 
 Every role carries a frontmatter `PreToolUse` hook, `.claude/hooks/block-git-writes.mjs`, that exits 2 on
 the git subcommands that write state (`commit`, `add`, `push`, `checkout`, `switch`, `merge`, `rebase`,

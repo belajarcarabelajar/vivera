@@ -35,7 +35,10 @@ export function renderAgent(template, member, { hookRoot, templateLabel = `agent
   const rest = head.filter((_, i) => i !== descLine).map((l) => (hookRoot === undefined ? l : l.replace(PROJECT_DIR, hookRoot)));
   return [
     '---',
-    `name: ${member.sprite}`,
+    // Claude Code draws the agent name on its color with no padding, so the
+    // padding is part of the name. YAML strips plain spaces from an unquoted
+    // value but keeps U+00A0. A call with plain "chef" still resolves.
+    `name:  ${member.sprite} `,
     `description: ${JSON.stringify(description)}`,
     `color: ${member.color}`,
     ...rest,

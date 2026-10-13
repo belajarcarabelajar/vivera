@@ -161,7 +161,8 @@ export function splitFrontmatter(text) {
 export function planStatus(text) {
   const { frontmatter } = splitFrontmatter(text);
   const m = frontmatter.match(/^status:\s*(.+)$/m);
-  return m ? m[1].trim().replace(/^["']|["']$/g, '') : null;
+  // A YAML comment starts at a `#` after whitespace; the plan template puts one after the value.
+  return m ? m[1].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '') : null;
 }
 
 export function planId(text, planPath) {

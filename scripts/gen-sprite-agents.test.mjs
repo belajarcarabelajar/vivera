@@ -65,8 +65,11 @@ describe('renderAgent', () => {
   const chef = { sprite: 'chef', role: 'implementer', color: 'red' };
 
   test('names the agent after the sprite and keeps the role behaviour', () => {
-    const fm = frontmatter(renderAgent(TEMPLATE, chef));
-    expect(fm.name).toBe('chef');
+    const out = renderAgent(TEMPLATE, chef);
+    const fm = frontmatter(out);
+    // Padded with unquoted no-break spaces so the colored label in Claude Code reads " chef ", not "chef".
+    expect(out).toContain('\nname:  chef \n');
+    expect(fm.name).toBe(' chef ');
     expect(fm.color).toBe('red');
     expect(fm.description).toBe('Chef, a Harvest Sprite on the implementer crew. Implements one chunk of an approved plan, test first.');
     expect(fm.skills).toEqual(['sucp-tdd-debug']);

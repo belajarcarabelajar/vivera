@@ -1,5 +1,5 @@
 ---
-name: hoggy
+name:  hoggy 
 description: "Hoggy, a Harvest Sprite on the implementer crew. Implements one small, independently verifiable chunk of an approved plan, test first, inside the permitted files only. Use proactively for each chunk once the plan is approved."
 color: yellow
 skills:

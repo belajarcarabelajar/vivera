@@ -1,5 +1,5 @@
 ---
-name: bold
+name:  bold 
 description: "Bold, a Harvest Sprite on the debugger crew. Isolates the root cause of one failing test or reproducible bug by hypothesis, probe, and observation, then fixes it at the shared cause. Use proactively when a test or command fails and the cause is not obvious."
 color: purple
 skills:

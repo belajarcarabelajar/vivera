@@ -194,6 +194,14 @@ test('a quoted status is unquoted', () => {
   assert.equal(planStatus('---\nstatus: "Complete"\n---\n'), 'Complete');
 });
 
+test('the trailing comment from the plan template is not part of the status', () => {
+  // templates/implementation-plan-template.md writes this line; read raw, Complete never matched and the
+  // issue of a finished plan stayed open.
+  assert.equal(planStatus('---\nstatus: Complete            # Draft|Approved|InProgress|Verification|Complete|Blocked\n---\n'), 'Complete');
+  assert.equal(planStatus('---\nstatus: "Complete" # done\n---\n'), 'Complete');
+  assert.equal(planStatus('---\nstatus: Draft\t# note\n---\n'), 'Draft');
+});
+
 test('plan_id falls back to the filename when frontmatter omits it', () => {
   assert.equal(planId('# no frontmatter\n', '/x/2026-10-01-fallback.md'), '2026-10-01-fallback');
 });

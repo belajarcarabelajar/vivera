@@ -18,7 +18,7 @@ const VIVERA_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 
 // Plain paths stay readable; anything a shell would split or expand is
 // single-quoted so a copied command still works in a directory with spaces.
-function shellArg(s) {
+export function shellArg(s) {
   if (/^[\w@%+=:,./-]+$/.test(s)) return s;
   return `'${s.replaceAll("'", "'\\''")}'`;
 }

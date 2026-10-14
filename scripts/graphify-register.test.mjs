@@ -1,7 +1,8 @@
 // scripts/graphify-register.test.mjs
 //
-// Guards for the command that builds a repository's graph and adds it to the
-// global graphify registry, or records that the repository opted out.
+// Guards for the command that builds a repository's graph, adds it to the
+// global graphify registry only with --global, or records that the repository
+// opted out.
 //
 // Fixtures are real repositories built with `git init` in temp dirs, because
 // the command's answers (main checkout, common dir, ignore rules, local config)
@@ -111,10 +112,10 @@ function runCli(args, env = {}) {
   return { exitCode: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
 }
 
-test('builds the graph then adds it to the global registry under the repository name', () => {
+test('global: true builds the graph then adds it to the global registry under the repository name', () => {
   const root = repo('build');
   const g = stub();
-  const r = register(root, { graphifyBin: g.bin });
+  const r = register(root, { graphifyBin: g.bin, global: true });
   expect(r.exitCode).toBe(0);
   const graph = path.join(root, 'graphify-out', 'graph.json');
   expect(g.calls()).toEqual([`update ${root}`, `global add ${graph} --as ${path.basename(root)}`]);
@@ -122,14 +123,45 @@ test('builds the graph then adds it to the global registry under the repository 
   expect(r.lines.length).toBeGreaterThanOrEqual(3);
 });
 
-test('appends graphify-out/ to info/exclude once across two runs', () => {
+test('a default registration builds the graph but does not call global add', () => {
+  const root = repo('default');
+  const g = stub();
+  const r = register(root, { graphifyBin: g.bin });
+  expect(r.exitCode).toBe(0);
+  expect(g.calls()).toEqual([`update ${root}`]);
+  expect(existsSync(path.join(root, 'graphify-out', 'graph.json'))).toBe(true);
+  expect(readFileSync(excludeOf(root), 'utf8').split('\n')).toContain('graphify-out/');
+});
+
+test('a default registration prints a hint naming the graph path and both ways to add it to the global graph', () => {
+  const root = repo('hint');
+  const g = stub();
+  const r = register(root, { graphifyBin: g.bin });
+  const graph = path.join(root, 'graphify-out', 'graph.json');
+  const hint = r.lines.filter((l) => l.includes('not in the global graph'));
+  expect(hint).toHaveLength(1);
+  expect(hint[0]).toContain(`graphify global add ${graph} --as ${path.basename(root)}`);
+  expect(hint[0]).toContain('--global');
+});
+
+test('never with global: never wins, global is ignored with a line saying so', () => {
+  const root = repo('never-global');
+  const g = stub();
+  const r = register(root, { graphifyBin: g.bin, never: true, global: true });
+  expect(r.exitCode).toBe(0);
+  expect(git(root, 'config', '--get', 'graphify.register')).toBe('never');
+  expect(g.calls()).toEqual([]);
+  expect(r.lines.join('\n')).toContain('--global ignored');
+});
+
+test('appends graphify-out/ to info/exclude once across two runs without global add', () => {
   const root = repo('twice');
   const g = stub();
   expect(register(root, { graphifyBin: g.bin }).exitCode).toBe(0);
   expect(register(root, { graphifyBin: g.bin }).exitCode).toBe(0);
   const lines = readFileSync(excludeOf(root), 'utf8').split('\n');
   expect(lines.filter((l) => l === 'graphify-out/')).toHaveLength(1);
-  expect(g.calls()).toHaveLength(4);
+  expect(g.calls()).toEqual([`update ${root}`, `update ${root}`]);
   expect(git(root, 'status', '--porcelain')).toBe('');
 });
 
@@ -192,12 +224,12 @@ test('an opted-out repository is skipped with the undo command', () => {
   expect(g.calls()).toEqual([]);
 });
 
-test('a linked worktree registers its main checkout', () => {
+test('a linked worktree registers its main checkout in the global registry with global: true', () => {
   const main = repo('wt-main');
   const wt = path.join(tempDir('wt-link'), 'linked');
   git(main, 'worktree', 'add', '-q', '-b', 'side', wt);
   const g = stub();
-  const r = register(wt, { graphifyBin: g.bin });
+  const r = register(wt, { graphifyBin: g.bin, global: true });
   expect(r.exitCode).toBe(0);
   const graph = path.join(main, 'graphify-out', 'graph.json');
   expect(g.calls()).toEqual([`update ${main}`, `global add ${graph} --as ${path.basename(main)}`]);
@@ -220,7 +252,7 @@ test('a failing update exits 1 naming the step, its exit code, and the stderr ta
 test('a failing global add exits 1 naming the step and its exit code', () => {
   const root = repo('addfail');
   const g = stub({ failOn: 'global', code: 3 });
-  const r = register(root, { graphifyBin: g.bin });
+  const r = register(root, { graphifyBin: g.bin, global: true });
   expect(r.exitCode).toBe(1);
   expect(r.lines.join('\n')).toMatch(/global add.*exit code 3/);
 });
@@ -245,6 +277,12 @@ test('CLI --help prints usage and exits 0', () => {
   const r = runCli(['--help']);
   expect(r.exitCode).toBe(0);
   expect(r.stdout).toContain('Usage');
+});
+
+test('CLI --help mentions --global', () => {
+  const r = runCli(['--help']);
+  expect(r.exitCode).toBe(0);
+  expect(r.stdout).toContain('--global');
 });
 
 test('CLI without a directory prints usage and exits 2', () => {
@@ -275,4 +313,23 @@ test('CLI --never opts the repository out', () => {
   expect(r.exitCode).toBe(0);
   expect(git(root, 'config', '--get', 'graphify.register')).toBe('never');
   expect(g.calls()).toEqual([]);
+});
+
+test('CLI --global adds the graph to the global registry', () => {
+  const root = repo('cli-global');
+  const g = stub();
+  const r = runCli([root, '--global'], { GRAPHIFY_BIN: g.bin });
+  expect(r.exitCode).toBe(0);
+  const graph = path.join(root, 'graphify-out', 'graph.json');
+  expect(g.calls()).toEqual([`update ${root}`, `global add ${graph} --as ${path.basename(root)}`]);
+  expect(r.stdout).toContain(`registered ${graph}`);
+});
+
+test('CLI without --global does not call global add and prints the hint', () => {
+  const root = repo('cli-noglobal');
+  const g = stub();
+  const r = runCli([root], { GRAPHIFY_BIN: g.bin });
+  expect(r.exitCode).toBe(0);
+  expect(g.calls()).toEqual([`update ${root}`]);
+  expect(r.stdout).toContain('not in the global graph');
 });

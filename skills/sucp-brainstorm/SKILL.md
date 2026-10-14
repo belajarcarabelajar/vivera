@@ -70,31 +70,30 @@ Invoke the workflow when at least one of the following is true. The decision tou
 
 The report follows the structure defined in `templates/deep-research-report-template.md`. It opens with an executive summary paragraph, develops three to seven `##` themes with `###` subsections, and closes with a synthesis. Every claim is grounded in an inline citation of the form `[n]`. Mathematical notation uses LaTeX delimiters. Lists are converted to prose; tables are used for multi-axis comparisons. The report length matches the scope of the question, not a fixed minimum.
 
-### 🕸️ Codebase Graph Preflight — graphify (optional)
+### 🕸️ Codebase Graph Preflight: graphify
 
-<!-- Added 2026-10-01. Re-wired 2026-10-04: originally scoped to Deep Research
-     only and explicitly NOT wired into TDD, systematic debugging, verification,
-     or the debt sweep. That exclusion is what left the moment of highest
-     context-thickness — implementation — with no "who else consumes this?"
-     query, which is exactly the gap `tasks[].impacts` now closes mechanically.
-     The graph is now consulted at the Affected-Surface Audit (before Step 1) and
-     at the evidence gate (before the completion claim). It stays optional: the
-     file may not exist and the CLI may not be installed, and file reading is
-     always the correct fallback.
-     Revert: delete this subsection. Nothing else references it — no template,
-     example, script, or validator check depends on it. -->
+<!-- Added 2026-10-01; re-wired 2026-10-04 so implementation, not only research,
+     gets a "who else consumes this?" query for `tasks[].impacts`. Corrected
+     2026-10-14: the evidence gate (sucp-verify-deliver) does not consult the
+     graph, and templates/implementation-plan-template.md:93 does name
+     `graphify path` as Affected Surfaces evidence. The graph became the default
+     when the session-start hook (scripts/hooks/graphify-session-start.mjs)
+     reports a registered one.
+     Revert: restore this subsection from the commit before 2026-10-14; no
+     validator needle points into it. -->
 
-Two moments use it. **Research**: the question is about the active project's own code — how a subsystem works, what calls what, why two modules are coupled — and re-reading raw files to answer it is wasteful. **Implementation and verification**: a task's `impacts` claim needs enumerating, which is the same question asked of the current tree rather than of a design. Check for a knowledge graph before either:
+Two moments use it. **Research**: a question about the repository's own code, such as how a subsystem works, what calls what, or why two modules are coupled. **Implementation and verification**: enumerating a task's `impacts`, the same question asked of the current tree rather than of a design. The session-start context says which case applies.
 
-```bash
-test -f graphify-out/graph.json && graphify query "<question>"
-```
+**Registered graph.** The context prints the graph path and the query command. Query the graph first, before grep or raw file reads:
 
-- `graphify query "<question>"` — scoped subgraph for a broad question.
-- `graphify path "A" "B"` — the relationship between two named things.
-- `graphify explain "<concept>"` — one concept in isolation.
+- `graphify query "<question>" --graph <path>`: scoped subgraph for a broad question.
+- `graphify path "A" "B" --graph <path>`: the relationship between two named things.
+- `graphify explain "<concept>" --graph <path>`: one concept in isolation.
+- MCP tool `query_graph` with `project_path` set to the repository root.
 
-**Conditional and non-mandatory.** The graph is built on demand and is not present by default, so check for the file; never assume it exists and never treat a missing graph as a failure. If it is absent, or `graphify` is not installed, or the question is not about the code, fall back to normal file reading — which is the default and always correct. A scoped subgraph is usually far smaller than `GRAPH_REPORT.md` or raw grep output, so when the graph is there, prefer it; that is a size argument, not a claim about wall-clock speed.
+**Unregistered repository.** The user's standing request is to be offered registration through the question tool: Register now, Not now, Never for this repository. Register now runs `bun <vivera>/scripts/graphify-register.mjs <root>`, which builds the graph offline; Never runs it with `--never`; Not now changes nothing.
+
+**No graphify.** When the context is silent, `graphify` is not installed, or the question is not about the code, file reading is the fallback and is always correct; a missing graph is never a failure. A scoped subgraph is usually far smaller than `GRAPH_REPORT.md` or raw grep output; that is a size argument, not a claim about wall-clock speed.
 
 **Graph results are leads, not evidence.** Cite the source file the graph names, and read it before asserting anything about it. Never report a graph result the tool did not actually produce, and never cite `graphify-out/GRAPH_REPORT.md` for a fact you did not read there.
 

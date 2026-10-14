@@ -1,4 +1,4 @@
-Note: the graphify rules below apply when the `graphify` CLI and `graphify-out/graph.json` exist (run `graphify update .` to build the graph; see install.sh to install the CLI). If they are absent, skip the graphify steps and use normal file reading.
+Note: the graphify rules below apply when the `graphify` CLI and `graphify-out/graph.json` exist (run `graphify update .` to build the graph; see docs/graphify-integration.md to install the CLI). If they are absent, skip the graphify steps and use normal file reading.
 
 Vivera is a fictional name inspired by Elli, a character in Harvest Moon: Back to Nature. It names this repository, which the flavor vocabulary calls the farm. Documents and tool output may use Harvest Moon: Back to Nature flavored terms: the shipping bin (PR registry), Harvest Sprites (subagents: watering is keep-alive, animal care is long-lived assets, harvesting is shipping), the Blue Feather (a pull request), and Power Berries (permanent capability upgrades). The mapping lives in docs/vivera-glossary.md; commands and paths keep their literal meaning.
 

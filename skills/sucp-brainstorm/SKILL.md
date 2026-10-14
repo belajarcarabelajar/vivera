@@ -45,6 +45,15 @@ Activate only the reasoning lenses relevant to the task. Always use the core len
 | 🏷️ Epistemic & Provenance | External entities, new libraries/APIs, or past decisions referenced | Entity verification, source freshness, Human vs Assistant commitment attribution |
 
 > **The 💡 Creative & Convergent output is not verified by anything.** That row asks for 2–3 alternatives, trade-offs, and one recommendation, and no test, lint, or runner step checks whether the alternatives are real, whether the trade-offs are honest, or whether the recommendation follows from them. Two spikes were opened to give it a check and both were closed without one: `2026-09-30-jev-decision-gate-spike.md` F6 was closed `corpus not viable` because the workspace holds 4 within-set alternative pairs and **0 near-duplicates** (`docs/code-plan/spikes/2026-09-30-jev-dedupe-corpus-spike-report.md`), so there is nothing to measure a dedupe model against; the earlier F1 was dropped for the same reason. Do not assume a gate exists downstream. The check on this row is the human reading it immediately after, and that is the whole of it.
+>
+> Design It Twice (below) adds no automated check either. What it changes is that, for interface or module shapes, the alternatives are independent by construction: separate sprites draft them under different constraints without seeing each other. The human reading stays the check.
+
+### ✌️ Design It Twice
+Use this for the 💡 Creative & Convergent row and Architectural step 4 when the alternatives are interface or module shapes. A first design is rarely the best one, and alternatives drafted by the same mind tend to be variations of it.
+1. Frame the problem for the user: the constraints any interface must meet, and each dependency with its category (in-process, local-substitutable, remote but owned, true external). Show the framing, then dispatch without waiting.
+2. Dispatch three or more research sprites in parallel (`timid`, `aqua`, then wrap around to `timid`), each asked for a radically different design. Each gets its own brief (paths, coupling, dependency categories, glossary terms) and one constraint: a minimal interface of one to three entry points; maximal flexibility; the most common caller made trivial; ports and adapters for dependencies that cross the seam.
+3. Each sprite returns the interface (types, methods, invariants, error modes), a usage example, what the interface hides, its dependency strategy, and its trade-offs.
+4. Compare the designs in prose on depth, locality, and seam placement (how much each interface hides, where a later change lands, where the boundary sits), then recommend one. A hybrid is allowed when parts combine well.
 
 ### 🧭 Task-to-Mode Routing
 
@@ -166,7 +175,11 @@ Treat unknown elements according to their epistemic nature before asking the use
    - Formulate focused questions offering 2–4 mutually exclusive options plus an explicit recommended default.
    - The recommended default states its basis in one line (`Why:`), as the Confirmation Protocol requires, and says `Why: my judgment` when there is no verified basis.
    - If unanswered or ambiguous, proceed with the recommended default and record it as an explicit assumption in the plan. This applies to a clarifying preference question, never to a catalog gate.
-   - Interactive Elicitation Protocol: Use structured options when understanding user preferences, constraints, or goals before providing advice or plans. Keep to 1–3 focused questions with 2–4 concise, mutually exclusive options. Negative Triggers (when NOT to offer structured options): (1) user asks "A or B" (requires AI analysis/recommendation, not options echoed back); (2) user already provided concrete constraints or detailed prompt (proceed with constraints and state assumptions inline); (3) factual questions, emotional processing, or code review prose; (4) answer is already present in conversation history or discoverable in code ("Homework First" invariant). These options are asked through the Confirmation Protocol (the harness question tool, never plain chat text).
+   - Frontier grilling: model the open decisions as a design tree, where settling one decision opens the ones that depend on it. The frontier is every open decision whose prerequisites are settled. Ask the whole frontier each round through the question tool, at most 4 questions per call and several calls in the same round when the frontier is larger.
+   - A question whose answer depends on another open question waits for the next round. After each round, recompute the frontier from the answers.
+   - Facts the frontier needs go to fact-finding subagents. Only the questions downstream of a pending lookup wait for it; the rest of the frontier is asked now.
+   - The session is done when the frontier is empty and nothing is silently assumed: a default taken is recorded as an assumption, so it is not silent.
+   - Interactive Elicitation Protocol: Use structured options when understanding user preferences, constraints, or goals before providing advice or plans. Each question offers 2–4 concise, mutually exclusive options, and the frontier rule above sets how many questions a round asks. Negative Triggers (when NOT to offer structured options): (1) user asks "A or B" (requires AI analysis/recommendation, not options echoed back); (2) user already provided concrete constraints or detailed prompt (proceed with constraints and state assumptions inline); (3) factual questions, emotional processing, or code review prose; (4) answer is already present in conversation history or discoverable in code ("Homework First" invariant). These options are asked through the Confirmation Protocol (the harness question tool, never plain chat text).
 3. **Visual & Artifact Specifications (Render, Don't Describe)**:
    - Specification Triggers: When the user provides a specification—a noun phrase describing a visual or structural artifact (e.g. "comparison table of REST vs GraphQL", "state machine for order lifecycle", "contact form layout")—the spec is the request. Render the artifact directly rather than describing it in prose.
    - Request Evaluation Checklist: (Step 0) Does the request need a visual at all? (Conveys spatial, architecture, or lifecycle flow vs text prose); (Step 1) Is a connected tool or MCP a category match? (Match category, not style preference; never subdivide categories to bypass tools); (Step 2) Did the user ask for a file? (Write to disk + present); (Step 3) Default inline visualizer (render Mermaid/SVG).
@@ -180,16 +193,26 @@ Treat unknown elements according to their epistemic nature before asking the use
   - Wrap final implementation plans in `<proposed_plan>...</proposed_plan>` tags.
   - If the user requests modifications, any revised plan must be emitted as a *complete replacement* (`<proposed_plan>`) rather than an ambiguous partial delta.
 
+### 📖 Project Glossary and ADRs
+- Read the target repository's `GLOSSARY.md` when present, and use its terms in questions, the design, and test names.
+- Challenge a term that conflicts with the glossary as soon as it appears. Propose one precise term for a fuzzy or overloaded one.
+- Cross-check the user's claims about current behavior against the code, and surface a contradiction instead of picking a side silently.
+- Show each resolved term in chat as it settles. The Plan Mode Invariant forbids writes during the design, so resolved terms are written together with the design doc at Architectural step 6. When at least one term was resolved, create `GLOSSARY.md` at the repository root in that step; when the repository already keeps a project glossary, extend that file instead of adding a second one. It holds terms and their meanings only, no implementation details or decisions.
+- The Bounded path has no design doc, so its short design lists `GLOSSARY.md` under files touched whenever a term was resolved, and the terms are written as the first edit after the `Design` gate.
+- Offer an ADR (`templates/adr-template.md`) only when a decision is hard to reverse, surprising without context, and the result of a real trade-off. If any of the three is missing, skip it.
+
 ### Spike
 1. Explore project context — minimum to frame probe
 2. Present question + probe plan (2-3 sentences)
 3. Get approval through the Confirmation Protocol (header `Probe`)
 4. Investigate — cheapest method preserving correctness
-5. Report recommendation — label built code as throwaway; include a MANDATORY Mermaid diagram (hypothesis → probe → outcome → decision, per spike-report-template §1b)
+   Prototype code lives under `docs/code-plan/spikes/<spike-id>/` next to the report, which links to it. It is exempt from the temp-file purge, so it stays a primary source, and it states the question it answers at its top.
+   Logic goes in a pure module (no I/O, no UI) that can be lifted into the real code. A UI question is answered with several clearly different variants on one route, switched by a parameter.
+5. Report recommendation: label built code as a prototype, kept under `docs/code-plan/spikes/<spike-id>/` and never merged as product code; include a MANDATORY Mermaid diagram (hypothesis → probe → outcome → decision, per spike-report-template §1b)
 ### Bounded
 1. Explore project context — files, docs, recent commits
-2. Ask clarifying questions through the Confirmation Protocol, one decision at a time, only ones that matter
-3. Present short design in chat — MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched, testing plan, and itemized pre-execution todo checklist (`[ ]`)
+2. Ask clarifying questions through the Confirmation Protocol in frontier rounds (see Two Kinds of Unknowns), only ones that matter
+3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, and itemized pre-execution todo checklist (`[ ]`)
 4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve
 5. Implement — chunk the checklist into small verifiable units, fan out to subagents, then gather and synthesize their reports; TDD applies
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:
@@ -198,11 +221,14 @@ Treat unknown elements according to their epistemic nature before asking the use
 ### 🧠 Architectural — Brainstorming → Design
 1. Phase 1 — Ground in Environment: Non-mutating exploration of project context, configs, dependencies, and architecture before asking questions.
 2. Phase 2 — Intent Chat: Clarify goal, success criteria, constraints, and tradeoffs using the Two Kinds of Unknowns protocol.
+   Ask in frontier rounds until the frontier is empty, and apply Project Glossary and ADRs as terms come up.
    The phase closes with the intent-lock question (header `Intent`) asked through the Confirmation Protocol.
 3. Phase 3 — Implementation Chat: Detail decision-complete architecture (interfaces, data flow, failure modes, acceptance criteria). Must include at least one Mermaid diagram as visual companion (a `flowchart` showing tasks, dependencies, gates, and verification is MANDATORY; add `sequenceDiagram`, `stateDiagram-v2`, or `erDiagram` when they clarify interactions, lifecycle, or data).
 4. Propose 2-3 approaches — trade-offs, recommendation, YAGNI applied.
+   When the approaches are interface or module shapes, produce them with Design It Twice.
 5. Present the design in sections scaled to complexity, and ask approval after each section through the Confirmation Protocol (header `Section`).
 6. Write design doc — save to docs/code-plan/specs/YYYY-MM-DD-<topic>-design.md, commit.
+   Use `templates/spec-template.md` for its structure, and write the session's resolved terms to `GLOSSARY.md` in the same step.
 7. Spec self-review — placeholders, contradictions, ambiguity, scope.
 8. User reviews spec: ask through the Confirmation Protocol (header `Spec`); no plan before the answer is Approve.
 9. Invoke writing-plans skill — generate decision-complete plan wrapped in `<proposed_plan>` block.

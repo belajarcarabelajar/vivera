@@ -2,6 +2,13 @@
 
 > Architecture Decision Record (ADR). Captures a significant architectural choice,
 > trade-offs evaluated, and consequences.
+>
+> Write an ADR only when all three hold:
+> - **Hard to reverse:** changing your mind later is costly.
+> - **Surprising without context:** a future reader would ask why it was done this way.
+> - **The result of a real trade-off:** genuine alternatives existed and one was chosen.
+>
+> If any one of the three is missing, skip the ADR.
 
 ## 1. Metadata
 - **Status:** Proposed | Accepted | Superseded | Deprecated

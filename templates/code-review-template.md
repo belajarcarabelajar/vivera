@@ -20,6 +20,8 @@
 - **Stated intent:** [what the change is supposed to accomplish, in one or two sentences]
 - **Out of scope:** [surfaces the reviewer must not comment on]
 - **Reviewer type:** independent subagent | parent self-review (no independent reviewer available)
+- **Axis:** Standards | Spec. The two reviewers run in parallel and neither sees the other's report. The Spec reviewer fills only Spec Axis and the verdict.
+- **Spec source:** [approved spec, plan acceptance criteria, or Bounded design checklist; or `no spec available`]
 
 ## 2. Rule Attribution Precedence
 
@@ -51,6 +53,8 @@ An issue is a genuine review finding ONLY when every criterion is satisfied:
 Trivial style, formatting, typos, and documentation nits are not findings. If nothing qualifies, report none.
 
 **One exception, because it is measurable rather than a matter of taste.** A comment this change *introduced* that adds nothing the code does not already show does qualify, under criteria 1 and 5: an unreadable comment is a maintainability cost every later reader pays. That covers a restated line, `// Step 1: validate`, `// Core logic`, a decorative emoji, and `} // end if`. Two limits keep it honest. It must be anchored to a line this diff actually touched, and a plain rule marking a top-level block in a long file is an index rather than slop, so it is never a finding. See **Code Comment Hygiene** in the master skill for the full rule.
+
+A tautological test qualifies too: its expected value is recomputed the way the code computes it, so it passes whether the code is right or wrong and the behaviour it names stays untested. It is a bug finding under criteria 1 and 5, not a design note.
 
 ## 4. Findings
 
@@ -97,19 +101,51 @@ Use a suggestion block only for a concrete, minimal replacement. Preserve the ex
 ```
 ````
 
-## 5. Pre-Existing Issues (reported, not filed as findings)
+### Spec Axis
+
+The Spec reviewer compares the diff with the spec source and uses the same finding fields. The spec line it quotes in the Body takes the place of rule support.
+
+| Kind | Priority |
+|---|---|
+| Requirement missing or only partly built | `P1` |
+| Requirement built wrongly | `P0` or `P1` |
+| Scope creep: behaviour the spec did not ask for | `P2`, or `P1` when it touches a Protected Boundary or a Non-Goal |
+
+With no spec source, write "no spec available" here. Standards findings and Spec findings are shown side by side, each in its own order, and never reranked against each other.
+
+## 5. Design Notes (non-blocking)
+
+The Standards reviewer reads the diff against the fixed baseline below. Write each note as "possible <smell>" with the hunk it points at. A note has no priority, never changes the verdict, and is never posted to the PR. A documented repository standard overrides a smell, and anything a linter, formatter, or type checker enforces is skipped. The baseline is codified here and cannot block, so a note is not a finding. The Step 6 debt sweep harvests the notes. Write `none` when nothing applies.
+
+| Smell | Possible when the diff shows | Usual remedy |
+|---|---|---|
+| Mysterious Name | a name that does not say what the thing does or holds | rename it; if no honest name fits, the design is unclear |
+| Duplicated Code | the same logic in two hunks or files | extract it once and call it from both |
+| Feature Envy | a function that uses another module's data more than its own | move it next to that data |
+| Data Clumps | the same few values always passed together | group them into one type |
+| Primitive Obsession | a string or number standing in for a domain concept | give the concept its own small type |
+| Repeated Switches | the same branch on the same type in several places | one shared lookup, or polymorphism |
+| Shotgun Surgery | a single change spread as small edits over many files | gather what changes together into one module |
+| Divergent Change | one file edited for several unrelated reasons | split it so each part changes for one reason |
+| Speculative Generality | parameters, hooks, or layers no requirement asks for | remove it until a real need appears |
+| Message Chains | a caller walking `a.b().c().d()` | give the first object one method that does the walk |
+| Middle Man | a module that mostly forwards calls | call the real target directly |
+| Refused Bequest | a subtype that ignores or overrides most of what it inherits | replace the inheritance with composition |
+
+## 6. Pre-Existing Issues (reported, not filed as findings)
 
 - [Issue observed in surrounding code, with `path:line` and why it is out of this change's scope]
 
-## 6. Correctness Verdict
+## 7. Correctness Verdict
 
 End every review with one explicit binary verdict, justified in one to three sentences.
 
 - **Verdict:** `correct` | `not correct`
 - **Justification:** [does the patch break existing code, tests, or contracts; are there blocking defects]
 - **Overall confidence:** `0.0`–`1.0`
+- **Two axes:** `not correct` when either axis holds a `P0` or `P1`. Design notes never change the verdict.
 
-## 7. Reviewer Self-Check
+## 8. Reviewer Self-Check
 
 - [ ] Every reported finding passes all 8 criteria in section 3.
 - [ ] All qualifying findings were reported, not just the first.
@@ -119,6 +155,8 @@ End every review with one explicit binary verdict, justified in one to three sen
 - [ ] No praise, no filler apology, and no restatement of the diff back to the author.
 - [ ] No fix was applied and no patch was emitted; the review reports only.
 - [ ] Verdict stated, with the conditions that would change it.
+- [ ] Every Spec finding quotes its spec line, and the two axes are reported side by side, never reranked.
+- [ ] Every design note says possible, has no priority, and stayed out of the verdict and the PR.
 
 ```mermaid
 flowchart TD

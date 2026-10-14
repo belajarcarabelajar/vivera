@@ -364,16 +364,21 @@ install_hooks() {
   elif ! tool_available graphify; then
     # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
     echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable, so skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
-  elif repo_is_own_checkout; then
-    if [ "$DRY_RUN" = true ]; then
-      echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
-      echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"
-    else
-      git -C "$REPO_DIR" config core.hooksPath .githooks
-      echo "[OK] Enabled git hooks: core.hooksPath=.githooks"
-      echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
-    fi
   else
-    echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
+    if repo_is_own_checkout; then
+      if [ "$DRY_RUN" = true ]; then
+        echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
+        echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"
+      else
+        git -C "$REPO_DIR" config core.hooksPath .githooks
+        echo "[OK] Enabled git hooks: core.hooksPath=.githooks"
+        echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
+      fi
+    else
+      echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
+    fi
+    # Printed in a dry run too: install.sh only names this command and never runs it, since the command
+    # changes Claude Code settings outside this repository.
+    echo "[INFO] graphify: to wire it into Claude Code sessions (opt-in, not done here), run from $REPO_DIR: bun run graphify:hooks --install (revert: bun run graphify:hooks --uninstall)"
   fi
 }

@@ -252,6 +252,27 @@ describe('5: a missing graphify is warned about once', () => {
     expect(graphifyLines(r.stderr)).toEqual([]);
     expect(r.stdout).toContain('[OK] Optional tool found: graphify');
   });
+
+  test('messages: graphify hooks hint appears once with graphify present, never without it', () => {
+    const hintLines = (text) => lines(text).filter((l) => l.includes('graphify:hooks'));
+    const sb = sandbox();
+
+    const without = sb.run(['--dry-run']);
+    expect(without.status).toBe(0);
+    expect(hintLines(without.stdout + without.stderr)).toEqual([]);
+    // Positive control: this run did reach install_hooks and took the missing-graphify branch.
+    expect(graphifyLines(without.stderr)).toHaveLength(1);
+
+    shim(sb, 'graphify');
+    for (const args of [[], ['--dry-run'], ['--update']]) {
+      const r = sb.run(args);
+      expect({ args, status: r.status }).toEqual({ args, status: 0 });
+      const found = hintLines(r.stdout + r.stderr);
+      expect({ args, count: found.length }).toEqual({ args, count: 1 });
+      expect(found[0]).toContain('bun run graphify:hooks --install');
+      expect(found[0]).toContain('bun run graphify:hooks --uninstall');
+    }
+  });
 });
 
 describe('6: a HOME that cannot be written fails with an installer line', () => {

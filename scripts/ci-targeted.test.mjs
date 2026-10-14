@@ -125,6 +125,14 @@ describe('planChecks', () => {
     expect(names(planChecks(['MEMORY.md'], { sources: prose }))).toEqual(['copy-rules']);
   });
 
+  test('a CLAUDE.md change selects the tests that name it instead of the full list', () => {
+    const sources = { ...SOURCES, 'scripts/claude-md.test.mjs': "writeFileSync(join(root, 'CLAUDE.md'), text);\n" };
+    const plan = planChecks(['CLAUDE.md'], { sources });
+    expect(plan.full).toBe(false);
+    expect(names(plan)).toEqual(['tests', 'copy-rules']);
+    expect(testFiles(plan)).toEqual(['./scripts/claude-md.test.mjs']);
+  });
+
   test('an agents file selects validate-agents and gen-sprite-agents --check', () => {
     const plan = planChecks(['agents/chef.md'], INDEX);
     const gen = plan.suites.find((s) => s.name === 'gen-sprite-agents');

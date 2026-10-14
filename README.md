@@ -1714,6 +1714,8 @@ unioned into `graphify-out/graph.json`.
 ```bash
 bun run graphify:sync     # structural extraction + merge, writes graph.json
 bun run graphify:check    # exit 1 when the graph is stale; never writes
+bun <vivera>/scripts/graphify-sync.mjs --root "$(pwd)"           # from any repository's root, vivera included
+bun <vivera>/scripts/graphify-sync.mjs --check --root "$(pwd)"
 bun scripts/graphify-sync.mjs --dry-run
 bun scripts/graphify-sync.mjs docs/code-plan/plans/<plan>.md   # narrow to files
 ```
@@ -1727,8 +1729,10 @@ bun scripts/graphify-sync.mjs docs/code-plan/plans/<plan>.md   # narrow to files
 | Idempotency | `structural()` is deterministic and the merge is a union keyed on node id, so a second run over unchanged files writes byte-identical output. `graphify:check` is the gate. |
 | Missing graph | It refuses and says so. It merges into an existing graph; it never fabricates one. |
 
-This runs at the end of a session as Step 6.6 of the skill, and it also runs automatically
-through a committed git hook.
+The `bun run` and `bun scripts/...` lines run inside vivera and default to its root. Step 6.6
+of the skill runs the sync at the end of a session in the `--root "$(pwd)"` form from the
+session's repository, which is correct in vivera and in every other repository. Inside vivera
+it also runs automatically through a committed git hook.
 
 ### The pre-commit hook
 
@@ -1748,6 +1752,60 @@ enables it with `git config core.hooksPath .githooks`.
 This is deliberately **not** part of `bun run ci`: it writes a gitignored, machine-local
 artifact whose correctness depends on the vault and the installed graphify, neither of
 which a portable CI runner can see.
+
+### Getting sessions to query the graph
+
+A graph nobody queries is only a build cost. Claude Code does not load a repository's
+`AGENTS.md` when a `CLAUDE.md` sits in a parent directory, so the graphify rules in that file
+never reached most sessions, and nothing else prompted a query: 14 of 161 top-level Claude
+Code sessions from 2026-10-08 to 2026-10-14 made one. Three user-level hooks now tell each
+session and subagent about the graph at start, and two commands register a repository and
+list the ones still without a graph.
+
+```text
+bun run graphify:hooks (--install | --uninstall | --check) [--settings <path>] [--hooks-dir <dir>] [--dry-run]
+bun run graphify:register <dir> [--never]
+bun run graphify:audit <root>... [--json] [--max-depth N]
+```
+
+| Command | What it does | Exit codes |
+|---|---|---|
+| `graphify:hooks` | Merges the three entries below into `--settings` (default `~/.claude/settings.json`), each running a script in `--hooks-dir` (default `scripts/hooks` in this checkout). An entry is its own when a command contains `/scripts/hooks/graphify-`: `--install` replaces those, so a second run changes nothing, and `--uninstall` removes only those. Every other key and hook is kept, and the previous file is kept at `<settings>.bak`. `--install` creates a missing settings file. `--dry-run` prints the resulting JSON and writes nothing. Run from a linked worktree without `--hooks-dir`, `--install` refuses and names the main checkout to run it from, because a session worktree is removed after its PR merges. | `--check`: 0 when all three entries and their scripts exist, else 1 naming what is missing. A settings file that is not valid JSON, or whose `hooks` is not an object: 1, nothing written. `--install` from a linked worktree without `--hooks-dir`: 1, nothing written. |
+| `graphify:register` | Resolves the main checkout (run from a worktree, it registers the main checkout), runs `graphify update <mainRoot>`, appends `graphify-out/` to `<git-common-dir>/info/exclude` when it is not already ignored, then runs `graphify global add <graphPath> --as <basename of mainRoot>`. Safe to run twice. An opted-out repository is reported and not built. `--never` sets `git config graphify.register never` and builds nothing. | 0 done; 1 when `graphify` is missing or a graphify step exits non-zero (the output names the step and its code); 2 on usage or a directory outside a git repository. |
+| `graphify:audit` | Walks each root to `--max-depth` (default 4), skipping `node_modules`, `.cache` and worktrees (listed separately, never counted as unregistered), and prints each repository's path, kind, node and edge counts and staleness with a totals line, or JSON with `--json`. | 1 while any repository is `unregistered` (opted-out ones do not count), else 0; 2 with no root or a root that does not exist. |
+
+Registration is offline: `graphify update` parses code locally (AST), with no LLM and no
+network. A 2,076-file repository built in about 13 s with networking disabled.
+
+The three hook entries, each `"<path to bun>" "<hooks-dir>/<script>"` with a 10 s timeout:
+
+- `SessionStart`, no matcher, so a `compact` re-injects it: `graphify-session-start.mjs`
+- `SubagentStart`: `graphify-session-start.mjs`
+- `PreToolUse`, matcher `^(Grep|Glob|Read|Bash|mcp__graphify__.*)$`: `graphify-search-nudge.mjs`
+
+| Repository state | What the session or subagent sees at start |
+|---|---|
+| Registered | One paragraph: the graph path (from a worktree, the main checkout's graph, and the text says so); when the graph is older than the last commit, that `graphify update <mainRoot>` refreshes it offline; and the query command, `graphify query "<question>" --graph <graphPath>` (also `path`, `explain`) or the MCP tool `query_graph` with `project_path` set to the main checkout. |
+| Unregistered | Session start only, not subagents: that the repository has no graph, the registration command, and the user's standing request to be offered registration through the question tool with Register now, Not now, and Never for this repository. Register now runs `graphify-register.mjs`, Never runs it with `--never`, and Not now records nothing, so the next session offers again. |
+| Opted out, or not a git repository | Nothing. |
+
+In a registered repository, the first search by a session or subagent before its first graph
+query gets one reminder next to the result, naming the graph path and the query command. A
+search is `Grep`, `Glob`, a `Read` of a file that is not Markdown and not under
+`graphify-out/`, or a Bash command whose first word is `rg`, `grep`, `fd`, `find` or `ag`. A
+query is any `mcp__graphify__` tool, or `graphify query`, `path` or `explain` in Bash. Each
+session and agent is tracked separately. Both hooks exit 0 on every path and never allow or
+block a tool call. `install.sh` only prints the install command; it does not edit the global
+settings.
+
+| Change | Revert |
+|---|---|
+| Hook entries in `~/.claude/settings.json` | `bun run graphify:hooks --uninstall` |
+| Never for a repository | `git config --unset graphify.register`, run in that repository |
+| A registration | `graphify global remove <tag>`, where the tag is the main checkout's directory name. The local graph stays in `graphify-out/`; delete it, and the `graphify-out/` line in `.git/info/exclude`, to undo the build too. |
+
+The runbook section with the measurement details is §3.4.1 of
+[`docs/graphify-integration.md`](docs/graphify-integration.md).
 
 ### The drift watchdog
 

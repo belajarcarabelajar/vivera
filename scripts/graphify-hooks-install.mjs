@@ -18,6 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { writeFileAtomic } from './lib/atomic-write.mjs';
+import { graphifyStatus } from './lib/graphify-status.mjs';
 
 // Anchored because a matcher with regex characters is tested unanchored, so
 // `Read` alone would also fire on any tool whose name merely contains it.
@@ -27,7 +28,7 @@ const OWNER_MARK = '/scripts/hooks/graphify-';
 const START_SCRIPT = 'graphify-session-start.mjs';
 const NUDGE_SCRIPT = 'graphify-search-nudge.mjs';
 const EVENTS = ['SessionStart', 'SubagentStart', 'PreToolUse'];
-const DEFAULT_HOOKS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'hooks');
+const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 const USAGE = `usage: bun scripts/graphify-hooks-install.mjs (--install | --uninstall | --check) [options]
 
@@ -35,7 +36,8 @@ const USAGE = `usage: bun scripts/graphify-hooks-install.mjs (--install | --unin
   --uninstall        remove only the graphify hook entries
   --check            exit 0 when all three entries and both hook scripts exist, else 1
   --settings <path>  settings file (default: ~/.claude/settings.json)
-  --hooks-dir <dir>  directory holding the hook scripts (default: this repository's scripts/hooks)
+  --hooks-dir <dir>  directory holding the hook scripts (default: this repository's scripts/hooks,
+                     which --install refuses when this repository is a linked git worktree)
   --dry-run          print the resulting JSON and write nothing
   -h, --help         this message`;
 
@@ -157,7 +159,8 @@ export function parseArgs(argv) {
   return opts;
 }
 
-function main(argv) {
+/** Runs the CLI and returns its exit code; `scriptsDir` stands in for this file's directory. */
+export function main(argv, { scriptsDir = SCRIPTS_DIR } = {}) {
   const opts = parseArgs(argv);
   if (opts.help) {
     console.log(USAGE);
@@ -170,7 +173,20 @@ function main(argv) {
   }
 
   const target = path.resolve(opts.settings ?? path.join(os.homedir(), '.claude', 'settings.json'));
-  const hooksDir = path.resolve(opts.hooksDir ?? DEFAULT_HOOKS_DIR);
+  const hooksDir = path.resolve(opts.hooksDir ?? path.join(scriptsDir, 'hooks'));
+
+  if (opts.mode === 'install' && opts.hooksDir === undefined && !opts.dryRun) {
+    // Session worktrees are deleted after merge, so hooks pointing into one
+    // would make every later session start on this machine report hook errors.
+    // `worktree` is only set once a graph exists, so compare the roots directly.
+    const status = graphifyStatus(scriptsDir);
+    if (status.kind !== 'not-git' && status.root !== status.mainRoot) {
+      console.error(`graphify-hooks-install: refused, ${target} left untouched: ${status.root} is a linked git worktree, and hooks pointing into it break once the worktree is removed.`);
+      console.error(`Hooks must point at the main checkout ${status.mainRoot}: run \`bun run graphify:hooks --install\` from ${status.mainRoot}, or pass --hooks-dir <dir> to choose explicitly.`);
+      return 1;
+    }
+  }
+
   const exists = existsSync(target);
 
   if (!exists && opts.mode === 'check') {

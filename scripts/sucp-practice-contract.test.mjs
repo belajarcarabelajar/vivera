@@ -198,6 +198,24 @@ const CONTRACT = [
     task: 'R1', gaps: 'review fixes', file: 'docs/diagrams-src/lifecycle.mmd',
     absent: ['4-Phase RCA Loop'],
   },
+  // F1 to F4: debt-sweep follow-ups selected at session close.
+  {
+    task: 'F1', gaps: 'follow-up', file: 'templates/pr-review-template.md',
+    present: ['Spec Axis', 'linked issue', 'never reranked'],
+  },
+  {
+    task: 'F2', gaps: 'follow-up', file: 'skills/sucp-verify-deliver/SKILL.md',
+    present: ['priorities in the Spec Axis table of `templates/code-review-template.md`'],
+    absent: ['one built wrongly is `P0` or `P1`'],
+  },
+  {
+    task: 'F3', gaps: 'follow-up', file: 'templates/subagent-contract-template.md',
+    present: ['**Context pointers:**', 'instead of pasted text'],
+  },
+  {
+    task: 'F4', gaps: 'follow-up', file: 'MEMORY.md',
+    present: ['refuses `rm` outside `/tmp`', 'cannot verify a variable', '| L57 |', 'UNROUTABLE'],
+  },
 ];
 
 describe('T0 contract: target files exist', () => {

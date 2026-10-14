@@ -94,7 +94,7 @@ flowchart LR
 Before first question: classify task, state classification aloud.
 | Path | Definition | Trigger |
 |---|---|---|
-| Spike | Feasibility question. Output = answer, not kept code. | "Can we...", "is it possible...", "quick and dirty" |
+| Spike | Feasibility question. Output = answer, not product code. | "Can we...", "is it possible...", "quick and dirty" |
 | Bounded | Well-scoped change to existing flow in repo. | Flag, small endpoint, one-file fix |
 | Architectural | New project/subsystem, restructures components, alters shared interfaces. | No existing flow to change |
 Rule: doubt → heavier path. Ratchet is one-way — hidden complexity mid-task upgrades path. Nothing downgrades.

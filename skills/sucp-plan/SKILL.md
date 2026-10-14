@@ -29,10 +29,14 @@ Assume: engineer has zero codebase context, questionable taste, skilled develope
 Save to: docs/code-plan/plans/YYYY-MM-DD-<feature-name>.md
 Plan body lives in the file, not the session: write the full plan content into the .md deliverable and keep in-session explanation to a concise summary plus the file path and the key decisions needing approval. Do not paste or narrate the whole plan in chat; when the user wants the details, point to the saved file. In plan/spec review mode, present the file content as the reviewable artifact; the approval question is the Gate 2 bullet below (spec approval, header `Spec`, is in `sucp-brainstorm`).
 - Gate 2: after the plan validates (and is published at Draft), show the plan path and a concise summary in chat, then ask approval through the Confirmation Protocol (header `Plan`); do not paste the plan.
+  - The summary lists each task with `Blocked by` (the task ids it waits on, or none) and `What it delivers` (the behaviour it makes verifiable), so the owner can judge the granularity.
 Scope check: spec covers multiple independent subsystems → split into separate plans, each producing working testable software alone.
 File structure: map files before defining tasks. One responsibility per file. Files that change together, live together. Split by responsibility not layer. Existing codebase → follow established patterns; split only files grown unwieldy under current task.
 File-size trigger: a source file of imperative logic that exceeds ~500 lines must be split by responsibility during the same task; a single file must not exceed 1000 lines without an explicit `defer: <ceiling>, <upgrade-trigger>` exception. Generated code, fixture/data files, and stylesheets are exempt from the 500-line trigger. Cite the line count when flagging an over-threshold file.
 Task sizing: smallest unit carrying its own test cycle, worth independent review gate. Fold setup/config/docs into the task needing them. Split only where reviewer could reject one task while approving neighbor.
+Vertical slices: every task is a tracer-bullet vertical slice, a narrow path through each layer it needs (data, logic, interface, tests) that is verifiable on its own; never one layer per task.
+Prefactor first: a refactor that makes the feature easier to add is its own task, and the tasks it unblocks depend on it ("make the change easy, then make the easy change").
+Wide refactor: one mechanical change whose blast radius spans the codebase (a rename, a shared type) cannot land green as one slice, so it runs as expand, migrate in batches, contract. The expand task adds the new form beside the old; each migrate batch, sized by blast radius, depends on the expand task; the contract task removes the old form and depends on every batch.
 Step granularity: 2-5 min per step.
 - Write failing test
 - Run — confirm fail

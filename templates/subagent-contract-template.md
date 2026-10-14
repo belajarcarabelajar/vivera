@@ -11,6 +11,7 @@
 - **Session slot:** [from `bun scripts/pr-registry.mjs claim`]
 - **Working directory:** [the session worktree path. Every relative path in this contract resolves inside it.]
 - **Head branch:** `<plan-id>/<session-slug>`
+- **Context pointers:** [paths or URLs of the notes, specs, issues, and prior commits this chunk reads by pointer instead of pasted text, for example an exploration chunk's notes file outside the repository]
 
 ## 1a. Git Boundary (read before dispatch)
 You edit files and run tests. You do **not** touch git state.
@@ -34,6 +35,7 @@ The parent chunks the work into the smallest independently verifiable units, the
 - **Chunk boundary check:** [ ] every chunk has exactly one owner, [ ] every planned unit is covered, [ ] no two chunks write the same file
 - **Disjoint scopes are a safety property, not a licence to ignore the seams.** Every chunk's `impacts` (frontmatter of the parent plan) names the surfaces it can break, including ones no chunk owns. Before dispatch, the parent checks each of those surfaces against the chunk list and gives it an owner. A surface that belongs to no chunk is still a consumer: either it is assigned, or it is recorded in the parent plan's follow-up backlog with a finish line. The gap between chunks is where a broken consumer lives, and the per-chunk file scope is what would otherwise hide it.
 - **Re-dispatch rule:** a red chunk is re-chunked and re-dispatched alone, never by restarting the whole batch
+- **Dispatch order:** a chunk is dispatched only after every chunk it depends on is integrated (Frontier Dispatch in `sucp-rules`).
 
 ```mermaid
 flowchart LR

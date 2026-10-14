@@ -26,6 +26,11 @@
 file list is already in the diff, and repeating it makes the reviewer read it
 twice.]
 
+**Smallest visual:** [the one view that makes the change clear: pseudocode, a
+call tree, a component tree, a file tree, a Mermaid diagram, or a diff-sketch.
+Show only what makes the change clear, and drop it when the paragraph already
+does.]
+
 **Non-goals:** [what this deliberately does not do, so a reviewer does not
 audit for something that was never claimed]
 
@@ -56,6 +61,9 @@ and its exit code are.
 | Type check | `[bun run typecheck]` | 0 | 0 errors |
 | Build | `[bun run build]` | 0 | completed |
 
+- **Before:** [the failing test run, output, or screenshot from before the change]
+- **After:** [the passing run, output, or screenshot from the same check after it]
+
 Pre-existing warnings outside the changed surface are reported in section 7,
 not carried as part of this PR.
 
@@ -81,6 +89,7 @@ justification, plus the conditions that would change it]
 | Concern | Answer |
 |---|---|
 | Blast radius | [which surfaces can break if this is wrong] |
+| Door | [one-way (hard to undo once merged) or two-way (a revert undoes it)] |
 | Rollout | [default / flag / staged; state it when not the default] |
 | Health signal | [what proves this is healthy in use, not just in tests] |
 | Rollback | [the exact revert, and who can run it] |

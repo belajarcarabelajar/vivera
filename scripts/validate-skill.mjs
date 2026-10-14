@@ -322,6 +322,7 @@ const requiredTemplates = [
   'pr-review-template.md',
   'brainstorm-intent-template.md',
   'session-learning-ledger-template.md',
+  'spec-template.md',
 ];
 
 for (const tmpl of requiredTemplates) {
@@ -348,6 +349,7 @@ const mermaidRequiredTemplates = [
   'pr-review-template.md',
   'brainstorm-intent-template.md',
   'session-learning-ledger-template.md',
+  'spec-template.md',
 ];
 for (const tmpl of mermaidRequiredTemplates) {
   const p = path.join(rootDir, 'templates', tmpl);

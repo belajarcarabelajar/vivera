@@ -28,7 +28,7 @@ flowchart TD
     HardGate -->|Approved| ExecRoute{"Execution\nStrategy"}
 
     ExecRoute -->|New Feature / Refactor| TDD["4️⃣ Test-Driven Development\nRED → GREEN → REFACTOR\nFailing test first"]
-    ExecRoute -->|Bug Isolation| Debug["🐞 4.1 Systematic Debugging\nHypothesis → Probe → Observation\n4-Phase RCA Loop"]
+    ExecRoute -->|Bug Isolation| Debug["🐞 4.1 Systematic Debugging\nFeedback Loop First\nHypothesis → Probe → Observation"]
     ExecRoute -->|Parallel Workstreams| ChunkPlan["📦 Chunk into smallest\nindependently verifiable units"]
 
     ChunkPlan --> FanOut["🚀 Fan-out: 10+ narrow\nsubagents dispatched"]

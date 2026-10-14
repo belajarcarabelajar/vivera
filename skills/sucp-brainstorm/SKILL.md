@@ -197,8 +197,8 @@ Treat unknown elements according to their epistemic nature before asking the use
 - Read the target repository's `GLOSSARY.md` when present, and use its terms in questions, the design, and test names.
 - Challenge a term that conflicts with the glossary as soon as it appears. Propose one precise term for a fuzzy or overloaded one.
 - Cross-check the user's claims about current behavior against the code, and surface a contradiction instead of picking a side silently.
-- Show each resolved term in chat as it settles. The Plan Mode Invariant forbids writes during the design, so resolved terms are written together with the design doc at Architectural step 6. Create `GLOSSARY.md` lazily at the repository root on the first resolved term; it holds terms and their meanings only, no implementation details or decisions.
-- The Bounded path has no design doc, so its resolved terms are written to `GLOSSARY.md` as the first edit after the `Design` gate.
+- Show each resolved term in chat as it settles. The Plan Mode Invariant forbids writes during the design, so resolved terms are written together with the design doc at Architectural step 6. When at least one term was resolved, create `GLOSSARY.md` at the repository root in that step; when the repository already keeps a project glossary, extend that file instead of adding a second one. It holds terms and their meanings only, no implementation details or decisions.
+- The Bounded path has no design doc, so its short design lists `GLOSSARY.md` under files touched whenever a term was resolved, and the terms are written as the first edit after the `Design` gate.
 - Offer an ADR (`templates/adr-template.md`) only when a decision is hard to reverse, surprising without context, and the result of a real trade-off. If any of the three is missing, skip it.
 
 ### Spike
@@ -208,11 +208,11 @@ Treat unknown elements according to their epistemic nature before asking the use
 4. Investigate — cheapest method preserving correctness
    Prototype code lives under `docs/code-plan/spikes/<spike-id>/` next to the report, which links to it. It is exempt from the temp-file purge, so it stays a primary source, and it states the question it answers at its top.
    Logic goes in a pure module (no I/O, no UI) that can be lifted into the real code. A UI question is answered with several clearly different variants on one route, switched by a parameter.
-5. Report recommendation — label built code as throwaway; include a MANDATORY Mermaid diagram (hypothesis → probe → outcome → decision, per spike-report-template §1b)
+5. Report recommendation: label built code as a prototype, kept under `docs/code-plan/spikes/<spike-id>/` and never merged as product code; include a MANDATORY Mermaid diagram (hypothesis → probe → outcome → decision, per spike-report-template §1b)
 ### Bounded
 1. Explore project context — files, docs, recent commits
 2. Ask clarifying questions through the Confirmation Protocol in frontier rounds (see Two Kinds of Unknowns), only ones that matter
-3. Present short design in chat — MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched, testing plan, and itemized pre-execution todo checklist (`[ ]`)
+3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, and itemized pre-execution todo checklist (`[ ]`)
 4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve
 5. Implement — chunk the checklist into small verifiable units, fan out to subagents, then gather and synthesize their reports; TDD applies
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:

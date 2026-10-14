@@ -25,7 +25,7 @@ Red flags — stop, restart: code before test, test passes immediately, can't ex
 
 - **Seams first.** Before the first RED test, list the seams under test, each with one line on what it catches and what it misses. The seams come from the approved Design or Spec, so this adds no gate; a seam found mid-task is recorded in the plan before its test is written.
 - **Public interfaces.** Tests drive behavior through public interfaces, so a refactor that keeps behavior keeps them green.
-- **Mock only at system boundaries:** external APIs, time, randomness, and sometimes the database or filesystem. Never mock your own modules. Inject boundary dependencies and give each external operation its own function, so each mock returns one shape without branching. This is a different rule from the Strict No-Mocking Invariant, which forbids fake tool output, not test doubles at a boundary.
+- **Mock only at system boundaries:** external APIs, time, randomness, and sometimes the database or filesystem. Never mock your own modules. Inject boundary dependencies and give each external operation its own function, so each mock returns one shape without branching. This is a different rule from the Strict No-Mocking Invariant in `sucp-rules`, which is about the agent's own tool use (mock interfaces, fake tool outputs, or simulated MCP standing in for a real tool), not about test doubles at a boundary inside a test suite.
 - **Domain terms.** When the target repository has a `GLOSSARY.md`, test names use its terms.
 
 | Anti-pattern | Tell | Instead |
@@ -110,12 +110,12 @@ NO HYPOTHESIS WITHOUT A RED-CAPABLE FEEDBACK LOOP
 3. Phase 3 — Smallest Safe Localized Fix:
    - Apply the most focused, surgical patch that eliminates the root cause.
    - Strictly avoid unsolicited refactoring, cleanup of adjacent code, or changing unrelated interfaces.
-   - Write the regression test before the fix, at a correct seam: one that exercises the bug pattern as it occurs at the real call site. A seam too shallow to show the bug gives false confidence, and no correct seam is itself a finding, recorded for the debt sweep.
+   - Write the regression test before the fix, at a correct seam: one that exercises the bug pattern as it occurs at the real call site. A seam too shallow to show the bug gives false confidence, and no correct seam is itself a finding, recorded for the debt sweep. Fixing without a regression test is a TDD exception, asked through the `TDD waiver` gate; the Phase 0 loop then stands as the proof of the fix.
    - A red forced by mutating code or a fixture counts only after a diff against a pristine copy proves the mutation landed.
 4. Phase 4 — Regression Proof & Verification:
    - Run the reproduction test to prove GREEN status.
    - Execute the targeted test suite to confirm 0 regressions across existing functionality.
    - Re-run the Phase 0 loop on the original, unminimised scenario.
-   - Clean up: grep the `[DEBUG-` prefix to zero hits, and move a throwaway harness under `docs/code-plan/spikes/<spike-id>/` or delete it.
+   - Clean up: grep the files the diff touches for the session's own tag (`[DEBUG-a4f2]`, never the bare prefix, which also matches this skill and the log template) and reach zero hits, then move a throwaway harness under `docs/code-plan/spikes/<spike-id>/` or delete it.
    - The confirmed hypothesis goes into the commit message or the PR body, so the reason for the fix outlives the session.
 

@@ -24,7 +24,7 @@ A SESSION ENDS WITH ZERO UNEXAMINED CODING DEBT
 ### 🔍 6.2 Harvest — collect debt candidates from the whole session
 Sweep the session record, not just the last command, for anything that was noticed but not closed. Candidate sources, in priority order:
 1. Recorded `defer:` deliberate shortcuts whose `<ceiling>` has actually been hit, so the debt the plan promised to revisit is now due.
-2. Findings deferred to follow-up by the code review, the Zero-Tolerance Clean Pass pre-existing warnings, or the Simplicity Ladder pruning pass.
+2. Findings deferred to follow-up by the code review, the review's Design Notes (non-blocking smells, which are not findings but are still debt candidates), the Zero-Tolerance Clean Pass pre-existing warnings, or the Simplicity Ladder pruning pass.
 3. Adjacent code, sibling callers, or sibling files the fix touched only partially. Comprehension-before-reduction exposes these; leaving them unlisted is choosing debt. **Anything already named in a task's `impacts` and still open at sweep time is a debt item by definition** — the impact was declared, so failing to close it is a decision, not an oversight.
 4. Missing test layers on the changed surface (no unit test, no contract test, no e2e for a user-facing flow), missing accessibility/localization/empty/error states, missing docs or changelog or runbook entries.
 5. TODO/FIXME/XXX/HACK comments, skipped or quarantined tests, `@ts-ignore`/`eslint-disable`/`.skip`/`.only` markers, dead code, stale feature flags, duplicate helpers, and orphaned files that the diff revealed.

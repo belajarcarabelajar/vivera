@@ -16,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { writeFileAtomic } from '../lib/atomic-write.mjs';
 import { graphifyStatus } from '../lib/graphify-status.mjs';
+import { shellArg } from './graphify-session-start.mjs';
 
 const SEARCH_COMMANDS = new Set(['rg', 'grep', 'fd', 'find', 'ag']);
 const QUERY_SUBCOMMANDS = new Set(['query', 'path', 'explain']);
@@ -73,7 +74,7 @@ export function reminderText(graphPath) {
   return (
     `This repository has a graphify knowledge graph at ${graphPath}. ` +
     'A query returns the nodes, files and relations that match a question in one call: ' +
-    `\`graphify query "<question>" --graph ${graphPath}\`. ` +
+    `\`graphify query "<question>" --graph ${shellArg(graphPath)}\`. ` +
     '`graphify path "A" "B"` and `graphify explain "X"` take the same --graph flag. ' +
     'This note appears once per session and agent.'
   );

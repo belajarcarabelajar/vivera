@@ -25,7 +25,8 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { decide } from './graphify-search-nudge.mjs';
+import { decide, reminderText } from './graphify-search-nudge.mjs';
+import { shellArg } from './graphify-session-start.mjs';
 
 const HOOK = path.join(import.meta.dir, 'graphify-search-nudge.mjs');
 const COMMIT_EPOCH_S = 1_700_000_000;
@@ -119,6 +120,16 @@ test('the first search in a registered repository prints one reminder naming the
   expect(text.length).toBeLessThan(600);
   expect(text).not.toContain('\u2014');
   expect(text).not.toMatch(/MANDATORY|You MUST/);
+});
+
+test('the suggested query command shell-quotes a graph path with a space or a single quote', () => {
+  const spaced = '/home/u/Dokumen/Obsidian Vault/graphify-out/graph.json';
+  const quoted = "/tmp/it's/graphify-out/graph.json";
+  expect(shellArg(spaced)).toBe(`'${spaced}'`);
+  expect(shellArg(quoted)).toBe("'/tmp/it'\\''s/graphify-out/graph.json'");
+  for (const graphPath of [spaced, quoted]) {
+    expect(reminderText(graphPath)).toContain(`\`graphify query "<question>" --graph ${shellArg(graphPath)}\``);
+  }
 });
 
 test('a second search in the same session and agent is silent', () => {

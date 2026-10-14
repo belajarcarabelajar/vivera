@@ -52,14 +52,40 @@
 > Each raw mistake becomes a candidate rule in `WHEN <situation> → DO <action>, NOT <anti-pattern>` form.
 > A rule earns a line only if it passes BOTH existing gates — otherwise NO-OP (drop it, zero file changes).
 
-| # | Candidate rule (`WHEN → DO → NOT`) | Minimum-Signal gate | 30-Day Horizon gate | Keep? |
-|---|---|---|---|---|
-| 1 | WHEN calling a tool → DO verify the exact name against the catalog, NOT assume a plausible alias | A future agent acts differently? Y/N | Still true in 30 days? Y/N | KEEP / NO-OP |
-| 2 | | | | |
+| # | Candidate rule (`WHEN → DO → NOT`) | Minimum-Signal gate | 30-Day Horizon gate | Keep? | Mechanical or judgement |
+|---|---|---|---|---|---|
+| 1 | WHEN calling a tool → DO verify the exact name against the catalog, NOT assume a plausible alias | A future agent acts differently? Y/N | Still true in 30 days? Y/N | KEEP / NO-OP | mechanical / judgement |
+| 2 | | | | | |
+
+**Mechanical or judgement:** a mechanical `KEEP` rule is a fixed pattern a machine can detect (a banned call, a path rule, a missing registration, a wording that must exist). Propose it as an automated check (test, validator needle, lint rule, or hook) in a 6.3 follow-up, and remove its `MEMORY.md` line once the check lands. A judgement rule goes to `MEMORY.md`.
 
 **Minimum-Signal NO-OP gate:** *"Will a future agent plausibly act differently and more effectively because of this rule?"* If NO → NO-OP, make zero file changes. Reject trivial facts, transient errors, and generic knowledge the model already has.
 
 **30-Day Horizon gate:** *"Would this rule still be true and worth reading a month from now?"* Stable residue passes; moving task state (today's bug, this environment's transient hiccup) fails and expires with the session.
+
+---
+
+## Environment Improvements
+
+> Harvested in the same pass as the Mistake Log, under the same two gates. A kept item that needs a file change
+> (a pointer to add, an instruction to delete, a rule to move into a check) is raised as a follow-up in 6.3.
+
+| # | Kind | What happened | Proposed change | Keep? |
+|---|---|---|---|---|
+| 1 | `navigation` | 4 tool calls to find the plan file | Add a pointer to it in `AGENTS.md` | KEEP / NO-OP |
+| 2 | `steering-size` | | | |
+| 3 | `information-access` | | | |
+| 4 | `tool-economy` | | | |
+
+**Kinds:**
+`navigation` (time lost finding a file means a pointer is missing) ·
+`steering-size` (a steering file grew with rules a check or a pointer could replace) ·
+`information-access` (a fact the agent needed but could not reach) ·
+`tool-economy` (a costly tool call a cheaper one would have covered).
+
+**Steering no-ops:** each instruction in a steering file (`AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, a skill) that changed nothing this session or contradicted another. Propose deleting or merging it.
+
+- `<file>:<line>` "<instruction>": changed nothing / contradicts `<file>:<line>`
 
 ---
 
@@ -81,6 +107,7 @@
 ## 5. Carry-Forward Pointer
 
 - [ ] `KEEP` rules written in-repo.
+- [ ] Each mechanical `KEEP` rule has its check proposed as a 6.3 follow-up.
 - [ ] Approved global rules written with a revert note; declined ones left in this ledger only.
 - [ ] Handoff "Resume Checklist" points the next session at these rules **before** it starts work.
 

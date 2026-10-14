@@ -229,6 +229,9 @@ bun run graphify:audit <root>... [--json] [--max-depth N]
 **Hooks (`graphify:hooks`).** Writes three entries into `--settings` (default
 `~/.claude/settings.json`). Each runs `"<path to bun>" "<hooks-dir>/<script>"`
 with `timeout: 10`; `--hooks-dir` defaults to `scripts/hooks` in this checkout.
+From a linked worktree, `--install` without `--hooks-dir` refuses (exit 1, nothing
+written) and names the main checkout to run it from, because a session worktree
+is removed after its PR merges and hooks pointing into it would then fail.
 
 - `SessionStart`, no matcher, so a `compact` re-injects it:
   `graphify-session-start.mjs`

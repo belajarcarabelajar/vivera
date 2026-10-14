@@ -206,6 +206,110 @@ work and is not a bug.
 
 Revert: none. These commands write nothing to the corpus.
 
+#### 3.4.1 Getting Claude Code sessions to query: hooks, registration, audit
+
+Added 2026-10-14. §3.4 helps only when an agent runs it, and before this change
+nothing made one do so. Claude Code does not load a repository's `AGENTS.md`
+when a `CLAUDE.md` sits in a parent directory (this machine has `~/CLAUDE.md`),
+so the graphify rules in `AGENTS.md` never reached most sessions. **Measured:**
+14 of 161 top-level Claude Code sessions from 2026-10-08 to 2026-10-14 made a
+graph query (counted from tool-use events in `~/.claude/projects/**/*.jsonl`).
+
+Run these from the vivera checkout. From any other directory, use
+`bun <vivera>/scripts/graphify-hooks-install.mjs`, `graphify-register.mjs` or
+`graphify-audit.mjs` with the same arguments. Each takes `--help` (exit 0) and
+ignores a leading `--`.
+
+```text
+bun run graphify:hooks (--install | --uninstall | --check) [--settings <path>] [--hooks-dir <dir>] [--dry-run]
+bun run graphify:register <dir> [--never]
+bun run graphify:audit <root>... [--json] [--max-depth N]
+```
+
+**Hooks (`graphify:hooks`).** Writes three entries into `--settings` (default
+`~/.claude/settings.json`). Each runs `"<path to bun>" "<hooks-dir>/<script>"`
+with `timeout: 10`; `--hooks-dir` defaults to `scripts/hooks` in this checkout.
+
+- `SessionStart`, no matcher, so a `compact` re-injects it:
+  `graphify-session-start.mjs`
+- `SubagentStart`: `graphify-session-start.mjs`
+- `PreToolUse`, matcher `^(Grep|Glob|Read|Bash|mcp__graphify__.*)$`:
+  `graphify-search-nudge.mjs`
+
+An entry is ours when any of its commands contains `/scripts/hooks/graphify-`.
+`--install` removes ours and appends fresh ones, so it is idempotent;
+`--uninstall` removes only ours. Every other key and hook is kept, and each write
+is atomic and copies the previous file to `<settings>.bak`. `--dry-run` prints
+the resulting JSON and writes nothing. Exit codes: `--check` is 0 when all three
+entries and their script files exist, else 1 naming what is missing. A missing
+settings file is created by `--install` and makes `--check` exit 1. A settings
+file that is not valid JSON, or whose `hooks` is not an object, is refused: exit
+1, nothing written. `install.sh` only prints the install command.
+
+**What a session sees.** The hook classifies the working directory with `git`
+and a `stat` of the graph; it never parses `graph.json`. `<mainRoot>` is the
+parent of `git rev-parse --path-format=absolute --git-common-dir`, so a worktree
+resolves the graph its main checkout holds.
+
+| State | Condition | SessionStart | SubagentStart |
+|---|---|---|---|
+| registered | `<mainRoot>/graphify-out/graph.json` exists | the graph path; from a worktree, that the graph describes the main checkout; when the graph's mtime is older than the main checkout's HEAD commit, that `graphify update <mainRoot>` refreshes it offline; then `graphify query "<question>" --graph <graphPath>` (and `path`, `explain`), or the MCP tool `query_graph` with `project_path` set to `<mainRoot>` | same |
+| unregistered | no graph in the main checkout | that there is no graph, so graph queries are unavailable; that `bun <vivera>/scripts/graphify-register.mjs <mainRoot>` builds one offline in about 13 s per 2,000 files, and `--never` stops the offer; that the user asked to be offered registration through the question tool: Register now, Not now, Never for this repository | nothing |
+| opted-out | `git -C <mainRoot> config --get graphify.register` prints `never` | nothing | nothing |
+| not-git | not inside a git work tree, or git failed | nothing | nothing |
+
+Not now records nothing, so the next session in that repository offers again.
+
+**Search reminder.** In a registered repository only: one reminder per session
+and per agent, next to the result of the first search made before any graph
+query. A query is any `mcp__graphify__` tool, or Bash with a `graphify` command
+word followed by `query`, `path` or `explain`. A search is `Grep`, `Glob`, a
+`Read` of a path not ending in `.md` and not under `graphify-out/`, or Bash whose
+first command word is `rg`, `grep`, `fd`, `find` or `ag`. State lives in
+`<stateDir>/<session_id>.<agent_id or main>.json`, where `stateDir` is
+`GRAPHIFY_HOOK_STATE_DIR` or `<os.tmpdir()>/graphify-hooks`. Both hooks exit 0 on
+every path, print nothing on any error, and never print `permissionDecision`, so
+they cannot block a tool call.
+
+**Registration (`graphify:register <dir> [--never]`).** Resolves `<mainRoot>`,
+runs `graphify update <mainRoot>`, appends `graphify-out/` to
+`<git-common-dir>/info/exclude` when `git check-ignore -q graphify-out/` fails,
+then runs `graphify global add <graphPath> --as <basename of mainRoot>`, printing
+one line per step. Run from a worktree, it registers the main checkout; running
+it twice is safe. An opted-out repository is reported and not built. `--never`
+runs `git -C <mainRoot> config graphify.register never` and builds nothing. Exit
+0 done; 1 when `graphify` is missing or a graphify call exits non-zero (the line
+names the step and its exit code); 2 on usage or a non-git `<dir>`.
+
+Registration is offline: `update` is local AST parsing, with no LLM and no
+network (§3.5), so §1's cloud boundary is not crossed. **Measured 2026-10-14**
+on a throwaway copy with networking disabled (`unshare -rn`): `graphify update .`
+built `fasttrack` (2,076 files) from nothing to 8,787 nodes in 12.8 s, exit 0.
+
+**Audit (`graphify:audit <root>... [--json] [--max-depth N]`).** Walks each root
+to depth 4 by default, skipping `node_modules`, `.cache` and any directory whose
+`.git` is a file (counted under worktrees, never as unregistered). Prints path,
+kind, nodes, edges and stale per repository plus a totals line, or JSON with
+`--json`. An unreadable or invalid `graph.json` is reported as registered with
+null counts and a note. Exit 1 while any repository is `unregistered`, else 0;
+2 with no root or a root that does not exist.
+
+UNMEASURED at time of writing: the context text in a live Claude Code session
+(the hook tests pipe JSON into the scripts), and whether query use rises after
+the rollout. One reminder per session and agent is a deliberate floor; it moves
+to a reminder per N searches only if measured query use stays under 25% of
+sessions after the rollout.
+
+Revert:
+
+- Hooks: `bun run graphify:hooks --uninstall` removes only these three entries.
+- Never: `git config --unset graphify.register`, run in that repository (any of
+  its worktrees works; the setting is repository-local).
+- Registration: `graphify global remove <tag>`, where the tag is the main
+  checkout's directory name. The graph itself is `graphify-out/` output (see
+  §7); the `graphify-out/` line in `<git-common-dir>/info/exclude` is removed by
+  hand.
+
 ### 3.5 Update
 
 ```bash
@@ -561,6 +665,9 @@ list:
 | Vault `.gitignore` stale-pattern fix (APPLIED, §4.4) | `cp /tmp/opencode/vault.gitignore.bak <vault>/.gitignore` |
 | Obsidian notes created by `export obsidian` | No built-in revert. It refuses to overwrite existing notes and warns about what it skipped, so only the new notes must go. **List them explicitly and delete by name — never `rm -rf` a vault directory.** |
 | `graphify hook install` | `graphify hook uninstall` |
+| `bun run graphify:hooks --install` (§3.4.1) | `bun run graphify:hooks --uninstall` |
+| `bun run graphify:register <dir> --never` (§3.4.1) | `git config --unset graphify.register`, run in that repository |
+| `bun run graphify:register <dir>` (§3.4.1) | `graphify global remove <tag>` (the main checkout's directory name); remove the `graphify-out/` line it may have added to `<git-common-dir>/info/exclude`; the graph as `extract` output above |
 | `graphify install --platform <p>` / `opencode install` / `codex install` / etc. | The matching `uninstall` subcommand (e.g. `graphify uninstall`, `graphify codex uninstall`) |
 | `.graphifyignore` for **this** repo | Not changed by this runbook. It currently declares no cloud boundary; see §1. |
 

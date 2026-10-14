@@ -1,8 +1,10 @@
 #!/usr/bin/env bun
 // scripts/graphify-register.mjs
 //
-// Builds a repository's graphify graph and adds it to the global graphify
-// registry, or records with --never that the repository opted out.
+// Builds a repository's graphify graph, adds it to the global graphify
+// registry only with --global, or records with --never that the repository
+// opted out. Every graphify MCP server loads the whole global graph at startup,
+// so adding a repository to it is an explicit choice.
 //
 // The graph always lands in the main checkout, so running this from a linked
 // worktree registers the main checkout instead of a throwaway copy. The output
@@ -21,12 +23,15 @@ const STDERR_TAIL_LINES = 20;
 const IGNORE_LINE = 'graphify-out/';
 const UNDO = 'git config --unset graphify.register';
 
-const USAGE = `Usage: bun scripts/graphify-register.mjs <dir> [--never]
+const USAGE = `Usage: bun scripts/graphify-register.mjs <dir> [--global | --never]
 
 Builds the graphify graph for the repository that contains <dir> (its main
-checkout when <dir> is a linked worktree) and adds it to the global registry.
+checkout when <dir> is a linked worktree). The graph is not added to the global
+graph unless --global is given.
 
-  --never   opt the repository out instead (sets graphify.register=never)
+  --global  also add the graph to the global registry (graphify global add)
+  --never   opt the repository out instead (sets graphify.register=never);
+            wins over --global
   --help    show this help
 
 Environment: GRAPHIFY_BIN overrides the graphify executable.
@@ -87,7 +92,7 @@ function ensureExcluded(mainRoot) {
 
 export function register(
   dir,
-  { graphifyBin = process.env.GRAPHIFY_BIN || 'graphify', never = false } = {},
+  { graphifyBin = process.env.GRAPHIFY_BIN || 'graphify', never = false, global = false } = {},
 ) {
   const target = path.resolve(dir);
   const status = graphifyStatus(target);
@@ -101,10 +106,9 @@ export function register(
     if (r.status !== 0) {
       return { exitCode: 1, lines: [`could not set graphify.register=never in ${mainRoot}`, ...tail(r.stderr)] };
     }
-    return {
-      exitCode: 0,
-      lines: [`opted out of graphify: ${mainRoot} (graphify.register=never; undo: ${UNDO})`],
-    };
+    const lines = [`opted out of graphify: ${mainRoot} (graphify.register=never; undo: ${UNDO})`];
+    if (global) lines.push('--global ignored because --never opts the repository out');
+    return { exitCode: 0, lines };
   }
   if (status.kind === 'opted-out') {
     return {
@@ -124,6 +128,13 @@ export function register(
   const excluded = ensureExcluded(mainRoot);
   if (excluded) lines.push(excluded);
 
+  if (!global) {
+    lines.push(
+      `not in the global graph: ${graphPath} (add it with: graphify global add ${graphPath} --as ${name}, or rerun with --global)`,
+    );
+    return { exitCode: 0, lines };
+  }
+
   const addArgs = ['global', 'add', graphPath, '--as', name];
   const addFail = runGraphify(graphifyBin, 'global add', addArgs, ADD_TIMEOUT_MS);
   if (addFail) return { exitCode: 1, lines: [...lines, ...addFail] };
@@ -139,14 +150,15 @@ function main(argv) {
     return 0;
   }
   const never = args.includes('--never');
-  const unknown = args.filter((a) => a.startsWith('-') && a !== '--never');
+  const global = args.includes('--global');
+  const unknown = args.filter((a) => a.startsWith('-') && a !== '--never' && a !== '--global');
   const dirs = args.filter((a) => !a.startsWith('-'));
   if (unknown.length > 0 || dirs.length !== 1) {
     if (unknown.length > 0) console.error(`unknown option: ${unknown.join(' ')}`);
     console.error(USAGE);
     return 2;
   }
-  const { exitCode, lines } = register(dirs[0], { never });
+  const { exitCode, lines } = register(dirs[0], { never, global });
   const out = exitCode === 0 ? console.log : console.error;
   for (const line of lines) out(line);
   return exitCode;

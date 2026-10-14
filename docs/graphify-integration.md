@@ -274,11 +274,15 @@ first command word is `rg`, `grep`, `fd`, `find` or `ag`. State lives in
 every path, print nothing on any error, and never print `permissionDecision`, so
 they cannot block a tool call.
 
-**Registration (`graphify:register <dir> [--never]`).** Resolves `<mainRoot>`,
-runs `graphify update <mainRoot>`, appends `graphify-out/` to
+**Registration (`graphify:register <dir> [--never] [--global]`).** Resolves
+`<mainRoot>`, runs `graphify update <mainRoot>`, and appends `graphify-out/` to
 `<git-common-dir>/info/exclude` when `git check-ignore -q graphify-out/` fails,
-then runs `graphify global add <graphPath> --as <basename of mainRoot>`, printing
-one line per step. Run from a worktree, it registers the main checkout; running
+printing one line per step. Only with `--global` does it then run
+`graphify global add <graphPath> --as <basename of mainRoot>`; without it, it
+prints how to add the graph later. The global graph is opt-in because every
+graphify MCP server loads all of it at startup, measured at 176 MB with 24,617
+nodes and at least 625 MB with 126,291, so it holds only what should answer
+queries that name no repository. Run from a worktree, it registers the main checkout; running
 it twice is safe. An opted-out repository is reported and not built. `--never`
 runs `git -C <mainRoot> config graphify.register never` and builds nothing. Exit
 0 done; 1 when `graphify` is missing or a graphify call exits non-zero (the line
@@ -308,8 +312,8 @@ Revert:
 - Hooks: `bun run graphify:hooks --uninstall` removes only these three entries.
 - Never: `git config --unset graphify.register`, run in that repository (any of
   its worktrees works; the setting is repository-local).
-- Registration: `graphify global remove <tag>`, where the tag is the main
-  checkout's directory name. The graph itself is `graphify-out/` output (see
+- Registration: only when it ran with `--global`, `graphify global remove <tag>`,
+  where the tag is the main checkout's directory name. The graph itself is `graphify-out/` output (see
   §7); the `graphify-out/` line in `<git-common-dir>/info/exclude` is removed by
   hand.
 
@@ -670,7 +674,7 @@ list:
 | `graphify hook install` | `graphify hook uninstall` |
 | `bun run graphify:hooks --install` (§3.4.1) | `bun run graphify:hooks --uninstall` |
 | `bun run graphify:register <dir> --never` (§3.4.1) | `git config --unset graphify.register`, run in that repository |
-| `bun run graphify:register <dir>` (§3.4.1) | `graphify global remove <tag>` (the main checkout's directory name); remove the `graphify-out/` line it may have added to `<git-common-dir>/info/exclude`; the graph as `extract` output above |
+| `bun run graphify:register <dir>` (§3.4.1) | `graphify global remove <tag>` (the main checkout's directory name), only when it ran with `--global`; remove the `graphify-out/` line it may have added to `<git-common-dir>/info/exclude`; the graph as `extract` output above |
 | `graphify install --platform <p>` / `opencode install` / `codex install` / etc. | The matching `uninstall` subcommand (e.g. `graphify uninstall`, `graphify codex uninstall`) |
 | `.graphifyignore` for **this** repo | Not changed by this runbook. It currently declares no cloud boundary; see §1. |
 

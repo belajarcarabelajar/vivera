@@ -1764,14 +1764,14 @@ list the ones still without a graph.
 
 ```text
 bun run graphify:hooks (--install | --uninstall | --check) [--settings <path>] [--hooks-dir <dir>] [--dry-run]
-bun run graphify:register <dir> [--never]
+bun run graphify:register <dir> [--never] [--global]
 bun run graphify:audit <root>... [--json] [--max-depth N]
 ```
 
 | Command | What it does | Exit codes |
 |---|---|---|
 | `graphify:hooks` | Merges the three entries below into `--settings` (default `~/.claude/settings.json`), each running a script in `--hooks-dir` (default `scripts/hooks` in this checkout). An entry is its own when a command contains `/scripts/hooks/graphify-`: `--install` replaces those, so a second run changes nothing, and `--uninstall` removes only those. Every other key and hook is kept, and the previous file is kept at `<settings>.bak`. `--install` creates a missing settings file. `--dry-run` prints the resulting JSON and writes nothing. Run from a linked worktree without `--hooks-dir`, `--install` refuses and names the main checkout to run it from, because a session worktree is removed after its PR merges. | `--check`: 0 when all three entries and their scripts exist, else 1 naming what is missing. A settings file that is not valid JSON, or whose `hooks` is not an object: 1, nothing written. `--install` from a linked worktree without `--hooks-dir`: 1, nothing written. |
-| `graphify:register` | Resolves the main checkout (run from a worktree, it registers the main checkout), runs `graphify update <mainRoot>`, appends `graphify-out/` to `<git-common-dir>/info/exclude` when it is not already ignored, then runs `graphify global add <graphPath> --as <basename of mainRoot>`. Safe to run twice. An opted-out repository is reported and not built. `--never` sets `git config graphify.register never` and builds nothing. | 0 done; 1 when `graphify` is missing or a graphify step exits non-zero (the output names the step and its code); 2 on usage or a directory outside a git repository. |
+| `graphify:register` | Resolves the main checkout (run from a worktree, it registers the main checkout), runs `graphify update <mainRoot>`, appends `graphify-out/` to `<git-common-dir>/info/exclude` when it is not already ignored. Only with `--global` does it then run `graphify global add <graphPath> --as <basename of mainRoot>`; without it, it prints how to add the graph later. The global graph stays opt-in because every graphify MCP server loads all of it at startup (measured at 176 MB with 24,617 nodes and at least 625 MB with 126,291), so it holds only what should answer queries that name no repository. Safe to run twice. An opted-out repository is reported and not built. `--never` sets `git config graphify.register never` and builds nothing. | 0 done; 1 when `graphify` is missing or a graphify step exits non-zero (the output names the step and its code); 2 on usage or a directory outside a git repository. |
 | `graphify:audit` | Walks each root to `--max-depth` (default 4), skipping `node_modules`, `.cache` and worktrees (listed separately, never counted as unregistered), and prints each repository's path, kind, node and edge counts and staleness with a totals line, or JSON with `--json`. | 1 while any repository is `unregistered` (opted-out ones do not count), else 0; 2 with no root or a root that does not exist. |
 
 Registration is offline: `graphify update` parses code locally (AST), with no LLM and no
@@ -1802,7 +1802,7 @@ settings.
 |---|---|
 | Hook entries in `~/.claude/settings.json` | `bun run graphify:hooks --uninstall` |
 | Never for a repository | `git config --unset graphify.register`, run in that repository |
-| A registration | `graphify global remove <tag>`, where the tag is the main checkout's directory name. The local graph stays in `graphify-out/`; delete it, and the `graphify-out/` line in `.git/info/exclude`, to undo the build too. |
+| A registration | Only when it ran with `--global`: `graphify global remove <tag>`, where the tag is the main checkout's directory name. The local graph stays in `graphify-out/`; delete it, and the `graphify-out/` line in `.git/info/exclude`, to undo the build too. |
 
 The runbook section with the measurement details is §3.4.1 of
 [`docs/graphify-integration.md`](docs/graphify-integration.md).

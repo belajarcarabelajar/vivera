@@ -69,6 +69,9 @@ red. If no test would, that is a finding, not a neutral observation.]
 Same 8-point qualification filter as `templates/code-review-template.md` §3.
 Every criterion must hold, or it is not a finding.
 
+The table below is the Standards axis: the diff read against the repository's
+rules and conventions. The Spec Axis follows it.
+
 | id | Priority | Location | Defect and trigger | Confidence | Suggested fix |
 |---|---|---|---|---|---|
 | F1 | `P0`–`P3` | `path:line` | [one paragraph: what breaks, under which input or state] | 0.0–1.0 | [the concrete change] |
@@ -82,6 +85,21 @@ teaches the author to skim.
 a line the PR actually touched, on the correct side. A comment on an unchanged
 line either fails to post or lands as a general remark pretending to be
 specific.
+
+### Spec Axis
+
+Check the diff against the PR's linked issue, its acceptance criteria, or its
+linked plan, whichever exists. A Spec finding uses the same fields and filter
+as the Standards table, and quotes the requirement line it is checked against.
+Take priorities from the Spec Axis table in `templates/code-review-template.md`
+§4; they are not restated here.
+
+| id | Priority | Location | Requirement quoted | Defect and trigger | Confidence | Suggested fix |
+|---|---|---|---|---|---|---|
+| S1 | `P0` to `P2` | `path:line`, or `none` when the requirement is missing | [the line, verbatim, and its source] | [missing, partly built, built wrongly, or scope creep] | 0.0 to 1.0 | [the concrete change] |
+
+With no linked issue, acceptance criteria, or plan, write `no spec available`
+here instead of the table, and carry that into the verdict.
 
 ## 5. Merge Readiness
 
@@ -100,8 +118,14 @@ specific.
 
 One of exactly two, never a hedge.
 
+The Standards axis and the Spec Axis are shown side by side, each in its own
+priority order, and never reranked against each other. The verdict is
+`not correct` when either axis holds any `P0` or `P1`.
+
 - **Verdict:** `correct` | `not correct`
 - **Blocking findings:** [ids, or `none`]
+- **Standards axis:** [ids in priority order, or `none`]
+- **Spec Axis:** [ids in priority order, `none`, or `no spec available`]
 - **Justification:** [one to three sentences: does this break existing code,
   tests, or contracts; are there blocking defects]
 - **Would change to `correct` when:** [the specific, checkable condition. "After

@@ -383,6 +383,7 @@ Every row below is a gate; a question without a row is a clarifying question.
 | Root-cause fix (only where the debugging trigger requires an RCA gate) | `Root cause` | Approve the fix (Recommended), Revise the diagnosis | RCA gate: the fix follows a verified cause with a failing reproduction, not a plausible guess |
 | Debt sweep (Step 6) | `Follow-ups` | Multi-select groups, see `sucp-debt-sweep` | Ranked by leftover risk times blast radius times cheapness to close; the top item of each group is the recommendation |
 | Plan closeout (Step 6) | `Close plan` | Mark Complete (Recommended), Keep it open | The recommended option follows `plan-closeout.mjs --readiness`: Mark Complete only on `READY`; on `NOT-READY` or `NEEDS-HUMAN`, Keep it open comes first and is recommended, naming the open tasks |
+| Graph registration of an unregistered repository | `Register` | Register now (Recommended), Not now, Never for this repository | Registration runs offline (local AST, no LLM, no network, about 13 s per 2,000 files), writes only the repository's `graphify-out/` and `.git/info/exclude` plus the global graph, and is reversible with `graphify global remove <tag>` and `git config --unset graphify.register`; a dismissed question registers nothing |
 
 - `Basis` is the `Why:` line for a recommended gate and the facts to state for a risky gate. The validator fails a missing column or an empty cell, so a gate cannot be added without its reason.
 - A `Hand-off` answer is a claim, not proof: verify the result (for example `gh auth status`) before relying on it.

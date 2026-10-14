@@ -198,6 +198,70 @@ test('an opt-out set in the main checkout applies to its linked worktree', () =>
   expect(graphifyStatus(wt)).toEqual({ kind: 'opted-out', dir: wt, root: wt, mainRoot: main });
 });
 
+// Named like a conventional bare repository: it ends in .git but not in /.git,
+// which is the exact boundary the classifier uses to find a main checkout.
+function bareRepo(tag) {
+  const src = repo(`${tag}-src`);
+  const bare = path.join(tempDir(tag), 'origin.git');
+  git(path.dirname(bare), 'clone', '-q', '--bare', src, bare);
+  return bare;
+}
+
+function bareWorktree(tag) {
+  const bare = bareRepo(tag);
+  const wt = path.join(tempDir(`${tag}-wt`), 'linked');
+  git(bare, 'worktree', 'add', '-q', wt, 'main');
+  return wt;
+}
+
+test('a bare repository directory is not-git because git has no toplevel there', () => {
+  const bare = bareRepo('bare-dir');
+  expect(graphifyStatus(bare)).toEqual({ kind: 'not-git', dir: bare });
+});
+
+test('a worktree of a bare repository without a graph is unregistered under the worktree itself', () => {
+  const wt = bareWorktree('bare-unreg');
+  expect(graphifyStatus(wt)).toEqual({
+    kind: 'unregistered',
+    dir: wt,
+    root: wt,
+    mainRoot: wt,
+    graphPath: path.join(wt, 'graphify-out', 'graph.json'),
+  });
+});
+
+test('a worktree of a bare repository is its own main checkout for a graph it holds', () => {
+  const wt = bareWorktree('bare-reg');
+  const graph = writeGraph(wt, COMMIT_EPOCH_S + 60);
+  expect(graphifyStatus(wt)).toEqual({
+    kind: 'registered',
+    dir: wt,
+    root: wt,
+    mainRoot: wt,
+    graphPath: graph,
+    graphMtimeMs: (COMMIT_EPOCH_S + 60) * 1000,
+    headCommitMs: COMMIT_EPOCH_S * 1000,
+    stale: false,
+    worktree: false,
+  });
+});
+
+test('a separate git dir falls back to its working tree like a bare repository worktree', () => {
+  const work = path.join(tempDir('sep-work'), 'work');
+  const gitDir = path.join(tempDir('sep-gitdir'), 'sep.git');
+  git(path.dirname(work), 'init', '-q', '-b', 'main', '--separate-git-dir', gitDir, work);
+  writeFileSync(path.join(work, 'a.txt'), 'a\n');
+  git(work, 'add', 'a.txt');
+  git(work, 'commit', '-q', '-m', 'init');
+  expect(graphifyStatus(work)).toEqual({
+    kind: 'unregistered',
+    dir: work,
+    root: work,
+    mainRoot: work,
+    graphPath: path.join(work, 'graphify-out', 'graph.json'),
+  });
+});
+
 test('graphPathFor puts the graph under graphify-out in the main checkout', () => {
   expect(graphPathFor('/r/main')).toBe(path.join('/r/main', 'graphify-out', 'graph.json'));
 });

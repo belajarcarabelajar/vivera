@@ -108,7 +108,7 @@ stateDiagram-v2
   - Command: `rtk bun test`
   - Output: Exit 0, all existing tests passed.
 - **Original scenario:** [ ] Phase 0 loop re-run on the unminimised scenario is green.
-- **Debug-tag cleanup:** [ ] `grep -rnF '[DEBUG-' .` returns 0 hits.
+- **Debug-tag cleanup:** [ ] a grep for the session's own tag (`[DEBUG-xxxx]` as recorded above, never the bare prefix) over the files the diff touches returns 0 hits; this log is excluded.
 - **Throwaway harness:** [ ] Moved under `docs/code-plan/spikes/<spike-id>/` or deleted.
 - **Confirmed hypothesis:** [Rank N, one sentence, copied into the commit message or the PR body]
 - **Verdict:** [ ] Bug resolved with 0 regressions.

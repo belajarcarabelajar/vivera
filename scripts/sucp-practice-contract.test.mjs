@@ -160,6 +160,44 @@ const CONTRACT = [
     task: 'T8', gaps: '1', file: 'snippets/orkestrasi-debugging.md',
     present: ['BUILD THE FEEDBACK LOOP FIRST', 'red-capable'],
   },
+  // R1: fixes from the Standards and Spec reviews of the session diff.
+  {
+    task: 'R1', gaps: 'review fixes', file: 'Super Ultra Code Plan Implementation.md',
+    present: ['Output = answer, not product code.'],
+    absent: ['Output = answer, not kept code.'],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'skills/sucp-rules/SKILL.md',
+    present: ['The ceiling wins over the phase boundary', 'consecutive calls within one round', 'the output is an answer, not product code'],
+    absent: ['the output is an answer, not kept code'],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'skills/sucp-brainstorm/SKILL.md',
+    present: ['lists `GLOSSARY.md` under files touched', 'extend that file instead of adding a second one'],
+    absent: ['label built code as throwaway', 'Create `GLOSSARY.md` lazily at the repository root on the first resolved term'],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'skills/sucp-debt-sweep/SKILL.md',
+    present: ["the review's Design Notes"],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'skills/sucp-tdd-debug/SKILL.md',
+    present: ["the session's own tag", 'without a regression test is a TDD exception', "about the agent's own tool use"],
+    absent: ['grep the `[DEBUG-` prefix to zero hits'],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'templates/systematic-debugging-log-template.md',
+    present: ["the session's own tag"],
+    absent: ["`grep -rnF '[DEBUG-' .` returns 0 hits"],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'snippets/orkestrasi-ngoding-plan.md',
+    present: ['feedback loop → reproduce'],
+  },
+  {
+    task: 'R1', gaps: 'review fixes', file: 'docs/diagrams-src/lifecycle.mmd',
+    absent: ['4-Phase RCA Loop'],
+  },
 ];
 
 describe('T0 contract: target files exist', () => {

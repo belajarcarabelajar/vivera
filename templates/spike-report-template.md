@@ -1,6 +1,7 @@
 # Spike Exploration Report: [Topic / Hypothesis]
 
 ## 1. Objective & Timebox
+- **Question this prototype answers:** [The one question this spike must settle, in a single sentence]
 - **Objective:** [What uncertainty or risk is being evaluated?]
 - **Timebox Budget:** [e.g. 30 minutes / 1 hour]
 - **Deliverable:** [Findings report, architecture decision, or proof-of-concept diff]
@@ -42,3 +43,9 @@ flowchart TD
 ## 5. Decision & Next Steps
 - **Recommended Path:** [Chosen approach based on empirical spike evidence]
 - **Transition to Plan:** [Ready for Architectural / Bounded path implementation plan]
+
+## 6. Prototype Location
+- **Path:** `docs/code-plan/spikes/<spike-id>/`, beside this report and linked from it.
+- **Run:** [One command that starts the prototype, e.g. `bun docs/code-plan/spikes/<spike-id>/main.mjs`]
+- **Kept:** The prototype stays as the primary source for this report's evidence. It is exempt from the temp-file purge, so do not delete it when the spike closes.
+- **Liftable logic:** Keep the logic under test in a pure module (no I/O, no global state) so the real implementation can lift it in unchanged.

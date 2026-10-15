@@ -138,6 +138,8 @@ each carries a ceiling and a trigger.
       named the way the code names it.
 - [ ] PR body written to a file and posted with `--body-file`, never `--body`.
 - [ ] Registered in the registry: `bun scripts/pr-registry.mjs pr <session> --number <N>`.
+- [ ] Task steps ticked from evidence: `ultra-plan-runner.mjs --execute` log,
+      then `plan-mark-done.mjs --from` it; readiness shows `open step boxes: 0`.
 - [ ] Plan closeout decided before the merge: `Complete` with the
       `plan-closeout.mjs --readiness` output recorded in the plan, or kept open
       with a `## Closeout status` section naming what remains.

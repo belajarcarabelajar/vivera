@@ -57,7 +57,7 @@
 
 - [ ] [Decision 1: e.g. "Should rate limit apply per IP or per API key? User hasn't specified."]
 - [ ] [Decision 2]
-- [ ] `Close plan` parked: [plan path], readiness verdict [READY / NOT-READY / NEEDS-HUMAN] from `bun scripts/plan-closeout.mjs --readiness`, open items [list], recommended answer [Mark Complete only on READY, else Keep it open]
+- [ ] `Close plan` parked: [plan path], steps ticked from evidence by `bun scripts/plan-mark-done.mjs <plan.md> --from [runner log]` after `bun scripts/ultra-plan-runner.mjs <plan.md> --execute` ([tasks ticked, tasks refused]), readiness verdict [READY / NOT-READY / NEEDS-HUMAN] from `bun scripts/plan-closeout.mjs --readiness`, open items [list], recommended answer [Mark Complete only on READY, else Keep it open]
 
 ## Blockers
 

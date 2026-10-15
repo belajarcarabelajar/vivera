@@ -12,7 +12,12 @@ import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
 import { tickSteps } from './plan-mark-done.mjs';
 
-const { closeoutGaps, checkCloseout: checkCloseoutRaw } = closeout;
+const { closeoutGaps } = closeout;
+
+// The default store is the machine's real one, so every test points at the
+// plan.issues.json inside its own temp repo unless it names another path.
+const checkCloseoutRaw = (opts) =>
+  closeout.checkCloseout({ configPath: path.join(opts.repoRoot, 'plan.issues.json'), ...opts });
 
 // The mirror check reads the machine's publish config by default, so the issue
 // tests stub it as fresh and only the mirror tests below choose a verdict.
@@ -215,6 +220,18 @@ test('checkCloseout: configPath override is honored', () => {
   writeFileSync(alt, JSON.stringify(cfgWith(null)));
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
   assert.deepEqual(r, { skipped: 'plan has no issue record, nothing to close', gaps: [] });
+});
+
+test('checkCloseout: a record filed for another repository is a gap, not a pass', () => {
+  const root = repo({ planText: plan('Complete') });
+  mkdirSync(path.join(root, '.git'));
+  writeFileSync(path.join(root, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/me/this-repo.git\n');
+  const alt = path.join(root, 'store.json');
+  writeFileSync(alt, JSON.stringify(cfgWith({ ...closedEntry, repo: 'other/repo' }, { other: 'other/repo' })));
+  const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
+  assert.deepEqual(codes(r.gaps), ['ISSUE_OTHER_REPO']);
+  assert.ok(r.gaps[0].message.includes('other/repo'), r.gaps[0].message);
+  assert.ok(r.gaps[0].message.includes('me/this-repo'), r.gaps[0].message);
 });
 
 test('mirror: a fresh mirror adds no gap and no skipped note', () => {

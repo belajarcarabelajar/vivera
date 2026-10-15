@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey } from './plan-issue-sync.mjs';
+import { planStatus, loadConfig, issueKey, ISSUES_STORE, originRepo } from './plan-issue-sync.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
@@ -70,7 +70,7 @@ export function closeoutGaps({ status: rawStatus, entry: rawEntry, planPath, pro
 export function checkCloseout({
   repoRoot,
   planSlug,
-  configPath = path.join(repoRoot, 'plan.issues.json'),
+  configPath = ISSUES_STORE,
   publishConfig,
   freshness = planFreshness,
 }) {
@@ -86,6 +86,7 @@ export function checkCloseout({
   let entry = null;
   let project = null;
   let configError = null;
+  let foreign = null;
 
   if (!existsSync(configPath)) {
     skipped.push(`plan.issues.json not found at ${configPath}, issue not checked`);
@@ -94,7 +95,17 @@ export function checkCloseout({
       const cfg = loadConfig(configPath);
       // defer: local record only, upgrade when a closed-by-hand reopen is observed after a merge
       entry = cfg.issues?.[planPath] ?? null;
-      if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
+      // The key carries no repository, so a same-named plan elsewhere can own this record.
+      const origin = entry?.repo ? originRepo(repoRoot) : null;
+      if (origin && origin !== entry.repo) {
+        const own = Object.keys(cfg.projects).find((k) => cfg.projects[k] === origin) ?? '<project>';
+        foreign = {
+          code: 'ISSUE_OTHER_REPO',
+          message: `${planPath} is recorded for ${entry.repo}, but this repository is ${origin}; the record belongs to another repository`,
+          fix: `rename ${planPath} so its key is unique, or record it for ${origin} with: bun scripts/plan-issue-sync.mjs --project ${own} ${planPath}`,
+        };
+        entry = null;
+      } else if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
       else skipped.push('plan has no issue record, nothing to close');
     } catch (e) {
       configError = e.message;
@@ -102,6 +113,7 @@ export function checkCloseout({
   }
 
   const gaps = closeoutGaps({ status, entry, planPath, project });
+  if (foreign) gaps.push(foreign);
   // A corrupt file must fail the gate; skipping here would let it pass silently.
   if (configError) gaps.push({ code: 'CONFIG_UNREADABLE', message: configError, fix: `repair ${configPath}` });
 

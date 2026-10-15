@@ -37,7 +37,7 @@
 // statement, and it costs one call per recorded plan. An unrecorded plan costs a
 // `gh issue list` before its create instead (see findExistingIssue).
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -493,6 +493,60 @@ export function applyAction(action, run) {  switch (action.kind) {
   }
 }
 
+// ---------- origin remote ----------
+
+// Owner and repo use the same character set loadConfig accepts for a project value.
+const GITHUB_URL = /^(?:https?:\/\/(?:[^@/\s]+@)?github\.com\/|ssh:\/\/(?:[^@/\s]+@)?github\.com(?::\d+)?\/|git@github\.com:)([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i;
+
+export function parseGithubRepo(url) {
+  if (typeof url !== 'string') return null;
+  const m = url.trim().match(GITHUB_URL);
+  return m ? `${m[1]}/${m[2]}` : null;
+}
+
+// Only the [remote "origin"] section counts: another remote listed earlier in
+// the file (an upstream, a fork) must not decide where a plan is filed.
+function originUrlOf(configText) {
+  let inOrigin = false;
+  for (const raw of configText.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line.startsWith('[')) {
+      inOrigin = /^\[\s*remote\s+"origin"\s*\]/.test(line);
+      continue;
+    }
+    if (!inOrigin) continue;
+    const m = line.match(/^url\s*=\s*(.*)$/i);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+// Read from the files git itself writes rather than `git remote get-url`, for
+// the same reason projectRootFor avoids `git rev-parse`. A worktree's .git is a
+// file pointing at its gitdir, and that gitdir keeps no config of its own: the
+// config lives in the common dir named by `commondir`.
+export function originRepo(repoRoot) {
+  try {
+    const root = path.resolve(repoRoot);
+    const dotGit = path.join(root, '.git');
+    let configPath;
+    if (statSync(dotGit).isDirectory()) {
+      configPath = path.join(dotGit, 'config');
+    } else {
+      const m = readFileSync(dotGit, 'utf8').trim().match(/^gitdir:\s*(.+)$/);
+      if (!m) return null;
+      const gitdir = path.resolve(root, m[1].trim());
+      const commondir = path.join(gitdir, 'commondir');
+      configPath = existsSync(commondir)
+        ? path.join(path.resolve(gitdir, readFileSync(commondir, 'utf8').trim()), 'config')
+        : path.join(gitdir, 'config');
+    }
+    return parseGithubRepo(originUrlOf(readFileSync(configPath, 'utf8')));
+  } catch {
+    return null;
+  }
+}
+
 // ---------- per-plan sync ----------
 
 export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
@@ -504,18 +558,39 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   // directory is named after the branch, not after the project it belongs to.
   // A <root>-wt/<slot> session worktree is the <root> project; a slot name that
   // was already mapped by hand keeps working when <root> itself is not mapped.
+  // Without an explicit name, an origin remote that names a configured repository
+  // fills in for an unmapped directory, and a disagreement with the name is refused.
   const dir = path.resolve(repoRoot || rootDir);
-  const own = path.basename(dir);
-  const sessionRoot = sessionWorktreeRoot(dir);
-  const fromSession = sessionRoot ? path.basename(sessionRoot) : null;
-  const project = projectOverride
-    ?? (fromSession && (cfg.projects[fromSession] || !cfg.projects[own]) ? fromSession : own);
-  const repo = cfg.projects[project];
+  let project = projectOverride;
+  let repo = null;
+  let originNote = '';
+  if (project != null) {
+    repo = cfg.projects[project];
+  } else {
+    const own = path.basename(dir);
+    const sessionRoot = sessionWorktreeRoot(dir);
+    const fromSession = sessionRoot ? path.basename(sessionRoot) : null;
+    project = fromSession && (cfg.projects[fromSession] || !cfg.projects[own]) ? fromSession : own;
+    const nameRepo = cfg.projects[project] || null;
+    const origin = originRepo(dir);
+    const configuredOrigin = origin && Object.values(cfg.projects).includes(origin) ? origin : null;
+    if (nameRepo && configuredOrigin && nameRepo !== configuredOrigin) {
+      throw new Error(
+        `project "${project}" maps to ${nameRepo}, but the origin remote of ${dir} is ${configuredOrigin}, which is also configured. `
+        + 'Pass --project <name> to choose. A plan is not filed under a guessed repository.',
+      );
+    }
+    repo = nameRepo ?? configuredOrigin;
+    originNote = origin
+      ? ` The origin remote is ${origin}, which no project maps to.`
+      : ' No GitHub origin remote was found.';
+  }
   if (!repo) {
     throw new Error(
       `no GitHub repository is configured for project "${project}". `
       + `Add "projects": {"${project}": "owner/repo"} to ${DEFAULT_CONFIG}. `
-      + 'A plan is not filed under a guessed repository, because a plan published to the wrong repository is worse than one that is not published.',
+      + 'A plan is not filed under a guessed repository, because a plan published to the wrong repository is worse than one that is not published.'
+      + originNote,
     );
   }
 
@@ -598,7 +673,7 @@ const USAGE = `usage:
   bun scripts/plan-issue-sync.mjs <plan.md>...          create or sync the issue
   bun scripts/plan-issue-sync.mjs --check <plan.md>...  report only, never writes
   bun scripts/plan-issue-sync.mjs --status              table of every entry, always exit 0
-  bun scripts/plan-issue-sync.mjs --project <name>      the project whose repo is used (default: repo dir name, or <root> inside <root>-wt/<slot>)
+  bun scripts/plan-issue-sync.mjs --project <name>      the project whose repo is used (default: repo dir name, or <root> inside <root>-wt/<slot>, or the configured repository its origin remote names)
 
   --repo-root <path>   repository root the key is computed relative to
   --config <path>      config file (default plan.issues.json)

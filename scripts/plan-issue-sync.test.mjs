@@ -1383,3 +1383,64 @@ test('Complete plan without an issue: a non-Complete plan still creates open', (
     f.cleanup();
   }
 });
+
+function foreignCfg(repoRoot, entryRepo) {
+  return cfgFor(repoRoot, {
+    issues: {
+      [PLAN_REL]: {
+        number: 41,
+        url: `https://github.com/${entryRepo}/issues/41`,
+        hash: 'deadbeef',
+        state: 'open',
+        status: 'Draft',
+        repo: entryRepo,
+      },
+    },
+  });
+}
+const foreignRefusal = (e) => e.message.includes('other/repo') && e.message.includes('u/snippet');
+
+test('foreign record: an entry filed for another repository is refused before any gh call', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    assert.throws(() => syncOne(foreignCfg(f.repoRoot, 'other/repo'), { planPath: f.full, repoRoot: f.repoRoot, run }), foreignRefusal);
+    assert.equal(run.calls.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: a dry run refuses the same way before any gh call', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    assert.throws(() => syncOne(foreignCfg(f.repoRoot, 'other/repo'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true }), foreignRefusal);
+    assert.equal(run.calls.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: the refused config is left exactly as it was', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const cfg = foreignCfg(f.repoRoot, 'other/repo');
+    const before = structuredClone(cfg);
+    assert.throws(() => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run: ghAnswers() }));
+    assert.deepEqual(cfg, before);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: an entry filed for this repository is still read by number', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    syncOne(foreignCfg(f.repoRoot, 'u/snippet'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true });
+    assert.equal(run.calls[0].args.join(' '), 'issue view 41 --repo u/snippet --json state');
+  } finally {
+    f.cleanup();
+  }
+});

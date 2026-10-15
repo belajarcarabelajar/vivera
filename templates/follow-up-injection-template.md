@@ -83,7 +83,7 @@ Mandatory after the follow-ups are executed or declined, including `Nothing, clo
 | Tick command | `bun scripts/ultra-plan-runner.mjs <plan.md> --execute > runner.log`, then `bun scripts/plan-mark-done.mjs <plan.md> --from runner.log` |
 | Readiness command | `bun scripts/plan-closeout.mjs --readiness <plan.md>` |
 | Verdict and exit code | `READY` 0 / `NOT-READY` 1 / `NEEDS-HUMAN` 3 |
-| Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, each open `NOW` backlog row, and each open step box (`open step boxes: N`) |
+| Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, each open `NOW` backlog row, each open task step box (`open step boxes: N`), and each other open box (`other open boxes: M`) |
 | Question asked | `Close plan`: Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise) |
 | Answer | `Mark Complete` / `Keep it open` / dismissed / parked in the handoff (unattended run) |
 | Evidence | Readiness output recorded in the plan; `plan-publish.mjs` and `plan-issue-sync.mjs` exit codes when completed |

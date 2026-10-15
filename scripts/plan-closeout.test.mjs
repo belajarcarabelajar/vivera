@@ -33,9 +33,13 @@ afterEach(() => {
   while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true });
 });
 
-function repo({ planText, config } = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-'));
-  dirs.push(root);
+// The repository is resolved from the directory name the way plan-issue-sync
+// resolves it, so the default name is the project cfgWith maps.
+function repo({ planText, config, name = 'vivera' } = {}) {
+  const base = mkdtempSync(path.join(tmpdir(), 'plan-closeout-'));
+  dirs.push(base);
+  const root = path.join(base, name);
+  mkdirSync(root);
   if (planText !== undefined) {
     mkdirSync(path.join(root, 'docs/code-plan/plans'), { recursive: true });
     writeFileSync(path.join(root, PLAN), planText);
@@ -202,15 +206,16 @@ test('checkCloseout: unreadable config does not hide the plan gap', () => {
   assert.deepEqual(codes(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps), ['PLAN_NOT_COMPLETE', 'CONFIG_UNREADABLE']);
 });
 
-test('checkCloseout: project key is looked up by entry.repo, with a placeholder fallback', () => {
+test('checkCloseout: an unresolved repository looks the project key up by entry.repo, with a placeholder fallback', () => {
   const entry = { ...closedEntry, state: 'open', status: 'Complete', repo: 'o/other' };
   const root = repo({
+    name: 'unmapped',
     planText: plan('Complete'),
     config: cfgWith(entry, { vivera: 'o/r', other: 'o/other' }),
   });
   assert.ok(checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps[0].fix.includes('--project other'));
 
-  const orphan = repo({ planText: plan('Complete'), config: cfgWith({ ...entry, repo: 'x/unknown' }) });
+  const orphan = repo({ name: 'unmapped', planText: plan('Complete'), config: cfgWith({ ...entry, repo: 'x/unknown' }) });
   assert.ok(checkCloseout({ repoRoot: orphan, planSlug: 'demo' }).gaps[0].fix.includes('--project <project>'));
 });
 
@@ -227,11 +232,38 @@ test('checkCloseout: a record filed for another repository is a gap, not a pass'
   mkdirSync(path.join(root, '.git'));
   writeFileSync(path.join(root, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/me/this-repo.git\n');
   const alt = path.join(root, 'store.json');
-  writeFileSync(alt, JSON.stringify(cfgWith({ ...closedEntry, repo: 'other/repo' }, { other: 'other/repo' })));
+  writeFileSync(alt, JSON.stringify(cfgWith({ ...closedEntry, repo: 'other/repo' }, { other: 'other/repo', mine: 'me/this-repo' })));
   const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
   assert.deepEqual(codes(r.gaps), ['ISSUE_OTHER_REPO']);
   assert.ok(r.gaps[0].message.includes('other/repo'), r.gaps[0].message);
   assert.ok(r.gaps[0].message.includes('me/this-repo'), r.gaps[0].message);
+  // syncOne refuses the colliding key under any --project, so only a rename helps.
+  assert.ok(r.gaps[0].fix.includes('rename'), r.gaps[0].fix);
+  assert.ok(!r.gaps[0].fix.includes('--project'), r.gaps[0].fix);
+});
+
+const withOrigin = (root, url) => {
+  mkdirSync(path.join(root, '.git'));
+  writeFileSync(path.join(root, '.git', 'config'), `[remote "origin"]\n\turl = ${url}\n`);
+};
+
+test('checkCloseout: a fork whose origin is not configured resolves by directory name and passes', () => {
+  const root = repo({ planText: plan('Complete') });
+  withOrigin(root, 'https://github.com/fork/a.git');
+  writeFileSync(path.join(root, 'plan.issues.json'), JSON.stringify(cfgWith({ ...closedEntry, repo: 'u/a' }, { [path.basename(root)]: 'u/a' })));
+  assert.deepEqual(checkCloseout({ repoRoot: root, planSlug: 'demo' }), { skipped: null, gaps: [] });
+});
+
+test('checkCloseout: an ambiguous repository skips the foreign-record check instead of guessing', () => {
+  const root = repo({ planText: plan('Complete') });
+  withOrigin(root, 'https://github.com/u/b.git');
+  writeFileSync(
+    path.join(root, 'plan.issues.json'),
+    JSON.stringify(cfgWith({ ...closedEntry, repo: 'u/a' }, { [path.basename(root)]: 'u/a', other: 'u/b' })),
+  );
+  const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
+  assert.ok(!codes(r.gaps).includes('ISSUE_OTHER_REPO'), JSON.stringify(r));
+  assert.match(r.skipped ?? '', /not resolved/);
 });
 
 test('mirror: a fresh mirror adds no gap and no skipped note', () => {

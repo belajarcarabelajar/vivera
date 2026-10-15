@@ -12,12 +12,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkCloseout } from './plan-closeout.mjs';
 import { syncOne } from './plan-issue-sync.mjs';
 
-// The store plan-issue-sync writes: the checkout root next to scripts/.
-const SYNC_STORE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'plan.issues.json');
+const CLOSEOUT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
 const PLAN_REL = 'docs/code-plan/plans/2026-10-15-shared-name.md';
 
 function fakeRepo(status) {
@@ -29,17 +28,30 @@ function fakeRepo(status) {
   return { root, full, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 
+// The default store is resolved when the module loads, so a child process with
+// its own PLAN_ISSUES_CONFIG is the only way to exercise the default without
+// reading the machine's real store.
 test('B1: the merged gate reads the record from the store the sync writes', () => {
   const r = fakeRepo('Complete');
+  const storeDir = mkdtempSync(path.join(tmpdir(), 'issue-scope-store-'));
+  const store = path.join(storeDir, 'store.json');
   try {
-    const out = checkCloseout({ repoRoot: r.root, planSlug: '2026-10-15-shared-name', freshness: () => ({ state: 'OK' }) });
-    const text = JSON.stringify(out);
+    const script = `const { checkCloseout } = await import(${JSON.stringify(CLOSEOUT)});
+console.log(JSON.stringify(checkCloseout({ repoRoot: ${JSON.stringify(r.root)}, planSlug: '2026-10-15-shared-name', freshness: () => ({ state: 'OK' }) })));`;
+    const child = spawnSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      env: { ...process.env, PLAN_ISSUES_CONFIG: store },
+    });
+    assert.equal(child.status, 0, child.stderr);
+    const out = JSON.parse(child.stdout.trim().split('\n').pop());
+    assert.equal(out.skipped, `plan.issues.json not found at ${store}, issue not checked`);
     assert.ok(
-      !text.includes(path.join(r.root, 'plan.issues.json')),
-      `checkCloseout looked for the record in the session repository instead of ${path.resolve(SYNC_STORE)}: ${text}`,
+      !child.stdout.includes(path.join(r.root, 'plan.issues.json')),
+      `checkCloseout looked for the record in the session repository instead of ${store}: ${child.stdout}`,
     );
   } finally {
     r.cleanup();
+    rmSync(storeDir, { recursive: true, force: true });
   }
 });
 

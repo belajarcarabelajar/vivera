@@ -637,7 +637,7 @@ function closeoutOnPlan(planText) {
     writeFileSync(path.join(root, 'docs/code-plan/plans/my-plan.md'), planText);
     return closeoutVerdict(SESSION, {
       repoRoot: root,
-      check: (args) => checkCloseout({ ...args, freshness: () => ({ state: 'OK' }) }),
+      check: (args) => checkCloseout({ ...args, configPath: path.join(root, 'plan.issues.json'), freshness: () => ({ state: 'OK' }) }),
     });
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -708,8 +708,16 @@ test('parseFlags stores --allow-open-plan as true without consuming a value, any
 
 const SCRIPT = path.join(path.dirname(new URL(import.meta.url).pathname), 'pr-registry.mjs');
 
+// The merged gate reads the issue store; point it at a path that never exists
+// so these tests never read the machine's real plan.issues.json.
+const NO_STORE = path.join(tmpdir(), 'pr-registry-no-issue-store', 'plan.issues.json');
+
 function runCli(...args) {
-  const r = Bun.spawnSync(['bun', SCRIPT, ...args], { stdout: 'pipe', stderr: 'pipe' });
+  const r = Bun.spawnSync(['bun', SCRIPT, ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, PLAN_ISSUES_CONFIG: NO_STORE },
+  });
   return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
 }
 

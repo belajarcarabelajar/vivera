@@ -727,6 +727,29 @@ test('origin: a directory name and an origin remote that name different reposito
   }
 });
 
+test('resolveProjectRepo: a configured origin remote fills in for an unmapped directory', () => {
+  const f = originCheckout('scratch-gate', 'git@github.com:u/snippet.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    assert.deepEqual(syncModule.resolveProjectRepo(cfg, f.repoRoot), { project: 'scratch-gate', repo: 'u/snippet' });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('resolveProjectRepo: a directory name and a configured origin naming different repositories throw', () => {
+  const f = originCheckout('Snipset', 'https://github.com/u/b.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/a', Other: 'u/b' }, issues: {} };
+    assert.throws(
+      () => syncModule.resolveProjectRepo(cfg, f.repoRoot),
+      (e) => e instanceof Error && e.message.startsWith('project "Snipset" maps to u/a') && e.message.includes('Pass --project <name> to choose'),
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('origin: an origin remote that no project maps to is refused, naming the origin', () => {
   const f = originCheckout('scratch-gate', 'git@github.com:u/stray.git');
   try {

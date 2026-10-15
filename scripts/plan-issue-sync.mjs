@@ -555,17 +555,13 @@ export function originRepo(repoRoot) {
 
 // ---------- per-plan sync ----------
 
-export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
-  const full = path.resolve(planPath);
-  if (!existsSync(full)) throw new Error(`plan file not found: ${full}`);
-  const planText = readFileSync(full, 'utf8');
-
-  // An explicit project name wins over the directory name, because a worktree
-  // directory is named after the branch, not after the project it belongs to.
-  // A <root>-wt/<slot> session worktree is the <root> project; a slot name that
-  // was already mapped by hand keeps working when <root> itself is not mapped.
-  // Without an explicit name, an origin remote that names a configured repository
-  // fills in for an unmapped directory, and a disagreement with the name is refused.
+// An explicit project name wins over the directory name, because a worktree
+// directory is named after the branch, not after the project it belongs to.
+// A <root>-wt/<slot> session worktree is the <root> project; a slot name that
+// was already mapped by hand keeps working when <root> itself is not mapped.
+// Without an explicit name, an origin remote that names a configured repository
+// fills in for an unmapped directory, and a disagreement with the name is refused.
+export function resolveProjectRepo(cfg, repoRoot, projectOverride = null) {
   const dir = path.resolve(repoRoot || rootDir);
   let project = projectOverride;
   let repo = null;
@@ -599,6 +595,15 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
       + originNote,
     );
   }
+  return { project, repo };
+}
+
+export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
+  const full = path.resolve(planPath);
+  if (!existsSync(full)) throw new Error(`plan file not found: ${full}`);
+  const planText = readFileSync(full, 'utf8');
+
+  const { project, repo } = resolveProjectRepo(cfg, repoRoot, projectOverride);
 
   const key = issueKey(repoRoot || rootDir, full);
   const id = planId(planText, full);

@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey, ISSUES_STORE, originRepo } from './plan-issue-sync.mjs';
+import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo } from './plan-issue-sync.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
@@ -96,16 +96,26 @@ export function checkCloseout({
       // defer: local record only, upgrade when a closed-by-hand reopen is observed after a merge
       entry = cfg.issues?.[planPath] ?? null;
       // The key carries no repository, so a same-named plan elsewhere can own this record.
-      const origin = entry?.repo ? originRepo(repoRoot) : null;
-      if (origin && origin !== entry.repo) {
-        const own = Object.keys(cfg.projects).find((k) => cfg.projects[k] === origin) ?? '<project>';
+      // The repository is decided exactly as syncOne decides it, so the gate never
+      // flags a record the sync itself would accept.
+      let own = null;
+      if (entry?.repo) {
+        try {
+          own = resolveProjectRepo(cfg, repoRoot);
+        } catch (e) {
+          skipped.push(`repository of ${repoRoot} not resolved (${e.message.split(/\.\s/)[0]}), foreign-record check not run`);
+        }
+      }
+      if (own && own.repo !== entry.repo) {
         foreign = {
           code: 'ISSUE_OTHER_REPO',
-          message: `${planPath} is recorded for ${entry.repo}, but this repository is ${origin}; the record belongs to another repository`,
-          fix: `rename ${planPath} so its key is unique, or record it for ${origin} with: bun scripts/plan-issue-sync.mjs --project ${own} ${planPath}`,
+          message: `${planPath} is recorded for ${entry.repo}, but this repository is ${own.repo}; the record belongs to another repository`,
+          // syncOne refuses this key under any --project while the foreign record holds it.
+          fix: `rename ${planPath} so its key no longer matches the record of ${entry.repo}, then sync the renamed plan`,
         };
         entry = null;
-      } else if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
+      } else if (own) project = own.project;
+      else if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
       else skipped.push('plan has no issue record, nothing to close');
     } catch (e) {
       configError = e.message;

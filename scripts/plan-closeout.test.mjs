@@ -242,6 +242,16 @@ test('checkCloseout: a record filed for another repository is a gap, not a pass'
   assert.ok(!r.gaps[0].fix.includes('--project'), r.gaps[0].fix);
 });
 
+test('checkCloseout: a record differing only in case from this repository is not foreign', () => {
+  const root = repo({ planText: plan('Complete') });
+  mkdirSync(path.join(root, '.git'));
+  writeFileSync(path.join(root, '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/me/this-repo.git\n');
+  const alt = path.join(root, 'store.json');
+  writeFileSync(alt, JSON.stringify(cfgWith({ ...closedEntry, repo: 'Me/This-Repo' }, { mine: 'me/this-repo' })));
+  const r = checkCloseout({ repoRoot: root, planSlug: 'demo', configPath: alt });
+  assert.ok(!codes(r.gaps).includes('ISSUE_OTHER_REPO'), JSON.stringify(r));
+});
+
 const withOrigin = (root, url) => {
   mkdirSync(path.join(root, '.git'));
   writeFileSync(path.join(root, '.git', 'config'), `[remote "origin"]\n\turl = ${url}\n`);

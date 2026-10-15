@@ -1468,6 +1468,17 @@ test('foreign record: an entry filed for this repository is still read by number
   }
 });
 
+test('foreign record: case alone does not make a record foreign, so it is read by number', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    syncOne(foreignCfg(f.repoRoot, 'U/Snippet'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true });
+    assert.equal(run.calls[0].args.join(' '), 'issue view 41 --repo u/snippet --json state');
+  } finally {
+    f.cleanup();
+  }
+});
+
 // Tests and other tools must be able to point the one store elsewhere; a test
 // that reads the machine's real store passes or fails on whatever it holds today.
 test('ISSUES_STORE: PLAN_ISSUES_CONFIG overrides the store path', () => {

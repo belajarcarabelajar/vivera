@@ -598,6 +598,12 @@ export function resolveProjectRepo(cfg, repoRoot, projectOverride = null) {
   return { project, repo };
 }
 
+// GitHub owner and repository names are case-insensitive.
+export function sameRepo(a, b) {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
 export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
   const full = path.resolve(planPath);
   if (!existsSync(full)) throw new Error(`plan file not found: ${full}`);
@@ -616,7 +622,7 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   // The key holds no repository, so one store can return another repository's
   // record here; syncing it would edit or close the issue with that number in
   // this repository, an unrelated one, and overwrite the other record.
-  if (entry && entry.repo && entry.repo !== repo) {
+  if (entry && entry.repo && !sameRepo(entry.repo, repo)) {
     throw new Error(
       `${key}: the recorded issue #${entry.number ?? '?'} belongs to ${entry.repo}, not ${repo}, so this plan is not synced against it. `
       + `Fix: rename the plan file, or sync it with --project <name> of the repository it belongs to (${entry.repo}). Nothing was read and nothing was written.`,

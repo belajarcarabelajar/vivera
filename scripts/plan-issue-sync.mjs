@@ -47,6 +47,9 @@ import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const DEFAULT_CONFIG = path.join(rootDir, 'plan.issues.json');
+// The one store every repository's records are written to. Readers (the
+// merged gate) import this instead of guessing a per-repository file.
+export const ISSUES_STORE = DEFAULT_CONFIG;
 
 // A registry entry with no `repo` is a planning-only plan: a Spike, or a Bounded
 // task too small for a file. Those are deliberately not issues, and refusing to
@@ -602,6 +605,15 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   }
 
   let entry = cfg.issues[key] ?? null;
+  // The key holds no repository, so one store can return another repository's
+  // record here; syncing it would edit or close the issue with that number in
+  // this repository, an unrelated one, and overwrite the other record.
+  if (entry && entry.repo && entry.repo !== repo) {
+    throw new Error(
+      `${key}: the recorded issue #${entry.number ?? '?'} belongs to ${entry.repo}, not ${repo}, so this plan is not synced against it. `
+      + `Fix: rename the plan file, or sync it with --project <name> of the repository it belongs to (${entry.repo}). Nothing was read and nothing was written.`,
+    );
+  }
   // Read GitHub BEFORE deciding. A dry run reads too, because `--check` is
   // exactly the question "does the sidecar still describe the issue", and that can
   // only be answered against the issue. An unreadable state throws here, the same

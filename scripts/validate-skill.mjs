@@ -7,6 +7,8 @@ import { execSync } from 'child_process';
 import { checkRunnerContract } from './check-runner-contract.mjs';
 import { TIERS, checkPrereqs, hasTool, loadTierTable } from './lib/prereq.mjs';
 import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
+// Safe to import: plan-issue-sync runs its CLI only when it is argv[1] itself.
+import { ISSUES_STORE } from './plan-issue-sync.mjs';
 import {
   SUBAGENT_CONTRACT_TERMS as subagentContractTerms,
   SNIPPET_CONTRACTS as snippetContracts,
@@ -618,33 +620,37 @@ for (const snip of requiredSnippets) {
   // The config is a real file, not a default. A plan filed under a guessed
   // repository is worse than one that is not filed, so the mapping from project
   // to owner/repo has to be checked in rather than assumed at runtime.
-  const issuesConfigPath = path.join(rootDir, 'plan.issues.json');
+  // ISSUES_STORE is the file the sync CLI and the merged gate read, so a
+  // PLAN_ISSUES_CONFIG override is validated here too, not a different file.
+  const issuesConfigPath = ISSUES_STORE;
+  const issuesRel = path.relative(rootDir, issuesConfigPath);
+  const issuesLabel = issuesRel.startsWith('..') || path.isAbsolute(issuesRel) ? issuesConfigPath : issuesRel;
   if (!fs.existsSync(issuesConfigPath)) {
     skip(
-      'plan.issues.json (the project to owner/repo mapping) is absent, so its JSON was NOT parsed and the project-to-repository mapping was NOT validated',
-      'It is gitignored machine-local state (.gitignore:63), so no clone or worktree has it. The publisher and the issue sync cannot resolve a vault or a repository until it is created; this run says nothing about either.',
+      `${issuesLabel} (the plan.issues.json project to owner/repo mapping, overridable with PLAN_ISSUES_CONFIG) is absent, so its JSON was NOT parsed and the project-to-repository mapping was NOT validated`,
+      'The default plan.issues.json is gitignored machine-local state (.gitignore:63), so no clone or worktree has it. The publisher and the issue sync cannot resolve a vault or a repository until it is created; this run says nothing about either.',
     );
   } else {
     try {
       const parsed = JSON.parse(fs.readFileSync(issuesConfigPath, 'utf8'));
       const projects = parsed.projects ?? {};
       if (parsed.version !== 1) {
-        console.error(`❌ plan.issues.json has unsupported version ${JSON.stringify(parsed.version)}; this repository writes version 1.`);
+        console.error(`❌ ${issuesLabel} has unsupported version ${JSON.stringify(parsed.version)}; this repository writes version 1.`);
         errors++;
       } else if (Object.keys(projects).length === 0) {
-        console.error('❌ plan.issues.json declares no projects, so every plan sync would be refused. Add at least {"projects": {"<project>": "owner/repo"}}.');
+        console.error(`❌ ${issuesLabel} declares no projects, so every plan sync would be refused. Add at least {"projects": {"<project>": "owner/repo"}}.`);
         errors++;
       } else {
         const bad = Object.entries(projects).filter(([, v]) => !/^[\w.-]+\/[\w.-]+$/.test(String(v)));
         if (bad.length) {
-          console.error(`❌ plan.issues.json projects entries must be "owner/repo": ${bad.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}`);
+          console.error(`❌ ${issuesLabel} projects entries must be "owner/repo": ${bad.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}`);
           errors++;
         } else {
           console.log(`✅ Plan-issue registry valid: ${Object.keys(projects).length} project(s) mapped to a repository.`);
         }
       }
     } catch (e) {
-      console.error(`❌ plan.issues.json is not valid JSON: ${e.message}`);
+      console.error(`❌ ${issuesLabel} is not valid JSON: ${e.message}`);
       errors++;
     }
   }

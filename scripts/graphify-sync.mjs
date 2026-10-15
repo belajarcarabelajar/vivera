@@ -238,7 +238,7 @@ function isGraphifyDatedBackup(dir) {
 /**
  * Remove every graphify `YYYY-MM-DD` backup directory in `outDir` except the
  * newest. graphify writes one such folder per day before overwriting a curated
- * graph and never prunes them. Only folders holding nothing but graphify's own
+ * or semantic graph and never prunes them. Only folders holding nothing but graphify's own
  * backup files are touched, so a hand-made folder or a future graphify artifact
  * makes a folder be skipped, never deleted. The newest stays as graphify's
  * restore source.

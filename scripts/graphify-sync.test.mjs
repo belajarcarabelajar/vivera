@@ -274,7 +274,7 @@ describe('pruneGraphifyDatedBackups', () => {
         '2026-10-20/graph.json': '{"day":20}',
         '2026-10-20/notes.txt': 'a hand-written note',
         '2026-10-21/graph.json': '{"day":21}',
-        '2026-10-21/nested/graph.json': '{"nested":21}',
+        '2026-10-21/manifest.json/graph.json': '{"nested":21}',
       },
     });
     try {
@@ -284,8 +284,8 @@ describe('pruneGraphifyDatedBackups', () => {
       expect(readFileSync(join(outDir, '2026-10-05', 'graph.json'), 'utf8')).toBe('{"day":5}');
       expect(readdirSync(join(outDir, '2026-10-20')).sort()).toEqual(['graph.json', 'notes.txt']);
       expect(readFileSync(join(outDir, '2026-10-20', 'notes.txt'), 'utf8')).toBe('a hand-written note');
-      expect(readdirSync(join(outDir, '2026-10-21')).sort()).toEqual(['graph.json', 'nested']);
-      expect(readFileSync(join(outDir, '2026-10-21', 'nested', 'graph.json'), 'utf8')).toBe('{"nested":21}');
+      expect(readdirSync(join(outDir, '2026-10-21')).sort()).toEqual(['graph.json', 'manifest.json']);
+      expect(readFileSync(join(outDir, '2026-10-21', 'manifest.json', 'graph.json'), 'utf8')).toBe('{"nested":21}');
     } finally {
       rmSync(outDir, { recursive: true, force: true });
     }

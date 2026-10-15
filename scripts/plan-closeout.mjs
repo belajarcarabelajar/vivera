@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey } from './plan-issue-sync.mjs';
+import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo } from './plan-issue-sync.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
@@ -70,7 +70,7 @@ export function closeoutGaps({ status: rawStatus, entry: rawEntry, planPath, pro
 export function checkCloseout({
   repoRoot,
   planSlug,
-  configPath = path.join(repoRoot, 'plan.issues.json'),
+  configPath = ISSUES_STORE,
   publishConfig,
   freshness = planFreshness,
 }) {
@@ -86,6 +86,7 @@ export function checkCloseout({
   let entry = null;
   let project = null;
   let configError = null;
+  let foreign = null;
 
   if (!existsSync(configPath)) {
     skipped.push(`plan.issues.json not found at ${configPath}, issue not checked`);
@@ -94,7 +95,27 @@ export function checkCloseout({
       const cfg = loadConfig(configPath);
       // defer: local record only, upgrade when a closed-by-hand reopen is observed after a merge
       entry = cfg.issues?.[planPath] ?? null;
-      if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
+      // The key carries no repository, so a same-named plan elsewhere can own this record.
+      // The repository is decided exactly as syncOne decides it, so the gate never
+      // flags a record the sync itself would accept.
+      let own = null;
+      if (entry?.repo) {
+        try {
+          own = resolveProjectRepo(cfg, repoRoot);
+        } catch (e) {
+          skipped.push(`repository of ${repoRoot} not resolved (${e.message.split(/\.\s/)[0]}), foreign-record check not run`);
+        }
+      }
+      if (own && !sameRepo(own.repo, entry.repo)) {
+        foreign = {
+          code: 'ISSUE_OTHER_REPO',
+          message: `${planPath} is recorded for ${entry.repo}, but this repository is ${own.repo}; the record belongs to another repository`,
+          // syncOne refuses this key under any --project while the foreign record holds it.
+          fix: `rename ${planPath} so its key no longer matches the record of ${entry.repo}, then sync the renamed plan`,
+        };
+        entry = null;
+      } else if (own) project = own.project;
+      else if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
       else skipped.push('plan has no issue record, nothing to close');
     } catch (e) {
       configError = e.message;
@@ -102,6 +123,7 @@ export function checkCloseout({
   }
 
   const gaps = closeoutGaps({ status, entry, planPath, project });
+  if (foreign) gaps.push(foreign);
   // A corrupt file must fail the gate; skipping here would let it pass silently.
   if (configError) gaps.push({ code: 'CONFIG_UNREADABLE', message: configError, fix: `repair ${configPath}` });
 

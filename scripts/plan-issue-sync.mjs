@@ -47,6 +47,12 @@ import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const DEFAULT_CONFIG = path.join(rootDir, 'plan.issues.json');
+// The one store every repository's records are written to, honouring the
+// PLAN_ISSUES_CONFIG override the CLI already reads. Readers (the merged gate)
+// import this instead of guessing a per-repository file.
+export const ISSUES_STORE = process.env.PLAN_ISSUES_CONFIG
+  ? path.resolve(process.env.PLAN_ISSUES_CONFIG)
+  : DEFAULT_CONFIG;
 
 // A registry entry with no `repo` is a planning-only plan: a Spike, or a Bounded
 // task too small for a file. Those are deliberately not issues, and refusing to
@@ -549,17 +555,13 @@ export function originRepo(repoRoot) {
 
 // ---------- per-plan sync ----------
 
-export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
-  const full = path.resolve(planPath);
-  if (!existsSync(full)) throw new Error(`plan file not found: ${full}`);
-  const planText = readFileSync(full, 'utf8');
-
-  // An explicit project name wins over the directory name, because a worktree
-  // directory is named after the branch, not after the project it belongs to.
-  // A <root>-wt/<slot> session worktree is the <root> project; a slot name that
-  // was already mapped by hand keeps working when <root> itself is not mapped.
-  // Without an explicit name, an origin remote that names a configured repository
-  // fills in for an unmapped directory, and a disagreement with the name is refused.
+// An explicit project name wins over the directory name, because a worktree
+// directory is named after the branch, not after the project it belongs to.
+// A <root>-wt/<slot> session worktree is the <root> project; a slot name that
+// was already mapped by hand keeps working when <root> itself is not mapped.
+// Without an explicit name, an origin remote that names a configured repository
+// fills in for an unmapped directory, and a disagreement with the name is refused.
+export function resolveProjectRepo(cfg, repoRoot, projectOverride = null) {
   const dir = path.resolve(repoRoot || rootDir);
   let project = projectOverride;
   let repo = null;
@@ -593,6 +595,21 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
       + originNote,
     );
   }
+  return { project, repo };
+}
+
+// GitHub owner and repository names are case-insensitive.
+export function sameRepo(a, b) {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project: projectOverride = null }) {
+  const full = path.resolve(planPath);
+  if (!existsSync(full)) throw new Error(`plan file not found: ${full}`);
+  const planText = readFileSync(full, 'utf8');
+
+  const { project, repo } = resolveProjectRepo(cfg, repoRoot, projectOverride);
 
   const key = issueKey(repoRoot || rootDir, full);
   const id = planId(planText, full);
@@ -602,6 +619,15 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   }
 
   let entry = cfg.issues[key] ?? null;
+  // The key holds no repository, so one store can return another repository's
+  // record here; syncing it would edit or close the issue with that number in
+  // this repository, an unrelated one, and overwrite the other record.
+  if (entry && entry.repo && !sameRepo(entry.repo, repo)) {
+    throw new Error(
+      `${key}: the recorded issue #${entry.number ?? '?'} belongs to ${entry.repo}, not ${repo}, so this plan is not synced against it. `
+      + `Fix: rename the plan file so its key no longer matches the record of ${entry.repo}, then sync the renamed plan. Nothing was read and nothing was written.`,
+    );
+  }
   // Read GitHub BEFORE deciding. A dry run reads too, because `--check` is
   // exactly the question "does the sidecar still describe the issue", and that can
   // only be answered against the issue. An unreadable state throws here, the same
@@ -735,7 +761,7 @@ function main(argv) {
     return 0;
   }
 
-  const configPath = opts.config || process.env.PLAN_ISSUES_CONFIG || DEFAULT_CONFIG;
+  const configPath = opts.config || ISSUES_STORE;
 
   if (opts.status) {
     let cfg;

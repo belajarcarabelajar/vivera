@@ -727,6 +727,29 @@ test('origin: a directory name and an origin remote that name different reposito
   }
 });
 
+test('resolveProjectRepo: a configured origin remote fills in for an unmapped directory', () => {
+  const f = originCheckout('scratch-gate', 'git@github.com:u/snippet.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    assert.deepEqual(syncModule.resolveProjectRepo(cfg, f.repoRoot), { project: 'scratch-gate', repo: 'u/snippet' });
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('resolveProjectRepo: a directory name and a configured origin naming different repositories throw', () => {
+  const f = originCheckout('Snipset', 'https://github.com/u/b.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/a', Other: 'u/b' }, issues: {} };
+    assert.throws(
+      () => syncModule.resolveProjectRepo(cfg, f.repoRoot),
+      (e) => e instanceof Error && e.message.startsWith('project "Snipset" maps to u/a') && e.message.includes('Pass --project <name> to choose'),
+    );
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('origin: an origin remote that no project maps to is refused, naming the origin', () => {
   const f = originCheckout('scratch-gate', 'git@github.com:u/stray.git');
   try {
@@ -1382,4 +1405,91 @@ test('Complete plan without an issue: a non-Complete plan still creates open', (
   } finally {
     f.cleanup();
   }
+});
+
+function foreignCfg(repoRoot, entryRepo) {
+  return cfgFor(repoRoot, {
+    issues: {
+      [PLAN_REL]: {
+        number: 41,
+        url: `https://github.com/${entryRepo}/issues/41`,
+        hash: 'deadbeef',
+        state: 'open',
+        status: 'Draft',
+        repo: entryRepo,
+      },
+    },
+  });
+}
+// The only remedy that works is a rename: under any --project the key still
+// holds the foreign record, and filing this plan elsewhere would be wrong.
+const foreignRefusal = (e) => e.message.includes('other/repo') && e.message.includes('u/snippet')
+  && e.message.includes('rename') && !e.message.includes('--project');
+
+test('foreign record: an entry filed for another repository is refused before any gh call', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    assert.throws(() => syncOne(foreignCfg(f.repoRoot, 'other/repo'), { planPath: f.full, repoRoot: f.repoRoot, run }), foreignRefusal);
+    assert.equal(run.calls.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: a dry run refuses the same way before any gh call', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    assert.throws(() => syncOne(foreignCfg(f.repoRoot, 'other/repo'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true }), foreignRefusal);
+    assert.equal(run.calls.length, 0);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: the refused config is left exactly as it was', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const cfg = foreignCfg(f.repoRoot, 'other/repo');
+    const before = structuredClone(cfg);
+    assert.throws(() => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run: ghAnswers() }));
+    assert.deepEqual(cfg, before);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: an entry filed for this repository is still read by number', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    syncOne(foreignCfg(f.repoRoot, 'u/snippet'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true });
+    assert.equal(run.calls[0].args.join(' '), 'issue view 41 --repo u/snippet --json state');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('foreign record: case alone does not make a record foreign, so it is read by number', () => {
+  const f = tmpPlan(plan('Draft'));
+  try {
+    const run = ghAnswers();
+    syncOne(foreignCfg(f.repoRoot, 'U/Snippet'), { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true });
+    assert.equal(run.calls[0].args.join(' '), 'issue view 41 --repo u/snippet --json state');
+  } finally {
+    f.cleanup();
+  }
+});
+
+// Tests and other tools must be able to point the one store elsewhere; a test
+// that reads the machine's real store passes or fails on whatever it holds today.
+test('ISSUES_STORE: PLAN_ISSUES_CONFIG overrides the store path', () => {
+  const alt = path.join(tmpdir(), 'plan-issues-override', 'store.json');
+  const r = spawnSync('bun', ['-e', `const m = await import(${JSON.stringify(SCRIPT)}); console.log(m.ISSUES_STORE);`], {
+    env: { ...process.env, PLAN_ISSUES_CONFIG: alt },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), alt);
 });

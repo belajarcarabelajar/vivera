@@ -1199,6 +1199,17 @@ trailer and so reads as permanent drift.
 > (`plan.issues.local.json`) on a machine that syncs plans, so twenty sessions
 > writing one file cannot collide in version control.
 
+Every repository's issue records share one store, `ISSUES_STORE` in
+`scripts/plan-issue-sync.mjs`: the `plan.issues.json` at the root of the checkout
+the script runs from, or the path in `PLAN_ISSUES_CONFIG`. A run from a vivera
+worktree therefore uses that worktree's file unless the variable is set. Records
+are keyed by the plan path relative to its repository, with no repository in the
+key, so two repositories with a same-named plan land on one record. `syncOne`
+refuses a record whose repository is not the one being synced, before any `gh` call
+or write; rename the plan file to fix it. The merged gate (`pr-registry state <s>
+merged`, through `checkCloseout`) reads the same store, decides "this repository"
+with the same `resolveProjectRepo`, and reports such a record as `ISSUE_OTHER_REPO`.
+
 ---
 
 ## Plan Checklist (the to-do list)

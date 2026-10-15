@@ -21,6 +21,7 @@ import path from 'node:path';
 import { planStatus, loadConfig, issueKey } from './plan-issue-sync.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
+import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -104,16 +105,18 @@ export function checkCloseout({
   // A corrupt file must fail the gate; skipping here would let it pass silently.
   if (configError) gaps.push({ code: 'CONFIG_UNREADABLE', message: configError, fix: `repair ${configPath}` });
 
-  const boxes = openStepBoxes(planText);
-  if (boxes.length) {
-    const shown = boxes.slice(0, BOXES_SHOWN).map((b) => b.line).join(', ');
-    const more = boxes.length > BOXES_SHOWN ? ', ...' : '';
+  const steps = openStepBoxes(planText);
+  if (steps.length) {
+    const tasks = [...new Set(steps.map((b) => b.task))].join(', ');
     gaps.push({
       code: 'OPEN_STEPS',
-      message: `${planPath} has ${boxes.length} open step box(es) (lines ${shown}${more})`,
+      message: `${planPath} has ${steps.length} open step box(es) in ${tasks} (lines ${lineNumbers(steps)})`,
       fix: tickCommand(planPath),
     });
   }
+  const other = otherOpenBoxes(planText);
+  // Boxes outside task sections are often ticked after closeout, so blocking on them would make the gate circular.
+  if (other.length) skipped.push(`other open boxes: ${other.length} outside task sections, not counted (lines ${lineNumbers(other)})`);
 
   const m = freshness(planFile, publishConfig ? { config: publishConfig } : {});
   if (m.state === 'NOT-APPLICABLE') {
@@ -131,34 +134,61 @@ export function checkCloseout({
   return { skipped: skipped.length ? skipped.join('; ') : null, gaps };
 }
 
-const OPEN_BOX = /^\s*[-*] \[ \]\s/;
-const CODE_FENCE = /^\s*(`{3,}|~{3,})/;
+const OPEN_STEP = /^[ \t]*[-*+][ \t]+\[ \]/;
+// Mirrors plan-mark-done's unexported STEP_RE and FENCE_RE, so both tools agree on what a box and a fence are.
+const OTHER_BOX = /^[ \t]*[-*+][ \t]+\[ \](?=[ \t]|$)/;
+const CODE_FENCE = /^[ \t]*(?:```|~~~)/;
 const BOXES_SHOWN = 5;
 
 const tickCommand = (plan) =>
-  `bun scripts/ultra-plan-runner.mjs ${plan} --execute > runner.log && bun scripts/plan-mark-done.mjs ${plan} --from runner.log`;
+  `bun scripts/ultra-plan-runner.mjs ${plan} --execute > runner.log; bun scripts/plan-mark-done.mjs ${plan} --from runner.log`;
 
+const lineNumbers = (rows) =>
+  rows.slice(0, BOXES_SHOWN).map((b) => b.line).join(', ') + (rows.length > BOXES_SHOWN ? ', ...' : '');
+
+// The gate counts only what plan-mark-done can tick, so its printed fix always clears it.
 export function openStepBoxes(planText) {
+  const lines = planText.split('\n');
+  const rows = [];
+  for (const task of planTaskIds(planText).ids) {
+    const range = taskSectionRange(lines, task);
+    if (!range) continue;
+    for (const i of stepLineIndices(lines, range.start, range.end)) {
+      if (OPEN_STEP.test(lines[i])) rows.push({ line: i + 1, text: lines[i].replace(/\r$/, '').trim(), task });
+    }
+  }
+  return rows.sort((a, b) => a.line - b.line);
+}
+
+export function otherOpenBoxes(planText) {
+  const lines = planText.split('\n');
+  const owned = new Set();
+  for (const task of planTaskIds(planText).ids) {
+    const range = taskSectionRange(lines, task);
+    if (range) for (let i = range.start; i < range.end; i++) owned.add(i);
+  }
   let body = planText;
   // checkCloseout runs inside the merge gate, where a malformed plan must still be measured, not throw.
   try {
     ({ body } = extractFrontmatter(planText));
   } catch {}
   // The body is a suffix of the file, so the lines before it give the whole-file offset.
-  const offset = planText.split('\n').length - body.split('\n').length;
+  const offset = lines.length - body.split('\n').length;
   const rows = [];
-  let fence = null;
-  body.split('\n').forEach((raw, i) => {
-    const line = raw.replace(/\r$/, '');
-    const f = CODE_FENCE.exec(line);
-    if (f) {
-      // Only the opening fence's character closes it, so ~~~ inside ``` stays code.
-      if (!fence) fence = f[1][0];
-      else if (f[1][0] === fence) fence = null;
-      return;
+  let inFence = false;
+  for (let i = offset; i < lines.length; i++) {
+    // plan-mark-done starts each section outside a fence, so each stretch between task sections does too.
+    if (owned.has(i)) {
+      inFence = false;
+      continue;
     }
-    if (!fence && OPEN_BOX.test(line)) rows.push({ line: offset + i + 1, text: line.trim() });
-  });
+    const line = lines[i].replace(/\r$/, '');
+    if (CODE_FENCE.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (!inFence && OTHER_BOX.test(line)) rows.push({ line: i + 1, text: line.trim() });
+  }
   return rows;
 }
 
@@ -318,9 +348,12 @@ function readinessCli(opts) {
   const boxes = openStepBoxes(text);
   console.log(`open step boxes: ${boxes.length}`);
   if (boxes.length) {
-    for (const b of boxes.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
+    for (const b of boxes.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line} (${b.task}): ${b.text}`);
     console.log(`    tick from evidence: ${tickCommand(opts.plan)}`);
   }
+  const other = otherOpenBoxes(text);
+  console.log(`other open boxes: ${other.length} (outside task sections; tick by hand with evidence, not counted)`);
+  for (const b of other.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
   const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length });
   console.log(`readiness: ${v.verdict}`);
   return v.exit;

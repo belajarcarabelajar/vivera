@@ -630,23 +630,37 @@ test('closeoutVerdict refuses with exact lines, one message and one fix per gap'
   ]);
 });
 
-test('closeoutVerdict refuses a Complete plan whose body still has an open step box', () => {
+function closeoutOnPlan(planText) {
   const root = mkdtempSync(path.join(tmpdir(), 'pr-registry-open-steps-'));
   try {
     mkdirSync(path.join(root, 'docs/code-plan/plans'), { recursive: true });
-    writeFileSync(path.join(root, 'docs/code-plan/plans/my-plan.md'), '---\nplan_id: my-plan\nstatus: Complete\n---\n\n- [ ] Step 1 a\n');
-    const verdict = closeoutVerdict(SESSION, {
+    writeFileSync(path.join(root, 'docs/code-plan/plans/my-plan.md'), planText);
+    return closeoutVerdict(SESSION, {
       repoRoot: root,
       check: (args) => checkCloseout({ ...args, freshness: () => ({ state: 'OK' }) }),
     });
-    assert.equal(verdict.proceed, false);
-    assert.ok(
-      verdict.lines.some((l) => /^ {2}- \[OPEN_STEPS\] \S*my-plan\.md has 1 open step box\(es\) \(lines 6\)$/.test(l)),
-      verdict.lines.join('\n'),
-    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+const TASK_PLAN = '---\nschema: ultra-plan/v1\nplan_id: my-plan\nstatus: Complete\ntasks:\n  - id: T1\n    depends_on: []\n---\n\n### Task T1: a\n';
+
+test('closeoutVerdict refuses a Complete plan whose task section still has an open step box', () => {
+  const verdict = closeoutOnPlan(TASK_PLAN + '- [ ] Step 1 a\n');
+  assert.equal(verdict.proceed, false);
+  assert.ok(
+    verdict.lines.some((l) => /^ {2}- \[OPEN_STEPS\] \S*my-plan\.md has 1 open step box\(es\) in T1 \(lines 11\)$/.test(l)),
+    verdict.lines.join('\n'),
+  );
+});
+
+test('closeoutVerdict proceeds for a Complete plan whose only other open boxes are outside task sections', () => {
+  const verdict = closeoutOnPlan(TASK_PLAN + '- [x] Step 1 a\n## Approval\n- [ ] Approved\n');
+  assert.equal(verdict.proceed, true, verdict.lines.join('\n'));
+  assert.ok(
+    verdict.lines.some((l) => /other open boxes: 1 outside task sections, not counted \(lines 13\)/.test(l)),
+    verdict.lines.join('\n'),
+  );
 });
 
 test('closeoutVerdict puts the skipped note before the refusal when both apply', () => {

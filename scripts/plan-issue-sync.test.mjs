@@ -1421,7 +1421,10 @@ function foreignCfg(repoRoot, entryRepo) {
     },
   });
 }
-const foreignRefusal = (e) => e.message.includes('other/repo') && e.message.includes('u/snippet');
+// The only remedy that works is a rename: under any --project the key still
+// holds the foreign record, and filing this plan elsewhere would be wrong.
+const foreignRefusal = (e) => e.message.includes('other/repo') && e.message.includes('u/snippet')
+  && e.message.includes('rename') && !e.message.includes('--project');
 
 test('foreign record: an entry filed for another repository is refused before any gh call', () => {
   const f = tmpPlan(plan('Draft'));

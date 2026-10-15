@@ -67,8 +67,8 @@
 // this script. To drop only the document nodes this script added, restore the
 // newest `graphify-out/backup-*-sync/graph.json` over `graphify-out/graph.json`.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
-import { resolve, join, isAbsolute, relative } from 'node:path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, rmSync } from 'node:fs';
+import { resolve, join, isAbsolute, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { scan } from './vault-index.mjs';
@@ -195,6 +195,28 @@ export function toRepoRelative(root, file) {
   return relative(root, file).split('\\').join('/');
 }
 
+const SYNC_BACKUP_NAME = /^backup-\d{4}-\d{2}-\d{2}-sync$/;
+
+/**
+ * Remove every `backup-YYYY-MM-DD-sync` directory in `outDir` except `keep`.
+ * Exactly one backup stays because the graph holds LLM-extracted concept nodes
+ * that an offline rebuild cannot recreate.
+ *
+ * @param {string} outDir
+ * @param {string} keep
+ * @returns {string[]} the removed directory names, sorted
+ */
+export function pruneSyncBackups(outDir, keep) {
+  if (!existsSync(outDir)) return [];
+  const removed = [];
+  for (const entry of readdirSync(outDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === keep || !SYNC_BACKUP_NAME.test(entry.name)) continue;
+    rmSync(join(outDir, entry.name), { recursive: true, force: true });
+    removed.push(entry.name);
+  }
+  return removed.sort();
+}
+
 function readGraph(graphPath) {
   if (!existsSync(graphPath)) {
     throw new Error(
@@ -308,6 +330,8 @@ function main() {
   const written = writeGraph(graph, graphPath);
   console.log(`  backup:            ${backupDir}/graph.json`);
   console.log(`  wrote ${written.path} (${written.bytes} bytes, ${graph.nodes.length} nodes, ${graph.links.length} links)`);
+  const pruned = pruneSyncBackups(join(root, 'graphify-out'), basename(backupDir));
+  console.log(`  pruned:            ${pruned.length} older backup(s)`);
   return 0;
 }
 

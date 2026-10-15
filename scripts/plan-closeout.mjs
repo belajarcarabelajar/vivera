@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo } from './plan-issue-sync.mjs';
+import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo } from './plan-issue-sync.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
@@ -106,7 +106,7 @@ export function checkCloseout({
           skipped.push(`repository of ${repoRoot} not resolved (${e.message.split(/\.\s/)[0]}), foreign-record check not run`);
         }
       }
-      if (own && own.repo !== entry.repo) {
+      if (own && !sameRepo(own.repo, entry.repo)) {
         foreign = {
           code: 'ISSUE_OTHER_REPO',
           message: `${planPath} is recorded for ${entry.repo}, but this repository is ${own.repo}; the record belongs to another repository`,

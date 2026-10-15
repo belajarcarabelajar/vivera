@@ -716,7 +716,7 @@ function runCli(...args) {
   const r = Bun.spawnSync(['bun', SCRIPT, ...args], {
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, VIVERA_PLAN_ISSUES: NO_STORE },
+    env: { ...process.env, PLAN_ISSUES_CONFIG: NO_STORE },
   });
   return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
 }

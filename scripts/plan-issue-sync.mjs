@@ -46,12 +46,13 @@ import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const DEFAULT_CONFIG = process.env.VIVERA_PLAN_ISSUES
-  ? path.resolve(process.env.VIVERA_PLAN_ISSUES)
-  : path.join(rootDir, 'plan.issues.json');
-// The one store every repository's records are written to. Readers (the
-// merged gate) import this instead of guessing a per-repository file.
-export const ISSUES_STORE = DEFAULT_CONFIG;
+const DEFAULT_CONFIG = path.join(rootDir, 'plan.issues.json');
+// The one store every repository's records are written to, honouring the
+// PLAN_ISSUES_CONFIG override the CLI already reads. Readers (the merged gate)
+// import this instead of guessing a per-repository file.
+export const ISSUES_STORE = process.env.PLAN_ISSUES_CONFIG
+  ? path.resolve(process.env.PLAN_ISSUES_CONFIG)
+  : DEFAULT_CONFIG;
 
 // A registry entry with no `repo` is a planning-only plan: a Spike, or a Bounded
 // task too small for a file. Those are deliberately not issues, and refusing to
@@ -749,7 +750,7 @@ function main(argv) {
     return 0;
   }
 
-  const configPath = opts.config || process.env.PLAN_ISSUES_CONFIG || DEFAULT_CONFIG;
+  const configPath = opts.config || ISSUES_STORE;
 
   if (opts.status) {
     let cfg;

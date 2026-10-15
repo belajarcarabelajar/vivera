@@ -1444,3 +1444,15 @@ test('foreign record: an entry filed for this repository is still read by number
     f.cleanup();
   }
 });
+
+// Tests and other tools must be able to point the one store elsewhere; a test
+// that reads the machine's real store passes or fails on whatever it holds today.
+test('ISSUES_STORE: VIVERA_PLAN_ISSUES overrides the store path', () => {
+  const alt = path.join(tmpdir(), 'plan-issues-override', 'store.json');
+  const r = spawnSync('bun', ['-e', `const m = await import(${JSON.stringify(SCRIPT)}); console.log(m.ISSUES_STORE);`], {
+    env: { ...process.env, VIVERA_PLAN_ISSUES: alt },
+    encoding: 'utf8',
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), alt);
+});

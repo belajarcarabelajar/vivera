@@ -66,6 +66,7 @@
 // graphify, and `graphify-out/` is gitignored, so no tracked artifact depends on
 // this script. To drop only the document nodes this script added, restore the
 // newest `graphify-out/backup-*-sync/graph.json` over `graphify-out/graph.json`.
+// The newest `graphify-out/YYYY-MM-DD/graph.json` is kept as a second restore source.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, readdirSync, rmSync } from 'node:fs';
 import { resolve, join, isAbsolute, relative, basename } from 'node:path';
@@ -217,6 +218,50 @@ export function pruneSyncBackups(outDir, keep) {
   return removed.sort();
 }
 
+/** graphify 0.9.77 `_BACKUP_ARTIFACTS` in graphify/export.py. */
+const GRAPHIFY_BACKUP_ARTIFACTS = new Set([
+  'graph.json',
+  'GRAPH_REPORT.md',
+  '.graphify_labels.json',
+  '.graphify_analysis.json',
+  'manifest.json',
+  '.graphify_semantic_marker',
+  'cost.json',
+]);
+const GRAPHIFY_DATED_BACKUP_NAME = /^\d{4}-\d{2}-\d{2}$/;
+
+function isGraphifyDatedBackup(dir) {
+  const entries = readdirSync(dir, { withFileTypes: true });
+  return entries.length > 0 && entries.every((e) => e.isFile() && GRAPHIFY_BACKUP_ARTIFACTS.has(e.name));
+}
+
+/**
+ * Remove every graphify `YYYY-MM-DD` backup directory in `outDir` except the
+ * newest. graphify writes one such folder per day before overwriting a curated
+ * graph and never prunes them. Only folders holding nothing but graphify's own
+ * backup files are touched, so a hand-made folder or a future graphify artifact
+ * makes a folder be skipped, never deleted. The newest stays as graphify's
+ * restore source.
+ *
+ * @param {string} outDir
+ * @returns {string[]} the removed directory names, sorted
+ */
+export function pruneGraphifyDatedBackups(outDir) {
+  if (!existsSync(outDir)) return [];
+  const candidates = readdirSync(outDir, { withFileTypes: true })
+    .filter(
+      (entry) =>
+        entry.isDirectory() &&
+        GRAPHIFY_DATED_BACKUP_NAME.test(entry.name) &&
+        isGraphifyDatedBackup(join(outDir, entry.name)),
+    )
+    .map((entry) => entry.name)
+    .sort();
+  const removed = candidates.slice(0, -1);
+  for (const name of removed) rmSync(join(outDir, name), { recursive: true, force: true });
+  return removed;
+}
+
 function readGraph(graphPath) {
   if (!existsSync(graphPath)) {
     throw new Error(
@@ -332,6 +377,8 @@ function main() {
   console.log(`  wrote ${written.path} (${written.bytes} bytes, ${graph.nodes.length} nodes, ${graph.links.length} links)`);
   const pruned = pruneSyncBackups(join(root, 'graphify-out'), basename(backupDir));
   console.log(`  pruned:            ${pruned.length} older backup(s)`);
+  const prunedDated = pruneGraphifyDatedBackups(join(root, 'graphify-out'));
+  console.log(`  pruned dated:      ${prunedDated.length} graphify backup(s)`);
   return 0;
 }
 

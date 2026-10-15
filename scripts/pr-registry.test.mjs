@@ -35,6 +35,7 @@ import {
   SESSION_STATES,
 } from './pr-registry.mjs';
 import * as registryModule from './pr-registry.mjs';
+import { checkCloseout } from './plan-closeout.mjs';
 
 // Through the namespace, so a missing export fails its own test instead of the
 // whole file at link time.
@@ -627,6 +628,25 @@ test('closeoutVerdict refuses with exact lines, one message and one fix per gap'
     'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
     'Override with --allow-open-plan to record it anyway.',
   ]);
+});
+
+test('closeoutVerdict refuses a Complete plan whose body still has an open step box', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'pr-registry-open-steps-'));
+  try {
+    mkdirSync(path.join(root, 'docs/code-plan/plans'), { recursive: true });
+    writeFileSync(path.join(root, 'docs/code-plan/plans/my-plan.md'), '---\nplan_id: my-plan\nstatus: Complete\n---\n\n- [ ] Step 1 a\n');
+    const verdict = closeoutVerdict(SESSION, {
+      repoRoot: root,
+      check: (args) => checkCloseout({ ...args, freshness: () => ({ state: 'OK' }) }),
+    });
+    assert.equal(verdict.proceed, false);
+    assert.ok(
+      verdict.lines.some((l) => /^ {2}- \[OPEN_STEPS\] \S*my-plan\.md has 1 open step box\(es\) \(lines 6\)$/.test(l)),
+      verdict.lines.join('\n'),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('closeoutVerdict puts the skipped note before the refusal when both apply', () => {

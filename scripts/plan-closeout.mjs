@@ -78,7 +78,8 @@ export function checkCloseout({
     return { skipped: `no plan file at ${planFile} (a one-task change has no plan file)`, gaps: [] };
   }
 
-  const status = planStatus(readFileSync(planFile, 'utf8'));
+  const planText = readFileSync(planFile, 'utf8');
+  const status = planStatus(planText);
   const planPath = issueKey(repoRoot, planFile);
   const skipped = [];
   let entry = null;
@@ -103,6 +104,17 @@ export function checkCloseout({
   // A corrupt file must fail the gate; skipping here would let it pass silently.
   if (configError) gaps.push({ code: 'CONFIG_UNREADABLE', message: configError, fix: `repair ${configPath}` });
 
+  const boxes = openStepBoxes(planText);
+  if (boxes.length) {
+    const shown = boxes.slice(0, BOXES_SHOWN).map((b) => b.line).join(', ');
+    const more = boxes.length > BOXES_SHOWN ? ', ...' : '';
+    gaps.push({
+      code: 'OPEN_STEPS',
+      message: `${planPath} has ${boxes.length} open step box(es) (lines ${shown}${more})`,
+      fix: tickCommand(planPath),
+    });
+  }
+
   const m = freshness(planFile, publishConfig ? { config: publishConfig } : {});
   if (m.state === 'NOT-APPLICABLE') {
     skipped.push(`vault mirror not checked: plan is not covered by a mirror${m.detail ? ` (${m.detail})` : ''}`);
@@ -119,12 +131,43 @@ export function checkCloseout({
   return { skipped: skipped.length ? skipped.join('; ') : null, gaps };
 }
 
+const OPEN_BOX = /^\s*[-*] \[ \]\s/;
+const CODE_FENCE = /^\s*(`{3,}|~{3,})/;
+const BOXES_SHOWN = 5;
+
+const tickCommand = (plan) =>
+  `bun scripts/ultra-plan-runner.mjs ${plan} --execute > runner.log && bun scripts/plan-mark-done.mjs ${plan} --from runner.log`;
+
+export function openStepBoxes(planText) {
+  let body = planText;
+  // checkCloseout runs inside the merge gate, where a malformed plan must still be measured, not throw.
+  try {
+    ({ body } = extractFrontmatter(planText));
+  } catch {}
+  // The body is a suffix of the file, so the lines before it give the whole-file offset.
+  const offset = planText.split('\n').length - body.split('\n').length;
+  const rows = [];
+  let fence = null;
+  body.split('\n').forEach((raw, i) => {
+    const line = raw.replace(/\r$/, '');
+    const f = CODE_FENCE.exec(line);
+    if (f) {
+      // Only the opening fence's character closes it, so ~~~ inside ``` stays code.
+      if (!fence) fence = f[1][0];
+      else if (f[1][0] === fence) fence = null;
+      return;
+    }
+    if (!fence && OPEN_BOX.test(line)) rows.push({ line: offset + i + 1, text: line.trim() });
+  });
+  return rows;
+}
+
 const STATES = ['DONE', 'OPEN', 'UNREAD', 'UNPROVEN'];
 
-export function readinessVerdict({ tasks, openNow = 0 }) {
+export function readinessVerdict({ tasks, openNow = 0, openBoxes = 0 }) {
   const counts = Object.fromEntries(STATES.map((s) => [s, 0]));
   for (const t of tasks) counts[t.state] = (counts[t.state] ?? 0) + 1;
-  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0) return { verdict: 'NOT-READY', exit: 1, counts };
+  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0) return { verdict: 'NOT-READY', exit: 1, counts };
   // A plan with no tasks measured nothing, so READY would recommend Complete without evidence.
   if (tasks.length === 0 || counts.UNPROVEN > 0) return { verdict: 'NEEDS-HUMAN', exit: 3, counts };
   return { verdict: 'READY', exit: 0, counts };
@@ -272,7 +315,13 @@ function readinessCli(opts) {
   }
   if (logDir) console.log(`log: ${logDir}`);
   console.log(`open NOW follow-ups: ${openNow}`);
-  const v = readinessVerdict({ tasks, openNow });
+  const boxes = openStepBoxes(text);
+  console.log(`open step boxes: ${boxes.length}`);
+  if (boxes.length) {
+    for (const b of boxes.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
+    console.log(`    tick from evidence: ${tickCommand(opts.plan)}`);
+  }
+  const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length });
   console.log(`readiness: ${v.verdict}`);
   return v.exit;
 }

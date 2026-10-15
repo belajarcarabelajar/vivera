@@ -531,7 +531,7 @@ describe('closeout CLI', () => {
       '---', '', '| Item | Class | State |', '|---|---|---|', '| x | NOW | DONE |', '',
     ].join('\n'));
     const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nreadiness: READY\n');
+    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nopen step boxes: 0\nreadiness: READY\n');
     assert.equal(r.exitCode, 0);
   });
 
@@ -578,7 +578,7 @@ describe('closeout CLI', () => {
     const root = tmpRoot();
     const file = planWith(root, [{ id: 'T1', skipIf: 'echo noisy; echo noisy-err >&2; true' }]);
     const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nreadiness: READY\n`);
+    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nopen step boxes: 0\nreadiness: READY\n`);
   });
 
   test('failure output: a task printing many lines shows at most 5', () => {
@@ -658,5 +658,112 @@ describe('closeout CLI', () => {
     assert.equal(r.exitCode, 0);
     assert.match(r.stdout.toString(), /closeout debt: 0 plan\(s\)/);
     assert.match(r.stdout.toString(), /not read: 1 plan file\(s\) not found/);
+  });
+});
+
+describe('open step boxes', () => {
+  const FENCE = '`'.repeat(3);
+  const boxedPlan = [
+    '---', 'plan_id: demo', 'status: Complete', 'notes: |', '  - [ ] in frontmatter, not body', '---',
+    '', '# Demo',
+    '- [ ] Step 1 write the test',
+    '  - [ ] Step 2 indented',
+    '* [ ] Step 3 star',
+    '- [x] Step 4 ticked',
+    '- [X] Step 5 ticked',
+    FENCE,
+    '- [ ] inside a backtick fence',
+    '~~~',
+    '- [ ] a tilde line does not close a backtick fence',
+    FENCE,
+    '~~~',
+    '* [ ] inside a tilde fence',
+    '~~~',
+    '- [ ] Step 6 after the fences',
+    '',
+  ].join('\n');
+
+  test('open step boxes: body boxes are counted with whole-file line numbers', () => {
+    assert.deepEqual(closeout.openStepBoxes(boxedPlan), [
+      { line: 9, text: '- [ ] Step 1 write the test' },
+      { line: 10, text: '- [ ] Step 2 indented' },
+      { line: 11, text: '* [ ] Step 3 star' },
+      { line: 22, text: '- [ ] Step 6 after the fences' },
+    ]);
+  });
+
+  test('open step boxes: a plan with only ticked boxes has none', () => {
+    assert.deepEqual(closeout.openStepBoxes(plan('Complete') + '- [x] Step 1 done\n'), []);
+  });
+
+  test('open step boxes: a plan without frontmatter is scanned whole, so the merge gate does not throw', () => {
+    assert.deepEqual(closeout.openStepBoxes('# Demo\n- [ ] Step 1 a\n'), [{ line: 2, text: '- [ ] Step 1 a' }]);
+  });
+
+  test('open step boxes make every-DONE tasks NOT-READY with exit 1', () => {
+    const r = closeout.readinessVerdict({ tasks: [{ id: 'T1', state: 'DONE' }, { id: 'T2', state: 'DONE' }], openBoxes: 2 });
+    assert.equal(r.verdict, 'NOT-READY');
+    assert.equal(r.exit, 1);
+  });
+
+  test('open step boxes beat NEEDS-HUMAN', () => {
+    assert.equal(closeout.readinessVerdict({ tasks: [{ id: 'T1', state: 'UNPROVEN' }], openBoxes: 1 }).exit, 1);
+    assert.equal(closeout.readinessVerdict({ tasks: [], openBoxes: 1 }).verdict, 'NOT-READY');
+  });
+
+  test('open step boxes: zero boxes keep the existing verdicts', () => {
+    assert.equal(closeout.readinessVerdict({ tasks: [{ id: 'T1', state: 'DONE' }], openBoxes: 0 }).verdict, 'READY');
+    assert.equal(closeout.readinessVerdict({ tasks: [{ id: 'T1', state: 'UNPROVEN' }], openBoxes: 0 }).verdict, 'NEEDS-HUMAN');
+  });
+
+  test('open step boxes: readiness CLI prints the count, five lines and the tick command, then exits 1', () => {
+    const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
+    const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
+    dirs.push(root);
+    writeFileSync(path.join(root, 'marker'), '');
+    const file = path.join(root, 'plan.md');
+    writeFileSync(file, [
+      '---', 'schema: ultra-plan/v1', 'plan_id: demo', 'tasks:',
+      '  - id: T1', '    depends_on: []', '    skip_if: "test -f marker"',
+      '---', '',
+      ...[1, 2, 3, 4, 5, 6].map((n) => `  - [ ] Step ${n} todo  `),
+      '',
+    ].join('\n'));
+    const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe' });
+    assert.equal(r.stdout.toString(), [
+      'T1\tDONE\ttest -f marker',
+      'open NOW follow-ups: 0',
+      'open step boxes: 6',
+      '    line 10: - [ ] Step 1 todo',
+      '    line 11: - [ ] Step 2 todo',
+      '    line 12: - [ ] Step 3 todo',
+      '    line 13: - [ ] Step 4 todo',
+      '    line 14: - [ ] Step 5 todo',
+      `    tick from evidence: bun scripts/ultra-plan-runner.mjs ${file} --execute > runner.log && bun scripts/plan-mark-done.mjs ${file} --from runner.log`,
+      'readiness: NOT-READY',
+      '',
+    ].join('\n'));
+    assert.equal(r.exitCode, 1);
+  });
+
+  const tick = `bun scripts/ultra-plan-runner.mjs ${PLAN} --execute > runner.log && bun scripts/plan-mark-done.mjs ${PLAN} --from runner.log`;
+
+  test('open step boxes: checkCloseout on a Complete plan reports OPEN_STEPS with lines and the tick command', () => {
+    const root = repo({ planText: plan('Complete') + '- [ ] Step 1 a\n- [x] Step 2 b\n- [ ] Step 3 c\n', config: cfgWith(closedEntry) });
+    const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
+    assert.deepEqual(r.gaps, [{
+      code: 'OPEN_STEPS',
+      message: `${PLAN} has 2 open step box(es) (lines 7, 9)`,
+      fix: tick,
+    }]);
+  });
+
+  test('open step boxes: checkCloseout lists five line numbers and sits after the issue gaps, before the mirror', () => {
+    const steps = [1, 2, 3, 4, 5, 6, 7].map((n) => `- [ ] Step ${n}\n`).join('');
+    const entry = { ...closedEntry, state: 'open', status: 'Verification' };
+    const root = repo({ planText: plan('Verification') + steps, config: cfgWith(entry) });
+    const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('DRIFT', 'hash differs') });
+    assert.deepEqual(codes(r.gaps), ['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED', 'OPEN_STEPS', 'MIRROR_STALE']);
+    assert.equal(r.gaps[2].message, `${PLAN} has 7 open step box(es) (lines 7, 8, 9, 10, 11, ...)`);
   });
 });

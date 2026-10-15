@@ -355,12 +355,16 @@ const copyTrackedTree = (dest) => {
   assert.equal(untar.status, 0, `untar into the fixture failed: ${untar.stderr?.toString().slice(0, 300)}`);
 };
 
-const runGateWithoutMmdc = (tree, noMmdc) => {
+const runGateWithoutMmdc = (tree, noMmdc, extraEnv = {}) => {
+  // A developer shell may export PLAN_ISSUES_CONFIG, which would point every
+  // fixture run at that machine's real store.
+  const env = { ...process.env, PATH: `${noMmdc}${path.delimiter}${process.env.PATH}` };
+  delete env.PLAN_ISSUES_CONFIG;
   const r = spawnSync('bun', [path.join(tree, 'scripts', 'validate-skill.mjs')], {
     cwd: tree,
     encoding: 'utf8',
     timeout: 180_000,
-    env: { ...process.env, PATH: `${noMmdc}${path.delimiter}${process.env.PATH}` },
+    env: { ...env, ...extraEnv },
   });
   return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
@@ -388,4 +392,36 @@ test('the gate refuses a debt sweep that drops the plan-mark-done.mjs tick step'
     fs.rmSync(tmp, { recursive: true, force: true });
     fs.rmSync(noMmdc, { recursive: true, force: true });
   }
+});
+
+// The sync CLI and the merged gate both read ISSUES_STORE, so the validator has
+// to check that same file, not a hardcoded <root>/plan.issues.json.
+const withIssuesStore = (contents, assertRun) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-issuestore-'));
+  const noMmdc = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-nommdc-'));
+  const storeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-store-'));
+  try {
+    copyTrackedTree(tmp);
+    assert.ok(!fs.existsSync(path.join(tmp, 'plan.issues.json')), 'fixture must lack the default store');
+    fs.writeFileSync(path.join(noMmdc, 'mmdc'), '#!/bin/sh\nexit 127\n', { mode: 0o755 });
+    const store = path.join(storeDir, 'issues.json');
+    fs.writeFileSync(store, contents);
+    assertRun(runGateWithoutMmdc(tmp, noMmdc, { PLAN_ISSUES_CONFIG: store }), store);
+  } finally {
+    for (const d of [tmp, noMmdc, storeDir]) fs.rmSync(d, { recursive: true, force: true });
+  }
+};
+
+test('the issue mapping check validates the PLAN_ISSUES_CONFIG store instead of skipping', () => {
+  withIssuesStore(JSON.stringify({ version: 1, projects: { vivera: 'owner/vivera' } }), (run) => {
+    assert.match(run.out, /Plan-issue registry valid: 1 project\(s\) mapped/, run.out.slice(-600));
+    assert.doesNotMatch(run.out, /SKIPPED: plan\.issues\.json/);
+  });
+});
+
+test('the issue mapping check fails on invalid JSON in the PLAN_ISSUES_CONFIG store', () => {
+  withIssuesStore('{ not json', (run, store) => {
+    assert.equal(run.status, 1, `an unparsable store must fail the gate\n${run.out.slice(-600)}`);
+    assert.ok(run.out.includes(`${store} is not valid JSON`), `the failure must name the store\n${run.out.slice(-600)}`);
+  });
 });

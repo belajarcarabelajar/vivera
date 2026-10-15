@@ -589,6 +589,7 @@ function main(argv) {
         console.log(`  git worktree prune`);
         console.log(`  git fetch origin ${session.base}`);
         console.log(`  git worktree add ${session.worktree} -b ${session.branch} origin/${session.base}`);
+        console.log('Gates that need gitignored local state (plans, configs, node_modules): symlink it into a detached /tmp worktree at the session head, never into this worktree (MEMORY.md L56).');
       }
       return 0;
     }

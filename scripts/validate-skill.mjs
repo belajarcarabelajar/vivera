@@ -920,6 +920,8 @@ for (const snip of requiredSnippets) {
     { label: 'PR template records the closeout decision', file: 'templates/pull-request-template.md', needle: 'Plan closeout decided' },
     { label: 'sweep asks the closeout gate before the final merge', file: sweep, needle: "before the merge of the session's final PR" },
     { label: 'verify-deliver asks the closeout gate before the final merge', file: verify, needle: "asked before the session's final merge" },
+    // Plan 2026-10-15-closeout-open-steps: closing must tick task steps, or merged plans keep open checkboxes.
+    { label: 'debt sweep ticks task steps from runner evidence', file: sweep, needle: 'plan-mark-done.mjs' },
   ];
   for (const c of closeoutContract) {
     const target = path.join(rootDir, c.file);

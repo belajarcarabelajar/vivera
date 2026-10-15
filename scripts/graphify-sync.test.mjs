@@ -17,7 +17,7 @@
 // never depend on graphify or the network.
 
 import { test, expect, describe } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readdirSync, existsSync, statSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 
@@ -27,6 +27,7 @@ import {
   gateVerdict,
   toRepoRelative,
 } from './graphify-sync.mjs';
+import * as syncModule from './graphify-sync.mjs';
 import { serializeGraph } from './vault-index-merge.mjs';
 
 /** A throwaway root with the named files written. */
@@ -167,5 +168,76 @@ describe('toRepoRelative', () => {
   test('relativises an absolute path and trusts a relative one', () => {
     expect(toRepoRelative('/repo', '/repo/docs/a.md')).toBe('docs/a.md');
     expect(toRepoRelative('/repo', 'docs/a.md')).toBe('docs/a.md');
+  });
+});
+
+describe('pruneSyncBackups', () => {
+  const KEEP = 'backup-2026-10-15-sync';
+
+  /** A throwaway graphify-out holding the named directories and files. */
+  function outDirFixture({ dirs = [], files = {} }) {
+    const outDir = mkdtempSync(join(tmpdir(), 'graphify-sync-prune-'));
+    for (const d of dirs) mkdirSync(join(outDir, d), { recursive: true });
+    for (const [rel, text] of Object.entries(files)) {
+      const abs = join(outDir, rel);
+      mkdirSync(dirname(abs), { recursive: true });
+      writeFileSync(abs, text, 'utf8');
+    }
+    return outDir;
+  }
+
+  test('removes every older sync backup directory and returns the removed names sorted', () => {
+    const outDir = outDirFixture({
+      dirs: ['backup-2026-10-03-sync', 'backup-2026-09-30-sync', KEEP],
+      files: { 'backup-2026-10-01-sync/graph.json': '{"old":1}' },
+    });
+    try {
+      const removed = syncModule.pruneSyncBackups(outDir, KEEP);
+      expect(removed).toEqual(['backup-2026-09-30-sync', 'backup-2026-10-01-sync', 'backup-2026-10-03-sync']);
+      expect(readdirSync(outDir).sort()).toEqual([KEEP]);
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test('leaves the kept backup, non-backup entries, a same-named regular file and near-miss names untouched', () => {
+    const outDir = outDirFixture({
+      dirs: ['cache', 'backup-foo-sync', 'backup-2026-10-01-sync-old'],
+      files: {
+        [`${KEEP}/graph.json`]: '{"kept":1}',
+        '2026-10-02/graph.json': '{"dated":1}',
+        'backup-2026-10-01-sync': 'a regular file, not a backup directory',
+        'graph.json': '{"live":1}',
+      },
+    });
+    try {
+      const removed = syncModule.pruneSyncBackups(outDir, KEEP);
+      expect(removed).toEqual([]);
+      expect(readdirSync(outDir).sort()).toEqual([
+        '2026-10-02',
+        'backup-2026-10-01-sync',
+        'backup-2026-10-01-sync-old',
+        KEEP,
+        'backup-foo-sync',
+        'cache',
+        'graph.json',
+      ]);
+      expect(readFileSync(join(outDir, KEEP, 'graph.json'), 'utf8')).toBe('{"kept":1}');
+      expect(readFileSync(join(outDir, '2026-10-02', 'graph.json'), 'utf8')).toBe('{"dated":1}');
+      expect(statSync(join(outDir, 'backup-2026-10-01-sync')).isFile()).toBe(true);
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  test('returns an empty list without throwing when the directory does not exist', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'graphify-sync-prune-missing-'));
+    try {
+      const missing = join(parent, 'graphify-out');
+      expect(existsSync(missing)).toBe(false);
+      expect(syncModule.pruneSyncBackups(missing, KEEP)).toEqual([]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });

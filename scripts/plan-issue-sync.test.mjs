@@ -671,7 +671,9 @@ test('origin: parseGithubRepo reads https, scp-like and ssh GitHub URLs', () => 
   assert.equal(syncModule.parseGithubRepo('https://github.com/owner/repo'), 'owner/repo');
   assert.equal(syncModule.parseGithubRepo('https://github.com/owner/repo.git'), 'owner/repo');
   assert.equal(syncModule.parseGithubRepo('git@github.com:owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('git@github.com:owner/repo'), 'owner/repo');
   assert.equal(syncModule.parseGithubRepo('ssh://git@github.com/owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('ssh://git@github.com/owner/repo'), 'owner/repo');
   assert.equal(syncModule.parseGithubRepo('https://GitHub.com/owner/repo.git'), 'owner/repo');
   assert.equal(syncModule.parseGithubRepo('https://gitlab.com/owner/repo.git'), null);
   assert.equal(syncModule.parseGithubRepo(''), null);

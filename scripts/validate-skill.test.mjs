@@ -341,3 +341,51 @@ test('a tree missing gitignored state exits 0 and still refuses a clean pass', (
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// Runs the real gate on a fresh-clone tree, since the skill needles live inline in the validator rather than in validate-lib.
+const copyTrackedTree = (dest) => {
+  const ls = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
+  const files = ls.stdout.split('\0').filter(Boolean);
+  const tar = spawnSync('tar', ['-C', ROOT, '--null', '-T', '-', '-cf', '-'], {
+    input: files.join('\0') + '\0', encoding: null, maxBuffer: 256 * 1024 * 1024,
+  });
+  assert.equal(tar.status, 0, `tar of tracked files failed: ${tar.stderr?.toString().slice(0, 300)}`);
+  const untar = spawnSync('tar', ['-C', dest, '-xf', '-'], { input: tar.stdout, encoding: null });
+  assert.equal(untar.status, 0, `untar into the fixture failed: ${untar.stderr?.toString().slice(0, 300)}`);
+};
+
+const runGateWithoutMmdc = (tree, noMmdc) => {
+  const r = spawnSync('bun', [path.join(tree, 'scripts', 'validate-skill.mjs')], {
+    cwd: tree,
+    encoding: 'utf8',
+    timeout: 180_000,
+    env: { ...process.env, PATH: `${noMmdc}${path.delimiter}${process.env.PATH}` },
+  });
+  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+};
+
+test('the gate refuses a debt sweep that drops the plan-mark-done.mjs tick step', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-ticksteps-'));
+  const noMmdc = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-nommdc-'));
+  try {
+    copyTrackedTree(tmp);
+    fs.writeFileSync(path.join(noMmdc, 'mmdc'), '#!/bin/sh\nexit 127\n', { mode: 0o755 });
+    const sweep = path.join(tmp, 'skills', 'sucp-debt-sweep', 'SKILL.md');
+    const body = fs.readFileSync(sweep, 'utf8').replaceAll('plan-mark-done.mjs', '');
+    const missing = 'missing: debt sweep ticks task steps from runner evidence: literal "plan-mark-done.mjs" not found in skills/sucp-debt-sweep/SKILL.md';
+
+    fs.writeFileSync(sweep, body);
+    const without = runGateWithoutMmdc(tmp, noMmdc);
+    assert.equal(without.status, 1, `a sweep without the tick step must fail the gate\n${without.out.slice(-600)}`);
+    assert.ok(without.out.includes(missing), `the failure must name the needle\n${without.out.slice(-600)}`);
+
+    fs.writeFileSync(sweep, `${body}\nTick the steps with \`bun scripts/plan-mark-done.mjs\`.\n`);
+    const withStep = runGateWithoutMmdc(tmp, noMmdc);
+    assert.ok(!withStep.out.includes(missing), `a sweep naming the tick step must pass this needle\n${withStep.out.slice(-600)}`);
+    assert.match(withStep.out, /present: debt sweep ticks task steps from runner evidence/);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(noMmdc, { recursive: true, force: true });
+  }
+});

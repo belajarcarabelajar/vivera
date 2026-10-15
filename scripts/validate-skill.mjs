@@ -956,6 +956,28 @@ for (const snip of requiredSnippets) {
   }
 }
 
+// 3p. Fast-mode entry check (2026-10-15, plan 2026-10-15-overnight-fast-mode).
+// An unattended run rarely needs a premium speed mode and pays its higher price all night, so the
+// overnight entry gate, its catalog row, and its snippet each name the standard-speed condition.
+{
+  const fastModeContract = [
+    { label: 'entry check 5 names the standard-speed condition', file: 'skills/sucp-overnight/SKILL.md', needle: 'The harness runs at standard speed, or the plan\'s limits name its premium speed mode' },
+    { label: 'the gate counts five checks', file: 'skills/sucp-overnight/SKILL.md', needle: 'once the five checks hold' },
+    { label: 'the Overnight gate basis names the standard-speed condition', file: 'skills/sucp-rules/SKILL.md', needle: 'and the harness runs at standard speed unless the plan allows its premium speed mode' },
+    { label: 'the overnight snippet checks the standard-speed condition', file: 'snippets/orkestrasi-overnight.md', needle: 'the harness runs at standard speed (Claude Code: fast mode off)' },
+  ];
+  for (const c of fastModeContract) {
+    const target = path.join(rootDir, c.file);
+    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    if (text.includes(c.needle)) {
+      console.log(`✅ Fast-mode entry check present: ${c.label}`);
+    } else {
+      console.error(`❌ Fast-mode entry check missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
+      errors++;
+    }
+  }
+}
+
 // 3e. The snippet manifest must stay consistent with the files it tracks.
 // The database comparison itself needs a local Snipset install and runs in
 // `bun run snippets:check`, but these invariants hold everywhere, including CI.

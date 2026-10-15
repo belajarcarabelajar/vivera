@@ -648,6 +648,100 @@ test('a session worktree whose root project is not configured is refused, naming
   }
 });
 
+// The upstream remote comes before origin, so a reader that takes the first
+// url in the file instead of the origin section resolves the wrong repository.
+const gitConfig = (originUrl) => '[core]\n\trepositoryformatversion = 0\n'
+  + '[remote "upstream"]\n\turl = git@github.com:someone/fork.git\n'
+  + `[remote "origin"]\n\turl = ${originUrl}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n`;
+
+// A hand-written .git, so the origin read never sees the config of the checkout
+// running the suite.
+function originCheckout(dirName, originUrl) {
+  const base = mkdtempSync(path.join(tmpdir(), 'plan-issue-origin-'));
+  const repoRoot = path.join(base, dirName);
+  const full = path.join(repoRoot, PLAN_REL);
+  mkdirSync(path.dirname(full), { recursive: true });
+  mkdirSync(path.join(repoRoot, '.git'));
+  writeFileSync(path.join(repoRoot, '.git', 'config'), gitConfig(originUrl), 'utf8');
+  writeFileSync(full, plan('Draft'), 'utf8');
+  return { repoRoot, full, cleanup: () => rmSync(base, { recursive: true, force: true }) };
+}
+
+test('origin: parseGithubRepo reads https, scp-like and ssh GitHub URLs', () => {
+  assert.equal(syncModule.parseGithubRepo('https://github.com/owner/repo'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('https://github.com/owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('git@github.com:owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('ssh://git@github.com/owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('https://GitHub.com/owner/repo.git'), 'owner/repo');
+  assert.equal(syncModule.parseGithubRepo('https://gitlab.com/owner/repo.git'), null);
+  assert.equal(syncModule.parseGithubRepo(''), null);
+});
+
+test('origin: a checkout whose directory name is not a configured project resolves through its origin remote', () => {
+  const f = originCheckout('scratch-gate', 'git@github.com:u/snippet.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    const res = syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run: stub({ ok: true, out: '[]' }), dryRun: true });
+    assert.equal(res.repo, 'u/snippet');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('origin: a detached worktree resolves its origin through gitdir and commondir', () => {
+  const base = mkdtempSync(path.join(tmpdir(), 'plan-issue-origin-'));
+  try {
+    // Real worktree gitdirs hold no config of their own; it lives in the common dir.
+    const commonDir = path.join(base, 'main', '.git');
+    const gitdir = path.join(commonDir, 'worktrees', 'gate');
+    mkdirSync(gitdir, { recursive: true });
+    writeFileSync(path.join(commonDir, 'config'), gitConfig('https://github.com/u/snippet.git'), 'utf8');
+    writeFileSync(path.join(gitdir, 'commondir'), '../..\n', 'utf8');
+    const repoRoot = path.join(base, 'piso-gate');
+    const full = path.join(repoRoot, PLAN_REL);
+    mkdirSync(path.dirname(full), { recursive: true });
+    writeFileSync(path.join(repoRoot, '.git'), `gitdir: ${gitdir}\n`, 'utf8');
+    writeFileSync(full, plan('Draft'), 'utf8');
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    const res = syncOne(cfg, { planPath: full, repoRoot, run: stub({ ok: true, out: '[]' }), dryRun: true });
+    assert.equal(res.repo, 'u/snippet');
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('origin: a directory name and an origin remote that name different repositories are refused, naming both', () => {
+  const f = originCheckout('Snipset', 'https://github.com/u/b.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/a', Other: 'u/b' }, issues: {} };
+    const run = stub({ ok: true, out: '[]' });
+    assert.throws(
+      () => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true }),
+      (e) => e instanceof Error && e.message.includes('u/a') && e.message.includes('u/b'),
+    );
+    assert.equal(run.calls.length, 0, 'the refusal comes before any gh call');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('origin: an origin remote that no project maps to is refused, naming the origin', () => {
+  const f = originCheckout('scratch-gate', 'git@github.com:u/stray.git');
+  try {
+    const cfg = { version: 1, projects: { Snipset: 'u/snippet' }, issues: {} };
+    const run = stub({ ok: true, out: '[]' });
+    assert.throws(
+      () => syncOne(cfg, { planPath: f.full, repoRoot: f.repoRoot, run, dryRun: true }),
+      (e) => e instanceof Error
+        && e.message.startsWith('no GitHub repository is configured for project')
+        && e.message.includes('u/stray'),
+    );
+    assert.equal(run.calls.length, 0, 'the refusal comes before any gh call');
+  } finally {
+    f.cleanup();
+  }
+});
+
 test('a malformed owner/repo in the config is a load error', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'plan-issue-cfg-'));
   try {

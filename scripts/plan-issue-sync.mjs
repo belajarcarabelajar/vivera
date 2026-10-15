@@ -625,7 +625,7 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   if (entry && entry.repo && !sameRepo(entry.repo, repo)) {
     throw new Error(
       `${key}: the recorded issue #${entry.number ?? '?'} belongs to ${entry.repo}, not ${repo}, so this plan is not synced against it. `
-      + `Fix: rename the plan file, or sync it with --project <name> of the repository it belongs to (${entry.repo}). Nothing was read and nothing was written.`,
+      + `Fix: rename the plan file so its key no longer matches the record of ${entry.repo}, then sync the renamed plan. Nothing was read and nothing was written.`,
     );
   }
   // Read GitHub BEFORE deciding. A dry run reads too, because `--check` is

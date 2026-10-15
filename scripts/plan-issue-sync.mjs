@@ -46,7 +46,9 @@ import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
-const DEFAULT_CONFIG = path.join(rootDir, 'plan.issues.json');
+const DEFAULT_CONFIG = process.env.VIVERA_PLAN_ISSUES
+  ? path.resolve(process.env.VIVERA_PLAN_ISSUES)
+  : path.join(rootDir, 'plan.issues.json');
 // The one store every repository's records are written to. Readers (the
 // merged gate) import this instead of guessing a per-repository file.
 export const ISSUES_STORE = DEFAULT_CONFIG;

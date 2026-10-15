@@ -836,6 +836,18 @@ test('CLI: claim records the repository given with --repo', () => {
   } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
 });
 
+test('claim prints the local-state worktree rule', () => {
+  const reg = registryFile('localstate');
+  const repo = mkdtempSync(path.join(tmpdir(), 'pr-registry-localstate-repo-'));
+  try {
+    const r = runCli('claim', '--plan', 'p', '--session', 'w1', '--registry', reg.file, '--repo', repo);
+    assert.equal(r.code, 0, r.err);
+    assert.ok(r.out.includes('detached /tmp worktree'), r.out);
+    assert.ok(r.out.includes('never into this worktree'), r.out);
+    assert.ok(r.out.includes('MEMORY.md L56'), r.out);
+  } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
+});
+
 test('resolveMergeRepo prefers --repo, then the recorded repository, then this repository', () => {
   const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
   assert.equal(resolveMergeRepo({ repo: '/recorded' }, 'given'), path.resolve('given'));

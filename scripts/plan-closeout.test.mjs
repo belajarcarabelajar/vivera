@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
+import { tickSteps } from './plan-mark-done.mjs';
 
 const { closeoutGaps, checkCloseout: checkCloseoutRaw } = closeout;
 
@@ -531,7 +532,7 @@ describe('closeout CLI', () => {
       '---', '', '| Item | Class | State |', '|---|---|---|', '| x | NOW | DONE |', '',
     ].join('\n'));
     const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nopen step boxes: 0\nreadiness: READY\n');
+    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nreadiness: READY\n');
     assert.equal(r.exitCode, 0);
   });
 
@@ -578,7 +579,7 @@ describe('closeout CLI', () => {
     const root = tmpRoot();
     const file = planWith(root, [{ id: 'T1', skipIf: 'echo noisy; echo noisy-err >&2; true' }]);
     const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nopen step boxes: 0\nreadiness: READY\n`);
+    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nreadiness: READY\n`);
   });
 
   test('failure output: a task printing many lines shows at most 5', () => {
@@ -663,41 +664,88 @@ describe('closeout CLI', () => {
 
 describe('open step boxes', () => {
   const FENCE = '`'.repeat(3);
-  const boxedPlan = [
-    '---', 'plan_id: demo', 'status: Complete', 'notes: |', '  - [ ] in frontmatter, not body', '---',
-    '', '# Demo',
-    '- [ ] Step 1 write the test',
-    '  - [ ] Step 2 indented',
-    '* [ ] Step 3 star',
-    '- [x] Step 4 ticked',
-    '- [X] Step 5 ticked',
-    FENCE,
-    '- [ ] inside a backtick fence',
-    '~~~',
-    '- [ ] a tilde line does not close a backtick fence',
-    FENCE,
-    '~~~',
-    '* [ ] inside a tilde fence',
-    '~~~',
-    '- [ ] Step 6 after the fences',
+  const front = (ids, status = 'Complete') => [
+    '---', 'schema: ultra-plan/v1', 'plan_id: demo', `status: ${status}`, 'tasks:',
+    ...ids.flatMap((id) => [`  - id: ${id}`, '    depends_on: []', '    skip_if: "test -f marker"']),
+    '---',
+  ];
+  // Shaped like templates/implementation-plan-template.md: every step ticked, open boxes only in sections no task owns.
+  const templatePlan = [
+    ...front(['T1', 'T2']), '', '# Demo', '',
+    '## 1. Acceptance Criteria',
+    '- [ ] AC1 the gate reads ticks',
+    '- [ ] AC2 nothing else',
+    '',
+    '### Task T1: first',
+    '- [x] Step 1 write the test',
+    '- [X] Step 2 run it',
+    '',
+    '### Task T2: second',
+    '- [x] Step 1 done',
+    '',
+    '## 8. Approval',
+    '- [ ] Approved by the owner',
     '',
   ].join('\n');
 
-  test('open step boxes: body boxes are counted with whole-file line numbers', () => {
-    assert.deepEqual(closeout.openStepBoxes(boxedPlan), [
-      { line: 9, text: '- [ ] Step 1 write the test' },
-      { line: 10, text: '- [ ] Step 2 indented' },
-      { line: 11, text: '* [ ] Step 3 star' },
-      { line: 22, text: '- [ ] Step 6 after the fences' },
+  test('open step boxes: a template-shaped plan with every step ticked has none, its other open boxes are listed', () => {
+    assert.deepEqual(closeout.openStepBoxes(templatePlan), []);
+    assert.deepEqual(closeout.otherOpenBoxes(templatePlan), [
+      { line: 17, text: '- [ ] AC1 the gate reads ticks' },
+      { line: 18, text: '- [ ] AC2 nothing else' },
+      { line: 28, text: '- [ ] Approved by the owner' },
     ]);
   });
 
-  test('open step boxes: a plan with only ticked boxes has none', () => {
-    assert.deepEqual(closeout.openStepBoxes(plan('Complete') + '- [x] Step 1 done\n'), []);
+  test('open step boxes: an open step inside ### Task T1 blocks and names the task', () => {
+    const text = templatePlan.replace('- [X] Step 2 run it', '- [ ] Step 2 run it');
+    assert.deepEqual(closeout.openStepBoxes(text), [{ line: 22, text: '- [ ] Step 2 run it', task: 'T1' }]);
   });
 
-  test('open step boxes: a plan without frontmatter is scanned whole, so the merge gate does not throw', () => {
-    assert.deepEqual(closeout.openStepBoxes('# Demo\n- [ ] Step 1 a\n'), [{ line: 2, text: '- [ ] Step 1 a' }]);
+  test('open step boxes: a bare box at the end of a step line counts, as plan-mark-done ticks it', () => {
+    const text = [...front(['T1']), '', '### Task T1: bare', '- [ ]', ''].join('\n');
+    assert.deepEqual(closeout.openStepBoxes(text), [{ line: 12, text: '- [ ]', task: 'T1' }]);
+  });
+
+  test('open step boxes: a fenced example inside a task section does not count, as plan-mark-done skips it', () => {
+    const text = [...front(['T1']), '', '### Task T1: fenced', FENCE, '- [ ] example inside a fence', FENCE, '- [x] Step 1 done', ''].join('\n');
+    assert.deepEqual(closeout.openStepBoxes(text), []);
+  });
+
+  test('open step boxes: the counted lines are exactly the lines plan-mark-done ticks', () => {
+    const text = [
+      ...front(['T1', 'T2']), '', '- [ ] before any task',
+      '### Task T1: tricky',
+      '- [ ]',
+      '+ [ ] plus bullet',
+      '-\t[ ] tab after the bullet',
+      '  * [ ] indented star',
+      '- [ ]x a typo is not a box',
+      'prose that mentions - [ ] mid-line',
+      FENCE, '- [ ] example', '~~~', '- [ ] after a tilde marker', FENCE,
+      '- [ ] fenced again', FENCE,
+      '#### Notes',
+      '- [ ] under a deeper heading, outside the task',
+      '### Task T2: plain',
+      '- [ ] Step 1 open',
+      '- [x] Step 2 done',
+      '',
+    ].join('\n');
+    const before = text.split('\n');
+    const ticked = (id) => tickSteps(text, id).lines.flatMap((l, i) => (l === before[i] ? [] : [i + 1]));
+    const expected = [...ticked('T1'), ...ticked('T2')];
+    assert.ok(expected.length >= 5, 'the fixture must exercise several box forms');
+    assert.deepEqual(closeout.openStepBoxes(text).map((b) => b.line), expected);
+  });
+
+  test('other open boxes: a fenced example and a ticked box outside task sections are not listed', () => {
+    const text = [...front(['T1']), '', '## Notes', FENCE, '- [ ] example', FENCE, '- [x] done', '+ [ ] plus', '-\t[ ]', ''].join('\n');
+    assert.deepEqual(closeout.otherOpenBoxes(text), [{ line: 16, text: '+ [ ] plus' }, { line: 17, text: '-\t[ ]' }]);
+  });
+
+  test('open step boxes: a plan without frontmatter tasks blocks nothing, its boxes are other open boxes, and nothing throws', () => {
+    assert.deepEqual(closeout.openStepBoxes('# Demo\n- [ ] Step 1 a\n'), []);
+    assert.deepEqual(closeout.otherOpenBoxes('# Demo\n- [ ] Step 1 a\n'), [{ line: 2, text: '- [ ] Step 1 a' }]);
   });
 
   test('open step boxes make every-DONE tasks NOT-READY with exit 1', () => {
@@ -716,54 +764,112 @@ describe('open step boxes', () => {
     assert.equal(closeout.readinessVerdict({ tasks: [{ id: 'T1', state: 'UNPROVEN' }], openBoxes: 0 }).verdict, 'NEEDS-HUMAN');
   });
 
-  test('open step boxes: readiness CLI prints the count, five lines and the tick command, then exits 1', () => {
-    const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
+  const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
+  const readiness = (text) => {
     const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
     dirs.push(root);
     writeFileSync(path.join(root, 'marker'), '');
     const file = path.join(root, 'plan.md');
-    writeFileSync(file, [
-      '---', 'schema: ultra-plan/v1', 'plan_id: demo', 'tasks:',
-      '  - id: T1', '    depends_on: []', '    skip_if: "test -f marker"',
-      '---', '',
-      ...[1, 2, 3, 4, 5, 6].map((n) => `  - [ ] Step ${n} todo  `),
-      '',
-    ].join('\n'));
+    writeFileSync(file, text);
     const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe' });
-    assert.equal(r.stdout.toString(), [
+    return { file, out: r.stdout.toString(), exit: r.exitCode };
+  };
+  const tickFor = (file) => `bun scripts/ultra-plan-runner.mjs ${file} --execute > runner.log; bun scripts/plan-mark-done.mjs ${file} --from runner.log`;
+
+  test('open step boxes: readiness CLI prints the count, five task rows and the tick command, then exits 1', () => {
+    const { file, out, exit } = readiness([
+      ...front(['T1']), '', '### Task T1: todo',
+      ...[1, 2, 3, 4, 5, 6].map((n) => `  - [ ] Step ${n} todo  `),
+      '', '## Approval', '- [ ] Approved', '',
+    ].join('\n'));
+    assert.equal(out, [
       'T1\tDONE\ttest -f marker',
       'open NOW follow-ups: 0',
       'open step boxes: 6',
-      '    line 10: - [ ] Step 1 todo',
-      '    line 11: - [ ] Step 2 todo',
-      '    line 12: - [ ] Step 3 todo',
-      '    line 13: - [ ] Step 4 todo',
-      '    line 14: - [ ] Step 5 todo',
-      `    tick from evidence: bun scripts/ultra-plan-runner.mjs ${file} --execute > runner.log && bun scripts/plan-mark-done.mjs ${file} --from runner.log`,
+      '    line 12 (T1): - [ ] Step 1 todo',
+      '    line 13 (T1): - [ ] Step 2 todo',
+      '    line 14 (T1): - [ ] Step 3 todo',
+      '    line 15 (T1): - [ ] Step 4 todo',
+      '    line 16 (T1): - [ ] Step 5 todo',
+      `    tick from evidence: ${tickFor(file)}`,
+      'other open boxes: 1 (outside task sections; tick by hand with evidence, not counted)',
+      '    line 20: - [ ] Approved',
       'readiness: NOT-READY',
       '',
     ].join('\n'));
-    assert.equal(r.exitCode, 1);
+    assert.equal(exit, 1);
   });
 
-  const tick = `bun scripts/ultra-plan-runner.mjs ${PLAN} --execute > runner.log && bun scripts/plan-mark-done.mjs ${PLAN} --from runner.log`;
+  test('other open boxes: a template-shaped plan is READY and the CLI lists its other open boxes as not counted', () => {
+    const { out, exit } = readiness(templatePlan);
+    assert.equal(out, [
+      'T1\tDONE\ttest -f marker',
+      'T2\tDONE\ttest -f marker',
+      'open NOW follow-ups: 0',
+      'open step boxes: 0',
+      'other open boxes: 3 (outside task sections; tick by hand with evidence, not counted)',
+      '    line 17: - [ ] AC1 the gate reads ticks',
+      '    line 18: - [ ] AC2 nothing else',
+      '    line 28: - [ ] Approved by the owner',
+      'readiness: READY',
+      '',
+    ].join('\n'));
+    assert.equal(exit, 0);
+  });
 
-  test('open step boxes: checkCloseout on a Complete plan reports OPEN_STEPS with lines and the tick command', () => {
-    const root = repo({ planText: plan('Complete') + '- [ ] Step 1 a\n- [x] Step 2 b\n- [ ] Step 3 c\n', config: cfgWith(closedEntry) });
+  const tick = tickFor(PLAN);
+
+  test('open step boxes: the tick command always runs plan-mark-done, never chained behind the runner with &&', () => {
+    const text = [...front(['T1']), '', '### Task T1: a', '- [ ] Step 1 a', ''].join('\n');
+    const root = repo({ planText: text, config: cfgWith(closedEntry) });
+    const { fix } = checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps[0];
+    assert.doesNotMatch(fix, /&&/);
+    assert.match(fix, /--execute > runner\.log; bun scripts\/plan-mark-done\.mjs /);
+  });
+
+  test('open step boxes: checkCloseout reports OPEN_STEPS naming the tasks and lines, with the tick command', () => {
+    const text = [
+      ...front(['T1', 'T2', 'T3']), '',
+      '### Task T1: a', '- [ ] Step 1 a', '- [x] Step 2 b',
+      '### Task T2: b', '- [x] Step 1 c',
+      '### Task T3: c', '- [ ] Step 1 d', '- [ ] Step 2 e', '',
+    ].join('\n');
+    const root = repo({ planText: text, config: cfgWith(closedEntry) });
     const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
+    assert.equal(r.skipped, null);
     assert.deepEqual(r.gaps, [{
       code: 'OPEN_STEPS',
-      message: `${PLAN} has 2 open step box(es) (lines 7, 9)`,
+      message: `${PLAN} has 3 open step box(es) in T1, T3 (lines 18, 23, 24)`,
       fix: tick,
     }]);
   });
 
+  test('other open boxes: checkCloseout notes them in skipped with at most five line numbers, never as a gap', () => {
+    const root = repo({ planText: templatePlan, config: cfgWith(closedEntry) });
+    const r = checkCloseout({ repoRoot: root, planSlug: 'demo' });
+    assert.deepEqual(r.gaps, []);
+    assert.equal(r.skipped, 'other open boxes: 3 outside task sections, not counted (lines 17, 18, 28)');
+    const many = [
+      ...front(['T1']), '', '## Acceptance',
+      ...[1, 2, 3, 4, 5, 6, 7].map((n) => `- [ ] AC${n}`),
+      '### Task T1: a', '- [x] Step 1', '',
+    ].join('\n');
+    const root2 = repo({ planText: many, config: cfgWith(closedEntry) });
+    assert.equal(
+      checkCloseout({ repoRoot: root2, planSlug: 'demo' }).skipped,
+      'other open boxes: 7 outside task sections, not counted (lines 12, 13, 14, 15, 16, ...)',
+    );
+  });
+
   test('open step boxes: checkCloseout lists five line numbers and sits after the issue gaps, before the mirror', () => {
-    const steps = [1, 2, 3, 4, 5, 6, 7].map((n) => `- [ ] Step ${n}\n`).join('');
+    const text = [
+      ...front(['T1'], 'Verification'), '', '### Task T1: many',
+      ...[1, 2, 3, 4, 5, 6, 7].map((n) => `- [ ] Step ${n}`), '',
+    ].join('\n');
     const entry = { ...closedEntry, state: 'open', status: 'Verification' };
-    const root = repo({ planText: plan('Verification') + steps, config: cfgWith(entry) });
+    const root = repo({ planText: text, config: cfgWith(entry) });
     const r = checkCloseoutRaw({ repoRoot: root, planSlug: 'demo', freshness: mirror('DRIFT', 'hash differs') });
     assert.deepEqual(codes(r.gaps), ['PLAN_NOT_COMPLETE', 'ISSUE_NOT_CLOSED', 'OPEN_STEPS', 'MIRROR_STALE']);
-    assert.equal(r.gaps[2].message, `${PLAN} has 7 open step box(es) (lines 7, 8, 9, 10, 11, ...)`);
+    assert.equal(r.gaps[2].message, `${PLAN} has 7 open step box(es) in T1 (lines 12, 13, 14, 15, 16, ...)`);
   });
 });

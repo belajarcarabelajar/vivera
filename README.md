@@ -1474,6 +1474,42 @@ A line that states the rule is exempt from it, with a two-line lookback so a
 wrapped markdown checklist item can quote the trigger phrase it forbids. The
 window is bounded: a violation four lines below a rule statement is still caught.
 
+### Design tells: no decorative left stripe
+
+The master skill names seven frontend tells (an eyebrow badge, a decorative
+status dot, a colored left stripe, and four more). The one with a mechanical
+shape has a gate, `bun run design:check`:
+
+```bash
+bun run design:check <file-or-dir>...   # whole files; a directory is walked
+cd <repo> && bun <vivera>/scripts/check-design-tells.mjs --diff origin/main
+                                        # only stylesheet lines added since the base
+```
+
+It exists because on 2026-10-16 the Snipset website still carried 31 decorative
+left stripes while the tell had been prose in `sucp-rules` all along: a 4px accent
+`border-left` on the closing CTA card of every solutions page (23 inline
+`style=""` attributes, EN and ID), on the compare page's TCO card, on every
+testimonial card (a 4px gradient `::before`), on two terminal demo boxes, and on
+the 404 page. None marked a state. The owner found the first one in a screenshot.
+
+| Shape | Pattern |
+|---|---|
+| Border stripe | `border-left`, `border-left-width`, `border-inline-start(-width)` of 2px or more with a visible colour |
+| Shadow stripe | `box-shadow: inset <N>px 0 0 ...` with N of 2 or more |
+| Pseudo-element stripe | a `::before`/`::after` that is `position: absolute`, `left: 0`, 2 to 8px wide, and full height |
+| Utility stripe | Tailwind `border-l-2`, `border-l-4`, `border-l-8` in a class list |
+
+A stripe is a signal when its selector says which state it marks, so a selector
+(or any enclosing selector, or the element's own tag for an inline style) that
+contains `active`, `current`, `selected`, `warning`, `error`, `success`, `alert`,
+`callout`, `blockquote`, `status`, `pass`, `fail`, or the rest of `STATE_WORDS`
+passes on its own. Anything else needs `/* design-tells: allow <reason> */` on
+the same line or the line above, and a waiver without a reason is a violation of
+its own. A 1px border is a border, and top, right, and bottom borders stay out of
+scope until one is measured as a tell. Like `copy:check`, `--diff` judges only
+the lines the branch adds, so an old stripe never blocks an unrelated PR.
+
 ### Strict retries: `retry_if`
 
 ```yaml

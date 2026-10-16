@@ -104,6 +104,7 @@ function isGateOrConsumer(relFile) {
     'scripts/ultra-plan-runner.mjs',
     'scripts/check-runner-contract.mjs',
     'scripts/check-copy-rules.mjs',
+    'scripts/check-design-tells.mjs',
     'scripts/pr-registry.mjs',
     'scripts/plan-publish.mjs',
     'scripts/plan-publish-registry.mjs',

@@ -22,5 +22,6 @@ How to audit:
 - Derive each requirement from the plan and judge whether the evidence proves it. Partial or indirect proof is a finding, not a pass.
 - Every finding cites the exact rule it breaks or the observable defect. A style preference with no rule behind it is not a finding.
 - Scan changed user-visible files and every commit message for em dashes and for attribution footers or co-author trailers. Run `bun scripts/check-copy-rules.mjs --diff origin/main`: it checks only the lines the branch adds (whole-file mode is red on pre-existing hits) plus the branch's commit messages, and prints how many lines, files, and messages it scanned, so a zero count is visible.
+- Scan added stylesheet lines for a decorative left stripe, the one named tell with a mechanical shape. Run `bun scripts/check-design-tells.mjs --diff origin/main` in the repository under review: a 2px or wider `border-left`, an inset shadow, a full-height `::before` bar, or a `border-l-*` utility on a selector that names no state is a finding, and a `design-tells: allow` waiver without a reason is one too.
 
 Report every finding, deduplicated by location and defect, each with a path, a line, and the failing evidence. State separately what you verified and what you could not.

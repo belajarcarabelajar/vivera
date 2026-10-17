@@ -29,6 +29,16 @@ fi
 if [[ "$cmd" == *"mktemp -d "* ]]; then
   mktemp -u "\${cmd##*mktemp -d }"
 fi
+# Same shape as wrangler 4.151.1 \`deployments list --json\` (JSON.stringify(list, null, 2)).
+if [[ "$cmd" == *"deployments list --json"* ]]; then
+  n="\${STUB_DEPLOYMENTS:-2}"
+  printf '['
+  for ((k = 1; k <= n; k++)); do
+    [ "$k" -eq 1 ] || printf ','
+    printf '\\n  {\\n    "id": "dep-%s",\\n    "source": "wrangler",\\n    "versions": [\\n      {\\n        "version_id": "ver-%s",\\n        "percentage": 100\\n      }\\n    ]\\n  }' "$k" "$k"
+  done
+  printf '\\n]\\n'
+fi
 exit 0
 `,
   rsync: `#!/usr/bin/env bash
@@ -55,7 +65,20 @@ exec "$STUB_REAL_GIT" "$@"
 `,
   bun: `#!/usr/bin/env bash
 printf 'bun\\t%s\\n' "$*" >> "$STUB_LOG"
-case " $* " in *" --live "*) exit "\${STUB_LIVE_EXIT:-0}" ;; esac
+case " $* " in *" --live "*)
+  # STUB_LIVE_EXITS is one exit code per live check; the last one repeats.
+  if [ -n "\${STUB_LIVE_EXITS:-}" ]; then
+    read -r -a codes <<< "$STUB_LIVE_EXITS"
+    n=$(grep -c -e ' --live ' "$STUB_LOG")
+    [ "$n" -le "\${#codes[@]}" ] || n="\${#codes[@]}"
+    exit "\${codes[$((n - 1))]}"
+  fi
+  exit "\${STUB_LIVE_EXIT:-0}" ;;
+esac
+exit 0
+`,
+  sleep: `#!/usr/bin/env bash
+printf 'sleep\\t%s\\n' "$*" >> "$STUB_LOG"
 exit 0
 `,
 };
@@ -191,21 +214,91 @@ test('deploy --dry-run streams HEAD, runs the build steps in order, and only dry
   expect(path.basename(logLine.slice(5))).toMatch(/^vivera-docs-remote-deploy-\d{8}T\d{6}Z\.log$/);
 });
 
-test('a real deploy whose live check fails rolls back and exits 1', () => {
-  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXIT: '1' });
+const isLive = (c) => c.tool === 'bun' && c.text.includes(`--live ${LIVE_URL}`);
+const isRollback = (c) =>
+  c.tool === 'ssh' && c.text.includes('bunx wrangler@4.151.1 rollback --message "smoke failed" --yes');
+const isDeploymentsList = (c) => c.tool === 'ssh' && c.text.includes('bunx wrangler@4.151.1 deployments list --json');
+const sleeps = () => calls().filter((c) => c.tool === 'sleep').map((c) => c.text);
+
+test('a live check that fails twice then passes exits 0 with no rollback', () => {
+  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXITS: '1 1 0' });
+  expect(r.code).toBe(0);
+  expect(calls().filter(isLive)).toHaveLength(3);
+  expect(sleeps()).toEqual(['20', '20']);
+  expect(calls().some(isRollback)).toBe(false);
+  expect(calls().some(isDeploymentsList)).toBe(false);
+  expectInOrder(r.out, [
+    'live check: attempt 1/10 exit 1',
+    'live check: attempt 2/10 exit 1',
+    'live check: attempt 3/10 exit 0',
+    'deploy: ok, live check passed',
+  ]);
+});
+
+test('a live check that fails every attempt with an earlier deployment rolls back and exits 1', () => {
+  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXIT: '1', STUB_DEPLOYMENTS: '2' });
   expect(r.code).toBe(1);
 
   const seq = calls();
   const deployAt = seq.findIndex((c) => c.tool === 'ssh' && REAL_WRANGLER_DEPLOY.test(c.text));
-  const liveAt = seq.findIndex((c) => c.tool === 'bun' && c.text.includes(`--live ${LIVE_URL}`));
-  const rollbackAt = seq.findIndex(
-    (c) => c.tool === 'ssh' && c.text.includes('bunx wrangler@4.151.1 rollback --message "smoke failed" --yes'),
-  );
+  const firstLiveAt = seq.findIndex(isLive);
+  const lastLiveAt = seq.findLastIndex(isLive);
+  const listAt = seq.findIndex(isDeploymentsList);
+  const rollbackAt = seq.findIndex(isRollback);
   expect(deployAt).toBeGreaterThan(-1);
-  expect(liveAt).toBeGreaterThan(deployAt);
-  expect(rollbackAt).toBeGreaterThan(liveAt);
+  expect(firstLiveAt).toBeGreaterThan(deployAt);
+  expect(seq.filter(isLive)).toHaveLength(10);
+  expect(sleeps()).toEqual(Array(9).fill('20'));
+  expect(listAt).toBeGreaterThan(lastLiveAt);
+  expect(rollbackAt).toBeGreaterThan(listAt);
+  expect(r.out).toContain('live check: attempt 10/10 exit 1');
   expect(r.out).toContain('live check: exit 1');
   expect(r.out).toContain('rollback: exit 0');
+});
+
+test('a live check that fails every attempt on a first deployment skips the rollback and exits 1', () => {
+  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXIT: '1', STUB_DEPLOYMENTS: '1' });
+  expect(r.code).toBe(1);
+  expect(calls().some(isDeploymentsList)).toBe(true);
+  expect(calls().some(isRollback)).toBe(false);
+  expect(r.out).toContain('nothing to roll back to');
+  expect(r.out).toContain('remove the docs routes by hand');
+  expect(r.out).toContain('live check: exit 1');
+});
+
+test('a deployments list that fails skips the rollback and exits 1', () => {
+  const r = run(['deploy'], {
+    VIVERA_DOCS_DEPLOY_ACK: ACK,
+    STUB_LIVE_EXIT: '1',
+    STUB_SSH_FAIL_MATCH: 'deployments list',
+  });
+  expect(r.code).toBe(1);
+  expect(calls().some(isRollback)).toBe(false);
+  expect(r.out).toContain('could not list deployments');
+});
+
+test('VIVERA_DOCS_LIVE_ATTEMPTS and VIVERA_DOCS_LIVE_INTERVAL set the retry count and the wait', () => {
+  const r = run(['deploy'], {
+    VIVERA_DOCS_DEPLOY_ACK: ACK,
+    STUB_LIVE_EXIT: '1',
+    VIVERA_DOCS_LIVE_ATTEMPTS: '3',
+    VIVERA_DOCS_LIVE_INTERVAL: '5',
+  });
+  expect(r.code).toBe(1);
+  expect(calls().filter(isLive)).toHaveLength(3);
+  expect(sleeps()).toEqual(['5', '5']);
+  expect(r.out).toContain('live check: attempt 3/3 exit 1');
+});
+
+test.each([
+  ['VIVERA_DOCS_LIVE_ATTEMPTS', '0'],
+  ['VIVERA_DOCS_LIVE_ATTEMPTS', 'three'],
+  ['VIVERA_DOCS_LIVE_INTERVAL', '-1'],
+])('deploy refuses %s=%s with exit 2 before any ssh', (name, value) => {
+  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, [name]: value });
+  expect(r.code).toBe(2);
+  expect(r.out).toContain(name);
+  expect(sshCalls()).toEqual([]);
 });
 
 test('a real deploy whose live check passes exits 0 without a rollback', () => {
@@ -236,6 +329,7 @@ test('every wrangler call runs the pinned wrangler@4.151.1', () => {
   expect(wrangler).toEqual([
     ['wrangler@4.151.1', 'deploy'],
     ['wrangler@4.151.1', 'deploy'],
+    ['wrangler@4.151.1', 'deployments'],
     ['wrangler@4.151.1', 'rollback'],
   ]);
 });

@@ -26,6 +26,23 @@ Note on the MIT License: it requires that the upstream copyright notice be kept
 with substantial portions of the software. This file provides that notice for
 the copies listed above.
 
+## Pagefind
+
+- Location: not stored in this repository. The docs site build
+  (`scripts/docs-remote.sh build`) runs `bunx pagefind@1.5.2`, which writes the
+  Pagefind UI (`pagefind-ui.js`, `pagefind-ui.css`), its search runtime, and the
+  generated index files into `apps/docs/dist/docs/pagefind/`. Those files ship
+  with the published docs site, which loads the UI from `apps/docs/assets/docs.js`.
+- Upstream: https://github.com/Pagefind/pagefind (formerly
+  https://github.com/CloudCannon/pagefind), npm package `pagefind` 1.5.2
+- Copyright 2022 Pagefind
+- License: MIT
+
+Footnote: license verified on 2026-10-17 from
+https://raw.githubusercontent.com/CloudCannon/pagefind/main/LICENSE, which reads
+"Copyright 2022 Pagefind" under the MIT License, and from the npm registry entry
+https://registry.npmjs.org/pagefind/1.5.2 (`"license": "MIT"`).
+
 ## Harvest Sprites illustration (not MIT)
 
 - Location in this repo: `docs/images/btn-harvest-sprites.jpg`, shown in `README.md`.

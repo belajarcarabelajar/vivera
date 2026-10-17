@@ -1,0 +1,44 @@
+[package]
+name = "vivera-docs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# Standalone crate: an empty workspace table keeps Cargo from looking upward.
+[workspace]
+
+[dependencies]
+maudit = "=0.12.1"
+maud = "=0.27.0"
+serde = { version = "=1.0.229", features = ["derive"] }
+
+# Not used directly. maudit 0.12.1 asks for rolldown ^1.2.4, but rolldown 1.2.14
+# changed its plugin types and maudit stops compiling. The rolldown crates and
+# string_wizard require each other with caret ranges, so these pins hold the
+# whole family at the 1.2.4 that maudit's own Cargo.lock resolves.
+rolldown = "=1.2.4"
+rolldown_common = "=1.2.4"
+rolldown_dev_common = "=1.2.4"
+rolldown_devtools = "=1.2.4"
+rolldown_devtools_action = "=1.2.4"
+rolldown_ecmascript = "=1.2.4"
+rolldown_ecmascript_utils = "=1.2.4"
+rolldown_error = "=1.2.4"
+rolldown_fs = "=1.2.4"
+rolldown_plugin = "=1.2.4"
+rolldown_plugin_asset_module = "=1.2.4"
+rolldown_plugin_chunk_import_map = "=1.2.4"
+rolldown_plugin_copy_module = "=1.2.4"
+rolldown_plugin_data_url = "=1.2.4"
+rolldown_plugin_hmr = "=1.2.4"
+rolldown_plugin_lazy_compilation = "=1.2.4"
+rolldown_plugin_oxc_runtime = "=1.2.4"
+rolldown_plugin_replace = "=1.2.4"
+rolldown_plugin_utils = "=1.2.4"
+rolldown_resolver = "=1.2.4"
+rolldown_sourcemap = "=1.2.4"
+rolldown_std_utils = "=1.2.4"
+rolldown_tracing = "=1.2.4"
+rolldown_utils = "=1.2.4"
+string_wizard = "=1.2.4"

@@ -17,6 +17,12 @@ diagrams/*
 # every time, which trains you to ignore untracked files.
 .mermaid-tmp/
 
+# Build output and generated content of the docs site under apps/docs.
+apps/docs/target/
+apps/docs/dist/
+apps/docs/content/en/
+apps/docs/static/generated/
+
 # Session coordination state for the PR delivery stage. This is per-machine live
 # state, not source: it records which branch and worktree each running session
 # holds right now, so twenty concurrent sessions can find each other. Committing

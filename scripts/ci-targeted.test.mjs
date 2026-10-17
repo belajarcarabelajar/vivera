@@ -192,6 +192,12 @@ describe('planChecks', () => {
     expect(plan.suites[0].reasons.join('\n')).toContain('Dockerfile');
   });
 
+  test('a path under apps/ is recognized and does not force full', () => {
+    const plan = planChecks(['apps/docs/src/main.rs'], INDEX);
+    expect(plan.full).toBe(false);
+    expect(names(plan)).toEqual(['copy-rules']);
+  });
+
   test('a module that no test reaches forces full', () => {
     const plan = planChecks(['scripts/orphan.mjs'], INDEX);
     expect(plan.full).toBe(true);

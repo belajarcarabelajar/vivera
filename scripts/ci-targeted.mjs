@@ -60,7 +60,7 @@ const CATEGORIES = [
   },
 ];
 
-const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/'];
+const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/', 'apps/'];
 const RECOGNIZED_FILES = [
   'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'Super Ultra Code Plan Implementation.md',
   'LICENSE', 'THIRD-PARTY-NOTICES.md', '.gitignore', '.graphifyignore', 'puppeteer-config.json',

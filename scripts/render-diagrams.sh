@@ -80,6 +80,8 @@ done < <(find "$REPO_DIR" -name "*.md" -type f \
   -not -path "*/node_modules/*" \
   -not -path "*/.git/*" \
   -not -path "*/diagrams/*" \
+  -not -path "*/target/*" \
+  -not -path "*/dist/*" \
   -print0 | sort -z)
 
 block_count=$(find "$STAGE_DIR" -name "*.mmd" -type f | wc -l | tr -d ' ')

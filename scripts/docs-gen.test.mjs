@@ -465,6 +465,29 @@ test('an unknown anchor keeps the current fallback in the written page', async (
   expect(body).toContain('[readme nowhere](/docs/start/intro/)');
 });
 
+// The docs crate serves getting-started/introduction at /docs/ itself.
+const INTRO_PAGES = [
+  { ...PAGES[0], category: 'getting-started', slug: 'introduction' },
+  ...PAGES.slice(1),
+];
+
+test('a link to the introduction page becomes /docs/ keeping its anchor', async () => {
+  const readme = README_LINES.join('\n')
+    .replace('Read [the guide](docs/guide.md).', 'Read [the guide](docs/guide.md).\n\n### Farm Notes\n\nNotes.')
+    .replace('Deep text.', 'Deep text. [home](README.md) [notes](#farm-notes) [notes file](README.md#farm-notes)');
+  const root = makeRepo({ readme, pages: INTRO_PAGES });
+  const r = await run(['--root', root, '--write']);
+  expect(r.code).toBe(0);
+  const gs = bodyOf(readPage(root, 'start-getting-started.md'));
+  expect(gs).toContain('[home](/docs/)');
+  expect(gs).toContain('[notes](/docs/#farm-notes)');
+  expect(gs).toContain('[notes file](/docs/#farm-notes)');
+  expect(gs).toContain('[refs](/docs/start/reference/)');
+  const guide = bodyOf(readPage(root, 'guides-guide.md'));
+  expect(guide).toContain('[the farm](/docs/)');
+  expect(guide).not.toContain('/docs/getting-started/introduction/');
+});
+
 // Hashes
 
 test('the hash of a known body equals the sha256sum literal', async () => {

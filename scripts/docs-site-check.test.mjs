@@ -153,6 +153,27 @@ describe('local mode', () => {
     expect(r.code).toBe(1);
   });
 
+  test('ignores same-origin links served by another Worker and resolves /_maudit/ assets', async () => {
+    const dist = makeDist((t) => {
+      t.pages['docs/index.html'].body.push(
+        '<a href="/workshop/">Workshop</a> <a href="/id/workshop/">Lokakarya</a> <a href="/">Home</a>',
+        `<a href="/id/">Beranda</a> <a href="${SITE}/privacy/">Privacy</a>`,
+        '<link rel="stylesheet" href="/_maudit/main.css">',
+      );
+      t.files['_maudit/main.css'] = 'body {}\n';
+    });
+    const r = await run([dist]);
+    expect(r.lines).toEqual(['docs-site-check: ok, 6 pages checked']);
+    expect(r.code).toBe(0);
+  });
+
+  test('reports a /_maudit/ asset that resolves to no file', async () => {
+    const dist = makeDist((t) => t.pages['docs/index.html'].body.push('<script type="module" src="/_maudit/gone.js"></script>'));
+    const r = await run([dist]);
+    expect(r.lines).toContain('docs/index.html: broken link /_maudit/gone.js (no file _maudit/gone.js)');
+    expect(r.code).toBe(1);
+  });
+
   test('reports a page without an hreflang id link', async () => {
     const dist = makeDist((t) => {
       t.pages['docs/guides/index.html'].hreflang = { en: `${SITE}/docs/guides/`, 'x-default': `${SITE}/docs/guides/` };
@@ -246,12 +267,12 @@ describe('usage', () => {
   });
 });
 
-function livePage({ lang, route, links = [], hreflang }) {
+function livePage({ lang, route, links = [], hreflang, extra = [] }) {
   return renderPage({
     lang,
     route,
     hreflang,
-    body: links.map((href) => `<a href="${href}">link</a>`),
+    body: [...extra, ...links.map((href) => `<a href="${href}">link</a>`)],
   });
 }
 
@@ -326,6 +347,36 @@ describe('live mode', () => {
     const site = serve(routes);
     const r = await run(['--live', `${site.origin}/docs/`]);
     expect(r.lines).toContain(`${site.origin}/docs/pagefind/pagefind.js: HTTP 404`);
+    expect(r.code).toBe(1);
+  });
+
+  test('fetches each referenced /_maudit/ asset once', async () => {
+    const external = serve({});
+    const routes = liveRoutes(external.origin);
+    const assets = ['<link rel="stylesheet" href="/_maudit/main.css">', '<script type="module" src="/_maudit/app.js"></script>'];
+    routes['/docs/'] = livePage({ lang: 'en', route: 'docs/', links: ['/docs/guides/'], extra: assets });
+    routes['/docs/guides/'] = livePage({ lang: 'en', route: 'docs/guides/', links: ['/docs/'], extra: assets });
+    routes['/_maudit/main.css'] = 'body {}\n';
+    routes['/_maudit/app.js'] = 'export {};\n';
+    const site = serve(routes);
+    const r = await run(['--live', `${site.origin}/docs/`]);
+    expect(r.code).toBe(0);
+    expect(site.hits.filter((h) => h === '/_maudit/main.css').length).toBe(1);
+    expect(site.hits.filter((h) => h === '/_maudit/app.js').length).toBe(1);
+  });
+
+  test('reports a referenced /_maudit/ asset that does not answer 200', async () => {
+    const external = serve({});
+    const routes = liveRoutes(external.origin);
+    routes['/docs/guides/'] = livePage({
+      lang: 'en',
+      route: 'docs/guides/',
+      links: ['/docs/'],
+      extra: ['<link rel="stylesheet" href="/_maudit/gone.css">'],
+    });
+    const site = serve(routes);
+    const r = await run(['--live', `${site.origin}/docs/`]);
+    expect(r.lines).toContain(`${site.origin}/_maudit/gone.css: HTTP 404 (linked from ${site.origin}/docs/guides/)`);
     expect(r.code).toBe(1);
   });
 

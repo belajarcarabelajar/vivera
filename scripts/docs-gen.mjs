@@ -334,6 +334,8 @@ function encodePath(rel) {
 // Model
 
 function pageUrl(page) {
+  // The docs crate serves the introduction page at /docs/ and has no route under its category.
+  if (page.category === 'getting-started' && page.slug === 'introduction') return '/docs/';
   return `/docs/${page.category}/${page.slug}/`;
 }
 

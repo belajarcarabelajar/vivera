@@ -17,10 +17,13 @@
 //   - every page carries <link rel="alternate" hreflang="en"> and hreflang="id";
 //     every hreflang target (x-default too) exists in dist.
 //   - every internal href and src resolves to a file. Internal means it resolves
-//     (relative, root-relative, protocol-relative, or absolute) onto SITE_ORIGIN.
-//     Query and fragment are stripped; a path ending in / means index.html; an
-//     extensionless path also passes when <path>/index.html exists, because the
-//     static host redirects it there. External links are never fetched.
+//     (relative, root-relative, protocol-relative, or absolute) onto SITE_ORIGIN
+//     under /docs, /id/docs, or /_maudit/ (the crate's bundled CSS and JS). Other
+//     same-origin paths such as /workshop/ or /privacy/ are served by another
+//     Worker and are not checked. Query and fragment are stripped; a path ending
+//     in / means index.html; an extensionless path also passes when
+//     <path>/index.html exists, because the static host redirects it there.
+//     External links are never fetched.
 //   - docs/pagefind/pagefind.js exists.
 //   - no U+2014 em dash (raw or as &mdash; / &#8212; / &#x2014;) in visible text,
 //     meaning text outside tags, comments, <pre>, <code>, <script>, <style>.
@@ -30,8 +33,9 @@
 // It follows <a href> and hreflang links on the same origin whose path is under
 // /docs or /id/docs, has no file extension or ends in .html, and is not under
 // /docs/pagefind/. Query and fragment are dropped before dedupe. Each page must
-// answer 200 and carry hreflang en and id; <origin>/docs/pagefind/pagefind.js
-// must answer 200. Every request has a 15 s timeout.
+// answer 200 and carry hreflang en and id. Each same-origin /_maudit/ asset that
+// a crawled page references by href or src is fetched once and must answer 200,
+// as must <origin>/docs/pagefind/pagefind.js. Every request has a 15 s timeout.
 //
 // The crawl checks at most 500 pages. Stopping at the cap with pages still
 // queued is a finding, because a silent cap would pass a site it never read.
@@ -189,7 +193,7 @@ function checkPage(dist, rel) {
       if (raw === undefined || seen.has(raw)) continue;
       seen.add(raw);
       const target = internalTarget(raw, pageUrl);
-      if (!target) continue;
+      if (!target || !isSitePath(target.pathname)) continue;
       const distRel = distPathFor(target);
       if (!resolvesInDist(dist, distRel)) out.push(`${rel}: broken link ${raw} (no file ${distRel})`);
     }
@@ -229,6 +233,15 @@ export function checkDist(dist) {
 
 function isDocsPath(p) {
   return p === '/docs' || p.startsWith('/docs/') || p === '/id/docs' || p.startsWith('/id/docs/');
+}
+
+function isMauditPath(p) {
+  return p.startsWith('/_maudit/');
+}
+
+// Other same-origin paths such as /workshop/ and /privacy/ belong to another Worker.
+function isSitePath(p) {
+  return isDocsPath(p) || isMauditPath(p);
 }
 
 function isCrawlable(u, origin) {
@@ -273,6 +286,17 @@ export async function checkLive(baseUrl, { maxPages = DEFAULT_MAX_PAGES } = {}) 
     queue.push(key);
   };
   for (const seed of liveSeeds(base)) enqueue(seed, null);
+  const assets = new Map();
+  const noteAsset = (raw, pageBase, from) => {
+    let u;
+    try {
+      u = new URL(raw.trim(), pageBase);
+    } catch {
+      return;
+    }
+    const key = origin + u.pathname;
+    if (u.origin === origin && isMauditPath(u.pathname) && !assets.has(key)) assets.set(key, from);
+  };
 
   let checked = 0;
   while (queue.length > 0 && checked < maxPages) {
@@ -288,6 +312,9 @@ export async function checkLive(baseUrl, { maxPages = DEFAULT_MAX_PAGES } = {}) 
       const pageBase = new URL(r.url || url);
       const langs = new Set();
       for (const tag of tagsOf(r.body)) {
+        if (!isHreflangLink(tag)) {
+          for (const attr of ['href', 'src']) if (tag.attrs[attr] !== undefined) noteAsset(tag.attrs[attr], pageBase, url);
+        }
         let raw;
         if (isHreflangLink(tag)) {
           langs.add(tag.attrs.hreflang.toLowerCase());
@@ -309,6 +336,18 @@ export async function checkLive(baseUrl, { maxPages = DEFAULT_MAX_PAGES } = {}) 
   }
   if (queue.length > 0) {
     findings.push(`${base.href}: crawl cap of ${maxPages} pages reached with at least ${queue.length} pages unchecked`);
+  }
+
+  const assetUrls = [...assets.keys()];
+  for (let i = 0; i < assetUrls.length; i += CONCURRENCY) {
+    const batch = assetUrls.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map((url) => fetchPage(url, { wantBody: false })));
+    batch.forEach((url, k) => {
+      const r = results[k];
+      const suffix = ` (linked from ${assets.get(url)})`;
+      if (r.error) findings.push(`${url}: fetch failed (${r.error})${suffix}`);
+      else if (r.status !== 200) findings.push(`${url}: HTTP ${r.status}${suffix}`);
+    });
   }
 
   const pagefind = `${origin}/docs/pagefind/pagefind.js`;

@@ -1,0 +1,24 @@
+{
+  "name": "vivera-docs",
+  "compatibility_date": "2026-10-10",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    {
+      "pattern": "vivera.belajarcarabelajar.com/docs*",
+      "zone_name": "belajarcarabelajar.com"
+    },
+    {
+      "pattern": "vivera.belajarcarabelajar.com/id/docs*",
+      "zone_name": "belajarcarabelajar.com"
+    },
+    {
+      "pattern": "vivera.belajarcarabelajar.com/_maudit/*",
+      "zone_name": "belajarcarabelajar.com"
+    }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}

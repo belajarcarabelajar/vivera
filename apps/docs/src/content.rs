@@ -357,6 +357,7 @@ impl Site {
             .find(|p| p.lang == lang && p.category == category && p.slug == slug)
     }
 
+    #[cfg(test)]
     pub fn twin(&self, page: &DocPage) -> Option<&DocPage> {
         self.find(page.lang.other(), page.category, &page.slug)
     }

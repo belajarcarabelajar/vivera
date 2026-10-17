@@ -1539,7 +1539,7 @@ test('the "none:" sentinel passes, and only when it names the check that ran', (
   const good = {
     schema: 'ultra-plan/v1',
     defaults: { require_impacts: true },
-    tasks: [{ id: 'T1', depends_on: [], impacts: ['none: bun test a.test.ts'], skip_if: 'bun test a.test.ts' }],
+    tasks: [{ id: 'T1', depends_on: [], impacts: ['none: verification only - bun test a.test.ts'], skip_if: 'bun test a.test.ts' }],
   };
   assert.deepEqual(validatePlan(good, null).errors, []);
 
@@ -1552,6 +1552,53 @@ test('the "none:" sentinel passes, and only when it names the check that ran', (
   };
   const { errors } = validatePlan(bare, null);
   assert.ok(errors.some((e) => /"none:" sentinel with no command/.test(e)), errors.join(' | '));
+});
+
+// The entry shape below is the one scripts/backfill-plan-impacts.test.mjs enforces
+// on every registered plan. Without it in the runner, an author learned about a
+// malformed entry only from the full gate, minutes after the plan validated clean.
+const impactsPlan = (impacts, defaults = { require_impacts: true }) => ({
+  schema: 'ultra-plan/v1',
+  defaults,
+  tasks: [{ id: 'T7', depends_on: [], impacts, skip_if: 'bun test a.test.ts' }],
+});
+
+test('require_impacts turns a "none:" entry with no " - " evidence into an error naming the task', () => {
+  const { errors } = validatePlan(impactsPlan(['none: bun test a.test.ts (checked)']), null);
+  const hit = errors.find((e) => /task T7 impacts entry "none: bun test a\.test\.ts \(checked\)"/.test(e));
+  assert.ok(hit, errors.join(' | '));
+  assert.ok(hit.includes('"<surface> - <evidence command>"'), hit);
+  assert.ok(hit.includes('"none: <reason> - <command>"'), hit);
+});
+
+test('require_impacts accepts "none: <reason> - <command>" and "<surface> - <command>"', () => {
+  const plan = impactsPlan(['none: reason - bun test a.test.ts', 'surface - bun test a.test.ts']);
+  assert.deepEqual(validatePlan(plan, null).errors, []);
+});
+
+test('an impact entry containing an em dash is an error, even with a valid separator', () => {
+  const { errors } = validatePlan(impactsPlan(['scripts/a.mjs - bun test a.test.ts \u2014 checked']), null);
+  const hit = errors.find((e) => /task T7 impacts entry/.test(e) && /em dash/.test(e));
+  assert.ok(hit, errors.join(' | '));
+  // The quoted entry is printed, so the message must not carry the U+2014 it rejects.
+  assert.ok(!hit.includes('\u2014'), hit);
+});
+
+test('a long malformed impact entry is quoted truncated, not whole', () => {
+  const entry = `none: ${'x'.repeat(200)}`;
+  const { errors } = validatePlan(impactsPlan([entry]), null);
+  const hit = errors.find((e) => /task T7 impacts entry/.test(e));
+  assert.ok(hit, errors.join(' | '));
+  assert.ok(!hit.includes(entry), 'the full 206-character entry should not be echoed');
+  assert.ok(hit.includes(entry.slice(0, 77)), hit);
+});
+
+test('without require_impacts a malformed impact entry warns and does not error', () => {
+  const { errors, warnings } = validatePlan(impactsPlan(['none: bun test a.test.ts (checked)'], {}), null);
+  assert.deepEqual(errors, []);
+  const hits = warnings.filter((w) => /T7 "none: bun test a\.test\.ts \(checked\)"/.test(w));
+  assert.equal(hits.length, 1, warnings.join(' | '));
+  assert.ok(hits[0].includes('"none: <reason> - <command>"'), hits[0]);
 });
 
 test('a non-string impact entry is reported as the parser defect it is', () => {

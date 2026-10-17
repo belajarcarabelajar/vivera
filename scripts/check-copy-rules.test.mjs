@@ -99,6 +99,27 @@ test('the lookback is short enough not to swallow a real violation', () => {
   assert.ok(v.length > 0, 'a violation far from the rule statement must still be caught');
 });
 
+test('an Indonesian rule statement exempts the example it quotes', () => {
+  // The bilingual docs site states the rule as "footer atribusi". With English stems
+  // only, the Indonesian page failed on the same quote the README copy is exempt for.
+  const id = [
+    'Aturan kedua melarang footer atribusi dalam artefak publik.',
+    'Contoh yang ditolak: `Generated with <tool>` di body PR.',
+  ].join('\n');
+  assert.deepEqual(checkText(id, { where: 't' }).map((x) => x.rule), []);
+});
+
+test('an Indonesian example with no rule word nearby is still a violation', () => {
+  // Guards the vocabulary against stems too common to mean the rule, such as
+  // "aturan" (rule) or "tanpa" (without), which would exempt real footers.
+  const id = [
+    'Aturan ini dipaksa oleh hasil menjalankan checker, bukan sekadar membacanya.',
+    'Tanpa template, footer itu tetap ditambahkan ke body PR.',
+    'Generated with Claude Code',
+  ].join('\n');
+  assert.deepEqual(checkText(id, { where: 't' }).map((x) => x.rule), ['generated-with footer']);
+});
+
 test('the README section documenting this rule does not flag itself', () => {
   // The real file, not a fixture. A rule document that cannot pass its own checker
   // is a rule document whose example gets deleted instead.

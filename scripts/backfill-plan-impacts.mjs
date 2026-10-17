@@ -31,7 +31,7 @@
 //     warn-only path until its author opts in
 //   - touch any file outside docs/code-plan/plans/
 //   - guess. A file with no detected consumer and no detectable contract gets
-//     the sentinel `none: <command>`, which says "this was checked" rather than
+//     the sentinel `none: <command> - <reason>`, which says "this was checked" rather than
 //     "there was nothing to check".
 //
 // Usage:

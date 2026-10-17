@@ -4,3 +4,5 @@
 scripts/install/tiers.tsv text eol=lf
 # .githooks/pre-commit is a bash script without a .sh suffix, so *.sh does not cover it.
 .githooks/* text eol=lf
+# The website is not part of the release archive.
+apps/ export-ignore

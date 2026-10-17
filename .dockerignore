@@ -17,6 +17,13 @@ diagrams
 **/pr.registry.json
 **/plan.issues.local.json
 
+# The website is not part of the image; its build output is listed too (named in .gitignore)
+apps
+apps/docs/target
+apps/docs/dist
+apps/docs/content/en
+apps/docs/static/generated
+
 # Backups, temp files and editor debris (named in .gitignore)
 **/.mermaid-tmp
 **/*.json.bak

@@ -37,7 +37,8 @@ fn build() -> Result<(), Box<dyn Error>> {
             routes::CategoryEn,
             routes::CategoryId,
             routes::DocEn,
-            routes::DocId
+            routes::DocId,
+            routes::NotFound
         ],
         ContentSources::new(vec![]),
         BuildOptions {

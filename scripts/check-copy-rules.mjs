@@ -132,7 +132,11 @@ export const WATERMARK_PATTERNS = [
 //      from the paragraph shape this repository writes in. The hole is guarded by
 //      the test below, which places a violation five lines clear of a rule
 //      statement and requires it still be caught.
-const RULE_STATEMENT = /attribution|watermark|co-?author|never use em dashes|no em dash|credit badge|sign-?off trailer|generated-with footer/i;
+//
+// `atribusi` is the Indonesian stem: the bilingual docs site states the rule as
+// "footer atribusi", and without it the Indonesian page failed on the same quotes
+// the README's English copy is exempt for.
+const RULE_STATEMENT = /attribution|atribusi|watermark|co-?author|never use em dashes|no em dash|credit badge|sign-?off trailer|generated-with footer/i;
 const RULE_LOOKBACK = 3;
 
 /** Off by default: a file path pattern is a guess about which files are artifacts. */

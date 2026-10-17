@@ -24,7 +24,9 @@ pub struct PageView<'a> {
     pub lang: Lang,
     pub title: &'a str,
     pub description: &'a str,
-    pub canonical: String,
+    /// None on pages that must not be indexed, such as the 404 page.
+    pub canonical: Option<String>,
+    pub noindex: bool,
     pub alternates: Vec<(&'static str, String)>,
     pub twin_path: String,
     pub sidebar: Vec<SidebarSection>,
@@ -104,7 +106,12 @@ pub fn render(view: &PageView) -> Markup {
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 title { (view.title) " | " (ui.title_suffix) }
                 meta name="description" content=(view.description);
-                link rel="canonical" href=(view.canonical);
+                @if view.noindex {
+                    meta name="robots" content="noindex";
+                }
+                @if let Some(canonical) = &view.canonical {
+                    link rel="canonical" href=(canonical);
+                }
                 @for (hreflang, href) in &view.alternates {
                     link rel="alternate" hreflang=(hreflang) href=(href);
                 }
@@ -138,12 +145,14 @@ pub fn render(view: &PageView) -> Markup {
                     }
                     main id="content" {
                         article class="doc" data-pagefind-body[view.pagefind] { (view.article) }
-                        nav class="pager" aria-label=(ui.pager_label) {
-                            @if let Some(prev) = &view.prev {
-                                a class="pager-prev" href=(prev.href) rel="prev" { (prev.title) }
-                            }
-                            @if let Some(next) = &view.next {
-                                a class="pager-next" href=(next.href) rel="next" { (next.title) }
+                        @if view.prev.is_some() || view.next.is_some() {
+                            nav class="pager" aria-label=(ui.pager_label) {
+                                @if let Some(prev) = &view.prev {
+                                    a class="pager-prev" href=(prev.href) rel="prev" { (prev.title) }
+                                }
+                                @if let Some(next) = &view.next {
+                                    a class="pager-next" href=(next.href) rel="next" { (next.title) }
+                                }
                             }
                         }
                     }

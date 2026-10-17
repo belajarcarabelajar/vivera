@@ -26,6 +26,9 @@ if [ -n "\${STUB_SSH_FAIL_MATCH:-}" ] && [[ "$cmd" == *"$STUB_SSH_FAIL_MATCH"* ]
   echo "stub ssh: failing on purpose" >&2
   exit 1
 fi
+if [[ "$cmd" == *"mktemp -d "* ]]; then
+  mktemp -u "\${cmd##*mktemp -d }"
+fi
 exit 0
 `,
   rsync: `#!/usr/bin/env bash
@@ -111,7 +114,14 @@ function calls() {
 }
 
 const sshCalls = () => calls().filter((c) => c.tool === 'ssh');
-const REAL_WRANGLER_DEPLOY = /bunx wrangler deploy(?!\s+--dry-run)/;
+const RUN_DIR = /\/tmp\/vivera-docs-[a-z]+-\d{8}T\d{6}Z-[A-Za-z0-9]{6}/g;
+
+// The mktemp template itself also matches RUN_DIR (XXXXXX), so its call is skipped.
+function runDirs(seq) {
+  const found = seq.filter((c) => !c.text.includes('mktemp')).flatMap((c) => c.text.match(RUN_DIR) ?? []);
+  return [...new Set(found)];
+}
+const REAL_WRANGLER_DEPLOY = /bunx wrangler@4\.151\.1 deploy(?!\s+--dry-run)/;
 
 function expectInOrder(haystack, markers) {
   let from = 0;
@@ -153,12 +163,14 @@ test('deploy --dry-run streams HEAD, runs the build steps in order, and only dry
   expect(archives).toContain('archive --format=tar --prefix=apps/ HEAD:apps');
 
   const ssh = sshCalls();
+  const [dir] = runDirs(ssh);
   const upload = ssh.find((c) => c.text.includes('tar -x'));
-  expect(upload.text).toContain('rm -rf /tmp/vivera-docs-release');
+  expect(upload.text).toContain(`tar -x --ignore-zeros -C ${dir}`);
   expect(upload.bytes).toBe('STUB-TARSTUB-TAR'.length);
 
   expectInOrder(ssh.map((c) => c.text).join('\n'), [
-    'rm -rf /tmp/vivera-docs-release',
+    'mktemp -d /tmp/vivera-docs-deploy-',
+    `tar -x --ignore-zeros -C ${dir}`,
     'bun install --frozen-lockfile',
     'bun scripts/docs-gen.mjs --check --scope all',
     'bun scripts/docs-gen.mjs --write',
@@ -166,10 +178,11 @@ test('deploy --dry-run streams HEAD, runs the build steps in order, and only dry
     'dist/docs/generated',
     'bunx pagefind@1.5.2 --site dist --output-path dist/docs/pagefind',
     'bun scripts/docs-site-check.mjs apps/docs/dist',
-    'bunx wrangler deploy --dry-run',
+    'bunx wrangler@4.151.1 deploy --dry-run',
+    `rm -rf -- ${dir}`,
   ]);
 
-  const dry = ssh.find((c) => c.text.includes('bunx wrangler deploy --dry-run'));
+  const dry = ssh.find((c) => c.text.includes('bunx wrangler@4.151.1 deploy --dry-run'));
   expect(dry.text).toContain('. ~/cloudflare/.env');
   expect(ssh.some((c) => REAL_WRANGLER_DEPLOY.test(c.text))).toBe(false);
   expect(calls().some((c) => c.tool === 'bun')).toBe(false);
@@ -186,7 +199,7 @@ test('a real deploy whose live check fails rolls back and exits 1', () => {
   const deployAt = seq.findIndex((c) => c.tool === 'ssh' && REAL_WRANGLER_DEPLOY.test(c.text));
   const liveAt = seq.findIndex((c) => c.tool === 'bun' && c.text.includes(`--live ${LIVE_URL}`));
   const rollbackAt = seq.findIndex(
-    (c) => c.tool === 'ssh' && c.text.includes('bunx wrangler rollback --message "smoke failed" --yes'),
+    (c) => c.tool === 'ssh' && c.text.includes('bunx wrangler@4.151.1 rollback --message "smoke failed" --yes'),
   );
   expect(deployAt).toBeGreaterThan(-1);
   expect(liveAt).toBeGreaterThan(deployAt);
@@ -199,18 +212,69 @@ test('a real deploy whose live check passes exits 0 without a rollback', () => {
   const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXIT: '0' });
   expect(r.code).toBe(0);
   expect(sshCalls().some((c) => REAL_WRANGLER_DEPLOY.test(c.text))).toBe(true);
-  expect(sshCalls().some((c) => c.text.includes('wrangler rollback'))).toBe(false);
+  expect(sshCalls().some((c) => c.text.includes('rollback --message'))).toBe(false);
 });
 
 test('a failed rollback after a failed live check exits 1 and prints both results', () => {
   const r = run(['deploy'], {
     VIVERA_DOCS_DEPLOY_ACK: ACK,
     STUB_LIVE_EXIT: '3',
-    STUB_SSH_FAIL_MATCH: 'wrangler rollback',
+    STUB_SSH_FAIL_MATCH: 'rollback --message',
   });
   expect(r.code).toBe(1);
   expect(r.out).toContain('live check: exit 3');
   expect(r.out).toContain('rollback: exit 1');
+});
+
+test('every wrangler call runs the pinned wrangler@4.151.1', () => {
+  const r = run(['deploy'], { VIVERA_DOCS_DEPLOY_ACK: ACK, STUB_LIVE_EXIT: '1' });
+  expect(r.code).toBe(1);
+  const wrangler = sshCalls()
+    .map((c) => c.text)
+    .filter((t) => t.includes('wrangler'))
+    .map((t) => t.match(/bunx (wrangler\S*) (\w+)/).slice(1));
+  expect(wrangler).toEqual([
+    ['wrangler@4.151.1', 'deploy'],
+    ['wrangler@4.151.1', 'deploy'],
+    ['wrangler@4.151.1', 'rollback'],
+  ]);
+});
+
+test('two consecutive test runs each use their own remote directory and remove exactly it', () => {
+  const used = [];
+  for (let i = 0; i < 2; i++) {
+    expect(run(['test']).code).toBe(0);
+    const seq = calls();
+    const dirs = runDirs(seq);
+    expect(dirs).toHaveLength(1);
+    const [dir] = dirs;
+    expect(dir).toMatch(/^\/tmp\/vivera-docs-test-\d{8}T\d{6}Z-[A-Za-z0-9]{6}$/);
+    expect(seq.find((c) => c.tool === 'ssh').text).toContain('mktemp -d /tmp/vivera-docs-test-');
+    expect(seq.find((c) => c.tool === 'rsync').text).toContain(`vps-bcb:${dir}/`);
+    expect(seq.at(-1).tool).toBe('ssh');
+    expect(seq.at(-1).text).toContain(`rm -rf -- ${dir}`);
+    used.push(dir);
+    fs.writeFileSync(callLog, '');
+  }
+  expect(used[0]).not.toBe(used[1]);
+});
+
+test('a build that fails on the VPS still removes its own remote directory', () => {
+  const r = run(['build'], { STUB_SSH_FAIL_MATCH: 'docs-gen.mjs --check' });
+  expect(r.code).toBe(1);
+  const seq = calls();
+  const dirs = runDirs(seq);
+  expect(dirs).toHaveLength(1);
+  expect(dirs[0]).toMatch(/^\/tmp\/vivera-docs-build-\d{8}T\d{6}Z-[A-Za-z0-9]{6}$/);
+  expect(seq.at(-1).tool).toBe('ssh');
+  expect(seq.at(-1).text).toContain(`rm -rf -- ${dirs[0]}`);
+});
+
+test('a failed mktemp exits 1 and removes nothing on the VPS', () => {
+  const r = run(['test'], { STUB_SSH_FAIL_MATCH: 'mktemp -d' });
+  expect(r.code).toBe(1);
+  expect(sshCalls().some((c) => c.text.includes('rm -rf'))).toBe(false);
+  expect(calls().some((c) => c.tool === 'rsync')).toBe(false);
 });
 
 test('wrangler.json serves the build output on the docs routes only, with workers.dev and previews off', () => {

@@ -12,6 +12,8 @@ pub const ORIGIN: &str = "https://vivera.belajarcarabelajar.com";
 /// Relative to the working directory, which is apps/docs during a build.
 pub const STYLESHEET: &str = "assets/site.css";
 pub const SCRIPT: &str = "assets/docs.js";
+/// wrangler.json serves this file for any missing path ("404-page").
+pub const NOT_FOUND_PATH: &str = "/404.html";
 
 pub fn docs_root(lang: Lang) -> &'static str {
     match lang {
@@ -58,6 +60,7 @@ pub fn route_list(site: &Site) -> Vec<String> {
             out.extend(pages.into_iter().filter(|p| !p.is_intro()).map(page_path));
         }
     }
+    out.push(NOT_FOUND_PATH.to_string());
     out
 }
 
@@ -99,7 +102,8 @@ pub fn page_markup(site: &Site, page: &DocPage, assets: &AssetUrls) -> Markup {
         lang,
         title: &page.title,
         description: &page.description,
-        canonical: format!("{ORIGIN}{path}"),
+        canonical: Some(format!("{ORIGIN}{path}")),
+        noindex: false,
         alternates: page_alternates(page),
         twin_path: path_in(lang.other(), page),
         sidebar: sidebar_sections(site, lang),
@@ -143,7 +147,8 @@ pub fn category_markup(
         lang,
         title: label,
         description: &description,
-        canonical: format!("{ORIGIN}{path}"),
+        canonical: Some(format!("{ORIGIN}{path}")),
+        noindex: false,
         alternates: alternate_links(
             &category_path(Lang::En, category),
             &category_path(Lang::Id, category),
@@ -157,6 +162,34 @@ pub fn category_markup(
         next: categories.get(index + 1).map(|c| category_link(*c)),
         assets,
     }))
+}
+
+/// Served for any missing path in either language, so it carries both.
+pub fn not_found_markup(site: &Site, assets: &AssetUrls) -> Markup {
+    let article = html! {
+        h1 { "Page not found" }
+        p lang="id" { "Halaman tidak ditemukan" }
+        ul {
+            li { a href=(docs_root(Lang::En)) { "English documentation" } }
+            li { a href=(docs_root(Lang::Id)) hreflang="id" lang="id" { "Dokumentasi bahasa Indonesia" } }
+        }
+    };
+    layout::render(&PageView {
+        lang: Lang::En,
+        title: "Page not found",
+        description: "This page does not exist in the Vivera documentation.",
+        canonical: None,
+        noindex: true,
+        alternates: Vec::new(),
+        twin_path: docs_root(Lang::Id).to_string(),
+        sidebar: sidebar_sections(site, Lang::En),
+        current_path: None,
+        article,
+        pagefind: false,
+        prev: None,
+        next: None,
+        assets,
+    })
 }
 
 static SITE: OnceLock<Site> = OnceLock::new();
@@ -220,6 +253,12 @@ fn render_doc(ctx: &mut PageContext, lang: Lang) -> Result<Markup, Box<dyn Error
     Ok(page_markup(site, page, &assets))
 }
 
+fn render_not_found(ctx: &mut PageContext) -> Result<Markup, Box<dyn Error>> {
+    let site = site()?;
+    let assets = asset_urls(ctx)?;
+    Ok(not_found_markup(site, &assets))
+}
+
 fn category_pages(lang: Lang) -> Pages<CategoryParams> {
     SITE.get()
         .map(|site| {
@@ -267,6 +306,15 @@ pub struct DocsRootId;
 impl Route for DocsRootId {
     fn render(&self, ctx: &mut PageContext) -> impl Into<RenderResult> {
         render_root(ctx, Lang::Id)
+    }
+}
+
+#[route("/404.html")]
+pub struct NotFound;
+
+impl Route for NotFound {
+    fn render(&self, ctx: &mut PageContext) -> impl Into<RenderResult> {
+        render_not_found(ctx)
     }
 }
 
@@ -358,7 +406,37 @@ mod tests {
                 want.push(format!("{root}{rest}"));
             }
         }
+        want.push("/404.html".to_string());
         assert_eq!(route_list(&site()), want);
+    }
+
+    #[test]
+    fn not_found_page_is_routed_and_links_both_doc_roots() {
+        let site = site();
+        assert!(route_list(&site).contains(&"/404.html".to_string()));
+        let html = not_found_markup(&site, &assets()).into_string();
+        assert_contains_all(
+            &html,
+            &[
+                "<!DOCTYPE html><html lang=\"en\">",
+                "<title>Page not found | Vivera Docs</title>",
+                "<meta name=\"robots\" content=\"noindex\">",
+                "<link rel=\"stylesheet\" href=\"/_maudit/site-abc.css\">",
+                "<header class=\"site-header\"><a class=\"brand\" href=\"https://vivera.belajarcarabelajar.com/\">Vivera</a>",
+                "<a class=\"lang-switch\" href=\"/id/docs/\" hreflang=\"id\" lang=\"id\">Bahasa Indonesia</a>",
+                "<main id=\"content\"><article class=\"doc\"><h1>Page not found</h1><p lang=\"id\">Halaman tidak ditemukan</p><ul><li><a href=\"/docs/\">English documentation</a></li><li><a href=\"/id/docs/\" hreflang=\"id\" lang=\"id\">Dokumentasi bahasa Indonesia</a></li></ul></article>",
+                "<footer class=\"site-footer\">",
+            ],
+        );
+        for absent in [
+            "rel=\"canonical\"",
+            "hreflang=\"x-default\"",
+            "data-pagefind-body",
+            "class=\"pager\"",
+            "aria-current",
+        ] {
+            assert!(!html.contains(absent), "unexpected {absent}\n{html}");
+        }
     }
 
     #[test]

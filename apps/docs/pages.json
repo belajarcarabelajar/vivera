@@ -1,0 +1,304 @@
+{
+  "pages": [
+    {
+      "category": "getting-started",
+      "slug": "introduction",
+      "order": 1,
+      "title": "Introduction",
+      "description": "Vivera is a skill pipeline that guides AI coding agents from idea and design through plan approval, TDD, debugging, verification, and a debt sweep.",
+      "source": {
+        "file": "README.md",
+        "heading": ""
+      }
+    },
+    {
+      "category": "getting-started",
+      "slug": "repository-structure",
+      "order": 2,
+      "title": "Repository Structure",
+      "description": "An annotated file tree of the repository, plus where the TinyFish rules live and how the skill installs through symlinks into the repo.",
+      "source": {
+        "file": "README.md",
+        "heading": "Repository Structure"
+      }
+    },
+    {
+      "category": "getting-started",
+      "slug": "quick-start",
+      "order": 3,
+      "title": "Quick Start & Installation",
+      "description": "One install.sh command installs the skill package into every detected agent tool, and --check verifies the result through its exit codes.",
+      "source": {
+        "file": "README.md",
+        "heading": "Quick Start & Installation"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "execution-lifecycle",
+      "order": 1,
+      "title": "Execution Lifecycle",
+      "description": "Requests are classified as Spike, Bounded, or Architectural, then pass brainstorming, plan approval, and verification gates before a debt sweep.",
+      "source": {
+        "file": "README.md",
+        "heading": "Execution Lifecycle"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "execution-model",
+      "order": 2,
+      "title": "Execution Model: Subagent-First, High Fan-Out",
+      "description": "The parent agent splits work into small verifiable chunks, dispatches 10 or more subagents when it can, then gathers and synthesizes their reports.",
+      "source": {
+        "file": "README.md",
+        "heading": "Execution Model: Subagent-First, High Fan-Out"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "confirmations",
+      "order": 3,
+      "title": "Confirmations Without Typing",
+      "description": "Each human decision gate is asked through the agent tool's own question tool with ready-made options, so an answer is a tap or an Enter.",
+      "source": {
+        "file": "README.md",
+        "heading": "Confirmations Without Typing"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "deep-research",
+      "order": 4,
+      "title": "Deep Research Workflow",
+      "description": "When a choice cannot be settled from the codebase, a cited research report is written between the spike and the implementation plan.",
+      "source": {
+        "file": "README.md",
+        "heading": "Deep Research Workflow"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "executing-a-plan",
+      "order": 5,
+      "title": "Executing an ultra-plan/v1 Plan",
+      "description": "scripts/ultra-plan-runner.mjs parses plan frontmatter, validates the task DAG, skips idempotent tasks, runs each step, and records failures in a ledger.",
+      "source": {
+        "file": "README.md",
+        "heading": "Executing an `ultra-plan/v1` Plan"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "plan-mirroring",
+      "order": 6,
+      "title": "Plan Mirroring: Obsidian and GitHub Issues",
+      "description": "Plans are copied one way to Obsidian and GitHub issues, and an issue body is the plan text byte for byte plus a trailer with id, status, and hash.",
+      "source": {
+        "file": "README.md",
+        "heading": "Plan Mirroring: Obsidian and GitHub Issues"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "plan-checklist",
+      "order": 7,
+      "title": "Plan Checklist (the to-do list)",
+      "description": "The to-do list is a checklist in the plan file, owned by the parent agent, and each checked item cites its command, exit code, and result.",
+      "source": {
+        "file": "README.md",
+        "heading": "Plan Checklist (the to-do list)"
+      }
+    },
+    {
+      "category": "pipeline",
+      "slug": "pr-delivery",
+      "order": 8,
+      "title": "Pull Request Delivery & Batch Merge",
+      "description": "Each session ends in a pull request on its own branch, git writes stay with the parent, and a PR registry merges sessions in dependency order.",
+      "source": {
+        "file": "README.md",
+        "heading": "Pull Request Delivery & Batch Merge"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "mermaid-rendering",
+      "order": 1,
+      "title": "Mermaid Rendering",
+      "description": "Diagrams are rendered to SVG locally with pinned mermaid-cli v12 before each commit, because the CI workflow runs only on manual dispatch.",
+      "source": {
+        "file": "README.md",
+        "heading": "Mermaid Rendering"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "trigger-snippets",
+      "order": 2,
+      "title": "Trigger Snippets",
+      "description": "Copy-paste prompts in snippets/ for the six workflow entry points, such as brainstorm, plan, and debugging, each with a short keyword.",
+      "source": {
+        "file": "README.md",
+        "heading": "Trigger Snippets"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "opencode-export",
+      "order": 3,
+      "title": "Exporting OpenCode History to Obsidian",
+      "description": "scripts/export-opencode-history.mjs mirrors the local OpenCode SQLite session database one way into Obsidian notes under 05 - Conversations.",
+      "source": {
+        "file": "README.md",
+        "heading": "Exporting OpenCode History to Obsidian"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "vault-indexing",
+      "order": 4,
+      "title": "Vault Indexing & Knowledge Graph Verification",
+      "description": "Contracts, scripts, and gates that build a knowledge graph of the local Obsidian vault and archived conversations from structural and semantic layers.",
+      "source": {
+        "file": "README.md",
+        "heading": "Vault Indexing & Knowledge Graph Verification"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "math-utilities",
+      "order": 5,
+      "title": "Mathematical Utilities",
+      "description": "Three pure, dependency-free modules: Bayesian evidence fusion with merge thresholds, plan structure predicates, and an M/M/c queue model for dispatch.",
+      "source": {
+        "file": "README.md",
+        "heading": "Mathematical Utilities"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "lifecycle-audit",
+      "order": 6,
+      "title": "Plan Lifecycle Audit & Task Completion",
+      "description": "One script reports plan status counts, and another ticks plan steps only for tasks a runner log shows as PASSED or SKIPPED-IDEMPOTENT.",
+      "source": {
+        "file": "README.md",
+        "heading": "Plan Lifecycle Audit & Task Completion"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "chunk-gates",
+      "order": 7,
+      "title": "Vault Chunk Quality Gates",
+      "description": "Scripts that check the semantic chunk corpus, including that every [path:LN] anchor points to a real line holding the quoted words verbatim.",
+      "source": {
+        "file": "README.md",
+        "heading": "Vault Chunk Quality Gates"
+      }
+    },
+    {
+      "category": "tooling",
+      "slug": "validation",
+      "order": 8,
+      "title": "Validation & Quality Checks",
+      "description": "The local validation suite checks frontmatter, master file integrity, token budget, symlinks, templates, scripts, and Mermaid syntax.",
+      "source": {
+        "file": "README.md",
+        "heading": "Validation & Quality Checks"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "companion-templates",
+      "order": 1,
+      "title": "Companion Templates",
+      "description": "Templates in templates/ for intent locks, specs, plans, and other planning artifacts, each of which must embed at least one Mermaid diagram.",
+      "source": {
+        "file": "README.md",
+        "heading": "Companion Templates"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "examples",
+      "order": 2,
+      "title": "Examples",
+      "description": "Filled-in walkthroughs in examples/, including a full pipeline run on a REST endpoint, a deep research report, and a knowledge-graph viewer demo.",
+      "source": {
+        "file": "README.md",
+        "heading": "Examples"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "third-party-notices",
+      "order": 3,
+      "title": "Third-Party Notices and Disclaimer",
+      "description": "The bundled graphify skill and plugin are MIT licensed, and Vivera is not affiliated with any referenced vendor or with the Harvest Moon franchise.",
+      "source": {
+        "file": "README.md",
+        "heading": "Third-Party Notices and Disclaimer"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "license",
+      "order": 4,
+      "title": "License",
+      "description": "Vivera is released under the MIT License, copyright 2026 Iwan Kurniawan.",
+      "source": {
+        "file": "README.md",
+        "heading": "License"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "glossary",
+      "order": 5,
+      "title": "The Vivera Glossary",
+      "description": "A short table that maps Harvest Moon: Back to Nature terms, such as the Blue Feather and the Harvest Sprites, to real pipeline concepts.",
+      "source": {
+        "file": "README.md",
+        "heading": "The Vivera Glossary"
+      }
+    },
+    {
+      "category": "reference",
+      "slug": "glossary-full",
+      "order": 6,
+      "title": "Full Vivera Glossary",
+      "description": "The complete glossary, with the three sprite jobs, dispatch affinity, heart levels, and the dated sources each game fact was checked against.",
+      "source": {
+        "file": "docs/vivera-glossary.md"
+      }
+    },
+    {
+      "category": "integrations",
+      "slug": "graphify-integrity",
+      "order": 1,
+      "title": "graphify Integration Integrity",
+      "description": "Two scripts that detect a stale graphify block in AGENTS.md and report when graphify install overwrites the OpenCode graphify plugin.",
+      "source": {
+        "file": "README.md",
+        "heading": "graphify Integration Integrity"
+      }
+    },
+    {
+      "category": "integrations",
+      "slug": "graphify-runbook",
+      "order": 2,
+      "title": "graphify Integration Runbook",
+      "description": "A runbook for graphify v0.9.73 with figures measured on one Linux machine on 2026-10-01, including the cloud-only LLM backend constraint.",
+      "source": {
+        "file": "docs/graphify-integration.md"
+      }
+    }
+  ],
+  "exclude": [
+    "docs/graphify-indexed-*.md",
+    "docs/code-plan/**",
+    "docs/diagrams-src/**"
+  ]
+}

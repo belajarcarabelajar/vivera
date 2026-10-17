@@ -513,12 +513,18 @@ export function parseMermaidMaps(body) {
 // that cannot fail is a false pass, so the claim has to carry its own evidence.
 //
 //   impacts: ["<surface> - <the command or graph query that shows the impact>",
-//             "none: <the command that checked and found nothing downstream>"]
+//             "none: <reason> - <the command that checked and found nothing downstream>"]
 //
-// The `"none: <command>"` sentinel exists for the same reason `skip_if: "false"`
-// does. "This task has no affected surface" is a real answer, and it is exactly
-// as easy to fabricate as a check that was never run. Requiring the command that
-// checked makes the claim falsifiable instead of decorative.
+// The `"none: <reason> - <command>"` sentinel exists for the same reason
+// `skip_if: "false"` does. "This task has no affected surface" is a real answer,
+// and it is exactly as easy to fabricate as a check that was never run. Requiring
+// the command that checked makes the claim falsifiable instead of decorative.
+//
+// EVERY entry, the sentinel included, splits on an ASCII " - ": a non-blank part
+// before it and at least 8 characters of evidence after it, and no em dash
+// anywhere. That is the rule scripts/backfill-plan-impacts.test.mjs applies to
+// every registered plan; checking it here means the author hears it from the
+// runner instead of from the full gate.
 //
 // FLOW STYLE ONLY. `impacts: ["a", "b"]` parses. The block style does not:
 // `parseBlockSeq` cannot tell a bare scalar `- "text"` from a step map
@@ -545,9 +551,26 @@ export function parseMermaidMaps(body) {
 //                                    error, so the list cannot decay into a
 //                                    permanent blanket.
 
+const IMPACT_SHAPES = '"<surface> - <evidence command>" or "none: <reason> - <command>"';
+
+// Null when the entry has the backfill test's shape, otherwise what is wrong.
+function impactEntryProblem(e) {
+  if (e.includes('\u2014')) return 'uses an em dash; the separator is an ASCII " - "';
+  const parts = e.split(' - ');
+  if (parts.length >= 2 && parts[0].trim() !== '' && parts.slice(1).join(' - ').trim().length >= 8) return null;
+  return 'has no checkable evidence after an ASCII " - " separator (at least 8 characters)';
+}
+
+// The rejected entry is printed, so its em dash is spelled out rather than echoed.
+function quoteImpact(e) {
+  const cut = e.length > 80 ? `${e.slice(0, 80)}...` : e;
+  return `"${cut.replaceAll('\u2014', '<U+2014>')}"`;
+}
+
 // Returns 'ok' | 'missing' | 'invalid'. Pushes its own errors; the caller decides
-// what a `missing` claim is worth.
-function impactsShape(t, errors) {
+// what a `missing` claim is worth. A malformed entry is an error only when the plan
+// requires impacts; otherwise it lands in `weak` for one aggregated warning.
+function impactsShape(t, errors, { requireImpacts = false, weak = [] } = {}) {
   const v = t.impacts;
   if (v === undefined) return 'missing';
   if (!Array.isArray(v)) {
@@ -558,7 +581,7 @@ function impactsShape(t, errors) {
   if (v.length === 0) {
     errors.push(`task ${t.id} impacts is an empty list, which claims nothing and proves nothing. `
       + 'Name the surfaces this task can break, or record the check that found none as '
-      + '"none: <command>"');
+      + '"none: <reason> - <command>"');
     return 'invalid';
   }
   for (const e of v) {
@@ -575,7 +598,15 @@ function impactsShape(t, errors) {
       return 'invalid';
     }
   }
-  return 'ok';
+  let malformed = false;
+  for (const e of v) {
+    const problem = impactEntryProblem(e);
+    if (!problem) continue;
+    if (!requireImpacts) { weak.push(`${t.id} ${quoteImpact(e)}`); continue; }
+    errors.push(`task ${t.id} impacts entry ${quoteImpact(e)} ${problem}. Write it as ${IMPACT_SHAPES}`);
+    malformed = true;
+  }
+  return malformed ? 'invalid' : 'ok';
 }
 
 // ---------- What proves an iteration finished ----------
@@ -648,10 +679,11 @@ function validateImpacts(plan, errors, warnings) {
   const exempted = new Set(plan.defaults?.allow_no_impacts || []);
   const used = new Set();
   const undeclared = [];
+  const weak = [];
 
   for (const t of plan.tasks || []) {
     if (!t.id) continue;
-    const state = impactsShape(t, errors);
+    const state = impactsShape(t, errors, { requireImpacts, weak });
     if (state === 'invalid') continue;
     if (state === 'ok') {
       // An exemption for a task that now carries its own impacts is dead weight
@@ -665,7 +697,7 @@ function validateImpacts(plan, errors, warnings) {
     if (exempted.has(t.id)) { used.add(t.id); continue; }
     if (requireImpacts) {
       errors.push(`task ${t.id} declares no impacts: name the surfaces this task can break, or record `
-        + 'the check that found none as "none: <command>". Focus that makes this task green while a '
+        + 'the check that found none as "none: <reason> - <command>". Focus that makes this task green while a '
         + 'consumer of the same interface stays broken is the defect this key exists to catch');
       continue;
     }
@@ -674,6 +706,11 @@ function validateImpacts(plan, errors, warnings) {
 
   if (undeclared.length) {
     warnings.push(`${undeclared.length} task(s) declare no impacts: ${undeclared.join(', ')}. `
+      + 'Set `defaults.require_impacts: true` in this plan to make it an error instead of a warning');
+  }
+  if (weak.length) {
+    warnings.push(`${weak.length} impacts entr${weak.length === 1 ? 'y has' : 'ies have'} no checkable evidence: `
+      + `${weak.join(', ')}. Write each as ${IMPACT_SHAPES}. `
       + 'Set `defaults.require_impacts: true` in this plan to make it an error instead of a warning');
   }
   for (const id of exempted) {

@@ -297,6 +297,27 @@ test('the CLI --diff checks the working directory repository', () => {
   assert.match(r.stderr, /doc\.md:4\s+\[em-dash\]/);
 });
 
+test('the CLI --diff reports an added em dash under a diff.mnemonicPrefix git config', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'copy-rules-mnemonic-'));
+  fixtureDirs.push(dir);
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'config', 'user.name', 'Fixture');
+  git(dir, 'config', 'user.email', 'fixture@example.invalid');
+  // Prints c/ and w/ instead of a/ and b/ in diff headers. The commits carry no
+  // trailer, so only the diff scan can produce the exit 1 asserted below.
+  git(dir, 'config', 'diff.mnemonicPrefix', 'true');
+  fs.writeFileSync(path.join(dir, 'doc.md'), '# Doc\nplain\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'base');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  fs.writeFileSync(path.join(dir, 'doc.md'), `# Doc\nplain\nadded${String.fromCharCode(0x2014)} line\n`);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'feat: add a line');
+  const r = cli(dir, ['--diff', 'main']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /doc\.md:3\s+\[em-dash\]/);
+});
+
 test('the CLI --diff from a subdirectory checks the working directory repository', () => {
   const dir = fixtureRepo();
   fs.mkdirSync(path.join(dir, 'sub'));

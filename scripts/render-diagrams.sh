@@ -38,6 +38,14 @@ else
   exit 1
 fi
 
+# Without ~/.cache/puppeteer the bundled Chrome is missing, so point mmdc at a
+# system browser. The resolver is shared with validate-skill.mjs; it prints
+# nothing when PUPPETEER_EXECUTABLE_PATH is set or the cache exists.
+browser="$(bun "$REPO_DIR/scripts/puppeteer-browser.mjs")"
+if [ -n "$browser" ]; then
+  export PUPPETEER_EXECUTABLE_PATH="$browser"
+fi
+
 for cfg in "$LIGHT_CONFIG" "$DARK_CONFIG" "$REPO_DIR/puppeteer-config.json"; do
   if [ ! -f "$cfg" ]; then
     echo "❌ Missing required config: ${cfg#$REPO_DIR/}" >&2
@@ -80,6 +88,8 @@ done < <(find "$REPO_DIR" -name "*.md" -type f \
   -not -path "*/node_modules/*" \
   -not -path "*/.git/*" \
   -not -path "*/diagrams/*" \
+  -not -path "*/target/*" \
+  -not -path "*/dist/*" \
   -print0 | sort -z)
 
 block_count=$(find "$STAGE_DIR" -name "*.mmd" -type f | wc -l | tr -d ' ')

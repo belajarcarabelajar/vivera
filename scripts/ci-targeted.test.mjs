@@ -173,11 +173,11 @@ describe('planChecks', () => {
     expect(names(planChecks(['snippets.manifest.json'], INDEX))).toContain('sync-snippets');
   });
 
-  test('a docs markdown file selects only the copy check', () => {
+  test('a docs markdown file selects only the docs-gen warning and the copy check', () => {
     const plan = planChecks(['docs/guide.md'], INDEX);
     expect(plan.full).toBe(false);
-    expect(plan.suites).toHaveLength(1);
-    expect(plan.suites[0].cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
+    expect(names(plan)).toEqual(['docs-gen', 'copy-rules']);
+    expect(plan.suites.at(-1).cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
     expect(plan.skipped.map((s) => s.name)).toEqual([
       'render-diagrams', 'validate-skill', 'validate-agents', 'gen-sprite-agents', 'tests', 'sync-snippets',
     ]);
@@ -185,7 +185,7 @@ describe('planChecks', () => {
 
   test('a markdown file whose mermaid block changed selects render-diagrams', () => {
     const plan = planChecks(['docs/guide.md'], { sources: SOURCES, mermaidChanged: ['docs/guide.md'] });
-    expect(names(plan)).toEqual(['render-diagrams', 'copy-rules']);
+    expect(names(plan)).toEqual(['render-diagrams', 'docs-gen', 'copy-rules']);
   });
 
   test('a diagram source selects render-diagrams', () => {
@@ -218,6 +218,12 @@ describe('planChecks', () => {
     expect(plan.suites[0].reasons.join('\n')).toContain('Dockerfile');
   });
 
+  test('a path under apps/ is recognized and does not force full', () => {
+    const plan = planChecks(['apps/other/src/main.rs'], INDEX);
+    expect(plan.full).toBe(false);
+    expect(names(plan)).toEqual(['copy-rules']);
+  });
+
   test('a module that no test reaches forces full', () => {
     const plan = planChecks(['scripts/orphan.mjs'], INDEX);
     expect(plan.full).toBe(true);
@@ -233,6 +239,37 @@ describe('planChecks', () => {
   test('the full list matches the ci script in package.json', () => {
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
     expect(FULL_CI.map((s) => s.cmd.join(' ')).join(' && ')).toBe(pkg.scripts.ci);
+  });
+});
+
+describe('docs-gen warning check', () => {
+  const DOCS_GEN_CMD = ['bun', 'scripts/docs-gen.mjs', '--warn'];
+  const docsGen = (plan) => plan.suites.filter((s) => s.name === 'docs-gen');
+
+  for (const p of ['README.md', 'docs/x.md', 'apps/docs/src/main.rs']) {
+    test(`a ${p} change adds the docs-gen warning and stays targeted`, () => {
+      const plan = planChecks([p], INDEX);
+      const [suite] = docsGen(plan);
+      expect({ full: plan.full, cmd: suite?.cmd }).toEqual({ full: false, cmd: DOCS_GEN_CMD });
+      expect(suite.reasons.join('\n')).toContain(p);
+    });
+  }
+
+  test('several docs paths add a single docs-gen check with one reason each', () => {
+    const plan = planChecks(['README.md', 'apps/docs/pages.json', 'docs/x.md'], INDEX);
+    expect(docsGen(plan)).toHaveLength(1);
+    expect(docsGen(plan)[0].reasons).toHaveLength(3);
+  });
+
+  test('a scripts change alone does not add the docs-gen check', () => {
+    const sources = { ...SOURCES, 'scripts/foo.mjs': 'export const foo = 1;\n', 'scripts/foo.test.mjs': "import './foo.mjs';\n" };
+    const plan = planChecks(['scripts/foo.mjs'], { sources });
+    expect({ full: plan.full, docsGen: docsGen(plan).length }).toEqual({ full: false, docsGen: 0 });
+  });
+
+  test('a docs/code-plan change alone does not add the docs-gen check', () => {
+    const plan = planChecks(['docs/code-plan/x.md'], INDEX);
+    expect({ full: plan.full, docsGen: docsGen(plan).length }).toEqual({ full: false, docsGen: 0 });
   });
 });
 

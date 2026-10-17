@@ -6,6 +6,8 @@
 #   build    build the site from the exact HEAD commit and check it
 #   deploy   build, then wrangler deploy; a real deploy needs
 #            VIVERA_DOCS_DEPLOY_ACK=I_UNDERSTAND_THIS_CHANGES_LIVE
+#            The live check is retried VIVERA_DOCS_LIVE_ATTEMPTS times (default
+#            10), VIVERA_DOCS_LIVE_INTERVAL seconds apart (default 20).
 # Exit: 0 ok, 1 failure, 2 usage error.
 set -euo pipefail
 
@@ -25,6 +27,20 @@ case "$MODE" in
     ;;
   *) usage ;;
 esac
+
+# New Worker routes take up to a few minutes to propagate after wrangler deploy.
+LIVE_ATTEMPTS="${VIVERA_DOCS_LIVE_ATTEMPTS:-10}"
+LIVE_INTERVAL="${VIVERA_DOCS_LIVE_INTERVAL:-20}"
+if [ "$MODE" = deploy ]; then
+  if [[ ! "$LIVE_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "VIVERA_DOCS_LIVE_ATTEMPTS must be a positive integer, got: $LIVE_ATTEMPTS" >&2
+    exit 2
+  fi
+  if [[ ! "$LIVE_INTERVAL" =~ ^[0-9]+$ ]]; then
+    echo "VIVERA_DOCS_LIVE_INTERVAL must be a whole number of seconds, got: $LIVE_INTERVAL" >&2
+    exit 2
+  fi
+fi
 
 HOST="${VIVERA_VPS:-vps-bcb}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -170,18 +186,50 @@ run_deploy() {
   echo "deploy: wrangler deploy"
   remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy"
   echo "deploy: live check $LIVE_URL"
-  local live_rc=0 rollback_rc=0
-  bun "$ROOT/scripts/docs-site-check.mjs" --live "$LIVE_URL" || live_rc=$?
+  local live_rc=0 rollback_rc=0 list_rc=0 count=0
+  live_check_with_retries || live_rc=$?
   if [ "$live_rc" -eq 0 ]; then
     echo "deploy: ok, live check passed"
     return
   fi
 
-  echo "deploy: live check failed, rolling back"
-  remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER rollback --message \"smoke failed\" --yes" || rollback_rc=$?
+  echo "deploy: live check failed on all $LIVE_ATTEMPTS attempts"
+  count="$(deployment_count)" || list_rc=$?
+  if [ "$list_rc" -ne 0 ]; then
+    echo "rollback: skipped, could not list deployments (exit $list_rc); check with wrangler deployments list and roll back by hand"
+  elif [ "$count" -gt 1 ]; then
+    echo "deploy: $count deployments listed, rolling back"
+    remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER rollback --message \"smoke failed\" --yes" || rollback_rc=$?
+    echo "rollback: exit $rollback_rc"
+  else
+    echo "rollback: skipped, nothing to roll back to because this is the first deployment of the Worker"
+    echo "rollback: the new Worker serves the docs routes; remove the docs routes by hand in the Cloudflare dashboard if they must go"
+  fi
   echo "live check: exit $live_rc"
-  echo "rollback: exit $rollback_rc"
   exit 1
+}
+
+live_check_with_retries() {
+  local attempt=1 rc
+  while :; do
+    rc=0
+    bun "$ROOT/scripts/docs-site-check.mjs" --live "$LIVE_URL" || rc=$?
+    echo "live check: attempt $attempt/$LIVE_ATTEMPTS exit $rc"
+    if [ "$rc" -eq 0 ] || [ "$attempt" -ge "$LIVE_ATTEMPTS" ]; then
+      return "$rc"
+    fi
+    echo "live check: waiting ${LIVE_INTERVAL}s for the routes to propagate"
+    sleep "$LIVE_INTERVAL"
+    attempt=$((attempt + 1))
+  done
+}
+
+# wrangler rollback needs an earlier deployment; on the first one it only fails.
+deployment_count() {
+  local listed
+  listed="$(remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deployments list --json")" || return
+  # Each deployment object has one top-level "id"; its versions use "version_id".
+  { grep -o '"id":' <<<"$listed" || true; } | wc -l | tr -d ' '
 }
 
 case "$MODE" in

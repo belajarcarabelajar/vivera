@@ -272,6 +272,7 @@ comment. Test files (`*.test.mjs`) sit next to the script they cover and are omi
 | `frontmatter-strict.mjs` | Runs plan frontmatter through a strict YAML check. The runner's own parser is a lenient subset, so a plan can pass it and still not be valid YAML. |
 | `validate-lib.mjs` | The pure, importable part of `validate-skill.mjs`, plus `renderMermaidBatch`, so unit tests can pin the checks. |
 | `mermaid-batch.mjs` | Renders a list of `.mmd` files from stdin with a batch-and-bisect fallback, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
+| `puppeteer-browser.mjs` | Points `mmdc` at a system Chromium or Chrome on PATH when `~/.cache/puppeteer` is absent and `PUPPETEER_EXECUTABLE_PATH` is unset, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
 | `skill-corpus.mjs` | Holds the list of phase skills and `readSkillCorpus`, which reads the master skill and the phase skills together for the validators. |
 | `make-graph-demo.py` | Regenerates `examples/graph-viewer-demo.html` from a seeded synthetic graph. Needs `numpy`. |
 | `vault-index-batch.mjs` | Splits the unindexed vault between parallel extraction subagents by bytes, not by file count. |

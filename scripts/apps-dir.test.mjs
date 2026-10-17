@@ -86,7 +86,7 @@ printf '<svg xmlns="http://www.w3.org/2000/svg"><p>stub</p></svg>' > "$out"
   test('render-diagrams.sh skips target and dist directories at any depth', () => {
     const tree = path.join(scratch, 'render-tree');
     for (const rel of [
-      'scripts/render-diagrams.sh', 'scripts/mermaid-batch.mjs', 'scripts/validate-lib.mjs',
+      'scripts/render-diagrams.sh', 'scripts/mermaid-batch.mjs', 'scripts/validate-lib.mjs', 'scripts/puppeteer-browser.mjs',
       'mermaid.config.json', 'mermaid.dark.config.json', 'puppeteer-config.json', 'docs/diagrams-src/lifecycle.mmd',
     ]) {
       write(tree, rel, read(rel));

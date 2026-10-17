@@ -9,6 +9,7 @@ import { TIERS, checkPrereqs, hasTool, loadTierTable } from './lib/prereq.mjs';
 import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
 // Safe to import: plan-issue-sync runs its CLI only when it is argv[1] itself.
 import { ISSUES_STORE } from './plan-issue-sync.mjs';
+import { systemPuppeteerBrowser } from './puppeteer-browser.mjs';
 import {
   SUBAGENT_CONTRACT_TERMS as subagentContractTerms,
   SNIPPET_CONTRACTS as snippetContracts,
@@ -1319,9 +1320,18 @@ if (!mmdcAvailable) {
     ...(fs.existsSync(puppeteerCfg) ? ['-p', puppeteerCfg] : []),
     '-b', 'transparent',
   ];
-  const { results: rendered } = collected.length
-    ? renderMermaidBatch(collected.map((b) => b.source), { mmdc, args: mmdcArgs, tmpDir })
-    : { results: [] };
+  // Without ~/.cache/puppeteer the bundled Chrome is missing, so mmdc gets a
+  // system browser for this render only (shared resolver, see render-diagrams.sh).
+  const browser = systemPuppeteerBrowser();
+  if (browser) process.env.PUPPETEER_EXECUTABLE_PATH = browser;
+  let rendered;
+  try {
+    ({ results: rendered } = collected.length
+      ? renderMermaidBatch(collected.map((b) => b.source), { mmdc, args: mmdcArgs, tmpDir })
+      : { results: [] });
+  } finally {
+    if (browser) delete process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
 
   for (let k = 0; k < collected.length; k++) {
     const { rel, index: i, source } = collected[k];

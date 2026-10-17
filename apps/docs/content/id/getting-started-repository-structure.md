@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "4394c1e50069"
+source_hash: "104a82b16fb9"
 ---
 
 <a id="repository-structure"></a>
@@ -207,6 +207,7 @@ sendiri. File test (`*.test.mjs`) berada di samping script yang diujinya dan tid
 | `frontmatter-strict.mjs` | Menjalankan frontmatter plan melalui pemeriksaan YAML yang ketat. Parser milik runner sendiri hanyalah subset yang longgar, jadi sebuah plan bisa lolos dari parser itu tetapi tetap bukan YAML yang valid. |
 | `validate-lib.mjs` | Bagian murni yang bisa di-import dari `validate-skill.mjs`, ditambah `renderMermaidBatch`, agar unit test bisa mengunci pemeriksaannya. |
 | `mermaid-batch.mjs` | Merender daftar file `.mmd` dari stdin dengan fallback batch-and-bisect, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
+| `puppeteer-browser.mjs` | Mengarahkan `mmdc` ke Chromium atau Chrome sistem di PATH saat `~/.cache/puppeteer` tidak ada dan `PUPPETEER_EXECUTABLE_PATH` tidak diset, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
 | `skill-corpus.mjs` | Menyimpan daftar phase skill dan `readSkillCorpus`, yang membaca master skill dan phase skill sekaligus untuk para validator. |
 | `make-graph-demo.py` | Membuat ulang `examples/graph-viewer-demo.html` dari graf sintetis dengan seed tetap. Membutuhkan `numpy`. |
 | `vault-index-batch.mjs` | Membagi vault yang belum terindeks ke subagent ekstraksi paralel berdasarkan ukuran byte, bukan jumlah file. |

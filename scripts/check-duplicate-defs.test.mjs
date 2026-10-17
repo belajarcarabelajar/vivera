@@ -243,10 +243,10 @@ test('a test file on the added side is not scanned', () => {
 
 const vendoredShapes = {
   'node_modules/pkg/index.js': 'function formatPrice() {}\n',
-  'vendor/x/price.go': 'func formatPrice() {}\n',
+  'vendor/x/price.mjs': 'function formatPrice() {}\n',
   'dist/price.js': 'function formatPrice() {}\n',
   'build/price.js': 'function formatPrice() {}\n',
-  'target/price.rs': 'fn format_price() {}\n',
+  'target/price.mjs': 'function formatPrice() {}\n',
   'graphify-out/price.js': 'function formatPrice() {}\n',
 };
 
@@ -360,6 +360,40 @@ test('two new definitions in different files are reported once, not twice', () =
   expect(r.definitions).toBe(2);
 });
 
+test('names made only of underscores are never a hit', () => {
+  const dir = makeRepo({
+    base: { 'lib/a.mjs': 'function _() {}\n' },
+    branch: { 'src/b.mjs': 'function __() {}\n' },
+  });
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(r.violations).toEqual([]);
+  expect(r.definitions).toBe(1);
+});
+
+test('a tracked symlink named like a source file but pointing at a directory is skipped, not a crash', () => {
+  const dir = makeRepo({ branch: { 'src/cart.mjs': 'export function totalWeight(kg) {\n  return kg;\n}\n' } });
+  fs.mkdirSync(path.join(dir, 'assets'));
+  fs.symlinkSync('assets', path.join(dir, 'link.mjs'));
+  git(dir, 'add', '-f', 'link.mjs');
+  git(dir, 'commit', '-q', '-m', 'symlink');
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(r.violations).toEqual([]);
+  expect(r.files).toBe(1);
+});
+
+test('a both-new pair is reported on the path that sorts first, whichever file is untracked', () => {
+  const body = 'export function shippingQuote(w) {\n  return w;\n}\n';
+  const message = (other) => `possible duplicate of shippingQuote (${other}:1); ${HINT}`;
+  const untrackedLast = makeRepo({ branch: { 'src/a.mjs': body }, untracked: { 'src/b.mjs': body } });
+  const first = checkDiff({ base: 'main', cwd: untrackedLast });
+  expect(where(first)).toEqual(['src/a.mjs:1']);
+  expect(first.violations[0].message).toBe(message('src/b.mjs'));
+  const untrackedFirst = makeRepo({ branch: { 'src/b.mjs': body }, untracked: { 'src/a.mjs': body } });
+  const second = checkDiff({ base: 'main', cwd: untrackedFirst });
+  expect(where(second)).toEqual(['src/a.mjs:1']);
+  expect(second.violations[0].message).toBe(message('src/b.mjs'));
+});
+
 test('CLI exits 0 on a clean branch and prints the scanned line last', () => {
   const dir = makeRepo({
     base: { 'lib/price.mjs': 'export function formatPrice(n) {\n  return n;\n}\n' },
@@ -382,6 +416,17 @@ test('CLI exits 1 on a hit, one line per hit, then the scanned line', () => {
     base: { 'lib/price.mjs': 'export function formatPrice(cents) {\n  return String(cents);\n}\n' },
     branch: { 'src/cart.mjs': 'const unrelated = 1;\nexport function formatPrice(n) {\n  return String(n);\n}\n' },
   });
+  const r = cli(dir, '--diff', 'main');
+  expect(r.status).toBe(1);
+  expect(r.stdout).toBe(`src/cart.mjs:2: possible duplicate of formatPrice (lib/price.mjs:1); ${HINT}\nscanned 1 added definitions in 1 files\n`);
+});
+
+test('a diff.mnemonicPrefix git config does not hide an added duplicate', () => {
+  const dir = makeRepo({
+    base: { 'lib/price.mjs': 'export function formatPrice(cents) {\n  return String(cents);\n}\n' },
+    branch: { 'src/cart.mjs': 'const unrelated = 1;\nexport function formatPrice(n) {\n  return String(n);\n}\n' },
+  });
+  git(dir, 'config', 'diff.mnemonicPrefix', 'true');
   const r = cli(dir, '--diff', 'main');
   expect(r.status).toBe(1);
   expect(r.stdout).toBe(`src/cart.mjs:2: possible duplicate of formatPrice (lib/price.mjs:1); ${HINT}\nscanned 1 added definitions in 1 files\n`);

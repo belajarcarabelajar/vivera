@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "3d827010004a"
+source_hash: "4394c1e50069"
 ---
 
 <a id="repository-structure"></a>
@@ -69,6 +69,8 @@ vivera/
 │   ├── render-diagrams.sh                       # Render all mermaid blocks to SVG
 │   ├── validate-skill.mjs                       # Frontmatter, link, token, mermaid & a11y lint
 │   ├── check-runner-contract.mjs                # Fast structural check for runner frontmatter keys
+│   ├── check-duplicate-defs.mjs                 # Diff-scoped gate: a definition a branch adds whose name already exists elsewhere
+│   ├── check-duplicate-defs.test.mjs            # Languages, skips, waiver, exit codes, and the calibration rules
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)
@@ -173,7 +175,7 @@ vivera/
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
     ├── sucp-verify-deliver/SKILL.md             # Phase skill: Step 5 verification and PR delivery
-    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep, plan closeout decision, learning harvest
+    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep (scans code for defer: markers), plan closeout decision, learning harvest
     └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
 

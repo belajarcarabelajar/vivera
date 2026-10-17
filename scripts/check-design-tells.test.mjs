@@ -249,6 +249,26 @@ test('--diff reports only the lines the branch adds, in checked file types, plus
   assert.equal(r.mergeBase.length, 40);
 });
 
+test('a diff.mnemonicPrefix git config does not hide an added stripe', () => {
+  const dir = tmpDir('design-tells-prefix-');
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'config', 'user.name', 'Fixture');
+  git(dir, 'config', 'user.email', 'fixture@example.invalid');
+  git(dir, 'config', 'diff.mnemonicPrefix', 'true');
+  const put = (lines) => fs.writeFileSync(path.join(dir, 'styles.css'), lines.join('\n') + '\n');
+  put(['.plain { color: red; }']);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'base');
+  git(dir, 'checkout', '-q', '-b', 'feature');
+  // design-tells: allow fixture text for the gate under test, not a stylesheet of this repository
+  put(['.plain { color: red; }', '.added { border-left: 4px solid var(--accent-primary); }']);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'feat: add a stripe');
+  const r = spawnSync('bun', [path.join(ROOT, 'scripts', 'check-design-tells.mjs'), '--diff', 'main'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /styles\.css:2 {2}\[left stripe: border\]/);
+});
+
 test('--diff refuses a base it cannot resolve', () => {
   assert.throws(() => checkDiff({ base: 'no-such-ref-for-test', cwd: fixtureRepo() }), /no-such-ref-for-test/);
   assert.throws(() => checkDiff({ base: '--output=x', cwd: fixtureRepo() }), /invalid --diff base/);

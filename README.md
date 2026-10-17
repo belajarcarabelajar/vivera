@@ -136,6 +136,8 @@ vivera/
 │   ├── render-diagrams.sh                       # Render all mermaid blocks to SVG
 │   ├── validate-skill.mjs                       # Frontmatter, link, token, mermaid & a11y lint
 │   ├── check-runner-contract.mjs                # Fast structural check for runner frontmatter keys
+│   ├── check-duplicate-defs.mjs                 # Diff-scoped gate: a definition a branch adds whose name already exists elsewhere
+│   ├── check-duplicate-defs.test.mjs            # Languages, skips, waiver, exit codes, and the calibration rules
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)
@@ -240,7 +242,7 @@ vivera/
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
     ├── sucp-verify-deliver/SKILL.md             # Phase skill: Step 5 verification and PR delivery
-    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep, plan closeout decision, learning harvest
+    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep (scans code for defer: markers), plan closeout decision, learning harvest
     └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
 
@@ -866,7 +868,7 @@ Agents can instantly scaffold structured artifacts using the ready-to-use templa
 - **[`adr-template.md`](templates/adr-template.md)**: Architecture Decision Record (ADR) - structured decision tree, alternative trade-off comparison, and consequences.
 - **[`subagent-contract-template.md`](templates/subagent-contract-template.md)**: Subagent task contract - task chunking and fan-out plan, strict scope isolation, permitted target files, gather & synthesize checkpoint, and parent diff audit gate sequence.
 - **[`vault-index-subagent-contract.md`](templates/vault-index-subagent-contract.md)**: Vault Index Extraction Contract (Semantic Layer). Subagent task contract for reading notes and emitting `concept` / attribute nodes into isolated chunk files with strict `source_file` provenance and chunk-schema validation.
-- **[`code-review-template.md`](templates/code-review-template.md)**: Reviewer output contract - Standards and Spec axes run as two parallel reviewers, rule attribution precedence, 8-point bug qualification filter, P0–P3 priority with confidence, exhaustiveness and dedupe rules, non-blocking design notes from a twelve-smell baseline, suggestion block format, and the binary `correct` / `not correct` verdict.
+- **[`code-review-template.md`](templates/code-review-template.md)**: Reviewer output contract - Standards and Spec axes run as two parallel reviewers, rule attribution precedence, 8-point bug qualification filter, an assumed load recorded per review and a scale lens (check-then-write race, unbounded growth, query per item, per-process state) applied under that same filter, P0–P3 priority with confidence, exhaustiveness and dedupe rules, non-blocking design notes from a twelve-smell baseline, suggestion block format, and the binary `correct` / `not correct` verdict.
 - **[`deep-research-report-template.md`](templates/deep-research-report-template.md)**: Citation-grounded long-form research report - executive summary, `##` themes with `###` subsections, inline `[n]` citations, LaTeX notation, and a closing synthesis.
 - **[`follow-up-injection-template.md`](templates/follow-up-injection-template.md)**: Session-close debt sweep - harvested debt candidates, `NOW`/`LATER` classification, the ranked 3-5 follow-up set, the batched multi-select question, the execution record, and the deferred backlog.
 - **[`session-learning-ledger-template.md`](templates/session-learning-ledger-template.md)**: Self-learning ledger filled during the Step 6 Learning Harvest - records the agent's own operational mistakes (wrong tool calls, misread rules, blind retries, premature guesses, scope creep), distills them into `WHEN → DO → NOT` rules through the Minimum-Signal and 30-Day Horizon gates, writes kept rules in-repo automatically into [`MEMORY.md`](MEMORY.md), and promotes recurring rules to `~/AGENTS.md` only with per-item user approval. The next session reads these before starting work.
@@ -1511,6 +1513,38 @@ the same line or the line above, and a waiver without a reason is a violation of
 its own. A 1px border is a border, and top, right, and bottom borders stay out of
 scope until one is measured as a tell. Like `copy:check`, `--diff` judges only
 the lines the branch adds, so an old stripe never blocks an unrelated PR.
+
+### Duplicate definitions: the reuse rung of the Simplicity Ladder
+
+Rung 2 of the Simplicity Ladder says to reuse a helper the repository already has
+before writing a new one. That rung was prose, so a duplicate helper was found by
+hand or not at all. `bun run dups:check` is its mechanical form:
+
+```bash
+bun run dups:check --diff origin/main   # only definitions on lines the branch adds
+```
+
+It reports a top-level definition on a line this branch adds whose name, lower-cased
+with `_` and `-` removed, is already defined in a different file (`formatPrice` and
+`format_price` are one name). It reads JS and TS, Python, Go plain funcs, and Rust
+`fn`. It skips generic names (including `parseArgs` and `usage`), test files,
+`node_modules`, `vendor`, `dist`, `build`, `target`, `graphify-out`, and pairs across
+language families. Exit 0 is clean, 1 is a possible duplicate, and 2 is a usage
+error. The last line is always `scanned N added definitions in M files`, so a zero
+is visible as a zero and not as a run that read nothing. The waiver is
+`dup-defs: allow <reason>` on the same line or the line above, and a waiver without
+a reason is a violation of its own.
+
+A hit is a possible duplicate: the reviewer reads both definitions before filing it.
+On the history of this repository on 2026-10-17 it reported 31 distinct hits over two
+windows (the last 20 and the last 60 commits). Reading both definitions of each, 5
+were true duplicates, 14 partial (same job, real differences), and 12 were not
+duplicates. The two skips that came out of that read, `parseArgs` and `usage` as
+generic names and pairs across language families, remove 7 of the 12, leaving 24
+hits of which 19 are worth a read. Two rules were tried on paper and rejected
+because they hide real duplicates: exported definitions only, and skipping
+`checkDiff`. The limit is that it matches names only, so a helper rewritten under
+another name is not found, and 5 same-name different-job pairs remain.
 
 ### Strict retries: `retry_if`
 

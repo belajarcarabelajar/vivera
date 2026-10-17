@@ -286,7 +286,8 @@ export function checkDiff({ base, cwd = ROOT } = {}) {
     throw new Error(`cannot resolve merge-base of '${base}' and HEAD: ${(mb.error?.message ?? mb.stderr).trim() || `exit ${mb.status}`}`);
   }
   const mergeBase = mb.stdout.trim();
-  const diff = run(['diff', '--unified=0', '--no-color', '--no-ext-diff', mergeBase]);
+  // parseAddedLines strips only a `b/` prefix, so diff.mnemonicPrefix or diff.noprefix must not change it.
+  const diff = run(['diff', '--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', mergeBase]);
   if (diff.error || diff.status !== 0) {
     throw new Error(`git diff ${mergeBase.slice(0, 8)} failed: ${(diff.error?.message ?? diff.stderr).trim()}`);
   }

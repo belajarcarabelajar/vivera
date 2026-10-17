@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: README.md#Trigger Snippets
-source_hash: "933ccd1b075e"
+source_hash: "920433bc06eb"
 ---
 
 <a id="trigger-snippets"></a>
@@ -177,6 +177,42 @@ tersendiri. Border 1px hanyalah border, dan border atas, kanan, dan bawah tetap 
 cakupan sampai salah satunya terukur sebagai tell. Seperti `copy:check`, `--diff` hanya
 menilai baris yang ditambahkan branch, sehingga garis lama tidak pernah memblokir PR
 yang tidak berkaitan.
+
+<a id="duplicate-definitions-the-reuse-rung-of-the-simplicity-ladder"></a>
+## Definisi duplikat: anak tangga reuse pada Simplicity Ladder
+
+Anak tangga 2 pada Simplicity Ladder meminta Anda memakai ulang helper yang sudah ada
+di repositori sebelum menulis yang baru. Anak tangga itu dulu hanya berupa prosa, jadi
+helper duplikat ditemukan secara manual atau tidak ditemukan sama sekali.
+`bun run dups:check` adalah bentuk mekanisnya:
+
+```bash
+bun run dups:check --diff origin/main   # only definitions on lines the branch adds
+```
+
+Perintah ini melaporkan definisi top-level pada baris yang ditambahkan branch ini jika
+namanya, setelah diubah ke huruf kecil dan dibersihkan dari `_` dan `-`, sudah
+didefinisikan di file lain (`formatPrice` dan `format_price` dihitung sebagai satu nama).
+Ia membaca JS dan TS, Python, func biasa Go, dan `fn` Rust. Ia melewati nama generik
+(termasuk `parseArgs` dan `usage`), file test, `node_modules`, `vendor`, `dist`, `build`,
+`target`, `graphify-out`, serta pasangan lintas keluarga bahasa. Exit 0 berarti bersih,
+1 berarti kemungkinan duplikat, dan 2 berarti kesalahan pemakaian. Baris terakhirnya
+selalu `scanned N added definitions in M files`, sehingga nol terlihat sebagai nol, bukan
+sebagai run yang tidak membaca apa pun. Waiver-nya adalah `dup-defs: allow <reason>` di
+baris yang sama atau di baris atasnya, dan waiver tanpa alasan adalah pelanggaran
+tersendiri.
+
+Sebuah temuan adalah kemungkinan duplikat: reviewer membaca kedua definisinya sebelum
+mencatatnya. Pada riwayat repositori ini tanggal 2026-10-17, perintah ini melaporkan 31
+temuan berbeda dalam dua jendela (20 commit terakhir dan 60 commit terakhir). Setelah kedua
+definisi pada setiap temuan dibaca, 5 adalah duplikat sungguhan, 14 parsial (tugasnya sama,
+dengan perbedaan nyata), dan 12 bukan duplikat. Dua pengecualian yang lahir dari pembacaan
+itu, yaitu `parseArgs` dan `usage` sebagai nama generik serta pasangan lintas keluarga
+bahasa, menghapus 7 dari 12 tersebut, sehingga tersisa 24 temuan yang 19 di antaranya layak
+dibaca. Dua aturan dicoba di atas kertas lalu ditolak karena menyembunyikan duplikat
+sungguhan: hanya memeriksa definisi yang diekspor, dan melewati `checkDiff`. Batasnya,
+perintah ini hanya mencocokkan nama, jadi helper yang ditulis ulang dengan nama lain tidak
+ditemukan, dan 5 pasangan bernama sama dengan tugas berbeda masih tersisa.
 
 <a id="strict-retries-retry_if"></a>
 ## Retry ketat: `retry_if`

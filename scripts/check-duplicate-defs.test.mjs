@@ -180,14 +180,14 @@ test('a definition added in one file that already exists in another is a hit', (
   expect(r.violations[0].message).toBe(`possible duplicate of formatPrice (lib/price.mjs:1); ${HINT}`);
 });
 
-test('camelCase and snake_case spellings of one name match across languages', () => {
+test('camelCase and snake_case spellings of one name match', () => {
   const dir = makeRepo({
-    base: { 'lib/pricing.py': 'def format_price(cents):\n    return cents\n' },
+    base: { 'lib/pricing.mjs': 'export function format_price(cents) {\n  return cents;\n}\n' },
     branch: { 'src/cart.mjs': 'export function formatPrice(n) {\n  return n;\n}\n' },
   });
   const r = checkDiff({ base: 'main', cwd: dir });
   expect(where(r)).toEqual(['src/cart.mjs:1']);
-  expect(r.violations[0].message).toBe(`possible duplicate of format_price (lib/pricing.py:1); ${HINT}`);
+  expect(r.violations[0].message).toBe(`possible duplicate of format_price (lib/pricing.mjs:1); ${HINT}`);
 });
 
 test('two definitions in the same file are not a hit', () => {
@@ -410,4 +410,45 @@ test('an unresolvable base throws with the message git printed', () => {
   const r = cli(dir, '--diff', 'no-such-ref-for-test');
   expect(r.status).toBe(2);
   expect(r.stderr).toMatch(/fatal:/);
+});
+
+test('calibration: parseArgs is skipped as a per-script convention', () => {
+  const body = 'export function parseArgs(argv) {\n  return argv;\n}\n';
+  const dir = makeRepo({ base: { 'lib/export.mjs': body }, branch: { 'src/sync.mjs': body } });
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(r.violations).toEqual([]);
+  expect(r.definitions).toBe(1);
+});
+
+test('calibration: usage is skipped as a per-script convention', () => {
+  const body = 'function usage() {\n  console.error("usage: tool");\n}\n';
+  const dir = makeRepo({ base: { 'lib/graph.mjs': body }, branch: { 'src/batch.mjs': body } });
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(r.violations).toEqual([]);
+  expect(r.definitions).toBe(1);
+});
+
+test('calibration: a name shared across language families is not a hit', () => {
+  const dir = makeRepo({
+    base: {
+      'lib/graph.py': 'def build_graph(files):\n    return files\n',
+      'lib/route.rs': 'fn route_table() {}\n',
+    },
+    branch: {
+      'src/graph.mjs': 'export function buildGraph(files) {\n  return files;\n}\n',
+      'src/route.go': 'func routeTable() {}\n',
+    },
+  });
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(r.violations).toEqual([]);
+  expect(r.definitions).toBe(2);
+});
+
+test('calibration: the same name in two files of one family is still a hit', () => {
+  const dir = makeRepo({
+    base: { 'lib/price.ts': 'export function formatPrice(cents: number) {\n  return String(cents);\n}\n' },
+    branch: { 'src/cart.mjs': 'export function formatPrice(n) {\n  return String(n);\n}\n' },
+  });
+  const r = checkDiff({ base: 'main', cwd: dir });
+  expect(where(r)).toEqual(['src/cart.mjs:1']);
 });

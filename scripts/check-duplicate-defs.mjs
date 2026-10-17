@@ -20,10 +20,18 @@
 // definition of a definition. An added definition is one on a line added since
 // merge-base(<base>, HEAD), plus every definition of an untracked new file.
 //
-// SKIPPED. Generic names (GENERIC_NAMES), test files on either side (`.test.`,
-// `.spec.`, `_test.`, a `test_` prefix, a `tests/` or `__tests__/` directory), and
-// anything under node_modules, vendor, dist, build, target, or graphify-out. Two new
-// definitions in different files are reported once, on the path that sorts first.
+// SKIPPED. Generic names (GENERIC_NAMES, which includes `parseArgs` and `usage`, one
+// per standalone script), test files on either side (`.test.`, `.spec.`, `_test.`, a
+// `test_` prefix, a `tests/` or `__tests__/` directory), and anything under
+// node_modules, vendor, dist, build, target, or graphify-out. A pair whose files are
+// in different language families (JS and TS together, .py, .go, .rs each alone) is
+// not a hit. Two new definitions in different files are reported once, on the path
+// that sorts first.
+//
+// MEASURED. A calibration over the history of this repository on 2026-10-17
+// classified 31 hits, 19 of them a true or partial duplicate; the two skips above
+// remove the 7 that were not duplicates by convention or by language.
+// defer: five of the 24 remaining calibration hits share a name but do a different job, upgrade to a body comparison when reviewers start ignoring hits
 //
 // WAIVER. `dup-defs: allow <reason>` in a comment on the definition line or the line
 // above passes it. A waiver without a reason is a violation of its own.
@@ -59,7 +67,7 @@ for (const ext of ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx']) FORMS[ext] = J
 const GENERIC_NAMES = new Set([
   'main', 'init', 'run', 'get', 'set', 'test', 'setup', 'open', 'close', 'read', 'write',
   'start', 'stop', 'load', 'save', 'update', 'create', 'delete', 'handle', 'render',
-  'index', 'new', 'call', 'apply',
+  'index', 'new', 'call', 'apply', 'parseargs', 'usage',
 ]);
 const SKIP_DIRS = new Set(['node_modules', 'vendor', 'dist', 'build', 'target', 'graphify-out']);
 const TEST_DIRS = new Set(['tests', '__tests__']);
@@ -96,6 +104,13 @@ function isScannable(rel) {
   if (parts.some((dir) => SKIP_DIRS.has(dir) || TEST_DIRS.has(dir))) return false;
   return !/(?:\.(?:test|spec)|_test)\./.test(file) && !file.startsWith('test_');
 }
+
+// JS and TS share one family; every other extension is its own. A helper is not
+// reused across languages, so a shared spelling there is a coincidence.
+const languageFamily = (rel) => {
+  const ext = path.extname(rel).toLowerCase();
+  return FORMS[ext] === JS_FORMS ? 'js' : ext;
+};
 
 // A name made only of underscores normalizes to '' and would match every other one.
 function isGeneric(normalized) {
@@ -163,7 +178,7 @@ export function checkDiff({ base, cwd = process.cwd() } = {}) {
     const key = normalizeName(def.name);
     if (isGeneric(key)) continue;
     // A new definition that matches an earlier new one was reported from that side.
-    const other = byName.get(key).find((o) => o.path !== def.path && !(o.added && o.id < def.id));
+    const other = byName.get(key).find((o) => o.path !== def.path && !(o.added && o.id < def.id) && languageFamily(o.path) === languageFamily(def.path));
     if (!other) continue;
     const where = `${def.path}:${def.line}`;
     const reason = waiverReason(def.sourceLines, def.line);

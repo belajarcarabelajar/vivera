@@ -203,3 +203,20 @@ describe('T5 wiring', () => {
     assertFileContains('scripts/backfill-plan-impacts.mjs', 'scripts/check-duplicate-defs.mjs');
   });
 });
+
+describe('F4 reviewer', () => {
+  const REPORT_BY_TURN = 'write the report by your 25th tool call';
+
+  test('the reviewer role tells the reviewer to write the report by its 25th tool call', () => {
+    assertFileContains('agents/roles/reviewer.md', REPORT_BY_TURN);
+  });
+
+  test('the generated staid sprite carries the same instruction', () => {
+    assertFileContains('.claude/agents/staid.md', REPORT_BY_TURN);
+  });
+
+  // The 25th-call budget only makes sense against this limit, so a change to either must change both.
+  test('the reviewer role keeps maxTurns: 30', () => {
+    assertFileContains('agents/roles/reviewer.md', 'maxTurns: 30');
+  });
+});

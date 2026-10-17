@@ -36,6 +36,8 @@ function git(cwd, ...args) {
 
 const SWEEP = 'skills/sucp-debt-sweep/SKILL.md';
 const LITERAL_COMMAND = "git grep -nE '(#|//|/[*]) ?defer:'";
+// The marker word is kept apart from any comment prefix so the sweep command does not count this file's fixture text.
+const MARK = 'defer:';
 
 describe('T0 contract', () => {
   let helperRoot;
@@ -105,8 +107,8 @@ describe('T1 debt-sweep', () => {
     git(tmpRepo, 'config', 'user.email', 'fixture@example.invalid');
     git(tmpRepo, 'config', 'commit.gpgsign', 'false');
     git(tmpRepo, 'config', 'core.hooksPath', '/dev/null');
-    fs.writeFileSync(path.join(tmpRepo, 'a.mjs'), '// defer: ceiling, upgrade when X\nexport const a = 1;\n');
-    fs.writeFileSync(path.join(tmpRepo, 'b.py'), '# defer: only the ceiling\nb = 2\n');
+    fs.writeFileSync(path.join(tmpRepo, 'a.mjs'), `// ${MARK} ceiling, upgrade when X\nexport const a = 1;\n`);
+    fs.writeFileSync(path.join(tmpRepo, 'b.py'), `# ${MARK} only the ceiling\nb = 2\n`);
     fs.writeFileSync(
       path.join(tmpRepo, 'c.md'),
       [
@@ -129,6 +131,14 @@ describe('T1 debt-sweep', () => {
 
   test('the sweep text names the no-trigger tag', () => {
     assertFileContains(SWEEP, 'no-trigger');
+  });
+
+  test('this test file holds no comment-prefixed marker of its own', () => {
+    const marker = new RegExp(`(#|//|/[*]) ?${MARK}`);
+    const own = readRepoFile('scripts/ponytail-gaps-contract.test.mjs')
+      .split('\n')
+      .flatMap((line, index) => (marker.test(line) ? [`${index + 1}: ${line.trim()}`] : []));
+    expect(own).toEqual([]);
   });
 
   test('the extracted command reports only files with a comment-prefixed marker', () => {

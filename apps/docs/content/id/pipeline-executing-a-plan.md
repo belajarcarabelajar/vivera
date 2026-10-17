@@ -5,7 +5,7 @@ category: pipeline
 slug: executing-a-plan
 order: 5
 source: README.md#Executing an `ultra-plan/v1` Plan
-source_hash: "880f63920ce3"
+source_hash: "0eb7a678d72b"
 ---
 
 <a id="executing-an-ultra-planv1-plan"></a>
@@ -199,7 +199,8 @@ query yang menunjukkan dampaknya, sehingga klaim tersebut membawa buktinya sendi
 |---|---|
 | `require_impacts: true` + task tanpa `impacts` | **Error validasi**, dengan menyebut task-nya. |
 | `impacts: []` | **Error validasi.** Daftar kosong tidak mengklaim apa pun dan tidak membuktikan apa pun. |
-| `impacts: ["none: <command>"]` | Lolos. "Sudah diperiksa, tidak ada dampak downstream" adalah jawaban yang sah, dan jawaban itu menyebut pemeriksaannya (disiplin yang sama dengan `skip_if: "false"`). |
+| `impacts: ["none: <reason> - <command>"]` | Lolos. "Sudah diperiksa, tidak ada dampak downstream" adalah jawaban yang sah, dan jawaban itu menyebut pemeriksaannya (disiplin yang sama dengan `skip_if: "false"`). |
+| Entri tanpa ` - ` ASCII yang diikuti bukti minimal 8 karakter, atau yang memuat em dash | **Error validasi** di bawah `require_impacts: true`, menyebut task dan mengutip entrinya; selain itu satu **peringatan** gabungan. Bentuknya sama dengan yang ditegakkan `backfill-plan-impacts.test.mjs`. |
 | `require_impacts` tidak ada | Satu **peringatan** gabungan yang menyebut setiap task yang belum mendeklarasikan, tidak pernah error. |
 | `allow_no_impacts: [T3]` | Membebaskan satu task. Menyebut task yang *justru* mendeklarasikan impacts adalah error tersendiri, sehingga daftar ini tidak bisa menjadi selimut permanen. |
 | `loop_until: "<command>"` pada langkah iteratif | Runner mengeksekusinya setelah `cmd` milik langkah itu sendiri berhasil. Exit 0 berarti konvergen dan langkah lolos; non-zero menjalankan ulang langkah di dalam anggaran `retry` yang sudah dideklarasikannya, dan menghabiskan anggaran itu adalah kegagalan yang menyebut `loop_until`. Ini selalu sebuah perintah, tidak pernah pencocokan string: `grep -q 'Done' src/x.ts` tetap lolos walaupun perilakunya di-revert, sehingga ia melaporkan konvergensi untuk pekerjaan yang belum konvergen. |

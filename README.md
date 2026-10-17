@@ -1086,7 +1086,8 @@ shows the impact, so the claim carries its own evidence:
 |---|---|
 | `require_impacts: true` + a task with no `impacts` | **Validation error**, naming the task. |
 | `impacts: []` | **Validation error.** An empty list claims nothing and proves nothing. |
-| `impacts: ["none: <command>"]` | Passes. "Checked, nothing downstream" is a real answer, and it names the check (the same discipline as `skip_if: "false"`). |
+| `impacts: ["none: <reason> - <command>"]` | Passes. "Checked, nothing downstream" is a real answer, and it names the check (the same discipline as `skip_if: "false"`). |
+| An entry with no ASCII ` - ` followed by at least 8 characters of evidence, or with an em dash | **Validation error** under `require_impacts: true`, naming the task and quoting the entry; one aggregated **warning** otherwise. The same shape `backfill-plan-impacts.test.mjs` enforces. |
 | `require_impacts` absent | One aggregated **warning** naming every undeclared task, never an error. |
 | `allow_no_impacts: [T3]` | Exempts one task. Naming a task that *does* declare impacts is itself an error, so the list cannot become a permanent blanket. |
 | `loop_until: "<command>"` on an iterative step | The runner executes it after that step's own `cmd` succeeds. Exit 0 is converged and the step passes; non-zero re-runs the step inside the `retry` budget it already declares, and exhausting that budget is a failure naming `loop_until`. It is a command, never a string match: `grep -q 'Done' src/x.ts` survives the behaviour being reverted, so it reports convergence for work that is not converged. |

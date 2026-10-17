@@ -219,6 +219,16 @@ function copySuite(base) {
   return { name: 'copy-rules', cmd: ['bun', 'scripts/check-copy-rules.mjs', '--diff', base], reasons: ['always: commits and added lines since the base'] };
 }
 
+// Plans under docs/code-plan/ are session records, not pages the docs app renders.
+const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
+  || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
+
+// `--warn` always exits 0, so a stale or unmapped page is reported without failing the gate.
+function docsGenSuite(paths) {
+  const reasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed (warn only)`);
+  return reasons.length ? { name: 'docs-gen', cmd: ['bun', 'scripts/docs-gen.mjs', '--warn'], reasons } : null;
+}
+
 /**
  * Pure planner. `index.sources` maps every file under scripts/ to its text;
  * `index.mermaidChanged` lists markdown files whose mermaid blocks differ from the base.
@@ -305,6 +315,8 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
       skipped.push({ name: s.name, reason: SKIP_REASON[s.name] });
     }
   }
+  const docsGen = docsGenSuite(paths);
+  if (docsGen) suites.push(docsGen);
   suites.push(copySuite(base));
   return { full: false, suites, skipped, ignored };
 }

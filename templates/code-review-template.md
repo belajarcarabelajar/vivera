@@ -22,6 +22,7 @@
 - **Reviewer type:** independent subagent | parent self-review (no independent reviewer available)
 - **Axis:** Standards | Spec. The two reviewers run in parallel and neither sees the other's report. The Spec reviewer fills only Spec Axis and the verdict.
 - **Spec source:** [approved spec, plan acceptance criteria, or Bounded design checklist; or `no spec available`]
+- **Assumed load:** [one person running a script | many users or processes; read from the README or deploy config, and say which]
 
 ## 2. Rule Attribution Precedence
 
@@ -49,6 +50,8 @@ An issue is a genuine review finding ONLY when every criterion is satisfied:
 6. It does not rest on unstated assumptions about intent or unstated infrastructure.
 7. Affected code is provably impacted, not speculatively affected.
 8. It is clearly not a deliberate design choice by the author.
+
+**Scale lens.** It applies when the diff reads or writes shared state, loops over a collection, or serves more than one caller at a time. Against the Assumed load, look for four shapes: a check-then-write race, a list or cache that grows without a bound, a query per item, and per-process state that must be shared between processes. A scale finding needs a concrete scenario like any other, the input or situation that leads to the wrong result (criteria 1 and 7). The lens adds no ninth criterion and no new priority; calibrate with the Priority Calibration table in section 4.
 
 Trivial style, formatting, typos, and documentation nits are not findings. If nothing qualifies, report none.
 

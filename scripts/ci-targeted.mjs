@@ -28,8 +28,8 @@ export const FULL_CI = [
 const SKIP_REASON = {
   'render-diagrams': 'no diagram source, mermaid config, changed mermaid block, or renderer script changed',
   'validate-skill': 'nothing under skills/, templates/, examples/, the root docs, or the validator changed',
-  'validate-agents': 'nothing under agents/ or the agent scripts changed',
-  'gen-sprite-agents': 'nothing under agents/ or the agent scripts changed',
+  'validate-agents': 'nothing under agents/, .claude/agents/, or the agent scripts changed',
+  'gen-sprite-agents': 'nothing under agents/, .claude/agents/, or the agent scripts changed',
   tests: 'no test reaches the changed files',
   'sync-snippets': 'nothing under snippets/, snippets.manifest.json, or the sync script changed',
 };
@@ -51,7 +51,7 @@ const CATEGORIES = [
   {
     suites: ['validate-agents', 'gen-sprite-agents'],
     scripts: ['scripts/validate-agents.mjs', 'scripts/gen-sprite-agents.mjs'],
-    match: (p) => p.startsWith('agents/'),
+    match: (p) => p.startsWith('agents/') || p.startsWith('.claude/agents/'),
   },
   {
     suites: ['sync-snippets'],
@@ -60,7 +60,7 @@ const CATEGORIES = [
   },
 ];
 
-const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/'];
+const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', '.claude/agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/'];
 const RECOGNIZED_FILES = [
   'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'Super Ultra Code Plan Implementation.md',
   'LICENSE', 'THIRD-PARTY-NOTICES.md', '.gitignore', '.graphifyignore', 'puppeteer-config.json',

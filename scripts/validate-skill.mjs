@@ -1264,7 +1264,8 @@ if (!mmdcAvailable) {
 
   function findMdFiles(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'diagrams') continue;
+      // target/ and dist/ hold build output, never authored Markdown.
+      if (['node_modules', '.git', 'diagrams', 'target', 'dist'].includes(entry.name)) continue;
       const full = path.join(dir, entry.name);
       // Skip symlinks: skills/*/SKILL.md points at the master file, so scanning
       // it would validate (and later render) every diagram twice.

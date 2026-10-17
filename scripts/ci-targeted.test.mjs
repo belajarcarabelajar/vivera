@@ -140,6 +140,32 @@ describe('planChecks', () => {
     expect(gen.cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
   });
 
+  test('a claude-agents file selects validate-agents and gen-sprite-agents instead of the full list', () => {
+    const plan = planChecks(['.claude/agents/staid.md'], INDEX);
+    expect(plan.full).toBe(false);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'copy-rules']);
+    expect(plan.suites.find((s) => s.name === 'gen-sprite-agents').cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
+    expect(plan.skipped.map((s) => s.name)).toEqual(['render-diagrams', 'validate-skill', 'tests', 'sync-snippets']);
+  });
+
+  test('a claude-agents file keeps the test that reads it', () => {
+    const sources = { ...SOURCES, 'scripts/claude-agents-reader.test.mjs': "assertFileContains('.claude/agents/staid.md', NEEDLE);\n" };
+    const plan = planChecks(['.claude/agents/staid.md'], { sources });
+    expect(plan.full).toBe(false);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'tests', 'copy-rules']);
+    expect(testFiles(plan)).toEqual(['./scripts/claude-agents-reader.test.mjs']);
+  });
+
+  test('a path outside every category still forces full beside a claude-agents file', () => {
+    const lone = planChecks(['some/unknown/file.xyz'], INDEX);
+    expect(lone.full).toBe(true);
+    expect(lone.suites[0].reasons).toEqual(['some/unknown/file.xyz: unrecognized path']);
+    const mixed = planChecks(['.claude/agents/staid.md', 'some/unknown/file.xyz'], INDEX);
+    expect(mixed.full).toBe(true);
+    expect(mixed.suites[0].reasons).toEqual(['some/unknown/file.xyz: unrecognized path']);
+    expect(planChecks(['.claude/settings.json'], INDEX).full).toBe(true);
+  });
+
   test('a snippets change selects the sync-snippets check', () => {
     const plan = planChecks(['snippets/demo.md'], INDEX);
     const sync = plan.suites.find((s) => s.name === 'sync-snippets');

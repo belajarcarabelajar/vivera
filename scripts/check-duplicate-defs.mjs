@@ -29,8 +29,10 @@
 // that sorts first.
 //
 // MEASURED. A calibration over the history of this repository on 2026-10-17
-// classified 31 hits, 19 of them a true or partial duplicate; the two skips above
-// remove the 7 that were not duplicates by convention or by language.
+// classified 31 hits, 19 of them a true or partial duplicate; the two skips that
+// calibration added, the generic names `parseArgs` and `usage` and the
+// cross-language-family rule, remove the 7 that were not duplicates by convention
+// or by language.
 // defer: five of the 24 remaining calibration hits share a name but do a different job, upgrade to a body comparison when reviewers start ignoring hits
 //
 // WAIVER. `dup-defs: allow <reason>` in a comment on the definition line or the line
@@ -143,7 +145,8 @@ export function checkDiff({ base, cwd = process.cwd() } = {}) {
     throw new Error(`invalid --diff base: '${base}'`);
   }
   const mergeBase = git(cwd, ['merge-base', base, 'HEAD'], `cannot resolve merge-base of '${base}' and HEAD`).trim();
-  const diff = git(cwd, ['diff', '--unified=0', '--no-color', '--no-ext-diff', mergeBase], `git diff ${mergeBase.slice(0, 8)} failed`);
+  // parseAddedLines strips only a `b/` prefix, so diff.mnemonicPrefix or diff.noprefix must not change it.
+  const diff = git(cwd, ['diff', '--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', mergeBase], `git diff ${mergeBase.slice(0, 8)} failed`);
   const addedLines = parseAddedLines(diff);
   // git diff never lists untracked files, so a new file not yet added would pass unread.
   const untracked = new Set(nulList(git(cwd, ['ls-files', '-z', '--others', '--exclude-standard'], 'git ls-files --others failed')));

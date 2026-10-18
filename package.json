@@ -41,10 +41,6 @@
     "graphify:register": "bun scripts/graphify-register.mjs",
     "graphify:audit": "bun scripts/graphify-audit.mjs",
     "graphify:hooks": "bun scripts/graphify-hooks-install.mjs",
-    "math:bayes": "bun scripts/bayesian-confidence.mjs",
-    "math:invariants": "bun scripts/formal-invariants.mjs",
-    "math:batch": "bun scripts/queueing-batch.mjs",
-    "export:history": "bun scripts/export-opencode-history.mjs",
     "ci:targeted": "bun scripts/ci-targeted.mjs",
     "ci": "bash scripts/render-diagrams.sh && bun scripts/validate-skill.mjs && bun scripts/validate-agents.mjs && bun scripts/gen-sprite-agents.mjs --check && bun scripts/check-file-size.mjs --all && bun test --timeout 30000 scripts/ && bun scripts/sync-snippets.mjs --check"
   },

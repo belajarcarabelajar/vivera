@@ -36,15 +36,5 @@ Open the HTML file directly in any browser — no server needed.
 
 ## Regenerating the demo
 
-The committed HTML is produced by [`scripts/make-graph-demo.py`](../scripts/make-graph-demo.py),
-which is fully seeded — same seed, byte-identical output:
-
-```bash
-python3 scripts/make-graph-demo.py                     # default seed → examples/graph-viewer-demo.html
-python3 scripts/make-graph-demo.py --seed 42 --out /tmp/alt.html
-```
-
-Requires numpy. The privacy property holds by construction: the generator's
-vocabulary is fictional, so no real-world string can enter the output — and a
-quick `grep` audit against identity strings is part of the script's own
-final output.
+The generator, `scripts/make-graph-demo.py`, was retired on 2026-10-19. The committed HTML stays as it is;
+its vocabulary is fictional, so no real-world string can appear in it.

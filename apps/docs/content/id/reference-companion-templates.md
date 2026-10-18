@@ -5,7 +5,7 @@ category: reference
 slug: companion-templates
 order: 1
 source: README.md#Companion Templates
-source_hash: "3a8643af5942"
+source_hash: "b054a450225d"
 ---
 
 <a id="companion-templates"></a>
@@ -25,7 +25,6 @@ Agen dapat langsung menyusun kerangka artefak terstruktur dengan template siap p
 - **[`progress-log-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/progress-log-template.md)**: Log state task yang persisten, satu-satunya sumber kebenaran untuk sebuah task lintas banyak sesi (checklist, keputusan, jejak bukti, log sesi).
 - **[`adr-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/adr-template.md)**: Architecture Decision Record (ADR): pohon keputusan terstruktur, perbandingan trade-off antaralternatif, dan konsekuensi.
 - **[`subagent-contract-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/subagent-contract-template.md)**: Kontrak task subagent: pemecahan task (chunking) dan plan fan-out, isolasi cakupan yang ketat, file target yang diizinkan, checkpoint gather & synthesize, dan urutan gate audit diff oleh parent.
-- **[`vault-index-subagent-contract.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/vault-index-subagent-contract.md)**: Vault Index Extraction Contract (Lapisan Semantik). Kontrak task subagent untuk membaca catatan dan menghasilkan node `concept` / atribut ke file chunk terisolasi, dengan asal-usul `source_file` yang ketat dan validasi chunk-schema.
 - **[`code-review-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/code-review-template.md)**: Kontrak keluaran reviewer: sumbu Standards dan Spec dijalankan sebagai dua reviewer paralel, urutan prioritas atribusi aturan, filter kualifikasi bug 8 poin, asumsi beban yang dicatat pada setiap review beserta lensa skala (race check-then-write, pertumbuhan tanpa batas, query per item, state per proses) yang diterapkan di bawah filter yang sama, prioritas P0–P3 beserta tingkat keyakinan, aturan kelengkapan dan dedupe, catatan desain yang tidak memblokir berdasarkan baseline dua belas smell, format blok saran, dan verdict biner `correct` / `not correct`.
 - **[`deep-research-report-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/deep-research-report-template.md)**: Laporan riset panjang berbasis sitasi: ringkasan eksekutif, tema `##` dengan subbagian `###`, sitasi inline `[n]`, notasi LaTeX, dan sintesis penutup.
 - **[`follow-up-injection-template.md`](https://github.com/belajarcarabelajar/vivera/blob/main/templates/follow-up-injection-template.md)**: Debt sweep (penyisiran utang) saat sesi ditutup: kandidat utang yang terkumpul, klasifikasi `NOW`/`LATER`, set 3-5 follow-up yang terurut, pertanyaan multi-select yang dibundel, catatan eksekusi, dan backlog yang ditunda.

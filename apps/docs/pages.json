@@ -145,17 +145,6 @@
     },
     {
       "category": "tooling",
-      "slug": "opencode-export",
-      "order": 3,
-      "title": "Exporting OpenCode History to Obsidian",
-      "description": "scripts/export-opencode-history.mjs mirrors the local OpenCode SQLite session database one way into Obsidian notes under 05 - Conversations.",
-      "source": {
-        "file": "README.md",
-        "heading": "Exporting OpenCode History to Obsidian"
-      }
-    },
-    {
-      "category": "tooling",
       "slug": "vault-indexing",
       "order": 4,
       "title": "Vault Indexing & Knowledge Graph Verification",
@@ -167,17 +156,6 @@
     },
     {
       "category": "tooling",
-      "slug": "math-utilities",
-      "order": 5,
-      "title": "Mathematical Utilities",
-      "description": "Three pure, dependency-free modules: Bayesian evidence fusion with merge thresholds, plan structure predicates, and an M/M/c queue model for dispatch.",
-      "source": {
-        "file": "README.md",
-        "heading": "Mathematical Utilities"
-      }
-    },
-    {
-      "category": "tooling",
       "slug": "lifecycle-audit",
       "order": 6,
       "title": "Plan Lifecycle Audit & Task Completion",
@@ -185,17 +163,6 @@
       "source": {
         "file": "README.md",
         "heading": "Plan Lifecycle Audit & Task Completion"
-      }
-    },
-    {
-      "category": "tooling",
-      "slug": "chunk-gates",
-      "order": 7,
-      "title": "Vault Chunk Quality Gates",
-      "description": "Scripts that check the semantic chunk corpus, including that every [path:LN] anchor points to a real line holding the quoted words verbatim.",
-      "source": {
-        "file": "README.md",
-        "heading": "Vault Chunk Quality Gates"
       }
     },
     {

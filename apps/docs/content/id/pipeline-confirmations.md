@@ -5,7 +5,7 @@ category: pipeline
 slug: confirmations
 order: 3
 source: README.md#Confirmations Without Typing
-source_hash: "4cddc682a8fe"
+source_hash: "27a7d00ef84a"
 ---
 
 <a id="confirmations-without-typing"></a>
@@ -34,5 +34,5 @@ Bentuk sebuah pertanyaan:
 - Run tanpa pengawasan tidak menanyakan apa pun di tengah jalan. Entry gate overnight dikumpulkan selagi pengguna hadir, dan keputusan di tengah run mengikuti Unattended Continuation Rule: keputusan yang dapat dibalik dilanjutkan dengan tafsiran yang paling masuk akal, sedangkan keputusan yang tidak dapat dibalik dan bisa condong ke dua arah diparkir di handoff. Pertanyaan debt sweep adalah satu-satunya pengecualian, sebagai tindakan terakhir dari run, dan hanya jika harness memiliki klien interaktif.
 - Teks pertanyaan mengikuti preferensi bahasa pengguna, tidak pernah bahasa yang di-hardcode. Subagent tidak pernah bertanya: pertanyaan dimasukkan ke laporannya, lalu parent yang mengajukannya.
 
-Aturan lengkapnya ada di bagian `### ⏸️ Confirmation Protocol` dalam [`skills/sucp-rules/references/07-completion-confirmation.md`](https://github.com/belajarcarabelajar/vivera/blob/main/skills/sucp-rules/references/07-completion-confirmation.md). Tabel terakhirnya adalah katalog gate: header dan urutan opsi untuk setiap gate, dari intent lock hingga merge dan debt sweep.
+Aturan lengkapnya ada di bagian `### ⏸️ Confirmation Protocol` dalam [`references/07-completion-confirmation.md`](https://github.com/belajarcarabelajar/vivera/blob/main/skills/sucp-rules/references/07-completion-confirmation.md). Tabel terakhirnya adalah katalog gate: header dan urutan opsi untuk setiap gate, dari intent lock hingga merge dan debt sweep.
 Katalog itu juga memiliki kolom `Basis` yang memuat alasan standar untuk setiap gate, yang diwajibkan oleh validator.

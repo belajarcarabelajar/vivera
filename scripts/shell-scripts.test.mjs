@@ -33,42 +33,6 @@ function isExecutable(scriptPath) {
   }
 }
 
-// ---------- accept-chunks.sh ----------
-
-test('accept-chunks.sh exists and is executable', () => {
-  const p = path.join(SCRIPTS_DIR, 'accept-chunks.sh');
-  assert.ok(fs.existsSync(p), 'accept-chunks.sh does not exist');
-  assert.ok(isExecutable(p), 'accept-chunks.sh is not executable');
-});
-
-test('accept-chunks.sh has valid bash syntax', () => {
-  const p = path.join(SCRIPTS_DIR, 'accept-chunks.sh');
-  assert.ok(bashSyntaxCheck(p), 'accept-chunks.sh has syntax errors');
-});
-
-test('accept-chunks.sh shows usage with no args', () => {
-  // The no-arg path lists chunk files dirty in the working tree, so it only
-  // reaches the "tidak ada chunk" message when the tree is clean. Running it
-  // against the real repo would make this test fail whenever a chunk is being
-  // accepted (i.e. exactly when the tool matters). Copy the script into a
-  // throwaway git repo with nothing dirty and exercise the real body there.
-  const p = path.join(SCRIPTS_DIR, 'accept-chunks.sh');
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'accept-chunks-test-'));
-  fs.mkdirSync(path.join(tmp, 'scripts'), { recursive: true });
-  fs.copyFileSync(p, path.join(tmp, 'scripts', 'accept-chunks.sh'));
-  const git = (...args) => spawnSync('git', args, { cwd: tmp, encoding: 'utf8' });
-  git('init', '-q');
-  git('config', 'user.email', 'test@example.com');
-  git('config', 'user.name', 'test');
-  git('add', '-A');
-  git('commit', '-qm', 'init');
-
-  const r = spawnSync('bash', [path.join(tmp, 'scripts', 'accept-chunks.sh')], { encoding: 'utf8', cwd: tmp });
-  assert.equal(r.status, 0);
-  assert.ok(r.stdout.includes('tidak ada chunk'));
-  fs.rmSync(tmp, { recursive: true, force: true });
-});
-
 // ---------- plan-mirror-check.sh ----------
 
 test('plan-mirror-check.sh exists and is executable', () => {
@@ -178,27 +142,6 @@ test('sync.sh status action works', () => {
   // Should exit 0 and show status
   assert.equal(r.status, 0);
   assert.ok(r.stdout.includes('==>') || r.stdout.includes('[WARN]') || r.stdout.includes('[INFO]'));
-});
-
-// ---------- verify-chunk.sh ----------
-
-test('verify-chunk.sh exists and is executable', () => {
-  const p = path.join(SCRIPTS_DIR, 'verify-chunk.sh');
-  assert.ok(fs.existsSync(p), 'verify-chunk.sh does not exist');
-  assert.ok(isExecutable(p), 'verify-chunk.sh is not executable');
-});
-
-test('verify-chunk.sh has valid bash syntax', () => {
-  const p = path.join(SCRIPTS_DIR, 'verify-chunk.sh');
-  assert.ok(bashSyntaxCheck(p), 'verify-chunk.sh has syntax errors');
-});
-
-test('verify-chunk.sh shows usage with no args', () => {
-  const p = path.join(SCRIPTS_DIR, 'verify-chunk.sh');
-  const r = spawnSync('bash', [p], { encoding: 'utf8', cwd: ROOT });
-  // Should fail with usage error
-  assert.equal(r.status, 1);
-  assert.ok(r.stderr.includes('usage:') || r.stdout.includes('usage:'));
 });
 
 // ---------- .githooks/pre-commit ----------
@@ -314,7 +257,7 @@ test('a code commit runs graphify update BEFORE the doc sync', () => {
 // ---------- Cross-script integration ----------
 
 test('all shell scripts have proper shebangs', () => {
-  const scripts = ['accept-chunks.sh', 'plan-mirror-check.sh', 'render-diagrams.sh', 'sync.sh', 'verify-chunk.sh'];
+  const scripts = ['plan-mirror-check.sh', 'render-diagrams.sh', 'sync.sh'];
   for (const name of scripts) {
     const content = fs.readFileSync(path.join(SCRIPTS_DIR, name), 'utf8');
     assert.ok(content.startsWith('#!/usr/bin/env bash'), `${name} missing proper shebang`);
@@ -322,7 +265,7 @@ test('all shell scripts have proper shebangs', () => {
 });
 
 test('all shell scripts use set -e or set -uo pipefail', () => {
-  const scripts = ['accept-chunks.sh', 'plan-mirror-check.sh', 'render-diagrams.sh', 'sync.sh', 'verify-chunk.sh'];
+  const scripts = ['plan-mirror-check.sh', 'render-diagrams.sh', 'sync.sh'];
   for (const name of scripts) {
     const content = fs.readFileSync(path.join(SCRIPTS_DIR, name), 'utf8');
     assert.ok(

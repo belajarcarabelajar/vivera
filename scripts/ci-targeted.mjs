@@ -4,8 +4,6 @@
 // Runs only the ci checks a change can affect, so a session gate takes seconds
 // instead of the whole `bun run ci`. When the planner cannot tell what a change
 // reaches, it falls back to the full list instead of guessing.
-//
-//   bun scripts/ci-targeted.mjs [--base <ref>] [--root <dir>] [--plan|--rencana] [--full|--penuh]
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -211,11 +209,14 @@ function testsForOther(p, sources) {
 function fullPlan(base, reasons, ignored = []) {
   return {
     full: true,
-    suites: [...FULL_CI.map((s) => ({ ...s, cmd: [...s.cmd], reasons: [...reasons] })), copySuite(base)],
+    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), copySuite(base)],
     skipped: [],
     ignored,
   };
 }
+
+// A ceiling raised since the base must name a plan id.
+const withBase = (s, base) => (s.name === 'file-size' ? [...s.cmd, '--base', base] : [...s.cmd]);
 
 function copySuite(base) {
   return { name: 'copy-rules', cmd: ['bun', 'scripts/check-copy-rules.mjs', '--diff', base], reasons: ['always: commits and added lines since the base'] };
@@ -225,17 +226,17 @@ function copySuite(base) {
 const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
   || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
 
-// `--warn` always exits 0, so a stale or unmapped page is reported without failing the gate.
+// English only: Indonesian twins may lag while the docs site is frozen.
 function docsGenSuite(paths) {
-  const reasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed (warn only)`);
-  return reasons.length ? { name: 'docs-gen', cmd: ['bun', 'scripts/docs-gen.mjs', '--warn'], reasons } : null;
+  const reasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed`);
+  return reasons.length ? { name: 'docs-gen', cmd: ['bun', 'scripts/docs-gen.mjs', '--check', '--scope', 'en'], reasons } : null;
 }
 
 /**
  * Pure planner. `index.sources` maps every file under scripts/ to its text;
  * `index.mermaidChanged` lists markdown files whose mermaid blocks differ from the base.
  */
-/** True when two package.json texts differ only inside `scripts`; a side that does not parse is never scripts-only. */
+/** True when two package.json texts differ only inside `scripts`; a side that fails to parse never does. */
 export function scriptsOnlyChange(before, after) {
   try {
     const a = JSON.parse(before);
@@ -257,8 +258,8 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
   const all = [...new Set(changed.map((p) => p.replace(/^\.\//, '')))]
     .filter((p) => p && !p.startsWith('graphify-out/'))
     .sort();
-  // An untracked non-code file outside the recognized paths (a stray backup, a local export) cannot be imported
-  // or read by any test, so it is reported instead of forcing the full ci.
+  // An untracked non-code file outside the recognized paths reaches no import and no tests,
+  // so it is reported instead of forcing the full ci.
   const ignored = all
     .filter((p) => untracked.has(p) && !recognized(p) && !CODE_EXT.test(p) && !toolchainReason(p))
     .map((p) => ({ path: p, reason: 'untracked local file outside the repository paths' }));
@@ -312,7 +313,7 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
         skipped.push({ name: 'tests', reason: SKIP_REASON.tests });
       }
     } else if (s.name === 'file-size') {
-      suites.push({ ...s, cmd: [...s.cmd], reasons: ['always: a few git calls over the index'] });
+      suites.push({ ...s, cmd: withBase(s, base), reasons: ['always: a few git calls over the index'] });
     } else if (categoryReasons.has(s.name)) {
       suites.push({ ...s, cmd: [...s.cmd], reasons: categoryReasons.get(s.name) });
     } else {

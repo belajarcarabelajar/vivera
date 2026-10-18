@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# .githooks/commit-msg
+#
+# WHAT THIS IS FOR
+#   A ceiling in scripts/file-size-baseline.json may rise, or a path gain one,
+#   only in a commit whose message carries a line
+#
+#     size-raise: <plan-id> <reason>
+#
+#   naming docs/code-plan/plans/<plan-id>.md (owner decision 2026-10-19). The
+#   pre-commit hook judges sizes but cannot see the message, so this hook runs
+#
+#     bun scripts/check-file-size.mjs --commit-msg <message file>
+#
+#   which compares the staged baseline with HEAD's. The same rule runs over a
+#   whole branch in `bun scripts/check-file-size.mjs --all --base <ref>`, which
+#   also catches `--no-verify` and an amend that drops the line.
+#
+# GATING: what runs when
+#   baseline not staged as changed -> nothing, silently
+#   checker passes                 -> commit proceeds (a note when there is no
+#                                     docs/code-plan/plans directory)
+#   checker reports a raise        -> print the report with the remedy, exit 1
+#   checker exits 2                -> skip with a one-line note, commit proceeds
+#   checker crashes                -> any other exit, or exit 1 without a
+#                                     [size-gate] line: print a blocked note, exit 1
+#   bun / checker not found        -> skip with a one-line note
+#
+# ENABLE / DISABLE / REVERT
+#   Enabled with the pre-commit hook by `git config core.hooksPath .githooks`.
+#   `git commit --no-verify` skips it. Delete this file to revert.
+#
+# NOTE: `set -uo pipefail` and deliberately NOT `-e`, as in .githooks/pre-commit.
+set -uo pipefail
+
+REPO_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_DIR" ] || [ -z "${1:-}" ]; then
+  exit 0
+fi
+
+if git -C "$REPO_DIR" diff --cached --quiet -- scripts/file-size-baseline.json 2>/dev/null; then
+  exit 0
+fi
+
+BUN_BIN="$(command -v bun || true)"
+if [ -z "$BUN_BIN" ] && [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+fi
+
+# Git passes the message path relative to the top level, where hooks run.
+MSG_FILE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+SIZE_CHECK="$REPO_DIR/scripts/check-file-size.mjs"
+if [ -z "$BUN_BIN" ]; then
+  echo "[size-gate] skipped: bun not found" >&2
+  exit 0
+elif [ ! -f "$SIZE_CHECK" ]; then
+  echo "[size-gate] skipped: scripts/check-file-size.mjs not found" >&2
+  exit 0
+fi
+
+size_stderr="$(mktemp)" || { echo "[size-gate] blocked: cannot create a temp file (TMPDIR=${TMPDIR:-unset}). Fix it, or commit with --no-verify." >&2; exit 1; }
+trap 'rm -f "$size_stderr"' EXIT
+(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-file-size.mjs --commit-msg "$MSG_FILE" 2>"$size_stderr") && size_status=0 || size_status=$?
+cat "$size_stderr" >&2
+if [ "$size_status" -eq 1 ]; then
+  if ! grep -q '^\[size-gate\]' "$size_stderr"; then
+    echo "[size-gate] blocked: the checker failed before judging (exit 1). Fix it, or commit with --no-verify." >&2
+  fi
+  exit 1
+elif [ "$size_status" -eq 2 ]; then
+  echo "[size-gate] skipped: checker exited 2" >&2
+elif [ "$size_status" -ne 0 ]; then
+  echo "[size-gate] blocked: the checker crashed (exit $size_status). Fix it, or commit with --no-verify." >&2
+  exit 1
+fi
+exit 0

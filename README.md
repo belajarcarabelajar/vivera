@@ -971,7 +971,7 @@ provably linear function, and a best-of-N retry still went flaky once the suite 
 both implementations timed back to back on the same input, alternating order, so a
 GC pause lands on both and cancels in the quotient.
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 23 keys the runner reads (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using pure AST/frontmatter comparison in ~1 second, bypassing the expensive headless Mermaid browser rendering.
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 24 keys the runner reads (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using AST/frontmatter comparison in ~1 second, bypassing the headless Mermaid browser rendering.
 
 The visual map check is the part that catches a lying plan. Every task heading must have a
 matching node in the Mermaid block, and every `depends_on` edge must match a Mermaid edge
@@ -1010,7 +1010,7 @@ itself the finding: the failing command produced nothing to diagnose with.
 
 | Exit | Class | Transient | Why |
 |---|---|---|---|
-| 124 / ETIMEDOUT | `timeout` | `true` | the step outlived `step_timeout_s` |
+| 124 / ETIMEDOUT | `timeout` | `true` | the step outlived `timeout_s`/`step_timeout_s` |
 | 127 | `environment` | `false` | the command is not on this machine; a re-run cannot change it |
 | 126 | `environment` | `false` | found, but not executable |
 | 130 | `interrupted` | `false` | SIGINT reached the step |

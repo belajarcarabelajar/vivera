@@ -5,7 +5,7 @@ category: pipeline
 slug: executing-a-plan
 order: 5
 source: README.md#Executing an `ultra-plan/v1` Plan
-source_hash: "0eb7a678d72b"
+source_hash: "ad30ad5589e8"
 ---
 
 <a id="executing-an-ultra-planv1-plan"></a>
@@ -67,7 +67,7 @@ file secara bersamaan. Assertion yang bertahan adalah yang **komparatif dan dise
 kedua implementasi diukur berurutan pada input yang sama dengan urutan bergantian, sehingga jeda
 GC mengenai keduanya dan saling meniadakan dalam hasil bagi.
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) memverifikasi bahwa `templates/implementation-plan-template.md` dan header plan pada master skill mendeklarasikan ke-23 key yang dibaca runner (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, dan seterusnya) memakai perbandingan AST/frontmatter murni dalam ~1 detik, tanpa perlu menjalankan rendering Mermaid lewat headless browser yang mahal.
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) memverifikasi bahwa `templates/implementation-plan-template.md` dan header plan pada master skill mendeklarasikan ke-24 key yang dibaca runner (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, dan seterusnya) memakai perbandingan AST/frontmatter dalam ~1 detik, tanpa perlu menjalankan rendering Mermaid lewat headless browser.
 
 Pemeriksaan visual map adalah bagian yang menangkap plan yang berbohong. Setiap heading task
 harus punya node yang cocok di blok Mermaid, dan setiap edge `depends_on` harus cocok dengan
@@ -110,7 +110,7 @@ menghasilkan apa pun untuk didiagnosis.
 
 | Exit | Kelas | Transient | Alasan |
 |---|---|---|---|
-| 124 / ETIMEDOUT | `timeout` | `true` | langkah berjalan melebihi `step_timeout_s` |
+| 124 / ETIMEDOUT | `timeout` | `true` | langkah berjalan melebihi `timeout_s`/`step_timeout_s` |
 | 127 | `environment` | `false` | perintah tidak ada di mesin ini; run ulang tidak bisa mengubahnya |
 | 126 | `environment` | `false` | ditemukan, tetapi tidak executable |
 | 130 | `interrupted` | `false` | SIGINT sampai ke langkah tersebut |

@@ -57,7 +57,7 @@ export const RUNNER_CONTRACT_KEYS = [
   'defaults.retry_if',
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
-  'tasks[].run[].loop_until',
+  'tasks[].run[].loop_until', 'tasks[].run[].timeout_s',
   'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
 ];
 
@@ -638,6 +638,11 @@ function impactsShape(t, errors, { requireImpacts = false, weak = [] } = {}) {
 // already said by omitting the key, and a sentinel for it would be a second
 // spelling of absence. So `loop_until: "false"` is not a valid no-op: it is a
 // shell command, it exits 1, and the step can never converge.
+// A step's own timeout_s replaces defaults.step_timeout_s for its cmd and probe.
+function isStepTimeout(v) {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
+
 function loopUntilShape(step, taskId, index, errors, warnings) {
   if (step.loop_until === undefined) return null; // absence stays legal
   const v = step.loop_until;
@@ -768,6 +773,9 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
         // a validation error naming the task and step, not a runtime surprise
         // discovered once the step's own work is already done.
         loopUntilShape(step, t.id, i, errors, warnings);
+        if (step.timeout_s !== undefined && !isStepTimeout(step.timeout_s)) {
+          errors.push(`task ${t.id} run[${i}] timeout_s must be a positive number of seconds, got ${JSON.stringify(step.timeout_s)}`);
+        }
       });
       continue;
     }
@@ -1197,6 +1205,8 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
       const want = typeof step.expect_exit === 'number' ? step.expect_exit : verifyExit;
       const stepRetry = step.retry ?? retryMax;
       failStepRetry = stepRetry;
+      // Unvalidated plans reach here too (see loopCmd), so a bad value falls back.
+      const stepTimeoutMs = isStepTimeout(step.timeout_s) ? step.timeout_s * 1000 : timeoutMs;
       // Only a well-formed command gates anything. Validation already refuses
       // blank, non-string, and file-probe values, and `executePlan` is reachable
       // directly (every test in the suite goes through it without validating
@@ -1211,14 +1221,14 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
       let loopConverged = true;
       let attempt = 0, r;
       do {
-        r = run(step.cmd, timeoutMs, { log });
+        r = run(step.cmd, stepTimeoutMs, { log });
         attempt++;
         loopConverged = true;
         if (r.exit === want && loopCmd !== null) {
           // Through the same run() helper and the same timeout as any step, so a
-          // probe that overruns step_timeout_s is killed with its process group
+          // probe that overruns its step's budget is killed with its process group
           // and cannot leak the children a step command can spawn.
-          const probe = run(loopCmd, timeoutMs, { log });
+          const probe = run(loopCmd, stepTimeoutMs, { log });
           if (probe.exit === 0) break; // converged: the step passes
           // Not converged. The step runs again inside the retry budget it already
           // declared, and the probe's own result is what the failure is reported

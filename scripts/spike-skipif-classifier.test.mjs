@@ -12,9 +12,10 @@
 // When that happens `summarize()` throws `stale label` and the published 0.995
 // stops being reproducible.
 //
-// So the classifier is snapshotted in `spike-skipif-classifier.mjs` and the
-// spike imports the snapshot, not the live function. This file is what notices
-// if that ever stops being true. A comment is not a guard; these assertions are.
+// So the classifier is snapshotted in `spike-skipif-classifier.mjs`, and the
+// spike scripts (retired on 2026-10-19) imported the snapshot, not the live
+// function. This file is what notices if the snapshot drifts. A comment is not a
+// guard; these assertions are.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -39,7 +40,7 @@ const EXPECTED_FILE_PROBE_SOURCE =
 // The cassette files are machine-local, untracked state. `spike-out/` holds the
 // corpus the spike harvested and the scored artefact the probe wrote, on the
 // machine that ran the spike, and .gitignore keeps the directory out of the
-// tree, so a fresh clone carries neither file. The three tests below read them
+// tree, so a fresh clone carries neither file. The two tests below read them
 // from disk and would die there with ENOENT, so each one gates on the file it
 // actually reads and skips with a reason that says what is missing and why.
 // On a machine that HAS the cassette nothing changes: every assertion still
@@ -50,13 +51,9 @@ const corpusPresent = fs.existsSync(SPIKE_CORPUS_PATH);
 const scoredPresent = fs.existsSync(SPIKE_SCORED_PATH);
 const cassetteSkipReason = (missing) =>
   `${missing} is absent: spike-out/ is gitignored, machine-local spike output (see .gitignore), so a fresh clone does not carry it; `
-  + 're-record the cassette with scripts/spike-skipif-corpus.mjs and scripts/spike-skipif-probe.mjs to run this test';
+  + 'the scripts that recorded it were retired on 2026-10-19, so only a machine that kept spike-out/ runs this test';
 const withCorpus = corpusPresent ? test : (name, fn) => test(name, { skip: cassetteSkipReason(CORPUS_FILE) }, fn);
 const withScored = scoredPresent ? test : (name, fn) => test(name, { skip: cassetteSkipReason(SCORED_FILE) }, fn);
-const withCassette =
-  corpusPresent && scoredPresent
-    ? test
-    : (name, fn) => test(name, { skip: cassetteSkipReason(`${CORPUS_FILE} and ${SCORED_FILE}`) }, fn);
 
 test('a tool that must succeed first is behavioural', () => {
   // The rule as written: a tool invocation qualifies even when a grep filters
@@ -123,34 +120,4 @@ withCorpus('the frozen classifier reproduces the label of all 200 committed corp
     [],
     `${drifted.length} of ${corpus.length} committed corpus labels drifted: ${JSON.stringify(drifted.slice(0, 5))}`,
   );
-});
-
-withCassette('the replayed probe still reproduces the committed agreement 0.995', async () => {
-  // Replay mode reads the cassette. No network, no API key.
-  const { runProbe } = await import('./spike-skipif-probe.mjs');
-  const corpus = JSON.parse(fs.readFileSync(SPIKE_CORPUS_PATH, 'utf8'));
-  const saved = JSON.parse(fs.readFileSync(SPIKE_SCORED_PATH, 'utf8'));
-  const replayed = await runProbe({ corpus, mode: 'replay', out: null });
-
-  assert.equal(replayed.summarize.agreement, 0.995, 'the published agreement is 0.995; a different number means the freeze leaked');
-  assert.equal(replayed.summarize.agreement, saved.agreement, 'replay must equal the committed artefact, not merely round to it');
-  assert.equal(replayed.summarize.ece, saved.ece);
-  assert.equal(replayed.summarize.brier, saved.brier);
-});
-
-test('the spike scripts do not import the live classifier any more', async () => {
-  // The stated risk in the plan: a re-import is how the freeze silently
-  // evaporates on the next refactor. Assert it on the source text, not on
-  // behaviour, because behaviour would be indistinguishable while the two
-  // classifiers happen to agree.
-  const ROOT = SPIKE_CORPUS_PATH.replace(/\/spike-out\/corpus\.json$/, '');
-  for (const file of ['spike-skipif-corpus.mjs', 'spike-skipif-probe.mjs']) {
-    const src = fs.readFileSync(`${ROOT}/scripts/${file}`, 'utf8');
-    for (const line of src.split('\n')) {
-      if (!/^\s*import\b/.test(line)) continue;
-      if (line.includes('classifySkipIf') && !line.includes('classifySpikeSkipIf')) {
-        assert.fail(`${file} still imports the live classifySkipIf from ultra-plan-runner.mjs:\n  ${line.trim()}`);
-      }
-    }
-  }
 });

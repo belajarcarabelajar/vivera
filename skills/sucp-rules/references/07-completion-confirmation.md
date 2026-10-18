@@ -28,7 +28,7 @@ flowchart LR
     More -->|"Yes"| Check
     More -->|"No"| Verify["Run verification\n& git hygiene"]
     Verify --> Done(["🏁 Handoff with\nfresh evidence"])
-    Check -->|"Destructive /\nscope change"| Stop["⏸️ Stop — request\nexplicit confirmation"]
+    Check -->|"Destructive /\nscope change"| Stop["⏸️ Stop: request\nexplicit confirmation"]
     Check -->|"Blocked externally"| Unblock["Complete all\nindependent steps\nthen report blocker"]
     Unblock --> More
 ```

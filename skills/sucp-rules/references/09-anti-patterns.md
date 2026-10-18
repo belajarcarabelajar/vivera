@@ -4,7 +4,7 @@
 | "Too simple to need approval/design/test" | Simple scales the artifact, not the gate |
 | "I'll call it bounded to skip the spec" | Reaching for a label to dodge work = take heavier path |
 | "It grew but I'm almost done" | Hidden complexity upgrades path mid-task |
-| "Tests after achieve same goal" | Tests-after prove nothing — never watched them fail |
+| "Tests after achieve same goal" | Tests-after prove nothing: never watched them fail |
 | "Agent said success" | Verify independently via diff |
 | "The tests pass, so it is done" | Completion Audit: derive every requirement, judge each evidence item, and treat partial or too-weak proof as not achieved |
 | "I'll ship the smaller, safer version" | Fidelity: a narrower or merely compatible solution is misalignment, not prudence. Surface the conflict instead of shrinking the goal |

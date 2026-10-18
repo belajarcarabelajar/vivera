@@ -292,7 +292,7 @@ test('the skip counter is reported in the summary, not just incremented', () => 
 test('a tree missing gitignored state exits 0 and still refuses a clean pass', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-freshclone-'));
   try {
-    const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const ls = spawnSync('git', ['ls-files', '-z', '--cached'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
     const files = ls.stdout.split('\0').filter(Boolean);
     assert.ok(files.length > 50, `expected a real tree, listed ${files.length} tracked files`);
@@ -345,7 +345,7 @@ test('a tree missing gitignored state exits 0 and still refuses a clean pass', (
 
 // Runs the real gate on a fresh-clone tree.
 const copyTrackedTree = (dest) => {
-  const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const ls = spawnSync('git', ['ls-files', '-z', '--cached'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
   const files = ls.stdout.split('\0').filter(Boolean);
   const tar = spawnSync('tar', ['-C', ROOT, '--null', '-T', '-', '-cf', '-'], {

@@ -51,6 +51,18 @@ afterEach(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+
+// A TOML comment is a `#` line outside a multi-line string; the role body inside
+// developer_instructions can hold Markdown headings that also start with `#`.
+function tomlComments(lines) {
+  const out = [];
+  let inString = false;
+  for (const line of lines) {
+    if (!inString && line.startsWith('#')) out.push(line);
+    if ((line.match(/"""|'''/g) ?? []).length % 2 === 1) inString = !inString;
+  }
+  return out;
+}
 describe('codex target', () => {
   test('is registered as a .toml target that needs --out', () => {
     expect(targetIds()).toContain('codex');
@@ -97,7 +109,7 @@ describe('codex target', () => {
 
         test('a read-only sprite says in a comment that sandbox_mode may not be enforced, and a writer has no such comment', () => {
           const lines = text.split('\n');
-          const comments = lines.filter((l) => l.startsWith('#'));
+          const comments = tomlComments(lines);
           if (READ_ONLY.includes(member.sprite)) {
             const at = lines.indexOf('sandbox_mode = "read-only"');
             expect(at).toBeGreaterThan(1);

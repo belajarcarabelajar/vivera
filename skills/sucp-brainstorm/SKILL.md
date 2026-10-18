@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan Step 2 (path process). Covers
 
 # Brainstorming and Research
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too. Next phase after design approval: `sucp-plan`.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase after design approval: `sucp-plan`.
 
 ## 🧠 Adaptive Reasoning Modes
 Activate only the reasoning lenses relevant to the task. Always use the core lenses; add conditional lenses when the scope or risk requires them. Do not expose private chain-of-thought. Report the selected lenses through their conclusions, assumptions, decisions, risks, artifacts, and evidence.

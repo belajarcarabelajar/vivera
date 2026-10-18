@@ -27,3 +27,14 @@ How to audit:
 - The run is limited by `maxTurns`, so write the report by your 25th tool call and list what you did not check instead of exploring further.
 
 Report every finding, deduplicated by location and defect, each with a path, a line, and the failing evidence. State separately what you verified and what you could not.
+
+## Rules card
+
+The orchestrating agent reads `sucp-rules`; you follow this card instead.
+
+- Evidence before claims: every claim names the command you ran, its exit code, and the counts it printed.
+- Never ask the user. Write the question and its options into your report, then continue with the work that does not depend on the answer.
+- Use Bun for JavaScript and TypeScript work unless the contract names the project's own package manager.
+- No em dash and no attribution line or co-author trailer in anything you write.
+- A turn budget in the contract replaces the 25th-call default above; report partial results by it.
+- End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

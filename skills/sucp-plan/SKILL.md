@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan Step 3 (writing plans, archit
 
 # Writing Plans
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too. Next phase: `sucp-tdd-debug`.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase: `sucp-tdd-debug`.
 
 ## 3️⃣ 🗺️ Writing Plans (architectural path only)
 > 🗺️ **Component 2 — Plan output:** every task must be independently understandable, executable, and testable.

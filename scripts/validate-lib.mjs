@@ -62,6 +62,11 @@ export const SNIPPET_CONTRACTS = {
     'A failed entry check still writes nothing',
     'merge into the base branch',
     'no follow-up executes unselected',
+    // The NEVER list and the retry budget replace a human overnight.
+    'NEVER, WHATEVER HAPPENS DURING THE NIGHT',
+    'none of this relaxes the NEVER list below',
+    'RETRY BUDGET',
+    'After three re-prompts',
   ],
 };
 
@@ -72,9 +77,9 @@ export const COMMAND_SNIPPET_CONTRACTS = {
   'cmd-audit.md': ['Do not edit, install, delete, commit'],
   'cmd-cleanup.md': ['git merge-base --is-ancestor', 'git branch -d', 'never `-D`', 'Never `rm -rf`', 'Leave remote branches alone'],
   'cmd-done-verify.md': ['Verify it yourself, read-only', 'positive control'],
-  'cmd-error-continue.md': ['At most 2 attempts per chunk', '--no-verify'],
-  'cmd-fallback.md': ['do not substitute a local run'],
-  'cmd-merge.md': ['bun scripts/pr-registry.mjs state <session> merged', 'Do not deploy, publish, or delete branches or worktrees'],
+  'cmd-error-continue.md': ['At most 2 attempts per chunk', '--no-verify', 'shared cause'],
+  'cmd-fallback.md': ['do not substitute a local run', 'Do not loop on it'],
+  'cmd-merge.md': ['bun scripts/pr-registry.mjs state <session> merged', 'Do not deploy, publish, or delete branches or worktrees', '--admin', 'nothing else'],
   'cmd-resume.md': ['skip_if'],
   'cmd-review-merge.md': ['AUTO-MERGE gate'],
   'cmd-status.md': ['bun scripts/pr-registry.mjs status', 'do not poll in a loop'],

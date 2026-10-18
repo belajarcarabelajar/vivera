@@ -475,6 +475,9 @@ package_entries() {
   for phase_dir in "$REPO_DIR"/skills/sucp-*; do
     phase_name="$(basename "$phase_dir")"
     printf '%s\t%s\n' "$phase_dir/SKILL.md" "$sibling_dir/$phase_name/SKILL.md"
+    if [ -d "$phase_dir/references" ]; then
+      printf '%s\t%s\n' "$phase_dir/references" "$sibling_dir/$phase_name/references"
+    fi
   done
   printf '%s\t%s\n' "$REPO_DIR/templates" "$dir/templates"
   printf '%s\t%s\n' "$REPO_DIR/examples" "$dir/examples"

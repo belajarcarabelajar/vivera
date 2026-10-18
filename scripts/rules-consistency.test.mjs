@@ -17,13 +17,13 @@ function mdUnder(dir) {
 }
 
 function corpus() {
-  const files = [...mdUnder('skills'), ...mdUnder('templates'), 'README.md', ORCHESTRATOR];
+  const files = [...mdUnder('skills'), ...mdUnder('templates'), ...mdUnder('snippets'), 'README.md', ORCHESTRATOR];
   return files.map((rel) => ({ rel, lines: fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n') }));
 }
 
-function hits(re, allow = () => false) {
+function hits(re, allow = () => false, files = corpus()) {
   const found = [];
-  for (const { rel, lines } of corpus()) {
+  for (const { rel, lines } of files) {
     lines.forEach((line, i) => {
       if (re.test(line) && !allow(line)) found.push(`${rel}:${i + 1}: ${line.trim().slice(0, 160)}`);
     });
@@ -50,7 +50,27 @@ describe('rule files do not contradict each other', () => {
     expect(hits(/p(kill|grep) -f/, negatedBefore)).toEqual([]);
   });
 
+  test('the snippets are part of the corpus', () => {
+    expect(corpus().some((f) => f.rel.startsWith('snippets/orkestrasi-'))).toBe(true);
+  });
+
   test('no fixed fan-out floor wording survives', () => {
-    expect(hits(/fan-out floor|10 or more|Ten narrow subagents|10\+ narrow subagents|the 10 floor/i)).toEqual([]);
+    expect(
+      hits(/fan-out floor|10 or more|Ten narrow subagents|10\+ narrow (subagents|chunks)|the 10 floor|not an excuse to skip fan-out/i),
+    ).toEqual([]);
+  });
+});
+
+describe('snippets carry no retired runner or harness behavior', () => {
+  const snippets = () => corpus().filter((f) => f.rel.startsWith('snippets/'));
+
+  // Gemini CLI stopped serving consumer accounts on 2026-06-18.
+  test('no snippet names ask_user in Gemini CLI', () => {
+    expect(hits(/`ask_user` in Gemini CLI/, () => false, snippets())).toEqual([]);
+  });
+
+  // The runner now warns on a stale or missing vault mirror and continues; the flag is a no-op.
+  test('no snippet says the runner exits 3 or recommends --skip-mirror-gate', () => {
+    expect(hits(/\bexits? (with )?(code |status )?3\b|skip-mirror-gate/i, () => false, snippets())).toEqual([]);
   });
 });

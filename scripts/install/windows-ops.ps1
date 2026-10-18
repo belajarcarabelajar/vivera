@@ -177,6 +177,30 @@ function Install-Target($T) {
 function Invoke-InstallAll($Selected) {
     foreach ($t in $Selected) { Install-Target $t }
     Write-Host '[SKIP] sprite agents: install.ps1 installs skills only; the generator needs bun, so use ./install.sh from WSL or Git Bash'
+    Install-Hooks
+}
+
+# The twin of install_hooks in targets.sh. core.hooksPath is repo-local config, so a copy of this repo inside
+# some other git repo (no .git of its own) is skipped: the value would land in the outer repo's config. The hook
+# runs through the bash of Git for Windows and needs bun; that is unverified on Windows.
+function Install-Hooks {
+    if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { Write-Host '[SKIP] git hooks: git not found on PATH'; return }
+    # Windows PowerShell 5.1 turns redirected native stderr into a terminating error under Stop.
+    $ErrorActionPreference = 'Continue'
+    $top = [string](git -C $RepoDir rev-parse --show-toplevel 2>$null)
+    $own = $false
+    if ($LASTEXITCODE -eq 0 -and $top -ne '') {
+        # git spells the toplevel with '/' and may add or drop a trailing separator; Windows paths ignore case.
+        $cmp = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
+        $a = [System.IO.Path]::GetFullPath($top).TrimEnd('\', '/')
+        $own = [string]::Equals($a, [System.IO.Path]::GetFullPath($RepoDir).TrimEnd('\', '/'), $cmp)
+    }
+    if (-not $own) { Write-Host '[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in).'; return }
+    if ($script:DryRunOn) { Write-Host '[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks'; return }
+    git -C $RepoDir config core.hooksPath .githooks 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Host "[WARN] git hooks: git config core.hooksPath failed (exit $LASTEXITCODE); the hook stays off"; return }
+    Write-Host '[OK] Enabled git hooks: core.hooksPath=.githooks'
+    Write-Host "     (revert: git -C `"$RepoDir`" config --unset core.hooksPath)"
 }
 
 # Phase-skill directories of a package target that this checkout no longer has: ours (they carry a marker),

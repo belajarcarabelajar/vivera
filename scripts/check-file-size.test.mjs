@@ -382,3 +382,21 @@ describe('CLI --root and --baseline', () => {
     expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
   });
 });
+
+describe('repo exemptions', () => {
+  const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const attr = (p) => git(REPO, 'check-attr', '--cached', 'size-gate', '--', p).trim().split(': ').pop();
+
+  // Lockfiles, rendered diagrams, the demo scripts/make-graph-demo.py writes, the sprites
+  // scripts/gen-sprite-agents.mjs writes, and the vendored graphify skill: fix them at the source.
+  test.each([
+    'bun.lock', 'apps/docs/Cargo.lock', 'diagrams/lifecycle.svg', 'examples/graph-viewer-demo.html',
+    '.claude/agents/staid.md', '.opencode/skills/graphify/SKILL.md', '.opencode/plugins/graphify.js',
+  ])('%s is exempt', (p) => {
+    expect(attr(p)).toBe('unset');
+  });
+
+  test.each(['README.md', 'skills/sucp-rules/SKILL.md', 'scripts/ci-targeted.mjs'])('%s is still checked (control)', (p) => {
+    expect(attr(p)).toBe('unspecified');
+  });
+});

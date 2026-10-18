@@ -103,7 +103,7 @@ describe('classifyMermaidResult', () => {
 
 // The tree under test is the working tree: tracked files plus untracked ones not ignored.
 const copyTrackedTree = (dest) => {
-  const ls = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const ls = spawnSync('git', ['ls-files', '-z', '--cached'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
   const tar = spawnSync('tar', ['-C', ROOT, '--null', '-T', '-', '-cf', '-'], {
     input: ls.stdout, encoding: null, maxBuffer: 256 * 1024 * 1024,

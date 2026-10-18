@@ -211,20 +211,28 @@ Three failure modes appear the moment more than one session touches one reposito
 
 So the naming is computed rather than chosen, and the order is computed rather than remembered.
 
+**The delivery path**, one command per step:
+1. `bun run plan:check <plan.md>` (runner validation)
+2. `bun run plan:sync <plan.md>` at `Approved`
+3. `bun scripts/pr-registry.mjs claim --plan <plan-id> --session <s> --worktree`
+4. `bun run ci:targeted`
+5. `bun scripts/pr-registry.mjs state <s> verified`
+6. `bun scripts/pr-registry.mjs open <s> --title "<t>" --body-file <f>`
+7. `bun scripts/plan-closeout.mjs --readiness <plan.md>`
+8. `bun run plan:sync <plan.md>` at `Complete`
+9. `gh pr merge <N> --merge --match-head-commit <sha>`
+10. `bun scripts/pr-registry.mjs reconcile`
+
 ### 5.1 Isolation, before any subagent is dispatched
 ```bash
-# One claim per session. It prints the branch and the worktree path.
-bun scripts/pr-registry.mjs claim --plan <plan-id> --session <session-slug> \
+# One claim per session. It derives the branch and worktree path, then runs
+# git worktree prune, git fetch origin <base>, git worktree add.
+bun scripts/pr-registry.mjs claim --plan <plan-id> --session <session-slug> --worktree \
   [--repo <repo-root>] [--depends-on <slug>,<slug>]
-
-# Then, in the repository, before dispatch:
-git worktree prune
-git fetch origin main
-git worktree add <printed-worktree> -b <printed-branch> origin/main
 ```
 
-- The branch is exactly `<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**. `ai/<plan-id>/<session-slug>` was the earlier shape and is gone: a branch name is permanent, publicly readable repository history, so a prefix is an authorship claim in an artifact nobody can redact later, which is the same defect as the `Generated with <tool>` footer (see the copy rule). The plan id already dates and describes the work. Slots claimed before the change keep the branch they claimed, so nothing has to be renamed and no migration exists.
-- The claim is **idempotent**. A retried claim after a crashed session returns the same slot instead of allocating a second one, because the names are a pure function of the two inputs.
+- The branch is exactly `<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**. A branch name is permanent, public history, so a prefix is an authorship claim nobody can redact (the attribution-footer defect, see the copy rule); the plan id already dates and describes the work. Slots claimed with the old `ai/` prefix keep it.
+- The claim is **idempotent**. A retried claim after a crashed session returns the same slot instead of allocating a second one, because the names are a pure function of the two inputs; `--worktree` skips a worktree already on the branch, and a failed git step exits 1 with git's stderr.
 - `--depends-on` is only accepted for sessions that already hold a slot. An unclaimable dependency would make the merge order unprovable, so it is refused at claim time rather than discovered at merge time.
 - Every subagent's working directory is that worktree. Nothing is dispatched before it exists.
 - The parent dispatches with the worktree path in the contract, so a subagent cannot resolve a relative path against the main checkout.
@@ -242,13 +250,14 @@ isolated → active → verified → open → merged
 | `isolated` | Branch and worktree exist, nothing written | `claim` |
 | `active` | Subagents are writing inside the worktree | `state <s> active` |
 | `verified` | Local evidence is green, parent diff audit passed | `state <s> verified` |
-| `open` | The PR exists on the remote | `pr <s> --number <N>` |
-| `merged` | The PR reached the base branch | `state <s> merged` (refused while the plan is not `Complete` or its issue is not closed) |
-| `closed` | The PR was closed without merging (superseded, abandoned, or its change landed by another path) | `state <s> closed` |
+| `open` | The PR exists on the remote | `open <s> --title "<t>" --body-file <f>` (a hand-opened PR: `pr <s> --number <N>`) |
+| `merged` | The PR reached the base branch | `reconcile`, or `state <s> merged`, which records it and prints the closeout verdict as a warning, never a refusal |
+| `closed` | The PR was closed without merging (superseded, abandoned, or its change landed by another path) | `reconcile`, or `state <s> closed` |
 
 - **A PR number cannot be recorded before `verified`.** `setPr` throws otherwise. Recording a PR implies the work is finished and checked, so `isolated → open` would skip the gate that makes a merge safe.
 - **Only an `open` session can merge**, and only if it has a PR number. A green local run is not a mergeable session; a mergeable session is a green local run *and* a PR.
-- **`state <s> merged` is also the close-out gate.** It reads the session's plan file (`docs/code-plan/plans/<plan>.md`) and the `plan.issues.json` record, and exits 1 without touching the registry when the plan is not `Complete`, the issue is not closed, or the issue record was not re-synced after the status changed. `claim` records the session's repository (absolute path), and `state merged` reads the plan from `--repo` when given, else from that recorded repository, else from this repository, so a session of another repository is checked against its own plan. Each gap is printed with the command that fixes it. The plan flips to `Complete` when the owner answers the `Close plan` gate in Step 6 (6.5.5), before the merge, so reaching this gate with an open plan means a closing step was skipped. `--allow-open-plan` records the merge anyway and prints a warning. A missing plan file, a missing `plan.issues.json`, or a plan with no issue record is reported as skipped, not as a pass; a missing plan file for a session with no recorded repository is a `warning:` that names `--repo`. The check reads the last sync's record, not live GitHub.
+- **`state <s> merged` reports the close-out; it does not gate it.** It reads the plan file and the `plan.issues.json` record, prints a `warning:` per gap (plan not `Complete`, issue not closed or not re-synced), and records the merge: GitHub already merged it, so a refusal would only leave the registry wrong. `claim` records the session's repository (absolute path), and `state merged` reads the plan from `--repo` when given, else from that recorded repository, else from this repository, so a session of another repository is checked against its own plan. Each gap names its fix. The plan flips to `Complete` at the `Close plan` gate (6.5.5), before the merge, so this warning means a closing step was skipped. A missing plan file, a missing `plan.issues.json`, or a plan with no issue record is reported as skipped, not as a pass; a missing plan file for a session with no recorded repository is a `warning:` that names `--repo`. The check reads the last sync's record, not live GitHub.
+- **`reconcile` records what GitHub says.** For each unfinished session with a PR it reads `gh pr view` and records `merged` or `closed` with GitHub's timestamp; a head-branch mismatch, an underivable repository, or a failed read is skipped by name (exit 1). PR-less sessions older than `--stale-days` (default 7) are listed; `--close-stale` closes them. `--dry-run` writes nothing.
 - **`merged` and `closed` are terminal.** Reverting or redoing a session is a new session with a new branch, never a state edit. Letting the registry file "un-merge" would hide a revert from the merge order.
 - **A `closed` session is finished but did not move the base.** Unlike `merged` it is not a rebase reason, so `surface` never lists it as landed; unlike an unmerged `open` session it satisfies a dependency, so `order` does not make a dependent wait on a PR that will never land.
 - **Recording a PR moves `verified → open` automatically.** A PR that exists while the session is still `isolated` is a state contradiction, so the tool refuses to represent it.
@@ -256,7 +265,7 @@ isolated → active → verified → open → merged
 ### 5.3 Opening the PR
 Follow `templates/pull-request-template.md` for the body.
 
-- **Write the body to a file, post with `--body-file`.** Passing multi-line markdown through `--body` on a command line is error-prone with newlines, backticks, shell quoting, and checkbox markers. `--body-file` handles all of it.
+- **Write the body to a file, post with `--body-file`.** Multi-line markdown in `--body` breaks on newlines, backticks, quoting, and checkbox markers.
 - **The body is in the codebase's language, not the language the request arrived in** (see Artifact Language Follows the Codebase). A translated PR body breaks `grep` for the next reviewer.
 - **No em dash anywhere in the body, the commit messages, or user-visible strings in the diff** (see the copy rule). This scan blocks the PR, not just the session.
 - **No attribution footer, watermark, badge, or co-author line** (see the copy rule for the full statement and the measured case). An unrequested credit line is a defect even when it names the right tool, because it sets a house style nobody agreed to, and the tool it names is frequently wrong. Append one only when the user names the exact text.
@@ -264,13 +273,13 @@ Follow `templates/pull-request-template.md` for the body.
 - Title is imperative and names the outcome, not the mechanism. `fix: null deref in retry loop`, not `update retry code`.
 - **A fix for code already on the base branch names its origin.** The fix commit carries a `Fixes: #<PR>` trailer naming the PR that introduced the defect, when that PR is known. `bun run metrics` counts these trailers on `origin/main` as escapes, defects that got past review, so a missing trailer hides one from the count.
 - Draft (`--draft`) when the session is genuinely incomplete. A draft is not a smaller completion claim; it is an honest one. Never leave a session draft when its evidence is green, because a draft that nobody un-drafts is a session that silently never lands.
-- Record it immediately: `bun scripts/pr-registry.mjs pr <session> --number <N>`. A PR that exists but is not in the registry is invisible to the merge order, which means it never gets merged.
-- **`gh` must be authenticated before the first push, not discovered at PR time.** `gh auth status` once per session, at the start. A missing token discovered after twenty commits is a much worse place to find out than before the first one.
+- Open and record in one step with `open` (below): it refuses unless the session is `verified`, runs `gh pr create`, and records the number. A PR that exists but is not in the registry is invisible to the merge order, which means it never gets merged.
+- **Run `gh auth status` once at session start, not at PR time.** A missing token found after twenty commits costs far more than one found before the first.
 
 ```bash
-gh pr create --base main --head <branch> \
+bun scripts/pr-registry.mjs open <session> \
   --title "<imperative title>" \
-  --body-file <path-to-pr-body.md>
+  --body-file <path-to-pr-body.md> [--draft]
 ```
 
 ### 5.4 Reviewing a PR
@@ -278,7 +287,7 @@ Use `templates/pr-review-template.md` for the report. Two things make it determi
 
 **Every input is fetched and recorded before any judgement.** Metadata, diff, commits, existing review comments, prior verdicts, and CI status. A row marked "not consulted" with a reason is honest; a row left blank is indistinguishable from a row that was checked and found clean, and it reads as the latter.
 
-**Remote CI status is reported, never adopted.** This repository's checks run locally by policy, so a green remote run is the author's evidence about a commit, not this reviewer's evidence about the working tree. Reading it as a verification result is the same error as pushing to trigger someone else's runner.
+**Remote CI status is reported, never adopted.** Checks run locally by policy, so a green remote run is the author's evidence about a commit, not this reviewer's evidence; adopting it is the same error as pushing to trigger someone else's runner.
 
 **Line anchoring is part of the finding, not formatting.** A comment anchored to a line the PR did not touch either fails to post or degrades into a general remark that looks specific. Every finding names a changed line and the correct side.
 
@@ -292,12 +301,13 @@ bun scripts/pr-registry.mjs order        # the merge order, computed from depend
 bun scripts/pr-registry.mjs surface <s>  # what must rebase first, and what blocks it
 ```
 
-- **Order is topological, from the recorded `depends_on` graph, never chronological.** Ties break on session name so the same registry always yields the same order. A timestamp tiebreak would make the printed plan unreproducible and two runs of one registry would disagree.
+- **Order is topological, from the recorded `depends_on` graph, never chronological.** Ties break on session name, never a timestamp, so one registry always yields one order.
 - **Already-merged sessions drop out and stop blocking their dependents.** That is the plan's own blast-radius rule applied to merges: a session waiting on nothing should still be able to land.
 - **A dependency cycle is refused with the cycle named.** There is no valid order for a cycle; the remedy is to split a session, not to pick an arbitrary one.
 - **Rebase before each merge, not once at the start.** The base branch moves with every merge, so a branch rebased at position 3 is already behind by position 7. `surface <s>` reports which sessions landed since the branch was cut.
 - **Verify locally after every single merge.** Twenty merges followed by one test run at the end means nineteen merges ship unverified. The check after merge N is the evidence for merge N, and it is cheap because the session was already verified once.
 - **One merge at a time.** A batch merge is an unverified batch.
+- **Record each merge right after it:** `bun scripts/pr-registry.mjs reconcile` (or `state <s> merged`).
 - **The `Close plan` gate is asked before the session's final merge, not after.** A status change after the merge needs its own PR, and that PR's plan needs another, so `status: Complete` and the readiness output ship in the session's final PR (`sucp-debt-sweep`, 6.5.5).
 - **The merge itself is a question, once per merge.** Ask it through the Confirmation Protocol (header `Merge`): the first option is `Do not merge`, the second is `Merge the PR` with a description naming the PR number and the head commit. The standing gate on merging into the base branch is unchanged; the question only removes the typing.
 - **A conflict is resolved in the session's branch, never on the base branch.** Rebase the session branch onto `origin/<base>`, resolve there, re-run that session's verification, push, then merge. Editing the base branch directly to "fix" a conflict is how a conflict becomes an unreviewable change nobody can attribute to a session.
@@ -316,14 +326,14 @@ flowchart TD
     accTitle: Session isolation, pull request delivery, and ordered batch merge
     accDescr: Each session claims a derived branch and worktree, subagents write only inside it, local verification and the parent diff audit gate the pull request, a reviewer fetches the remote state and returns a binary verdict, and the batch merges in topological order with a rebase and a local check before every individual merge.
     subgraph Per["Per session, N sessions run concurrently"]
-        Claim["pr-registry claim<br/>derived branch + worktree"] --> Wt["git worktree add<br/>from origin/main"]
+        Claim["pr-registry claim<br/>derived branch + worktree"] --> Wt["claim --worktree<br/>worktree add from origin/main"]
         Wt --> Fan["Subagents write in the worktree<br/>never touch git state"]
         Fan --> Verify["Local verification<br/>zero-tolerance clean pass"]
         Verify --> Audit{"Parent diff audit<br/>stage by explicit path"}
         Audit -->|"Red"| Redo["Re-chunk, re-dispatch<br/>only that scope"]
         Redo --> Verify
         Audit -->|"Green"| State["state: verified"]
-        State --> Pr["gh pr create --body-file<br/>record the number"]
+        State --> Pr["pr-registry open --body-file<br/>creates and records the PR"]
     end
     Pr --> Rev{"Review verdict"}
     Rev -->|"not correct"| Fix["Author fixes in the<br/>session branch"]

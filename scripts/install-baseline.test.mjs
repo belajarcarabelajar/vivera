@@ -193,17 +193,18 @@ test('baseline: a missing tgrep only warns on stderr', () => {
   expect(r.stderr).toContain("optional tool 'tgrep' not found");
 });
 
-test('baseline: without graphify the run skips core.hooksPath and leaves the repo git config alone', () => {
+test('baseline: with or without graphify the run enables core.hooksPath', () => {
   const sb = sandbox({ tools: ['git', 'bun'], git: true });
   expect(fs.existsSync(path.join(sb.repo, '.git'))).toBe(true);
-  const r = sb.run([]);
-  expect(r.status).toBe(0);
-  expect(r.stderr).toContain('skipping core.hooksPath');
   const gitEnv = { ...sb.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_SYSTEM: '/dev/null' };
   const git = (...args) => Bun.spawnSync([path.join(sb.bin, 'git'), '-C', sb.repo, 'config', ...args], { env: gitEnv });
+  // Negative control: before the run the same read reports no value, so a pass below comes from the run.
   expect(git('--get', 'core.hooksPath').exitCode).toBe(1);
-  // Positive control: the same read does see a value when one is set.
-  expect(git('core.hooksPath', '.githooks').exitCode).toBe(0);
+  const r = sb.run([]);
+  expect(r.status).toBe(0);
+  // The run took the missing-graphify branch and still set the hooks path.
+  expect(r.stderr).toContain("optional tool 'graphify' not found");
+  expect(r.stderr).not.toContain('skipping core.hooksPath');
   const after = git('--get', 'core.hooksPath');
   expect(after.exitCode).toBe(0);
   expect(after.stdout.toString().trim()).toBe('.githooks');

@@ -5,7 +5,7 @@ category: getting-started
 slug: quick-start
 order: 3
 source: README.md#Quick Start & Installation
-source_hash: "68739f6334e6"
+source_hash: "b2d341f601e5"
 ---
 
 <a id="quick-start--installation"></a>
@@ -26,7 +26,7 @@ cd vivera
 | Menautkan skill | Paket skill (`SKILL.md`, tujuh phase skill `sucp-*`, `templates/`, `examples/`, dan dua konfigurasi Mermaid) ditautkan ke setiap target dengan path absolut yang menunjuk ke checkout ini, jadi biarkan checkout tetap di tempatnya. `--copy` menyalin file sebagai gantinya. |
 | Memilih target | `~/.config/ai` dan `~/.agents/skills` selalu dipilih. Harness lain hanya dipilih bila terdeteksi (direktorinya ada di home Anda, atau CLI-nya ada di `PATH`, `~/.local/bin`, atau `~/.bun/bin`; tabel di bawah menyebut direktori dan CLI setiap target, dan CLI dicari di ketiga tempat itu untuk setiap baris) atau disebut dengan `--only ID,ID`. Home yang masih kosong hanya mendapat dua target itu. |
 | Merender sprite agent | Tujuh file subagent Harvest Sprite (peri pembantu) dibuat, bukan ditautkan, untuk setiap harness yang terdeteksi di antara Claude Code, OpenCode, Codex, Cursor, Copilot, dan Antigravity. Langkah ini butuh `bun`, sehingga tier `minimal` melewatinya. |
-| Mengaktifkan git hook | Menyetel `core.hooksPath=.githooks` di checkout ini, hanya bila `graphify` terpasang dan checkout memiliki `.git` sendiri. Batalkan dengan `git -C <checkout> config --unset core.hooksPath`. |
+| Mengaktifkan git hook | Menyetel `core.hooksPath=.githooks` di checkout ini bila checkout memiliki `.git` sendiri, baik `graphify` terpasang maupun tidak, karena hook ini membawa gate ukuran file. Batalkan dengan `git -C <checkout> config --unset core.hooksPath`. |
 | Melindungi file Anda | File atau direktori yang sudah ada di tujuan dan bukan milik installer dipindahkan dulu ke `<name>.vivera-bak-<UTC time>` (sebuah baris `[BACKUP]`), sehingga tidak ada yang ditimpa. |
 
 Periksa dulu sebelum memasang, lalu cek lagi sesudahnya:

@@ -12,7 +12,7 @@
   "scripts/check-copy-rules.mjs": 21116,
   "scripts/check-design-tells.mjs": 22188,
   "scripts/check-duplicate-defs.test.mjs": 20224,
-  "scripts/ci-targeted.mjs": 20781,
+  "scripts/ci-targeted.mjs": 20530,
   "scripts/ci-targeted.test.mjs": 21442,
   "scripts/container.test.mjs": 23423,
   "scripts/docs-gen.mjs": 26332,

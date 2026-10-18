@@ -5,7 +5,7 @@ category: pipeline
 slug: pr-delivery
 order: 8
 source: README.md#Pull Request Delivery & Batch Merge
-source_hash: "3897965b9568"
+source_hash: "712f870344a5"
 ---
 
 <a id="pull-request-delivery--batch-merge"></a>
@@ -54,24 +54,29 @@ isolated → active → verified → open → merged
 |---|---|
 | Nomor PR tidak bisa dicatat sebelum `verified` | Mencatat nomor PR menyiratkan pekerjaan sudah selesai dan diperiksa, jadi `isolated → open` akan melewati gate yang membuat merge aman |
 | Hanya sesi `open` yang punya PR yang bisa di-merge | Run lokal yang hijau saja belum menjadikan sebuah sesi siap di-merge |
-| `merged` membutuhkan plan `Complete` dan issue yang sudah ditutup | Plan berubah menjadi `Complete` setelah debt sweep (penyisiran utang), jadi merge yang tercatat saat plan atau issue masih terbuka berarti ada langkah penutup yang terlewat. `state <s> merged` keluar dengan kode 1 dan mencetak perintah perbaikannya; `--allow-open-plan` mengesampingkannya dengan peringatan, dan `--repo <path>` mengarahkannya ke plan milik repositori lain |
 | `merged` dan `closed` bersifat terminal | Me-revert atau mengulang sebuah sesi berarti sesi baru dengan branch baru. File yang bisa "membatalkan merge" menyembunyikan revert dari urutan merge |
 | Sesi yang ditutup tidak menggeser base | `merged` adalah alasan untuk rebase karena ia memajukan `origin/main`; `closed` tidak, sehingga `surface` tidak pernah mencantumkannya sebagai sudah masuk, sementara `order` tetap memperlakukannya sebagai dependensi yang terpenuhi |
 | Branch atau worktree duplikat ditolak | Registry yang melaporkan sukses untuk tata letak yang akan menghilangkan pekerjaan lebih buruk daripada tidak punya registry sama sekali |
 
 ```bash
-bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> [--depends-on <slug>,<slug>]
+bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> --worktree [--depends-on <slug>,<slug>]
 bun scripts/pr-registry.mjs state <session> <isolated|active|verified|open|merged|closed>
-bun scripts/pr-registry.mjs state <session> merged [--repo <path>] [--allow-open-plan]
-bun scripts/pr-registry.mjs pr <session> --number 42
+bun scripts/pr-registry.mjs state <session> merged [--repo <path>]
+bun scripts/pr-registry.mjs open <session> --title "<t>" --body-file <f> [--draft]
+bun scripts/pr-registry.mjs pr <session> --number 42   # a PR opened by hand
+bun scripts/pr-registry.mjs reconcile [--dry-run] [--stale-days N] [--close-stale]
 bun scripts/pr-registry.mjs order       # topological merge order
 bun scripts/pr-registry.mjs surface w3  # what must rebase first, what blocks it
 bun scripts/pr-registry.mjs status
 ```
 
-`claim` mencetak perintah `git worktree add` persis yang harus dijalankan, dan bersifat
-idempoten: claim yang diulang setelah sesi crash mengembalikan slot yang sama, bukan
-mengalokasikan slot kedua.
+`claim --worktree` menjalankan sendiri `git worktree prune`, `fetch`, dan `worktree add`,
+dan bersifat idempoten: claim yang diulang setelah sesi crash mengembalikan slot yang sama.
+`open` menolak sesi yang belum `verified`, menjalankan `gh pr create`, lalu mencatat
+nomornya. `state <s> merged` tidak pernah menolak karena plan: celah close-out dicetak
+sebagai peringatan dan merge tetap dicatat. `reconcile` mencatat `merged` atau `closed`
+dari `gh pr view`, melewati dengan menyebut nama sesi yang tidak bisa dibaca atau
+dicocokkan, dan menutup sesi tanpa PR yang usang hanya dengan `--close-stale`.
 
 Branch turunannya adalah `<plan-id>/<session-slug>`, tanpa prefiks tool atau workflow.
 Dulu ada prefiks `ai/`, dan prefiks itu dihapus dengan alasan yang sama seperti aturan

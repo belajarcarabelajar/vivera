@@ -1,6 +1,6 @@
 {
   "MEMORY.md": 29739,
-  "README.md": 190411,
+  "README.md": 190583,
   "apps/docs/content/id/getting-started-quick-start.md": 65260,
   "apps/docs/content/id/getting-started-repository-structure.md": 21474,
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
@@ -53,9 +53,9 @@
   "scripts/vault-index.mjs": 23535,
   "scripts/vault-index.test.mjs": 31712,
   "skills/sucp-brainstorm/SKILL.md": 32723,
-  "skills/sucp-debt-sweep/SKILL.md": 29332,
-  "skills/sucp-plan/SKILL.md": 43870,
-  "skills/sucp-verify-deliver/SKILL.md": 43710,
+  "skills/sucp-debt-sweep/SKILL.md": 29345,
+  "skills/sucp-plan/SKILL.md": 43877,
+  "skills/sucp-verify-deliver/SKILL.md": 44316,
   "snippets/orkestrasi-ngoding-plan.md": 22729,
   "snippets/orkestrasi-pr-review.md": 20371
 }

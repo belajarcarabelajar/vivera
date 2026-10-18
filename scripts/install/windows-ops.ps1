@@ -187,14 +187,10 @@ function Install-Hooks {
     if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { Write-Host '[SKIP] git hooks: git not found on PATH'; return }
     # Windows PowerShell 5.1 turns redirected native stderr into a terminating error under Stop.
     $ErrorActionPreference = 'Continue'
-    $top = [string](git -C $RepoDir rev-parse --show-toplevel 2>$null)
-    $own = $false
-    if ($LASTEXITCODE -eq 0 -and $top -ne '') {
-        # git spells the toplevel with '/' and may add or drop a trailing separator; Windows paths ignore case.
-        $cmp = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
-        $a = [System.IO.Path]::GetFullPath($top).TrimEnd('\', '/')
-        $own = [string]::Equals($a, [System.IO.Path]::GetFullPath($RepoDir).TrimEnd('\', '/'), $cmp)
-    }
+    # An empty prefix means $RepoDir is the toplevel. Asking git, not comparing paths, survives a symlink,
+    # junction, or subst on the way to install.ps1; a nested copy has a non-empty prefix and a non-repo fails.
+    $prefix = [string](git -C $RepoDir rev-parse --show-prefix 2>$null)
+    $own = $LASTEXITCODE -eq 0 -and $prefix.Trim() -eq ''
     if (-not $own) { Write-Host '[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in).'; return }
     if ($script:DryRunOn) { Write-Host '[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks'; return }
     git -C $RepoDir config core.hooksPath .githooks 2>$null

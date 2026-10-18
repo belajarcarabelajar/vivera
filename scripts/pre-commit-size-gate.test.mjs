@@ -234,3 +234,14 @@ test('a checker report with exit 1 blocks without the crash line', () => {
   assert.ok(!outputOf(r).includes('failed before judging'), outputOf(r));
   assert.equal(repo.head(), '');
 });
+
+test('a mktemp failure blocks with a clear message and no cat noise', () => {
+  const repo = sizeGateRepo();
+  repo.write('small.txt', 'ok\n');
+  repo.git(['add', 'small.txt']);
+  const r = repo.commit('small', { TMPDIR: '/nonexistent/dir' });
+  assert.notEqual(r.status, 0, outputOf(r));
+  assert.ok(outputOf(r).includes('cannot create a temp file'), outputOf(r));
+  assert.ok(!outputOf(r).includes('cat:'), outputOf(r));
+  assert.equal(repo.head(), '', 'no commit should exist after a blocked commit');
+});

@@ -5,8 +5,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  LIMIT_BYTES, fileKind, judge, renderReport, staleCeilings, tightenBaseline, tokensOf,
+  LIMIT_BYTES, exitCodeFor, fileKind, judge, renderReport, staleCeilings, tightenBaseline, tokensOf,
 } from './check-file-size.mjs';
+import { GitError } from './lib/git.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-file-size.mjs');
 const BASELINE = 'scripts/file-size-baseline.json';
@@ -399,6 +400,17 @@ describe('CLI exit 2', () => {
     expect(r.code).toBe(2);
     expect(r.err).toContain('invalid baseline JSON');
     expect(r.err).toContain(path.join(dir, BASELINE));
+  });
+});
+
+describe('exitCodeFor', () => {
+  test('a GitError is exit 2', () => expect(exitCodeFor(new GitError('x'))).toBe(2));
+  test('a system error such as EISDIR is exit 2', () => {
+    expect(exitCodeFor(Object.assign(new Error('x'), { code: 'EISDIR' }))).toBe(2);
+  });
+  test('a TypeError is rethrown', () => {
+    const bug = new TypeError('bug');
+    expect(() => exitCodeFor(bug)).toThrow(bug);
   });
 });
 

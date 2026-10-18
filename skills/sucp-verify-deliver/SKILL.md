@@ -217,7 +217,7 @@ So the naming is computed rather than chosen, and the order is computed rather t
 3. `bun scripts/pr-registry.mjs claim --plan <plan-id> --session <s> --worktree`
 4. `bun run ci:targeted`
 5. `bun scripts/pr-registry.mjs state <s> verified`
-6. `bun scripts/pr-registry.mjs open <s> --title "<t>" --body-file <f>`
+6. `bun scripts/pr-registry.mjs open <s> --title "<t>" --body-file <f>` (pushes the branch first)
 7. `bun scripts/plan-closeout.mjs --readiness <plan.md>`
 8. `bun run plan:sync <plan.md>` at `Complete`
 9. `gh pr merge <N> --merge --match-head-commit <sha>`
@@ -273,7 +273,7 @@ Follow `templates/pull-request-template.md` for the body.
 - Title is imperative and names the outcome, not the mechanism. `fix: null deref in retry loop`, not `update retry code`.
 - **A fix for code already on the base branch names its origin.** The fix commit carries a `Fixes: #<PR>` trailer naming the PR that introduced the defect, when that PR is known. `bun run metrics` counts these trailers on `origin/main` as escapes, defects that got past review, so a missing trailer hides one from the count.
 - Draft (`--draft`) when the session is genuinely incomplete. A draft is not a smaller completion claim; it is an honest one. Never leave a session draft when its evidence is green, because a draft that nobody un-drafts is a session that silently never lands.
-- Open and record in one step with `open` (below): it refuses unless the session is `verified`, runs `gh pr create`, and records the number. A PR that exists but is not in the registry is invisible to the merge order, which means it never gets merged.
+- Open and record in one step with `open` (below): it refuses unless the session is `verified`, pushes the branch, runs `gh pr create`, and records the number. A PR that exists but is not in the registry is invisible to the merge order, which means it never gets merged.
 - **Run `gh auth status` once at session start, not at PR time.** A missing token found after twenty commits costs far more than one found before the first.
 
 ```bash

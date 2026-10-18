@@ -10,7 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync,
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadRegistry } from './pr-registry.mjs';
-import { parseRemote, resolveRepoPath } from './lib/registry-sync.mjs';
+import { parseRemote, resolveRepoPath, applyReconcile } from './lib/registry-sync.mjs';
 
 const SCRIPT = path.join(path.dirname(new URL(import.meta.url).pathname), 'pr-registry.mjs');
 const GIT_ENV = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
@@ -210,4 +210,12 @@ test('resolveRepoPath uses this repository only for its own legacy ai-skills-wt 
     assert.ok(resolveRepoPath({ worktree: `${dir}/Elsewhere/s` }, main).error);
     assert.deepEqual(resolveRepoPath({ repo: '/given', worktree: `${dir}/Elsewhere/s` }, main), { path: '/given' });
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a stale close is dropped at write time when the session gained a PR since the read', () => {
+  const live = { session: 's1', plan: 'p', branch: 'p/s1', worktree: '/w/s1', state: 'isolated', pr: null };
+  const facts = new Map([['s1', { patch: { state: 'closed', closed_at: 'x' }, stale: true }]]);
+  assert.equal(applyReconcile({ version: 1, sessions: [live] }, facts).sessions[0].state, 'closed');
+  const gained = { ...live, state: 'verified', pr: 9 };
+  assert.deepEqual(applyReconcile({ version: 1, sessions: [gained] }, facts).sessions[0], gained);
 });

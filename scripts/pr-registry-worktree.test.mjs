@@ -25,7 +25,8 @@ function git(cwd, ...args) {
 }
 
 function cli(env, ...args) {
-  const r = Bun.spawnSync(['bun', SCRIPT, ...args], { env: { ...process.env, ...GIT_ENV, ...env } });
+  const cwd = env.CWD ?? process.cwd();
+  const r = Bun.spawnSync(['bun', SCRIPT, ...args], { cwd, env: { ...process.env, ...GIT_ENV, ...env } });
   return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
 }
 
@@ -70,6 +71,27 @@ test('claim --worktree is idempotent when the worktree already exists on the bra
   } finally { f.cleanup(); }
 });
 
+test('claim --worktree re-adds a deleted worktree on the existing branch after a crash', () => {
+  const f = gitFixture();
+  try {
+    assert.equal(f.claim().code, 0);
+    rmSync(f.worktree, { recursive: true, force: true });
+    const r = f.claim();
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.equal(git(f.worktree, 'rev-parse', '--abbrev-ref', 'HEAD'), 'p/w1');
+  } finally { f.cleanup(); }
+});
+
+test('claim --worktree does not take a worktree on a branch that only shares the prefix', () => {
+  const f = gitFixture();
+  try {
+    git(f.repo, 'worktree', 'add', '-q', f.worktree, '-b', 'p/w1-old');
+    const r = f.claim();
+    assert.ok(!r.out.includes('skipping'), r.out);
+    assert.equal(r.code, 1, r.out + r.err);
+  } finally { f.cleanup(); }
+});
+
 test('claim --worktree exits 1 with git stderr when a git step fails', () => {
   const f = gitFixture();
   try {
@@ -90,8 +112,13 @@ function openFixture(state, pr = null) {
   const log = path.join(dir, 'gh.log');
   writeFileSync(path.join(bin, 'gh'), `#!/bin/sh\necho "$*" >> '${log}'\ncase "$*" in\n  *FAIL*) echo "gh: GraphQL: base branch missing" >&2; exit 1 ;;\nesac\necho "https://github.com/acme/widgets/pull/77"\n`);
   chmodSync(path.join(bin, 'gh'), 0o755);
+  const origin = path.join(dir, 'origin.git');
   const repo = path.join(dir, 'repo');
-  mkdirSync(repo);
+  git(dir, 'init', '-q', '--bare', '-b', 'main', origin);
+  git(dir, 'init', '-q', '-b', 'main', repo);
+  git(repo, 'commit', '-q', '--allow-empty', '-m', 'seed');
+  git(repo, 'remote', 'add', 'origin', origin);
+  git(repo, 'branch', 'p/w1');
   const body = path.join(dir, 'body.md');
   writeFileSync(body, 'body\n');
   const registry = path.join(dir, 'pr.registry.json');
@@ -99,9 +126,13 @@ function openFixture(state, pr = null) {
     version: 1,
     sessions: [{ session: 'w1', plan: 'p', branch: 'p/w1', worktree: `${dir}/repo-wt/w1`, repo, base: 'main', state, pr, depends_on: [], claimed_at: new Date().toISOString() }],
   }, null, 2));
+  const env = { PATH: `${bin}:${process.env.PATH}` };
   return {
     body,
-    open: (...extra) => cli({ PATH: `${bin}:${process.env.PATH}` }, 'open', 'w1', '--registry', registry, '--body-file', body, ...extra),
+    remoteHead: () => Bun.spawnSync(['git', '-C', origin, 'rev-parse', '--verify', '-q', 'refs/heads/p/w1']).stdout.toString().trim(),
+    localHead: () => git(repo, 'rev-parse', 'p/w1'),
+    openFrom: (cwd, file, ...extra) => cli({ ...env, CWD: cwd }, 'open', 'w1', '--registry', registry, '--body-file', file, ...extra),
+    open: (...extra) => cli(env, 'open', 'w1', '--registry', registry, '--body-file', body, ...extra),
     session: () => loadRegistry(registry).sessions[0],
     calls: () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []),
     cleanup: () => rmSync(dir, { recursive: true, force: true }),
@@ -120,6 +151,34 @@ test('open creates the PR with gh and records its number like the pr command', (
   } finally { f.cleanup(); }
 });
 
+test('open pushes the session branch to origin before creating the PR', () => {
+  const f = openFixture('verified');
+  try {
+    assert.equal(f.open('--title', 'T').code, 0);
+    assert.equal(f.remoteHead(), f.localHead());
+  } finally { f.cleanup(); }
+});
+
+test('open resolves a relative --body-file against the caller cwd', () => {
+  const f = openFixture('verified');
+  try {
+    const r = f.openFrom(path.dirname(f.body), 'body.md', '--title', 'T');
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.ok(f.calls()[0].endsWith(`--body-file ${f.body}`), f.calls()[0]);
+  } finally { f.cleanup(); }
+});
+
+test('open exits 2 without calling gh when the body file does not exist', () => {
+  const f = openFixture('verified');
+  try {
+    const r = f.openFrom(path.dirname(f.body), 'nope.md', '--title', 'T');
+    assert.equal(r.code, 2, r.out + r.err);
+    assert.match(r.err, /nope\.md/);
+    assert.deepEqual(f.calls(), []);
+    assert.equal(f.remoteHead(), '');
+  } finally { f.cleanup(); }
+});
+
 test('open --draft passes --draft to gh', () => {
   const f = openFixture('verified');
   try {
@@ -135,6 +194,7 @@ test('open refuses a session that is not verified and never calls gh', () => {
     assert.equal(r.code, 1, r.out + r.err);
     assert.match(r.err, /w1.*active.*verified/);
     assert.deepEqual(f.calls(), []);
+    assert.equal(f.remoteHead(), '', 'nothing is pushed for a refused session');
     assert.equal(f.session().state, 'active');
   } finally { f.cleanup(); }
 });

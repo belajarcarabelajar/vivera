@@ -5,7 +5,7 @@ category: pipeline
 slug: pr-delivery
 order: 8
 source: README.md#Pull Request Delivery & Batch Merge
-source_hash: "712f870344a5"
+source_hash: "29378c3e9c67"
 ---
 
 <a id="pull-request-delivery--batch-merge"></a>
@@ -72,7 +72,7 @@ bun scripts/pr-registry.mjs status
 
 `claim --worktree` menjalankan sendiri `git worktree prune`, `fetch`, dan `worktree add`,
 dan bersifat idempoten: claim yang diulang setelah sesi crash mengembalikan slot yang sama.
-`open` menolak sesi yang belum `verified`, menjalankan `gh pr create`, lalu mencatat
+`open` menolak sesi yang belum `verified`, mendorong branch-nya, menjalankan `gh pr create`, lalu mencatat
 nomornya. `state <s> merged` tidak pernah menolak karena plan: celah close-out dicetak
 sebagai peringatan dan merge tetap dicatat. `reconcile` mencatat `merged` atau `closed`
 dari `gh pr view`, melewati dengan menyebut nama sesi yang tidak bisa dibaca atau

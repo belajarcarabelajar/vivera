@@ -1,11 +1,11 @@
 {
   "MEMORY.md": 29318,
-  "README.md": 199968,
+  "README.md": 200037,
   "apps/docs/content/id/getting-started-quick-start.md": 65260,
   "apps/docs/content/id/getting-started-repository-structure.md": 22371,
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
   "apps/docs/content/id/reference-glossary-full.md": 20370,
-  "apps/docs/content/id/tooling-trigger-snippets.md": 49123,
+  "apps/docs/content/id/tooling-trigger-snippets.md": 49206,
   "apps/docs/src/routes.rs": 21536,
   "docs/graphify-integration.md": 43327,
   "scripts/agents-md-current.test.mjs": 22184,

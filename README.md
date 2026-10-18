@@ -1328,7 +1328,7 @@ bun scripts/pr-registry.mjs status
 
 `claim --worktree` runs `git worktree prune`, `fetch` and `worktree add` itself, and is
 idempotent: a retried claim after a crashed session returns the same slot. `open` refuses
-a session that is not `verified`, runs `gh pr create`, and records the number. `state <s>
+a session that is not `verified`, pushes the branch, runs `gh pr create`, and records the number. `state <s>
 merged` never refuses over the plan: it prints close-out gaps as warnings and records the
 merge. `reconcile` records `merged` or `closed` from `gh pr view`, skips by name what it
 cannot read or match, and closes PR-less stale sessions only with `--close-stale`.

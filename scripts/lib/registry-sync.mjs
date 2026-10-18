@@ -73,6 +73,17 @@ function readPr(slug, pr) {
   }
 }
 
+// Re-checked at write time: a session that finished, or (for a stale close)
+// gained a PR, since the read keeps what it has now.
+export function applyReconcile(registry, facts) {
+  const apply = (s) => {
+    const fact = facts.get(s.session);
+    if (!fact || !LIVE_STATES.includes(s.state) || (fact.stale && s.pr)) return s;
+    return { ...s, ...fact.patch };
+  };
+  return { ...registry, sessions: registry.sessions.map(apply) };
+}
+
 // Reads first, then writes once. The mutation only replays facts already read,
 // so mutateRegistry can re-apply it on a conflict without calling GitHub again.
 export function reconcile({ registryPath, rootDir, flags }) {
@@ -93,7 +104,7 @@ export function reconcile({ registryPath, rootDir, flags }) {
       if (age > staleDays * DAY_MS) {
         counts.stale++;
         lines.push(`stale ${s.session} claimed ${s.claimed_at}, no PR${closeStale ? ' -> closed' : ' (pass --close-stale to close)'}`);
-        if (closeStale) facts.set(s.session, { state: 'closed', closed_at: now.toISOString() });
+        if (closeStale) facts.set(s.session, { patch: { state: 'closed', closed_at: now.toISOString() }, stale: true });
       }
       continue;
     }
@@ -110,11 +121,11 @@ export function reconcile({ registryPath, rootDir, flags }) {
     if (state === 'MERGED') {
       counts.merged++;
       lines.push(`merged ${s.session} (PR #${s.pr} on ${repo.slug}) at ${mergedAt}`);
-      facts.set(s.session, { state: 'merged', merged_at: mergedAt });
+      facts.set(s.session, { patch: { state: 'merged', merged_at: mergedAt } });
     } else if (state === 'CLOSED') {
       counts.closed++;
       lines.push(`closed ${s.session} (PR #${s.pr} on ${repo.slug}) at ${closedAt}`);
-      facts.set(s.session, { state: 'closed', closed_at: closedAt });
+      facts.set(s.session, { patch: { state: 'closed', closed_at: closedAt } });
     } else if (state !== 'OPEN') {
       counts.skipped++;
       lines.push(`skipped ${s.session} (PR #${s.pr}): unexpected GitHub state ${JSON.stringify(state)}`);
@@ -122,10 +133,7 @@ export function reconcile({ registryPath, rootDir, flags }) {
   }
 
   if (facts.size > 0 && !dryRun) {
-    mutateRegistry((registry) => ({
-      ...registry,
-      sessions: registry.sessions.map((s) => (facts.has(s.session) && LIVE_STATES.includes(s.state) ? { ...s, ...facts.get(s.session) } : s)),
-    }), { registryPath });
+    mutateRegistry((registry) => applyReconcile(registry, facts), { registryPath });
   }
   for (const l of lines) console.log(dryRun ? `[dry run] ${l}` : l);
   if (dryRun) console.log('dry run: nothing written');
@@ -142,22 +150,23 @@ function hasWorktree(repo, worktree, branch) {
   if (!r.ok) return false;
   return r.out.split(/\n\s*\n/).some((block) => {
     const wt = /^worktree (.+)$/m.exec(block);
-    return wt && real(wt[1]) === real(worktree) && block.includes(`\nbranch refs/heads/${branch}`);
+    return wt && real(wt[1]) === real(worktree) && block.split('\n').includes(`branch refs/heads/${branch}`);
   });
 }
 
 export function setupWorktree(session, repoRoot) {
   const repo = session.repo ?? path.resolve(repoRoot);
-  if (hasWorktree(repo, session.worktree, session.branch)) {
+  if (existsSync(session.worktree) && hasWorktree(repo, session.worktree, session.branch)) {
     console.log(`${session.worktree} is already a worktree on ${session.branch}; skipping`);
     return 0;
   }
-  const steps = [
-    ['worktree', 'prune'],
-    ['fetch', 'origin', session.base],
-    ['worktree', 'add', session.worktree, '-b', session.branch, `origin/${session.base}`],
-  ];
-  for (const step of steps) {
+  // After a crash the folder can be gone while the branch survives; prune drops
+  // the stale entry and the add then reuses the branch instead of `-b`.
+  const branchExists = run('git', ['-C', repo, 'rev-parse', '--verify', '--quiet', `refs/heads/${session.branch}`]).ok;
+  const add = branchExists
+    ? ['worktree', 'add', session.worktree, session.branch]
+    : ['worktree', 'add', session.worktree, '-b', session.branch, `origin/${session.base}`];
+  for (const step of [['worktree', 'prune'], ['fetch', 'origin', session.base], add]) {
     const r = run('git', ['-C', repo, ...step]);
     console.log(`${r.ok ? 'ok' : 'FAILED'}: git ${step.join(' ')} (in ${repo})`);
     if (!r.ok) {
@@ -172,6 +181,13 @@ export function setupWorktree(session, repoRoot) {
 export function openPr({ registryPath, rootDir, positional, flags }) {
   const [id] = positional;
   if (!id || !flags.title || !flags['body-file']) throw new Error('open needs <session> --title <t> --body-file <f> [--draft]');
+  // gh runs inside the session repository, so a relative path must be fixed
+  // against the caller's directory first.
+  const bodyFile = path.resolve(process.cwd(), flags['body-file']);
+  if (!existsSync(bodyFile)) {
+    console.error(`❌ --body-file ${bodyFile} does not exist`);
+    return 2;
+  }
   const s = loadRegistry(registryPath).sessions.find((x) => x.session === id);
   if (!s) throw new Error(`no slot for session "${id}"; claim it first`);
   if (s.state === 'open' && s.pr) {
@@ -181,9 +197,16 @@ export function openPr({ registryPath, rootDir, positional, flags }) {
   if (s.state !== 'verified') {
     throw new Error(`session "${s.session}" is ${s.state}; open needs a verified session, so run the local checks and the diff audit first`);
   }
-  const args = ['pr', 'create', '--base', s.base, '--head', s.branch, '--title', flags.title, '--body-file', flags['body-file']];
+  const cwd = s.repo ?? rootDir;
+  const push = run('git', ['-C', cwd, 'push', '-u', 'origin', s.branch]);
+  console.log(`${push.ok ? 'ok' : 'FAILED'}: git push -u origin ${s.branch} (in ${cwd})`);
+  if (!push.ok) {
+    console.error(push.err);
+    return 1;
+  }
+  const args = ['pr', 'create', '--base', s.base, '--head', s.branch, '--title', flags.title, '--body-file', bodyFile];
   if (flags.draft === true) args.push('--draft');
-  const r = run('gh', args, { cwd: s.repo ?? rootDir });
+  const r = run('gh', args, { cwd });
   if (!r.ok) {
     console.error(r.err);
     return 1;

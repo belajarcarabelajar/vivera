@@ -31,6 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
+import { gitText } from './lib/git.mjs';
 
 export const LIMIT_BYTES = 20000;
 const LIMIT_TOKENS = LIMIT_BYTES / 4;
@@ -170,14 +171,6 @@ function renderStale(stale, baselineName) {
   return lines.join('\n');
 }
 
-// Argument arrays only, never a shell string, so no path is ever interpreted.
-function git(root, args, input) {
-  const r = spawnSync('git', args, { cwd: root, input, encoding: 'utf8', maxBuffer: 1 << 30 });
-  if (r.error) throw r.error;
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr.trim()}`);
-  return r.stdout;
-}
-
 function nulFields(text) {
   const fields = text.split('\0');
   if (fields.at(-1) === '') fields.pop();
@@ -190,30 +183,30 @@ function resolveRoot(dir) {
 }
 
 function stagedPaths(root) {
-  return nulFields(git(root, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']));
+  return nulFields(gitText(root, ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']));
 }
 
 // Returns [{ path, bytes }] for every judged index path, or only those in `only`.
 export function indexEntries(root, only = null) {
   const want = only ? new Set(only) : null;
   const blobs = new Map();
-  for (const rec of nulFields(git(root, ['ls-files', '-s', '-z']))) {
+  for (const rec of nulFields(gitText(root, ['ls-files', '-s', '-z']))) {
     const tab = rec.indexOf('\t');
     const [mode, oid, stage] = rec.slice(0, tab).split(' ');
     const p = rec.slice(tab + 1);
     if (stage !== '0' || mode === '120000' || mode === '160000' || (want && !want.has(p))) continue;
     blobs.set(p, oid);
   }
-  for (const rec of nulFields(git(root, ['ls-files', '--eol', '-z']))) {
+  for (const rec of nulFields(gitText(root, ['ls-files', '--eol', '-z']))) {
     if (rec.startsWith('i/-text')) blobs.delete(rec.slice(rec.indexOf('\t') + 1));
   }
   if (blobs.size) {
-    const attrs = nulFields(git(root, ['check-attr', '--cached', '-z', '--stdin', 'size-gate'], [...blobs.keys()].join('\0') + '\0'));
+    const attrs = nulFields(gitText(root, ['check-attr', '--cached', '-z', '--stdin', 'size-gate'], { input: [...blobs.keys()].join('\0') + '\0' }));
     for (let i = 0; i + 2 < attrs.length; i += 3) if (attrs[i + 2] === 'unset') blobs.delete(attrs[i]);
   }
   const kept = [...blobs];
   if (!kept.length) return [];
-  const sizes = git(root, ['cat-file', '--batch-check'], kept.map(([, oid]) => oid).join('\n') + '\n').split('\n');
+  const sizes = gitText(root, ['cat-file', '--batch-check'], { input: kept.map(([, oid]) => oid).join('\n') + '\n' }).split('\n');
   return kept.map(([p, oid], i) => {
     const [gotOid, type, size] = sizes[i].split(' ');
     if (gotOid !== oid || type !== 'blob') throw new Error(`git cat-file: unexpected answer for ${p}: ${sizes[i]}`);

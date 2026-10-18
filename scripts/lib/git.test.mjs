@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,8 +9,14 @@ import { GitError, gitText } from './git.mjs';
 process.env.GIT_CONFIG_GLOBAL = '/dev/null';
 process.env.GIT_CONFIG_NOSYSTEM = '1';
 
+const repos = [];
+afterAll(() => {
+  for (const d of repos) fs.rmSync(d, { recursive: true, force: true });
+});
+
 function tempRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-helper-'));
+  repos.push(dir);
   const r = spawnSync('git', ['init', '-q', dir], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`git init failed: ${r.stderr}`);
   return dir;
@@ -71,10 +77,10 @@ describe('gitText', () => {
 describe('single helper', () => {
   test('no script defines its own throwing git()', () => {
     const scripts = path.join(import.meta.dir, '..');
-    const files = [
-      ...fs.readdirSync(scripts).map((f) => path.join(scripts, f)),
-      ...fs.readdirSync(import.meta.dir).map((f) => path.join(import.meta.dir, f)),
-    ].filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== path.join(import.meta.dir, 'git.mjs'));
+    const files = fs
+      .readdirSync(scripts, { recursive: true })
+      .map((f) => path.join(scripts, f))
+      .filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && f !== path.join(import.meta.dir, 'git.mjs'));
     const offenders = files.filter((f) => {
       const m = /^(?:export\s+)?function git\(.*?^\}/ms.exec(fs.readFileSync(f, 'utf8'));
       return m !== null && /\bthrow\b/.test(m[0]);

@@ -374,6 +374,11 @@ describe('CLI', () => {
     const r = cli('--plan', '--root', ROOT, '--base', 'no-such-ref-for-ci-targeted');
     expect(r.status).toBe(2);
   });
+
+  test('a missing --root exits 2 and names the path', () => {
+    const r = cli('--plan', '--root', '/nonexistent/x');
+    expect([r.status, r.stderr.includes('/nonexistent/x')]).toEqual([2, true]);
+  });
 });
 
 describe('package.json limited to scripts', () => {

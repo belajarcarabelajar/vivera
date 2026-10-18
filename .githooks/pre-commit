@@ -116,7 +116,7 @@ if [ -z "$BUN_BIN" ]; then
 elif [ ! -f "$SIZE_CHECK" ]; then
   echo "[size-gate] skipped: scripts/check-file-size.mjs not found" >&2
 else
-  size_stderr="$(mktemp)"
+  size_stderr="$(mktemp)" || { echo "[size-gate] blocked: cannot create a temp file (TMPDIR=${TMPDIR:-unset}). Fix it, or commit with --no-verify." >&2; exit 1; }
   trap 'rm -f "$size_stderr"' EXIT
   size_output="$(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-file-size.mjs --staged 2>"$size_stderr")" && size_status=0 || size_status=$?
   cat "$size_stderr" >&2

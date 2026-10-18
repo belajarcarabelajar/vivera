@@ -110,6 +110,15 @@ describe.skipIf(!shell || !git)('install.ps1 enables the git hooks like install.
     expect(hooksPath(fx.chk)).toBe('probe');
   });
 
+  test('-DryRun through a symlink to the checkout still counts it as its own', () => {
+    const fx = makeFixture();
+    const link = path.join(fx.base, 'link');
+    fs.symlinkSync(fx.chk, link);
+    const r = run({ ...fx, ps1: path.join(link, 'install.ps1') }, ['-DryRun']);
+    expect({ code: r.code, err: r.err }).toEqual({ code: 0, err: '' });
+    expect(lines(r.out)).toContain(DRY_LINE);
+  });
+
   test('-Check and -Uninstall do not touch core.hooksPath', () => {
     const fx = makeFixture();
     for (const args of [['-Check'], ['-Uninstall']]) {

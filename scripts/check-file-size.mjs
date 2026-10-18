@@ -31,7 +31,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
-import { gitText } from './lib/git.mjs';
+import { GitError, gitText } from './lib/git.mjs';
 
 export const LIMIT_BYTES = 20000;
 const LIMIT_TOKENS = LIMIT_BYTES / 4;
@@ -304,12 +304,18 @@ export function main(argv, cwd = process.cwd()) {
   return violations.length || stale.length ? 1 : 0;
 }
 
+// A git or filesystem failure is not a size verdict, so it is exit 2 (the hook skips).
+// Anything else is a bug in this script: rethrow so bun exits 1 and the hook blocks.
+export function exitCodeFor(e) {
+  if (e instanceof GitError || typeof e?.code === 'string') return 2;
+  throw e;
+}
+
 if (import.meta.main) {
   try {
     process.exitCode = main(process.argv.slice(2));
   } catch (e) {
-    // A git or filesystem failure is not a size verdict, so it must not look like exit 1.
+    process.exitCode = exitCodeFor(e);
     err(`[size-gate] ${e.message}`);
-    process.exitCode = 2;
   }
 }

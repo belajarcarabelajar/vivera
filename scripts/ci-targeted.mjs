@@ -356,11 +356,13 @@ export function parseArgs(argv) {
 }
 
 export function changedFiles(root, base) {
-  const mergeBase = gitText(root, ['merge-base', 'HEAD', base]).trim();
+  // -C, not cwd: then git's own error names a bad root.
+  const git = (...a) => gitText(process.cwd(), ['-C', root, ...a], { label: `git ${a.join(' ')} failed` });
+  const mergeBase = git('merge-base', 'HEAD', base).trim();
   const lists = [
-    gitText(root, ['diff', '--name-only', '-z', '--no-renames', mergeBase]),
-    gitText(root, ['diff', '--name-only', '-z', '--no-renames', 'HEAD']),
-    gitText(root, ['ls-files', '--others', '--exclude-standard', '-z']),
+    git('diff', '--name-only', '-z', '--no-renames', mergeBase),
+    git('diff', '--name-only', '-z', '--no-renames', 'HEAD'),
+    git('ls-files', '--others', '--exclude-standard', '-z'),
   ];
   const files = [...new Set(lists.flatMap((s) => s.split('\0').filter(Boolean)))].sort();
   return { mergeBase, files, untracked: lists[2].split('\0').filter(Boolean) };

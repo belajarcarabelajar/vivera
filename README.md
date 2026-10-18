@@ -71,7 +71,7 @@ What a question looks like:
 - Unattended runs ask nothing mid-run. The overnight entry gate is collected while the user is present, and a mid-run decision follows the Unattended Continuation Rule: a reversible one continues on the most reasonable reading, an irreversible one that could go either way is parked in the handoff. The debt-sweep question is the one exception, as the last act of the run, and only when the harness has an interactive client.
 - Question text follows the user's language preference, never a hardcoded language. Subagents never ask: a question goes into their report and the parent asks.
 
-The full rule is the `### ⏸️ Confirmation Protocol` section of [`skills/sucp-rules/SKILL.md`](skills/sucp-rules/SKILL.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
+The full rule is the `### ⏸️ Confirmation Protocol` section of [`skills/sucp-rules/references/07-completion-confirmation.md`](skills/sucp-rules/references/07-completion-confirmation.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
 The catalog also has a `Basis` column holding the standard reason for each gate, which the validator requires.
 
 ---

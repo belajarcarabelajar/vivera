@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import { checkRunnerContract } from './check-runner-contract.mjs';
 import { TIERS, checkPrereqs, hasTool, loadTierTable } from './lib/prereq.mjs';
-import { PHASE_SKILLS, readSkillCorpus } from './skill-corpus.mjs';
+import { PHASE_SKILLS, readSkillCorpus, readSkillText } from './skill-corpus.mjs';
 // Safe to import: plan-issue-sync runs its CLI only when it is argv[1] itself.
 import { ISSUES_STORE } from './plan-issue-sync.mjs';
 import { systemPuppeteerBrowser } from './puppeteer-browser.mjs';
@@ -725,7 +725,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of amendmentContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Prompting-guide amendment present: ${c.label}`);
     } else {
@@ -759,7 +759,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of automationContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Automation-article amendment present: ${c.label}`);
     } else {
@@ -822,7 +822,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of confirmationContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Confirmation protocol present: ${c.label}`);
     } else {
@@ -841,7 +841,7 @@ for (const snip of requiredSnippets) {
   let typedApprovalClean = true;
   for (const file of typedApprovalFiles) {
     const target = path.join(rootDir, file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, file) : '';
     for (const phrase of typedApprovalPhrases) {
       if (text.includes(phrase)) {
         console.error(`❌ Typed-approval phrase still present: "${phrase}" in ${file}`);
@@ -855,7 +855,7 @@ for (const snip of requiredSnippets) {
   // The needles above pin wording; this pins the table's shape (header cap, unique
   // headers, safe-option-first). Logic and tests live in validate-lib.mjs.
   const catalogFile = path.join(rootDir, rules);
-  const catalogProblems = checkGateCatalog(fs.existsSync(catalogFile) ? fs.readFileSync(catalogFile, 'utf8') : '');
+  const catalogProblems = checkGateCatalog(fs.existsSync(catalogFile) ? readSkillText(rootDir, rules) : '');
   if (catalogProblems.length === 0) {
     console.log('✅ Gate catalog shape is valid');
   } else {
@@ -894,7 +894,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of reasonContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Recommendation reasons present: ${c.label}`);
     } else {
@@ -932,7 +932,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of closeoutContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Plan closeout gate present: ${c.label}`);
     } else {
@@ -953,7 +953,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of targetedContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Targeted gate present: ${c.label}`);
     } else {
@@ -975,7 +975,7 @@ for (const snip of requiredSnippets) {
   ];
   for (const c of fastModeContract) {
     const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : '';
+    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
     if (text.includes(c.needle)) {
       console.log(`✅ Fast-mode entry check present: ${c.label}`);
     } else {

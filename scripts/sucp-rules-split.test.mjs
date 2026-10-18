@@ -8,7 +8,7 @@ const SKILL_DIR = path.join(ROOT, 'skills', 'sucp-rules');
 const INDEX = path.join(SKILL_DIR, 'SKILL.md');
 const REFS = path.join(SKILL_DIR, 'references');
 const LIMIT = 20000;
-const READING_HEADING = '## 📚 Required reading';
+const READING_HEADING = '## 📚 Load on demand';
 
 function refNames() {
   return fs.existsSync(REFS) ? fs.readdirSync(REFS).sort() : [];
@@ -42,10 +42,10 @@ describe('sucp-rules split into an index and references', () => {
     expect(names.filter((n) => !n.endsWith('.md'))).toEqual([]);
   });
 
-  test('the Required reading list names exactly the reference files, in name order', () => {
+  test('the Load on demand table names exactly the reference files, in name order', () => {
     const section = readingSection(fs.readFileSync(INDEX, 'utf8'));
-    expect(section).toMatch(/MUST be read in full, in order, before acting/);
-    const listed = [...section.matchAll(/^\d+\. \[[^\]]*\]\(references\/([^)]+)\)/gm)].map((m) => m[1]);
+    expect(section).toMatch(/always loaded/);
+    const listed = [...section.matchAll(/^\| \[[^\]]*\]\(references\/([^)]+)\)/gm)].map((m) => m[1]);
     expect(listed).toEqual(refNames());
     for (const name of listed) expect(fs.existsSync(path.join(REFS, name))).toBe(true);
   });

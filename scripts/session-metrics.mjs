@@ -27,6 +27,7 @@ const NAME_RE = /^[A-Za-z0-9_.:-]{1,80}$/;
 // Sprite agent types are stored padded with spaces (" chef "), so trim first.
 const safeName = (s) => (typeof s === 'string' && NAME_RE.test(s.trim()) ? s.trim() : '<other>');
 
+// dup-defs: allow a Claude Code project slug, not the vault note slug of vault-index-structural.mjs
 export function slugFor(repoPath) {
   return path.resolve(repoPath).replace(/\//g, '-');
 }
@@ -47,7 +48,8 @@ export async function readTranscript(file) {
     }
     if (rec.type !== 'assistant' || !rec.message) continue;
     const msg = rec.message;
-    const id = msg.id ?? `anon-${anon++}`;
+    // An id-less message must never collide with one in another file during cross-file dedupe.
+    const id = msg.id ?? `${file}#anon-${anon++}`;
     let call = byId.get(id);
     if (!call) {
       call = { id, usage: null, tools: [], skills: [], seen: new Set() };
@@ -94,17 +96,35 @@ function inWindow(ts, b) {
 
 export function repoMatches(entry, repo) {
   const name = path.basename(path.resolve(repo));
-  if (entry.repo) return entry.repo.replace(/\/+$/, '').endsWith(name);
+  if (entry.repo) return path.basename(path.resolve(entry.repo)) === name;
   const segs = String(entry.worktree ?? '').split('/');
-  return segs.includes(name) || segs.includes(`${name}-wt`);
+  // vivera was named ai-skills, and its oldest registry entries still carry that worktree path.
+  return segs.includes(`${name}-wt`) || (name === 'vivera' && segs.includes('ai-skills-wt'));
 }
 
+// dup-defs: allow the skipif-registry-audit bump is private to that CLI module
 const bump = (obj, k) => { obj[k] = (obj[k] ?? 0) + 1; };
 
+// Claude Code can leave one conversation in two transcript files (a resumed or
+// copied session), so a message id is counted once across the whole set. The
+// earliest file keeps it, and a file left with no calls is not a session.
+function dedupeAcross(transcripts) {
+  const order = [...transcripts].sort((x, y) => (x.firstTs ?? '').localeCompare(y.firstTs ?? '') || (x.file ?? '').localeCompare(y.file ?? ''));
+  const seen = new Set();
+  const out = [];
+  for (const t of order) {
+    const calls = t.calls.filter((c) => !seen.has(c.id));
+    for (const c of calls) seen.add(c.id);
+    if (calls.length) out.push({ ...t, calls });
+  }
+  return out;
+}
+
+// dup-defs: allow the summarize(...) signature is the contract named in plan 2026-10-19-pipeline-efficiency T3
 export function summarize({ mains, subs, registry, fixes, window = {}, repo = '' }) {
   const b = windowBounds(window);
-  const M = mains.filter((t) => inWindow(t.firstTs, b));
-  const S = subs.filter((t) => inWindow(t.firstTs, b));
+  const M = dedupeAcross(mains.filter((t) => inWindow(t.firstTs, b)));
+  const S = dedupeAcross(subs.filter((t) => inWindow(t.firstTs, b)));
   const tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
   const skills = {};
   let apiCalls = 0;
@@ -128,9 +148,12 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     COST_WEIGHTS.input * tokens.input + COST_WEIGHTS.cacheWrite * tokens.cacheWrite
     + COST_WEIGHTS.cacheRead * tokens.cacheRead + COST_WEIGHTS.output * tokens.output, 1,
   );
-  const firstCtx = (t) => (t.calls.length ? ctxOf(t.calls[0].usage) : null);
+  const firstCtx = (t) => {
+    const c = t.calls.find((x) => ctxOf(x.usage) > 0);
+    return c ? ctxOf(c.usage) : null;
+  };
   const firsts = (ts) => ts.map(firstCtx).filter((v) => v !== null);
-  const shares = S.filter((t) => t.calls.length).map((t) => {
+  const shares = S.filter((t) => firstCtx(t) !== null).map((t) => {
     const first = firstCtx(t);
     let num_ = 0;
     let den = 0;
@@ -276,7 +299,10 @@ export async function main(argv) {
   }
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
   for (const k of ['since', 'until']) {
-    if (values[k] !== undefined && (!DATE_RE.test(values[k]) || Number.isNaN(Date.parse(values[k])))) {
+    const v = values[k];
+    const real = DATE_RE.test(v ?? '') && !Number.isNaN(Date.parse(`${v}T00:00:00Z`))
+      && new Date(`${v}T00:00:00Z`).toISOString().slice(0, 10) === v;
+    if (v !== undefined && !real) {
       return usage(`--${k} must be YYYY-MM-DD`);
     }
   }
@@ -297,9 +323,9 @@ export async function main(argv) {
   const notes = [];
   const files = listTranscripts(projectsDir, windowBounds(window).from);
   const mains = [];
-  for (const f of files.mains) mains.push(await readTranscript(f));
+  for (const f of files.mains) mains.push({ file: f, ...(await readTranscript(f)) });
   const subs = [];
-  for (const f of files.subs) subs.push({ agentType: agentTypeOf(f), ...(await readTranscript(f)) });
+  for (const f of files.subs) subs.push({ file: f, agentType: agentTypeOf(f), ...(await readTranscript(f)) });
   let registry = null;
   try {
     registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));

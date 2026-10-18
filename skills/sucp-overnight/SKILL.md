@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan, unattended mode. Takes an al
 
 # Overnight Run
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too. This skill adds no new gate to the normal path. It only fixes what "unattended" means, so the rules already in `sucp-rules` (Unattended Continuation, Autonomous Completion Bias, Isolated Worktree, Draft PR) and `sucp-verify-deliver` (5.1 to 5.3) apply with nobody watching. The HARD GATE and every approval gate stay in the orchestrator.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. This skill adds no new gate to the normal path. It only fixes what "unattended" means, so the rules already in `sucp-rules` (Unattended Continuation, Autonomous Completion Bias, Isolated Worktree, Draft PR) and `sucp-verify-deliver` (5.1 to 5.3) apply with nobody watching. The HARD GATE and every approval gate stay in the orchestrator.
 
 The deliverable is a verified pull request that is waiting for a human. It is never a merge.
 

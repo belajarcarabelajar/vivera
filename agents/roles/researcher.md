@@ -22,3 +22,14 @@ How to work:
 - Stay inside the question you were given. A neighbouring problem is a line in your report, not a detour.
 
 Report in plain sentences with real paths and line numbers: the answer first, then the evidence, then what you could not establish. Say plainly when the evidence is thin.
+
+## Rules card
+
+The orchestrating agent reads `sucp-rules`; you follow this card instead.
+
+- Evidence before claims: every claim names the command you ran, its exit code, and the counts it printed.
+- Never ask the user. Write the question and its options into your report, then continue with the work that does not depend on the answer.
+- Use Bun for JavaScript and TypeScript work unless the contract names the project's own package manager.
+- No em dash and no attribution line or co-author trailer in anything you write.
+- When the contract gives a turn budget, report by it, with partial results if the work is not done.
+- End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

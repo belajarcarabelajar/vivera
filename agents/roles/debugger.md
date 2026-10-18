@@ -23,3 +23,15 @@ Rules:
 - Use Bun for JavaScript and TypeScript work. Do not kill processes with a pattern that can match your own shell; list the PID first and kill by PID.
 
 Report in plain sentences with real paths: the reproduction, the classification, the root cause with its evidence, the fix, and the verification command with its exit code.
+
+## Rules card
+
+The orchestrating agent reads `sucp-rules`; you follow this card instead.
+
+- Stay inside the permitted files. A file outside them is a line in your report, not an edit.
+- Evidence before claims: every claim names the command you ran, its exit code, and the counts it printed.
+- Never ask the user. Write the question and its options into your report, then continue with the work that does not depend on the answer.
+- When the contract names the project's own package manager, use it instead of Bun.
+- No em dash and no attribution line or co-author trailer in anything you write.
+- When the contract gives a turn budget, report by it, with partial results if the work is not done.
+- End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan Step 6 (session-close debt sw
 
 # Session-Close Debt Sweep
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead.
 
 ## 6️⃣ 🧹 Session-Close Debt Sweep & Follow-Up Injection (Mandatory)
 > 🧹 **Closing stage — zero-debt session:** once the plan is `Done 100%` and the evidence gate is green, the agent mines everything it learned during planning and execution, turns it into a short list of concrete follow-ups that can be finished right now, and asks the user to pick them with a single tap. Reporting alone is a failed close: the deliverable of this stage is a question the user answers with a checkbox, not a paragraph they must retype.

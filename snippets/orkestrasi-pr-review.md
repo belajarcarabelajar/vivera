@@ -19,7 +19,7 @@ Apply super-ultra-code-plan (fallback chain: ~/vivera/Super Ultra Code Plan Impl
 TARGET RESOLUTION RUNS FIRST, BEFORE ANY REVIEW WORK. The text below `#{clipboard}` was substituted at expansion time and is the ONLY statement of what to review. Resolve it to an ordered list of `(owner/repo, number)` pairs, then work that list. Do not ask the user to restate a target the text already names.
 
 Accepted shapes, and nothing else is a target:
-- One full URL: `https://github.com/owner/repo/pull/123`
+- One full URL: `#{clipboard}`
 - One `#123`, or `owner/repo#123`, when the repo is unambiguous from the remote of the current checkout
 - Several of the above, one per line or separated by whitespace or commas (the multi-PR case)
 - A bare URL fragment the clipboard mangled: reconstruct it only when owner, repo, and number are all present after reconstruction, and state the reconstruction in one line

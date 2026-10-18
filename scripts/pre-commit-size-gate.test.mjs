@@ -10,8 +10,23 @@ import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dir, '..');
 const HOOK = path.join(ROOT, '.githooks', 'pre-commit');
-// The checker plus every local module it imports; the temp repo needs all of them.
-const CHECKER_FILES = ['scripts/check-file-size.mjs', 'scripts/lib/atomic-write.mjs'];
+// The checker plus its relative import closure, walked from the source so a new
+// local import reaches the temp repo without editing a list. Copying all of
+// scripts/lib instead would let `git add -A` stage modules over the limit.
+function importClosure(entry) {
+  const seen = new Set();
+  const visit = (rel) => {
+    if (seen.has(rel)) return;
+    seen.add(rel);
+    const source = fs.readFileSync(path.join(ROOT, rel), 'utf8');
+    for (const [, spec] of source.matchAll(/\bfrom\s+['"](\.{1,2}\/[^'"]+\.mjs)['"]/g)) {
+      visit(path.posix.join(path.posix.dirname(rel), spec));
+    }
+  };
+  visit(entry);
+  return [...seen];
+}
+const CHECKER_FILES = importClosure('scripts/check-file-size.mjs');
 const OVERSIZED = 'x'.repeat(20001);
 
 const tmpDirs = [];
@@ -175,4 +190,58 @@ test('a commit without bun on PATH or in ~/.bun commits and prints the skip note
   assert.equal(r.status, 0, outputOf(r));
   assert.ok(outputOf(r).includes('[size-gate] skipped: bun not found'), outputOf(r));
   assert.notEqual(repo.head(), '');
+});
+
+/** A temp repo whose checker is the given source, with one small file staged. */
+function fakeCheckerRepo(source) {
+  const repo = sizeGateRepo();
+  repo.write('scripts/check-file-size.mjs', source);
+  repo.write('small.txt', 'small\n');
+  repo.git(['add', 'small.txt']);
+  return repo;
+}
+
+test('a checker crash with exit 3 blocks the commit', () => {
+  const repo = fakeCheckerRepo('process.exit(3);\n');
+  const r = repo.commit('crash exit 3');
+  assert.equal(r.status, 1, outputOf(r));
+  assert.ok(outputOf(r).includes('[size-gate] blocked: the checker crashed (exit 3)'), outputOf(r));
+  assert.equal(repo.head(), '');
+});
+
+test('a checker crash at import blocks the commit as failed before judging', () => {
+  const repo = fakeCheckerRepo("throw new Error('boom');\n");
+  const r = repo.commit('crash at import');
+  assert.equal(r.status, 1, outputOf(r));
+  assert.ok(outputOf(r).includes('[size-gate] blocked: the checker failed before judging (exit 1)'), outputOf(r));
+  assert.ok(outputOf(r).includes('boom'), outputOf(r));
+  assert.equal(repo.head(), '');
+});
+
+test('a checker exit 2 is not a crash and commits with the skip note', () => {
+  const repo = fakeCheckerRepo('process.exit(2);\n');
+  const r = repo.commit('exit 2');
+  assert.equal(r.status, 0, outputOf(r));
+  assert.ok(outputOf(r).includes('[size-gate] skipped: checker exited 2'), outputOf(r));
+  assert.notEqual(repo.head(), '');
+});
+
+test('a checker report with exit 1 blocks without the crash line', () => {
+  const repo = fakeCheckerRepo("console.error('[size-gate] blocked: x');\nprocess.exit(1);\n");
+  const r = repo.commit('reported block');
+  assert.equal(r.status, 1, outputOf(r));
+  assert.ok(outputOf(r).includes('[size-gate] blocked: x'), outputOf(r));
+  assert.ok(!outputOf(r).includes('failed before judging'), outputOf(r));
+  assert.equal(repo.head(), '');
+});
+
+test('a mktemp failure blocks with a clear message and no cat noise', () => {
+  const repo = sizeGateRepo();
+  repo.write('small.txt', 'ok\n');
+  repo.git(['add', 'small.txt']);
+  const r = repo.commit('small', { TMPDIR: '/nonexistent/dir' });
+  assert.notEqual(r.status, 0, outputOf(r));
+  assert.ok(outputOf(r).includes('cannot create a temp file'), outputOf(r));
+  assert.ok(!outputOf(r).includes('cat:'), outputOf(r));
+  assert.equal(repo.head(), '', 'no commit should exist after a blocked commit');
 });

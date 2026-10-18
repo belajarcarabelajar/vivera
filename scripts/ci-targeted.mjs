@@ -11,6 +11,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { GitError, gitText } from './lib/git.mjs';
 
 const USAGE = 'usage: ci-targeted.mjs [--base <ref>] [--root <dir>] [--plan|--rencana] [--full|--penuh]';
 const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
@@ -337,7 +338,6 @@ export function mermaidBlocks(text) {
 }
 
 class ArgError extends Error {}
-class GitError extends Error {}
 
 export function parseArgs(argv) {
   const opts = { base: 'origin/main', root: null, plan: false, full: false, help: false };
@@ -355,20 +355,14 @@ export function parseArgs(argv) {
   return opts;
 }
 
-function git(root, args) {
-  const r = spawnSync('git', ['-C', root, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (r.error || r.status !== 0) {
-    throw new GitError(`git ${args.join(' ')} failed: ${(r.error?.message ?? r.stderr).trim()}`);
-  }
-  return r.stdout;
-}
-
 export function changedFiles(root, base) {
-  const mergeBase = git(root, ['merge-base', 'HEAD', base]).trim();
+  // -C, not cwd: then git's own error names a bad root.
+  const git = (...a) => gitText(process.cwd(), ['-C', root, ...a], { label: `git ${a.join(' ')} failed` });
+  const mergeBase = git('merge-base', 'HEAD', base).trim();
   const lists = [
-    git(root, ['diff', '--name-only', '-z', '--no-renames', mergeBase]),
-    git(root, ['diff', '--name-only', '-z', '--no-renames', 'HEAD']),
-    git(root, ['ls-files', '--others', '--exclude-standard', '-z']),
+    git('diff', '--name-only', '-z', '--no-renames', mergeBase),
+    git('diff', '--name-only', '-z', '--no-renames', 'HEAD'),
+    git('ls-files', '--others', '--exclude-standard', '-z'),
   ];
   const files = [...new Set(lists.flatMap((s) => s.split('\0').filter(Boolean)))].sort();
   return { mergeBase, files, untracked: lists[2].split('\0').filter(Boolean) };
@@ -482,7 +476,7 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
     return 0;
   }
   try {
-    const root = path.resolve(opts.root ?? git(process.cwd(), ['rev-parse', '--show-toplevel']).trim());
+    const root = path.resolve(opts.root ?? gitText(process.cwd(), ['rev-parse', '--show-toplevel']).trim());
     const { mergeBase, files, untracked } = changedFiles(root, opts.base);
     const plan = opts.full
       ? fullPlan(opts.base, ['--full requested'])

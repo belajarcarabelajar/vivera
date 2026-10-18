@@ -177,6 +177,26 @@ function Install-Target($T) {
 function Invoke-InstallAll($Selected) {
     foreach ($t in $Selected) { Install-Target $t }
     Write-Host '[SKIP] sprite agents: install.ps1 installs skills only; the generator needs bun, so use ./install.sh from WSL or Git Bash'
+    Install-Hooks
+}
+
+# The twin of install_hooks in targets.sh. core.hooksPath is repo-local config, so a copy of this repo inside
+# some other git repo (no .git of its own) is skipped: the value would land in the outer repo's config. The hook
+# runs through the bash of Git for Windows and needs bun; that is unverified on Windows.
+function Install-Hooks {
+    if ($null -eq (Get-Command git -ErrorAction SilentlyContinue)) { Write-Host '[SKIP] git hooks: git not found on PATH'; return }
+    # Windows PowerShell 5.1 turns redirected native stderr into a terminating error under Stop.
+    $ErrorActionPreference = 'Continue'
+    # An empty prefix means $RepoDir is the toplevel. Asking git, not comparing paths, survives a symlink,
+    # junction, or subst on the way to install.ps1; a nested copy has a non-empty prefix and a non-repo fails.
+    $prefix = [string](git -C $RepoDir rev-parse --show-prefix 2>$null)
+    $own = $LASTEXITCODE -eq 0 -and $prefix.Trim() -eq ''
+    if (-not $own) { Write-Host '[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in).'; return }
+    if ($script:DryRunOn) { Write-Host '[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks'; return }
+    git -C $RepoDir config core.hooksPath .githooks 2>$null
+    if ($LASTEXITCODE -ne 0) { Write-Host "[WARN] git hooks: git config core.hooksPath failed (exit $LASTEXITCODE); the hook stays off"; return }
+    Write-Host '[OK] Enabled git hooks: core.hooksPath=.githooks'
+    Write-Host "     (revert: git -C `"$RepoDir`" config --unset core.hooksPath)"
 }
 
 # Phase-skill directories of a package target that this checkout no longer has: ours (they carry a marker),

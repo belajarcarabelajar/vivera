@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: README.md#Trigger Snippets
-source_hash: "fe5a5e364c56"
+source_hash: "d66c70fca67c"
 ---
 
 <a id="trigger-snippets"></a>
@@ -538,7 +538,7 @@ mengaktifkannya dengan `git config core.hooksPath .githooks`.
 |---|---|
 | Gate ukuran (memblokir) | `bun scripts/check-file-size.mjs` memblokir file teks yang di-stage bila lebih dari 5.000 token (byte / 4, jadi 20.000 byte), diukur dari index, bukan working tree. Hanya file yang di-stage yang dinilai. Symlink, submodule, file biner, dan path bertanda `-size-gate` di `.gitattributes` (lockfile, diagram hasil render, file vendor) dilewati. Pesan galatnya mencetak saran pemecahan per jenis file. `bun run size:check` menjalankannya secara manual. |
 | Ratchet | File yang sudah melewati batas memiliki plafon di `scripts/file-size-baseline.json`: boleh menyusut, tidak boleh membesar. `--write-baseline` hanya menurunkan atau menghapus plafon; menaikkannya adalah edit manual di commit yang sama, terlihat saat review, dengan tindak lanjut disebut di body PR. |
-| Refresh graph tidak memblokir | Setiap langkah graphify keluar dengan kode 0, dan bun atau checker yang tidak ada, atau checker yang keluar dengan kode 2, membuat gate ukuran dilewati dengan `[size-gate] skipped: <reason>`. Graph bersifat turunan, lokal, dan bisa dibuat ulang, sehingga langkah yang gagal mencetak peringatan yang panjangnya dibatasi dan commit tetap berlanjut. Graph yang merah tidak boleh memblokir riwayat. |
+| Refresh graph tidak memblokir | Setiap langkah graphify keluar dengan kode 0, dan bun atau checker yang tidak ada, atau checker yang keluar dengan kode 2, membuat gate ukuran dilewati dengan `[size-gate] skipped: <reason>`; checker yang crash (kode keluar lain, atau kode 1 tanpa laporan) memblokir commit. Graph bersifat turunan, lokal, dan bisa dibuat ulang, sehingga langkah yang gagal mencetak peringatan yang panjangnya dibatasi dan commit tetap berlanjut. Graph yang merah tidak boleh memblokir riwayat. |
 | Urutan | `graphify update` berjalan **sebelum** sync, tidak pernah sesudahnya. `update` membangun ulang `graph.json` dan penulisnya tidak dijamin mempertahankan node asing, sehingga lapisan struktural harus menjadi penulis terakhir atau node document bisa hilang. Diukur 2026-10-03: `update` memakan 5,3 detik, menumbuhkan graph 2342 → 2832 node, mempertahankan lapisan semantik (concept 284 → 274, rationale 156 → 158), dan sync berikutnya memulihkan lapisan document menjadi 2984 node dengan `graphify:check` CURRENT. |
 | Gating / biaya | Tidak ada yang berjalan saat diff yang di-stage kosong atau tidak ada graph untuk diperbarui. Commit yang **hanya berisi Markdown** menjalankan sync saja dan melewati rebuild kode 5,3 detik; commit dengan **file non-Markdown apa pun** menjalankan `update` lalu sync. Kedua langkah bersifat lokal: tanpa LLM, tanpa jaringan. |
 | Mengapa git hook dan bukan plugin hook OpenCode | Satu-satunya event siklus hidup sesi di OpenCode v2 adalah `session.idle`, yang terpicu setelah **setiap** giliran asisten, bukan di akhir sesi, sehingga plugin hook di sana akan memindai ulang terus-menerus. Git hook tidak bergantung pada harness (OpenCode, Claude Code, dan terminal semuanya berakhir di `git commit`) dan merupakan file yang di-commit, bukan state plugin yang lokal di mesin. |

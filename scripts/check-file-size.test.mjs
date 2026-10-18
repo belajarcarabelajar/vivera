@@ -301,6 +301,26 @@ describe('CLI --staged', () => {
     expect(r.code).toBe(1);
     expect(r.err).toContain('odd\nname.txt');
   });
+
+  test('names a unicode path exactly, without octal quoting', () => {
+    const dir = repo();
+    stage(dir, { 'docs/catatan-ü-日本.md': 30000 });
+    const r = run(dir, '--staged');
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('  docs/catatan-ü-日本.md  7500 tokens (30000 bytes), no ceiling');
+  });
+
+  test('judges a renamed file as new, since its ceiling stays on the old path', () => {
+    const dir = repo();
+    baseline(dir, { 'big.txt': 25000 });
+    stage(dir, { 'big.txt': 25000 });
+    git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed');
+    git(dir, 'mv', 'big.txt', 'moved.txt');
+    const r = run(dir, '--staged');
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('  moved.txt  6250 tokens (25000 bytes), no ceiling');
+    expect(r.err).toContain('A renamed file counts as new: move its ceiling to the new path in the same commit.');
+  });
 });
 
 describe('CLI --all', () => {
@@ -322,6 +342,15 @@ describe('CLI --all', () => {
     const r = run(dir, '--all');
     expect([r.code, r.err]).toEqual([0, '']);
     expect(lastLine(r.out)).toBe('checked 3 files, 0 over the limit');
+  });
+
+  test('skips a submodule entry and does not count it as checked', () => {
+    const dir = repo();
+    stage(dir, { 'small.txt': 10 });
+    git(dir, 'update-index', '--add', '--cacheinfo', `160000,${'a'.repeat(40)},sub`);
+    const r = run(dir, '--all');
+    expect([r.code, r.err]).toEqual([0, '']);
+    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
   });
 });
 

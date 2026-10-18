@@ -8,7 +8,7 @@ description: Phase skill for super-ultra-code-plan Step 4 (test-driven developme
 > Part of `super-ultra-code-plan`. Read `sucp-rules` too. Next phase: `sucp-verify-deliver`.
 
 ## 4️⃣ 🧪 Test-Driven Development (Iron Law)
-> 🧪 **Component 3 — Test loop:** RED → GREEN → REFACTOR, repeated for each behavior, executed inside subagents (see Delegation & Execution for chunking, the high fan-out floor, and the gather & synthesize loop).
+> 🧪 **Component 3: Test loop:** RED → GREEN → REFACTOR, repeated for each behavior, executed inside subagents (see Delegation & Execution for chunking, proportional fan-out, and the gather & synthesize loop).
 
 ```
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST

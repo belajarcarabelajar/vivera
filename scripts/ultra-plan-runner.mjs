@@ -1389,6 +1389,7 @@ function main(argv) {
   const file = args.find((a) => !a.startsWith('--'));
   const execute = args.includes('--execute');
   const asJson = args.includes('--json');
+  if (args.includes('--skip-mirror-gate')) console.error('note: --skip-mirror-gate is no longer needed; a stale mirror only warns.');
   if (!file) {
     console.error('usage: ultra-plan-runner <plan.md> [--execute] [--json]');
     console.error('  --execute  run the DAG (warns when the Obsidian mirror is missing or stale)');

@@ -162,7 +162,7 @@ const ADVICE = {
   ],
   skill: [
     'Move a self-contained section into a phase skill or references/<topic>.md, leave a one-line pointer,',
-    'then update every scripts/validate-skill.mjs needle that names the old file.',
+    'then run bun scripts/validate-skill.mjs (its invariants match the moved text in any skill file).',
   ],
   markdown: ['Split at H2 headings into sibling files and keep a short index of links in the original.'],
   data: ['Split by key or range into several files loaded together, or mark the file generated if a script writes it.'],

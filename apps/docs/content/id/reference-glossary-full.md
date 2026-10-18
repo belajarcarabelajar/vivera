@@ -5,7 +5,7 @@ category: reference
 slug: glossary-full
 order: 6
 source: docs/vivera-glossary.md
-source_hash: "051a434d8759"
+source_hash: "0c13d6c0f5d1"
 ---
 
 <a id="the-vivera-glossary"></a>
@@ -25,7 +25,7 @@ Glosarium ini hanya mengikuti game PlayStation. *Friends of Mineral Town* (remak
 | The farm | Lahan milik pemain di Mineral Village | Repositori ini |
 | Crops and seeds | Yang Anda tanam, rawat, dan kirim | Skill beserta file sumbernya; `install.sh` menanamnya ke setiap harness yang dideteksinya (dan selalu ke `~/.config/ai` dan `~/.agents/skills`) |
 | Power Berry | Buah beri tersembunyi yang menaikkan stamina maksimum sebesar 10 secara permanen; jumlahnya ada sepuluh | Peningkatan kemampuan permanen: setiap perubahan skill atau tooling yang di-merge menaikkan apa yang bisa dikerjakan pipeline dalam sehari |
-| Mystic Berry (Kappa's Berry) | Memangkas laju kelelahan menjadi separuh; didapat dari Kappa setelah meninggalkan tiga mentimun di Mother Lake, satu per hari di musim Spring | Pekerjaan yang memangkas kelelahan konteks menjadi separuh: hemat token, query graphify alih-alih dump mentah, `ctx_execute` alih-alih output penuh |
+| Mystic Berry (Kappa's Berry) | Memangkas laju kelelahan menjadi separuh; didapat dari Kappa setelah meninggalkan tiga mentimun di Mother Lake, satu per hari di musim Spring | Pekerjaan yang memangkas kelelahan konteks menjadi separuh: hemat token, query graphify alih-alih dump mentah, filter pipe alih-alih output penuh |
 | The seven Harvest Sprites | Chef, Nappy, Hoggy, Aqua, Bold, Timid, dan Staid, masing-masing dengan warna berbeda; mereka tinggal di pondok di belakang gereja dan bisa disewa untuk 1 hari, 3 hari, atau seminggu, mulai keesokan harinya, setelah memiliki minimal 2 hati | Subagent. Fan-out mengirim sprite ke ladang yang terpisah, dan setiap sprite memegang satu chunk kecil. Di Claude Code, OpenCode, Codex, Cursor, Copilot, dan Antigravity, setiap sprite adalah agent bernama (dirender oleh `./install.sh` untuk setiap harness yang terdeteksi) dengan peran yang ditetapkan di `agents/crew.json` |
 | Watering | Salah satu dari tiga pekerjaan ladang: minta sprite menyiram tanaman, di setiap petak yang ditanami; keahlian dicatat per pekerjaan dan naik 1 per tugas | Pekerjaan keep-alive: rebase branch sesi, jalankan ulang pemeriksaan, jaga tanaman yang sedang dikerjakan tetap hidup sampai panen |
 | Animal Care | Salah satu dari tiga pekerjaan ladang: minta sprite memberi makan, memerah susu, dan mencukur bulu hewan, lalu mengirim hasilnya; aturan permintaannya sama | Aset jangka panjang: template, graph, indeks vault, dan dokumen yang bertahan lintas musim, bukan hanya untuk satu panen |

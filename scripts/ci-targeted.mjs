@@ -21,9 +21,9 @@ export const FULL_CI = [
   { name: 'validate-skill', cmd: ['bun', 'scripts/validate-skill.mjs'] },
   { name: 'validate-agents', cmd: ['bun', 'scripts/validate-agents.mjs'] },
   { name: 'gen-sprite-agents', cmd: ['bun', 'scripts/gen-sprite-agents.mjs', '--check'] },
+  { name: 'file-size', cmd: ['bun', 'scripts/check-file-size.mjs', '--all'] },
   { name: 'tests', cmd: [...TEST_CMD, 'scripts/'] },
   { name: 'sync-snippets', cmd: ['bun', 'scripts/sync-snippets.mjs', '--check'] },
-  { name: 'file-size', cmd: ['bun', 'scripts/check-file-size.mjs', '--all'] },
 ];
 
 const SKIP_REASON = {

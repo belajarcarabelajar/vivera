@@ -1564,10 +1564,11 @@ bun scripts/check-file-size.mjs --all                # every tracked file plus s
 bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, then only lower or drop them
 ```
 
-Exit 0 is a pass, 1 is a violation or a stale ceiling, and 2 is a usage error. Files that
+Exit 0 is a pass, 1 is a violation or a stale ceiling, and 2 is a usage error, a missing
+git repository, an invalid baseline, or a failed git call. Files that
 were over the limit when the gate landed keep their size as a ceiling in
-`scripts/file-size-baseline.json`, a ratchet: shrinking is free, growing is blocked. When a
-split is out of scope, raise the ceiling by hand in the same commit and name the follow-up in
+`scripts/file-size-baseline.json`, a ratchet: shrinking is free, growing is blocked. Ceilings are read from the staged copy of that file. When a
+split is out of scope, raise the ceiling by hand and stage it in the same commit and name the follow-up in
 the PR body. A renamed file counts as new, so move its ceiling. After a split, `git grep` the
 old path and update references (`validate-skill` pins skill paths).
 
@@ -1857,7 +1858,7 @@ nodes last. `install.sh` enables it with `git config core.hooksPath .githooks`.
 |---|---|
 | Size gate (blocking) | `bun scripts/check-file-size.mjs` blocks a staged text file over 5,000 tokens (bytes / 4, so 20,000 bytes), measured from the index, not the working tree. Only staged files are judged. Symlinks, submodules, binaries, and paths marked `-size-gate` in `.gitattributes` (lockfiles, rendered diagrams, vendored files) are skipped. The error prints split advice per file kind. `bun run size:check` runs it by hand. |
 | Ratchet | Files already over the limit carry a ceiling in `scripts/file-size-baseline.json`: they may shrink, not grow. `--write-baseline` only lowers or drops ceilings; raising one is a hand edit in the same commit, visible in review, with the follow-up named in the PR body. |
-| Graph refresh not blocking | Every graphify step exits 0, and a missing bun or checker skips the size gate with `[size-gate] skipped: <reason>`. The graph is derived, local and regenerable, so a failed step prints a bounded warning and the commit proceeds. A red graph must never block history. |
+| Graph refresh not blocking | Every graphify step exits 0, and a missing bun or checker, or a checker exit 2, skips the size gate with `[size-gate] skipped: <reason>`. The graph is derived, local and regenerable, so a failed step prints a bounded warning and the commit proceeds. A red graph must never block history. |
 | Ordering | `graphify update` runs **before** the sync, never after. `update` rebuilds `graph.json` and its writer is not guaranteed to preserve foreign nodes, so the structural layer must be the last writer or the document nodes can vanish. Measured 2026-10-03: `update` took 5.3 s, grew the graph 2342 → 2832 nodes, preserved the semantic layers (concept 284 → 274, rationale 156 → 158), and the following sync restored the document layer to 2984 nodes with `graphify:check` CURRENT. |
 | Gating / cost | Nothing runs when the staged diff is empty or there is no graph to update. A **Markdown-only** commit runs the sync alone and skips the 5.3 s code rebuild; a commit with **any non-Markdown** file runs `update` then the sync. Both steps are local: no LLM, no network. |
 | Why a git hook and not an OpenCode plugin hook | OpenCode v2's only session-lifecycle event is `session.idle`, which fires after **every** assistant turn rather than at a session end, so a plugin hook there would re-scan constantly. A git hook is harness-agnostic (OpenCode, Claude Code, a terminal all end in `git commit`) and is a committed file rather than machine-local plugin state. |

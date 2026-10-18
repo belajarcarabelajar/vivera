@@ -10,6 +10,16 @@ const SCRIPT_RE = /\bbun\s+(scripts\/[^\s`]+)/g;
 const NPM_RE = /\bbun\s+run\s+([^\s`]+)/g;
 const SPAN_RE = /`([^`\n]+)`/g;
 const IMPORT_RE = /from\s+['"](\.\/[^'"]+)['"]/g;
+// Docs show these names as commands of other repositories, so they are never
+// looked up in this package.json.
+export const GENERIC_NPM_NAMES = new Set(['lint', 'format', 'typecheck', 'build', 'dev']);
+
+// A flag counts only as a whole dashed token: '--x', "--x", `--x=${v}`, or /^--x$/.
+// A bare word such as `length` or a longer flag such as `--x-y` does not count.
+function hasFlag(source, flag) {
+  const escaped = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`).test(source);
+}
 
 function isPlaceholder(text) {
   return /[<>*{}[\]$]/.test(text) || text.includes('...');
@@ -127,12 +137,13 @@ export function checkDocReferences({ root, files }) {
         }
         if (!sources.has(abs)) sources.set(abs, scriptSource(abs));
         for (const flag of ref.flags) {
-          if (!sources.get(abs).includes(flag.replace(/^-+/, ''))) {
+          if (!hasFlag(sources.get(abs), flag)) {
             findings.push({ ...at, message: `${ref.ref} has no flag ${flag}` });
           }
         }
       } else if (ref.kind === 'npm') {
-        if (!ref.ref.includes(':') || !prefixes.has(ref.ref.split(':')[0])) continue;
+        const prefixed = ref.ref.includes(':');
+        if (prefixed ? !prefixes.has(ref.ref.split(':')[0]) : GENERIC_NPM_NAMES.has(ref.ref)) continue;
         checked += 1;
         if (!names.has(ref.ref)) findings.push({ ...at, message: `bun run ${ref.ref}: no such script in package.json` });
       } else {

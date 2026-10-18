@@ -22,7 +22,7 @@ import {
   checkGateCatalog,
   classifyMermaidResult,
 } from './validate-lib.mjs';
-import { checkInvariants, listDocReferenceFiles } from './lib/skill-invariants.mjs';
+import { INVARIANTS, checkInvariants, listDocReferenceFiles } from './lib/skill-invariants.mjs';
 import { checkDocReferences } from './lib/doc-references.mjs';
 import { DEFAULT_CACHE_REL, cacheKey, loadCache, saveCache, partition, recordResults, rendererVersion } from './lib/mermaid-cache.mjs';
 
@@ -554,16 +554,15 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3q. Skill invariants. Each sentence in INVARIANTS (lib/skill-invariants.mjs) must
-// appear somewhere in the orchestrator, a phase skill, or a references file, so a
-// rule may move between files and fails only when it is deleted.
+// 3q. Each INVARIANTS sentence (lib/skill-invariants.mjs) must appear somewhere
+// in the skill corpus, so a rule may move between files but not disappear.
 {
   const missingInvariants = fs.existsSync(masterPath) ? checkInvariants(readSkillCorpus(rootDir)) : [];
   for (const inv of missingInvariants) {
     console.error(`❌ Skill invariant missing: ${inv.label}: "${inv.text}" appears nowhere in the skill corpus.`);
     errors++;
   }
-  if (fs.existsSync(masterPath) && missingInvariants.length === 0) console.log('✅ Skill invariants present.');
+  if (fs.existsSync(masterPath) && missingInvariants.length === 0) console.log(`✅ Skill invariants present: ${INVARIANTS.length}.`);
 }
 
 // 3r. Commands, flags, and repository paths named in the docs must exist.

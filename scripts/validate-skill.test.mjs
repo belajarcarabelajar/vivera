@@ -66,8 +66,9 @@ test('every command snippet carries its own terms and no prohibited runtime', ()
 });
 
 test('a command snippet contract can fail: removing a pinned term is detected', () => {
-  const body = readSnip('cmd-merge.md').replace('--admin', '');
-  assert.deepEqual(findMissingTerms(body, COMMAND_SNIPPET_CONTRACTS['cmd-merge.md']), ['--admin']);
+  const term = 'Do not deploy, publish, or delete branches or worktrees';
+  const body = readSnip('cmd-merge.md').replace(term, '');
+  assert.deepEqual(findMissingTerms(body, COMMAND_SNIPPET_CONTRACTS['cmd-merge.md']), [term]);
 });
 
 test('every required snippet is tracked in the manifest (or it never reaches the DB)', () => {
@@ -108,8 +109,8 @@ test('snippet checks fail when a term is deleted (negative controls)', () => {
   const body = readSnip('orkestrasi-pr-review.md');
   const extra = SNIPPET_CONTRACTS['orkestrasi-pr-review.md'];
   // Remove one shared term and one phase term; each must be reported.
-  const withoutShared = body.replaceAll('TASK-CHUNKING', 'XXXXXXXX');
-  assert.ok(checkSnippetContract(withoutShared, extra).includes('TASK-CHUNKING'));
+  const withoutShared = body.replaceAll('subagent-contract-template.md', 'XXXXXXXX');
+  assert.ok(checkSnippetContract(withoutShared, extra).includes('subagent-contract-template.md'));
   const phaseTerm = extra.find((t) => body.includes(t));
   assert.ok(phaseTerm, 'phase-term list names nothing the snippet contains, so this test proves nothing');
   const withoutPhase = body.replaceAll(phaseTerm, 'YYYYYYYY');

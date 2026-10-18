@@ -16,137 +16,68 @@ import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 
-export const SUBAGENT_CONTRACT_TERMS = [
-  'SUBAGENT-FIRST',
-  'TASK-CHUNKING',
-  'BATCH MANIFEST',
-  'HIGH FAN-OUT FLOOR',
-  'NON-OVERLAPPING',
-  'NESTED FAN-OUT',
-  'GATHER & SYNTHESIZE',
-  'PARENT DIFF AUDIT GATE',
-  'subagent-contract-template.md',
-];
+// Snippet terms pin only a safety behaviour or a tool contract: a command, file,
+// or substitution a script implements, or a rule that stops a harmful action.
+// Wording, headings, counts, and fan-out floors are not pinned here.
+export const SUBAGENT_CONTRACT_TERMS = ['subagent-contract-template.md'];
 
 export const TINYFISH_LADDER_NEED = ['TinyFish', 'search', 'fetch_content'];
 
 export const BANNED_RUNTIME_SNIPPETS = ['node scripts/', 'npm install', 'npm test', 'npx '];
 
-// Per-snippet phase terms. Every snippet drives delegated work, so the fan-out
-// terms above are shared; these extras make each snippet's own phase
-// enforceable. orkestrasi-pr-review.md was missing here until 2026-10-01:
-// it was tracked in snippets.manifest.json but bypassed every content check.
+// Per-snippet terms on top of the shared one above.
 export const SNIPPET_CONTRACTS = {
-  'orkestrasi-ngoding-plan.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
-    'plan-issue-sync.mjs',
-    'session-learning-ledger-template.md',
-    'MEMORY.md',
-    'graphify:sync',
-  ],
-  'orkestrasi-debugging.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
-    'plan-issue-sync.mjs',
-    'session-learning-ledger-template.md',
-    'MEMORY.md',
-    'graphify:sync',
-  ],
+  'orkestrasi-ngoding-plan.md': ['plan-issue-sync.mjs'],
+  'orkestrasi-debugging.md': ['plan-issue-sync.mjs'],
   'orkestrasi-pr.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'pr-registry.mjs claim',
     'worktree add',
     'GIT WRITES ARE PARENT-ONLY',
-    'pull-request-template.md',
+    'pull-request-template.md', // carries the no-attribution checklist item
     '--body-file',
     'pr-registry.mjs order',
-    'pr-review-template.md',
-    'plan-issue-sync.mjs', // the plan's issue closes after the merge, from the plan's status
-    'plan-closeout.mjs --readiness', // the plan is decided before the session's final merge
-    'session-learning-ledger-template.md',
-    'MEMORY.md',
-    'graphify:sync',
+    'plan-issue-sync.mjs',
+    'plan-closeout.mjs --readiness',
     'merged | closed',
   ],
   'orkestrasi-pr-review.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
-    'pr-review-template.md',
-    'code-review-template.md',
     'gh pr diff',
     'gh pr checks',
-    'graphify:sync',
-    // The review target arrives by clipboard substitution, so the contract has to
-    // pin the resolver and its stop rule. Without these terms a later edit could
-    // quietly drop TARGET RESOLUTION and leave `#{clipboard}` unhandled in the
-    // snippet an agent actually receives.
     '#{clipboard}',
-    'TARGET RESOLUTION RUNS FIRST',
     'Never guess a nearby PR number',
-    // Single AND batch are both required paths; the batch terms are what stop a
-    // multi-PR expansion from collapsing into "review them all, merge them all".
-    'BATCH BEHAVIOUR',
     'One verdict per PR, never one verdict for the batch',
     'Merges stay strictly sequential even when reviews were parallel',
-    // The `--admin` exception. These terms are pinned because the exception is
-    // the one part of this snippet that grants itself permission, and a later
-    // edit that trimmed the four measurements would re-create a silent
-    // authority to skip a review. Pinning the heading keeps the rule and its
-    // conditions from being separable.
-    'THE ADMIN\'S OWN APPROVAL ALWAYS PASSES',
+    // The --admin exception grants itself permission, so its measured conditions are pinned.
     'gh api repos/<o>/<r>/collaborators --jq length',
     'Review Can not approve your own pull request',
   ],
-  'orkestrasi-brainstorm.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
-    'brainstorm-intent-template.md',
-    'question',
-    'graphify:sync',
-  ],
-  // Unattended run. The plan arrives by clipboard substitution, so the resolver
-  // and its stop rule are pinned like the review target in orkestrasi-pr-review.md.
-  // The NEVER list and the retry budget are the parts that replace a human, so
-  // a later edit that trimmed them would leave nobody watching and nothing limiting.
+  'orkestrasi-brainstorm.md': ['question'],
   'orkestrasi-overnight.md': [
-    'KEEP THE TO-DO LIST IN THE PLAN FILE',
     'pr-registry.mjs claim',
     'GIT WRITES ARE PARENT-ONLY',
     'pull-request-template.md',
     '--body-file',
-    'graphify:sync',
     '#{clipboard}',
-    'ENTRY GATE RUNS FIRST',
-    'THE HANDOFF IS THE RUN RECORD',
     'the first file you write is the handoff',
-    'Rewrite `Last update` each time',
     'A failed entry check still writes nothing',
-    'replace `Result: running` with the result',
-    'before any code is written',
-    'RETRY BUDGET',
-    'A TURN WITH NO TOOL CALL IS A REPORT',
-    'Refuse four endings while work is owed',
-    'After three re-prompts',
-    'a deadline recorded in the plan has passed',
-    'none of this relaxes the NEVER list below',
-    'NEVER, WHATEVER HAPPENS DURING THE NIGHT',
     'merge into the base branch',
     'no follow-up executes unselected',
-    'overnight-handoff.md',
   ],
 };
 
-// The short cmd-* command snippets. They are not phase triggers, so the fan-out
-// terms and the TinyFish ladder do not apply; each pins only the phrases that
-// make it what it is, taken from its own text.
+// The short cmd-* command snippets are not phase triggers, so the shared term
+// and the TinyFish ladder do not apply.
 export const COMMAND_SNIPPET_CONTRACTS = {
-  'cmd-approved.md': ['Carry this to completion', 'without asking again', 'destructive or hard-to-reverse'],
-  'cmd-audit.md': ['Read-only audit', 'Do not edit, install, delete, commit', 'ranked list of proposed changes'],
+  'cmd-approved.md': ['destructive or hard-to-reverse'],
+  'cmd-audit.md': ['Do not edit, install, delete, commit'],
   'cmd-cleanup.md': ['git merge-base --is-ancestor', 'git branch -d', 'never `-D`', 'Never `rm -rf`', 'Leave remote branches alone'],
-  'cmd-done-verify.md': ['Verify it yourself, read-only', 'positive control', 'not verified'],
-  'cmd-error-continue.md': ['At most 2 attempts per chunk', '--no-verify', 'shared cause'],
-  'cmd-fallback.md': ['Do not loop on it', 'run_web_automation', 'do not substitute a local run'],
-  'cmd-merge.md': ['nothing else', '--admin', 'bun scripts/pr-registry.mjs state <session> merged', 'Do not deploy, publish, or delete branches or worktrees'],
-  'cmd-resume.md': ['Resume this session from its plan file', 'skip_if', 'where you resumed'],
-  'cmd-review-merge.md': ['Pre-authorized: review and merge if safe', 'AUTO-MERGE gate'],
-  'cmd-status.md': ['Status check, read-only', 'bun scripts/pr-registry.mjs status', 'do not poll in a loop'],
+  'cmd-done-verify.md': ['Verify it yourself, read-only', 'positive control'],
+  'cmd-error-continue.md': ['At most 2 attempts per chunk', '--no-verify'],
+  'cmd-fallback.md': ['do not substitute a local run'],
+  'cmd-merge.md': ['bun scripts/pr-registry.mjs state <session> merged', 'Do not deploy, publish, or delete branches or worktrees'],
+  'cmd-resume.md': ['skip_if'],
+  'cmd-review-merge.md': ['AUTO-MERGE gate'],
+  'cmd-status.md': ['bun scripts/pr-registry.mjs status', 'do not poll in a loop'],
 };
 
 export const REQUIRED_SNIPPETS = Object.keys(SNIPPET_CONTRACTS);

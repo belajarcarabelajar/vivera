@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classifyMermaidResult } from './validate-lib.mjs';
+import { classifyMermaidResult, SUBAGENT_CONTRACT_TERMS, SNIPPET_CONTRACTS, COMMAND_SNIPPET_CONTRACTS } from './validate-lib.mjs';
 import { INVARIANTS, checkInvariants, listDocReferenceFiles } from './lib/skill-invariants.mjs';
 import { MASTER_NAME, readSkillCorpus } from './skill-corpus.mjs';
 
@@ -152,4 +152,9 @@ test('the gate fails when an invariant sentence is deleted from every skill file
     fs.rmSync(tmp, { recursive: true, force: true });
     fs.rmSync(noMmdc, { recursive: true, force: true });
   }
+});
+
+test('no snippet contract pins a fan-out floor or a count of fan-out', () => {
+  const terms = [SUBAGENT_CONTRACT_TERMS, ...Object.values(SNIPPET_CONTRACTS), ...Object.values(COMMAND_SNIPPET_CONTRACTS)].flat();
+  expect(terms.filter((t) => /fan-?out/i.test(t))).toEqual([]);
 });

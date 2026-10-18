@@ -28,7 +28,7 @@ Trigger: spec/requirements exist, before touching code.
 Assume: engineer has zero codebase context, questionable taste, skilled developer, weak test design.
 Save to: docs/code-plan/plans/YYYY-MM-DD-<feature-name>.md
 Plan body lives in the file, not the session: write the full plan content into the .md deliverable and keep in-session explanation to a concise summary plus the file path and the key decisions needing approval. Do not paste or narrate the whole plan in chat; when the user wants the details, point to the saved file. In plan/spec review mode, present the file content as the reviewable artifact; the approval question is the Gate 2 bullet below (spec approval, header `Spec`, is in `sucp-brainstorm`).
-- Gate 2: after the plan validates (and is published at Draft), show the plan path and a concise summary in chat, then ask approval through the Confirmation Protocol (header `Plan`); do not paste the plan.
+- Gate 2: after the plan validates (and is published at Draft), show the plan path and a concise summary in chat, then ask approval through the Confirmation Protocol (header `Plan`); do not paste the plan. For Bounded work the Design call is Gate 2 when the plan was validated first (`sucp-brainstorm`), so no separate `Plan` question follows.
   - The summary lists each task with `Blocked by` (the task ids it waits on, or none) and `What it delivers` (the behaviour it makes verifiable), so the owner can judge the granularity.
 Scope check: spec covers multiple independent subsystems → split into separate plans, each producing working testable software alone.
 File structure: map files before defining tasks. One responsibility per file. Files that change together, live together. Split by responsibility not layer. Existing codebase → follow established patterns; split only files grown unwieldy under current task.
@@ -187,9 +187,10 @@ Deterministic step mapping: one execution step maps to exactly one runnable shel
 No placeholders — banned: TBD, TODO, "implement later", "add appropriate error handling", "similar to Task N", steps without code, undefined references.
 Plan self-review: spec and acceptance-criteria coverage (every requirement → a task), selected reasoning-lens coverage and outputs, visual-map presence + validity + consistency (at least one runnable Mermaid flowchart; every task id appears as a node; every `depends_on` edge appears in the diagram; missing diagram or mismatch = blocker), non-goals, assumptions, dependencies, risks, rollback, placeholder scan, anti-bloat pruning pass (scan with tags: `delete:` dead/speculative code, `stdlib:` stdlib replacement, `native:` platform feature, `yagni:` single-impl abstraction/unused config, `shrink:` fewer lines; target net line reduction), deliberate shortcut check (all simplifications must include `defer: <ceiling>, <upgrade-trigger>`), type consistency across tasks (signature names must match), and verification evidence. Fix inline, no re-review cycle.
 Pre-execution walkthrough: refresh the active project profile and inspect the plan's Mermaid diagram and selected reasoning-lens outputs, then compare every path, dependency, gate, failure branch, contract, command, and acceptance criterion with the current repository and approved spec before starting implementation.
-Execution handoff — subagent fan-out is the default:
-1. Subagent fan-out (default, required) — chunk every task into small verifiable units, dispatch a high-fan-out batch of narrow subagents, then gather and synthesize their reports.
-2. Inline execution — permitted only for a genuinely atomic task, and the reason (atomic scope, no subagent tool in this runtime, or inseparable shared state) is stated explicitly at the handoff.
+Execution handoff: fan-out is proportional to the work, and the reason for the chosen width is stated at the handoff.
+1. Inline for a genuinely atomic task (atomic scope, no subagent tool in this runtime, or inseparable shared state).
+2. Two to four subagents for the usual plan: chunk each task into small verifiable units, dispatch, then gather and synthesize their reports.
+3. Ten or more only when the scopes are disjoint, every chunk with one owner and no two writing the same file.
 
 ### 📤 Plan Publishing
 > 📤 **Component 2b — Reachability:** a plan that exists only inside a project repository cannot be searched, rendered, or re-read months later. Publishing is a required step of finishing a plan, not an optional convenience.

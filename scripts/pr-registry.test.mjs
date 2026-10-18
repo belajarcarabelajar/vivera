@@ -592,6 +592,7 @@ test('re-claiming the same session stays idempotent under the CAS path', () => {
 
 const SESSION = { session: 'w1', plan: 'my-plan' };
 const GAP = { code: 'PLAN_NOT_COMPLETE', message: 'plan.md has status "Verification", not Complete', fix: 'set "status: Complete"' };
+const WARN = 'warning: recording "w1" as merged, but plan my-plan is not closed out:';
 const GAP2 = { code: 'ISSUE_NOT_CLOSED', message: 'issue #7 is recorded as "open", not closed', fix: 'bun scripts/plan-issue-sync.mjs plan.md' };
 
 test('closeoutVerdict proceeds silently when nothing is open and nothing was skipped', () => {
@@ -600,7 +601,7 @@ test('closeoutVerdict proceeds silently when nothing is open and nothing was ski
     repoRoot: '/r',
     check: (args) => { seen = args; return { skipped: null, gaps: [] }; },
   });
-  assert.deepEqual(verdict, { proceed: true, lines: [] });
+  assert.deepEqual(verdict, { lines: [] });
   assert.deepEqual(seen, { repoRoot: '/r', planSlug: 'my-plan' });
 });
 
@@ -609,24 +610,21 @@ test('closeoutVerdict proceeds with a note when the check was partial', () => {
     repoRoot: '/r',
     check: () => ({ skipped: 'no plan file at /r/x.md', gaps: [] }),
   });
-  assert.equal(verdict.proceed, true);
   assert.deepEqual(verdict.lines, ['note: close-out not fully checked: no plan file at /r/x.md']);
 });
 
-test('closeoutVerdict refuses with exact lines, one message and one fix per gap', () => {
+test('closeoutVerdict warns with exact lines, one message and one fix per gap', () => {
   const verdict = closeoutVerdict(SESSION, {
     repoRoot: '/r',
     check: () => ({ skipped: null, gaps: [GAP, GAP2] }),
   });
-  assert.equal(verdict.proceed, false);
   assert.deepEqual(verdict.lines, [
-    'refusing to record "w1" as merged: plan my-plan is not closed out.',
+    WARN,
     `  - [PLAN_NOT_COMPLETE] ${GAP.message}`,
     `    fix: ${GAP.fix}`,
     `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
     `    fix: ${GAP2.fix}`,
     'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
-    'Override with --allow-open-plan to record it anyway.',
   ]);
 });
 
@@ -645,65 +643,36 @@ function closeoutOnPlan(planText) {
 }
 const TASK_PLAN = '---\nschema: ultra-plan/v1\nplan_id: my-plan\nstatus: Complete\ntasks:\n  - id: T1\n    depends_on: []\n---\n\n### Task T1: a\n';
 
-test('closeoutVerdict refuses a Complete plan whose task section still has an open step box', () => {
+test('closeoutVerdict warns about a Complete plan whose task section still has an open step box', () => {
   const verdict = closeoutOnPlan(TASK_PLAN + '- [ ] Step 1 a\n');
-  assert.equal(verdict.proceed, false);
+  assert.ok(verdict.lines.includes(WARN), verdict.lines.join('\n'));
   assert.ok(
     verdict.lines.some((l) => /^ {2}- \[OPEN_STEPS\] \S*my-plan\.md has 1 open step box\(es\) in T1 \(lines 11\)$/.test(l)),
     verdict.lines.join('\n'),
   );
 });
 
-test('closeoutVerdict proceeds for a Complete plan whose only other open boxes are outside task sections', () => {
+test('closeoutVerdict does not warn for a Complete plan whose only other open boxes are outside task sections', () => {
   const verdict = closeoutOnPlan(TASK_PLAN + '- [x] Step 1 a\n## Approval\n- [ ] Approved\n');
-  assert.equal(verdict.proceed, true, verdict.lines.join('\n'));
+  assert.ok(!verdict.lines.includes(WARN), verdict.lines.join('\n'));
   assert.ok(
     verdict.lines.some((l) => /other open boxes: 1 outside task sections, not counted \(lines 13\)/.test(l)),
     verdict.lines.join('\n'),
   );
 });
 
-test('closeoutVerdict puts the skipped note before the refusal when both apply', () => {
+test('closeoutVerdict puts the skipped note before the warning when both apply', () => {
   const verdict = closeoutVerdict(SESSION, {
     repoRoot: '/r',
     check: () => ({ skipped: 'plan.issues.json not found', gaps: [GAP] }),
   });
-  assert.equal(verdict.proceed, false);
   assert.equal(verdict.lines[0], 'note: close-out not fully checked: plan.issues.json not found');
-  assert.equal(verdict.lines[1], 'refusing to record "w1" as merged: plan my-plan is not closed out.');
+  assert.equal(verdict.lines[1], WARN);
 });
 
-test('closeoutVerdict with allowOpenPlan proceeds, warns, and still lists every gap', () => {
-  const verdict = closeoutVerdict(SESSION, {
-    repoRoot: '/r',
-    allowOpenPlan: true,
-    check: () => ({ skipped: null, gaps: [GAP, GAP2] }),
-  });
-  assert.equal(verdict.proceed, true);
-  assert.deepEqual(verdict.lines, [
-    'warning: recording "w1" as merged with an unclosed plan (--allow-open-plan)',
-    `  - [PLAN_NOT_COMPLETE] ${GAP.message}`,
-    `    fix: ${GAP.fix}`,
-    `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
-    `    fix: ${GAP2.fix}`,
-    'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
-  ]);
-});
-
-test('closeoutVerdict does not print the override hint when the override is already on', () => {
-  const verdict = closeoutVerdict(SESSION, {
-    repoRoot: '/r', allowOpenPlan: true, check: () => ({ skipped: null, gaps: [GAP] }),
-  });
-  assert.ok(!verdict.lines.some((l) => l.includes('Override with')));
-});
-
-test('parseFlags stores --allow-open-plan as true without consuming a value, anywhere in argv', () => {
-  assert.deepEqual(parseFlags(['w1', 'merged', '--allow-open-plan']),
-    { flags: { 'allow-open-plan': true }, positional: ['w1', 'merged'] });
-  assert.deepEqual(parseFlags(['--allow-open-plan', 'w1', 'merged', '--registry', 'r.json']),
-    { flags: { 'allow-open-plan': true, registry: 'r.json' }, positional: ['w1', 'merged'] });
-  assert.deepEqual(parseFlags(['w1', '--allow-open-plan', '--repo', '/x', 'merged']),
-    { flags: { 'allow-open-plan': true, repo: '/x' }, positional: ['w1', 'merged'] });
+test('parseFlags stores --dry-run and --close-stale as true without consuming a value', () => {
+  assert.deepEqual(parseFlags(['--dry-run', '--registry', 'r.json', '--close-stale']),
+    { flags: { 'dry-run': true, registry: 'r.json', 'close-stale': true }, positional: [] });
 });
 
 const SCRIPT = path.join(path.dirname(new URL(import.meta.url).pathname), 'pr-registry.mjs');
@@ -732,25 +701,14 @@ function mergeFixture(planStatus) {
   return { reg, repo, cleanup: () => { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); } };
 }
 
-test('CLI: state merged is refused while the plan is at Verification, and the registry is untouched', () => {
+test('merged with an open plan warns', () => {
   const f = mergeFixture('Verification');
   try {
-    const before = readFileSync(f.reg.file);
     const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo);
-    assert.equal(r.code, 1, r.err);
-    assert.match(r.err, /refusing to record "w1" as merged: plan p is not closed out\./);
-    assert.match(r.err, /\[PLAN_NOT_COMPLETE\]/);
-    assert.match(r.err, /Override with --allow-open-plan/);
-    assert.ok(Buffer.compare(before, readFileSync(f.reg.file)) === 0, 'the registry bytes must not change on a refusal');
-  } finally { f.cleanup(); }
-});
-
-test('CLI: --allow-open-plan as the last token records the merge with a warning', () => {
-  const f = mergeFixture('Verification');
-  try {
-    const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo, '--allow-open-plan');
     assert.equal(r.code, 0, r.err);
-    assert.match(r.err, /warning: recording "w1" as merged with an unclosed plan/);
+    assert.match(r.err, /^warning: recording "w1" as merged, but plan p is not closed out:$/m);
+    assert.match(r.err, /\[PLAN_NOT_COMPLETE\]/);
+    assert.ok(!r.err.includes('allow-open-plan'), r.err);
     assert.equal(loadRegistry(f.reg.file).sessions[0].state, 'merged');
   } finally { f.cleanup(); }
 });
@@ -770,17 +728,17 @@ test('CLI: merged on an unknown session still fails with the existing error', ()
     const r = runCli('state', 'nope', 'merged', '--registry', f.reg.file, '--repo', f.repo);
     assert.equal(r.code, 1);
     assert.match(r.err, /no slot for session "nope"; claim it first/);
-    assert.ok(!r.err.includes('refusing to record'));
+    assert.ok(!r.err.includes('warning: recording'));
   } finally { f.cleanup(); }
 });
 
 test('CLI: merged on an already merged session keeps the existing error, not the gate', () => {
   const f = mergeFixture('Verification');
   try {
-    assert.equal(runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo, '--allow-open-plan').code, 0);
+    assert.equal(runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo).code, 0);
     const r = runCli('state', 'w1', 'merged', '--registry', f.reg.file, '--repo', f.repo);
     assert.equal(r.code, 1);
-    assert.ok(!r.err.includes('refusing to record'), r.err);
+    assert.ok(!r.err.includes('warning: recording'), r.err);
     assert.match(r.err, /only a session in open can merge/);
   } finally { f.cleanup(); }
 });
@@ -918,9 +876,9 @@ test('CLI: state merged reads the plan from the recorded repository when --repo 
   const reg = registryFile('recorded', openSessionIn(repo));
   try {
     const r = runCli('state', 'w1', 'merged', '--registry', reg.file);
-    assert.equal(r.code, 1, r.err);
-    assert.match(r.err, /refusing to record "w1" as merged: plan p is not closed out\./);
-    assert.equal(loadRegistry(reg.file).sessions[0].state, 'open');
+    assert.equal(r.code, 0, r.err);
+    assert.match(r.err, /warning: recording "w1" as merged, but plan p is not closed out:/);
+    assert.equal(loadRegistry(reg.file).sessions[0].state, 'merged');
   } finally { reg.cleanup(); rmSync(repo, { recursive: true, force: true }); }
 });
 
@@ -958,7 +916,6 @@ const NO_PLAN = 'no plan file at /r/docs/code-plan/plans/my-plan.md (a one-task 
 
 test('closeoutVerdict warns with readiness and re-claim hints when the plan is missing and no repository is known', () => {
   const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', check: () => ({ skipped: NO_PLAN, gaps: [] }) });
-  assert.equal(verdict.proceed, true);
   assert.equal(verdict.lines[0], `warning: close-out not fully checked: ${NO_PLAN}`);
   const hints = verdict.lines.slice(1).join('\n');
   assert.ok(!hints.includes('rerun'), hints);
@@ -980,10 +937,8 @@ test('closeoutVerdict keeps the note for other skip reasons even without a known
 });
 
 test('closeoutVerdict names the readiness command with the absolute plan file when gaps exist', () => {
-  for (const allowOpenPlan of [false, true]) {
-    const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', allowOpenPlan, check: () => ({ skipped: null, gaps: [GAP] }) });
-    assert.ok(verdict.lines.includes('readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md'), verdict.lines.join('\n'));
-  }
+  const verdict = closeoutVerdict(SESSION, { repoRoot: '/r', check: () => ({ skipped: null, gaps: [GAP] }) });
+  assert.ok(verdict.lines.includes('readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md'), verdict.lines.join('\n'));
 });
 
 test('CLI: other target states ignore the plan status', () => {

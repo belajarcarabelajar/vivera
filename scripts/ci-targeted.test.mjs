@@ -41,12 +41,12 @@ describe('planChecks', () => {
     const plan = planChecks(['scripts/core.mjs'], INDEX);
     expect(plan.full).toBe(false);
     expect(testFiles(plan)).toEqual(['./scripts/core.test.mjs', './scripts/top.test.mjs']);
-    expect(names(plan)).toEqual(['tests', 'file-size', 'copy-rules']);
+    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
   });
 
   test('the selected tests run as one bun test invocation with the ci timeout', () => {
     const plan = planChecks(['scripts/core.mjs'], INDEX);
-    expect(plan.suites[0].cmd.slice(0, 4)).toEqual(['bun', 'test', '--timeout', '30000']);
+    expect(plan.suites.find((s) => s.name === 'tests').cmd.slice(0, 4)).toEqual(['bun', 'test', '--timeout', '30000']);
   });
 
   test('a module named only in another module comment does not pull in that module tests', () => {
@@ -101,7 +101,7 @@ describe('planChecks', () => {
   test('a skills file selects validate-skill and the tests that reference skills/', () => {
     const plan = planChecks(['skills/demo/SKILL.md'], INDEX);
     expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-skill', 'tests', 'file-size', 'copy-rules']);
+    expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/skills-reader.test.mjs']);
   });
 
@@ -114,7 +114,7 @@ describe('planChecks', () => {
   test('a module the agent generator imports selects both agent checks', () => {
     const plan = planChecks(['scripts/sprite-agents/crew.mjs'], INDEX);
     expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'tests', 'file-size', 'copy-rules']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/gen-sprite-agents.test.mjs']);
   });
 
@@ -129,7 +129,7 @@ describe('planChecks', () => {
     const sources = { ...SOURCES, 'scripts/claude-md.test.mjs': "writeFileSync(join(root, 'CLAUDE.md'), text);\n" };
     const plan = planChecks(['CLAUDE.md'], { sources });
     expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['tests', 'file-size', 'copy-rules']);
+    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-md.test.mjs']);
   });
 
@@ -152,7 +152,7 @@ describe('planChecks', () => {
     const sources = { ...SOURCES, 'scripts/claude-agents-reader.test.mjs': "assertFileContains('.claude/agents/staid.md', NEEDLE);\n" };
     const plan = planChecks(['.claude/agents/staid.md'], { sources });
     expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'tests', 'file-size', 'copy-rules']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-agents-reader.test.mjs']);
   });
 
@@ -241,8 +241,9 @@ describe('planChecks', () => {
     expect(FULL_CI.map((s) => s.cmd.join(' ')).join(' && ')).toBe(pkg.scripts.ci);
   });
 
-  test('the full plan runs file-size just before the copy check', () => {
-    expect(names(planChecks(['bun.lock'], INDEX)).slice(-2)).toEqual(['file-size', 'copy-rules']);
+  test('file-size runs before the tests and the snippet check', () => {
+    const n = names(planChecks(['bun.lock'], INDEX));
+    expect(n.slice(n.indexOf('gen-sprite-agents'), -1)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
   test('a docs-only change still runs file-size over the index', () => {
@@ -257,7 +258,7 @@ describe('planChecks', () => {
   test('a scripts-only change still runs file-size', () => {
     const sources = { 'scripts/a.mjs': 'export const a = 1;\n', 'scripts/a.test.mjs': "import './a.mjs';\n" };
     const plan = planChecks(['scripts/a.mjs'], { sources });
-    expect({ full: plan.full, names: names(plan) }).toEqual({ full: false, names: ['tests', 'file-size', 'copy-rules'] });
+    expect({ full: plan.full, names: names(plan) }).toEqual({ full: false, names: ['file-size', 'tests', 'copy-rules'] });
   });
 });
 

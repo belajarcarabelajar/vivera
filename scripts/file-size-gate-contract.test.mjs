@@ -53,3 +53,18 @@ describe('T4 docs', () => {
     expect(line).toContain('bun run size:check');
   });
 });
+
+describe('F3 workflow', () => {
+  const workflow = () => readRepoFile('.github/workflows/ci.yml');
+
+  test('the manual workflow runs the size check over every tracked file', () => {
+    expect(workflow()).toMatch(/^\s+run: bun scripts\/check-file-size\.mjs --all$/m);
+  });
+
+  test('the workflow stays manual-dispatch only', () => {
+    const on = workflow().match(/^on:\n((?:[ \t]+.*\n)+)/m);
+    expect(on).not.toBeNull();
+    expect(on[1]).toContain('workflow_dispatch');
+    expect(on[1]).not.toMatch(/\b(push|pull_request)\b/);
+  });
+});

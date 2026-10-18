@@ -1296,12 +1296,11 @@ test('an unrecognised on_precondition_fail throws instead of defaulting to the p
 
 // ---------- vault mirror gate (T2) ----------
 //
-// The runner is the one place that can make "publish the plan" mandatory instead
-// of advisory, because it is the last thing that runs before a task step
-// executes. These cases drive the real CLI as a SUBPROCESS against a throwaway
-// vault, for the same reason the publisher tests do: the contract is an exit
-// code plus what did or did not run, and an in-process call cannot prove
-// process.exit() behaviour.
+// The runner is the last thing that runs before a task step executes, so it is
+// where a missing or stale mirror gets reported. These cases drive the real
+// CLI as a SUBPROCESS against a throwaway vault, for the same reason the
+// publisher tests do: the contract is an exit code plus what did or did not
+// run, and an in-process call cannot prove process.exit() behaviour.
 //
 // Nothing here touches the real vault. PLAN_PUBLISH_CONFIG redirects the
 // registry, which is the seam the publisher was built with.
@@ -1385,54 +1384,54 @@ function publish(f) {
   assert.equal(r.status, 0, `publish failed: ${r.stderr}`);
 }
 
-test('refuses to execute a plan whose mirror is stale', () => {
+// The gate warns and executes: a missing or stale mirror is derived state, and
+// blocking a valid plan on it cost more runs than it protected. What stays
+// load-bearing is that the warning is exactly one line a person can act on.
+function mirrorWarnings(r) {
+  return `${r.stdout}${r.stderr}`.split('\n').filter((l) => /MIRROR WARNING/.test(l));
+}
+
+function assertWarnsAndRuns(r, f, what) {
+  const out = `${r.stdout}${r.stderr}`;
+  assert.notEqual(r.code, 3, `${what} must execute, got:\n${out}`);
+  assert.match(r.stdout, /NEEDS-AGENT/, `${what}: the DAG must be reached:\n${out}`);
+  const lines = mirrorWarnings(r);
+  assert.equal(lines.length, 1, `${what}: exactly one warning line, got:\n${out}`);
+  assert.ok(lines[0].includes(`plan-sync.mjs ${path.resolve(f.plan)}`),
+    `${what}: the warning must name the fix command for this plan:\n${lines[0]}`);
+  return lines[0];
+}
+
+test('a plan whose mirror is missing or stale warns once and still executes', () => {
   const f = gateFixture('stale');
   try {
-    // 1. Never published. The whole reason this gate exists: a plan that is
-    //    perfectly valid, in a project, with nothing in the vault.
     let r = runRunner(f, ['--execute']);
-    assert.equal(r.code, 3, `an unpublished plan must not execute, got ${r.code}:\n${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /NEEDS-AGENT/, 'no task step may run while the gate is closed');
-    assert.match(`${r.stdout}${r.stderr}`, /MIRROR GATE/, 'the block must be visible in the output');
-    assert.ok(`${r.stdout}${r.stderr}`.includes(GATE_PLAN), 'the block must name the plan');
-    assert.match(`${r.stdout}${r.stderr}`, /planFreshness|no mirror|MISSING/i,
-      'the block must say why, not just that it failed');
-    // The fix has to be copy-pasteable, because the person hitting this is
-    // mid-plan and should not have to reconstruct the command.
-    assert.match(`${r.stdout}${r.stderr}`, /plan-publish\.mjs/, 'the block must name the publish command');
+    let line = assertWarnsAndRuns(r, f, 'an unpublished plan');
+    assert.ok(line.includes(path.join(f.vault, '01 - Projects', 'demo', 'plans')), `the warning must name the mirror path:\n${line}`);
+    assert.match(line, /MISSING|no mirror/i, `the warning must say why:\n${line}`);
 
-    // 2. Published, then the source edited. This is the case that used to slip
-    //    through: the mirror exists, so a presence check would pass it.
     publish(f);
     r = runRunner(f, ['--execute']);
-    assert.notEqual(r.code, 3, `a current mirror must execute, got:\n${r.stdout}${r.stderr}`);
+    assert.equal(mirrorWarnings(r).length, 0, `a current mirror must not warn:\n${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /NEEDS-AGENT/);
 
     appendFileSync(f.plan, '\nedited after publishing\n', 'utf8');
     r = runRunner(f, ['--execute']);
-    assert.equal(r.code, 3, `a drifted mirror must not execute, got ${r.code}:\n${r.stdout}${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /NEEDS-AGENT/, 'no task step may run on drift');
-    assert.match(`${r.stdout}${r.stderr}`, /!=/, `the block must show both hashes:\n${r.stdout}${r.stderr}`);
-
-    // 3. Republish and it runs again. A gate with no way back is a dead end.
-    publish(f);
-    r = runRunner(f, ['--execute']);
-    assert.notEqual(r.code, 3, `republishing must unblock, got:\n${r.stdout}${r.stderr}`);
-    assert.match(r.stdout, /NEEDS-AGENT/, 'the DAG must actually be reached after republishing');
+    line = assertWarnsAndRuns(r, f, 'a drifted mirror');
+    assert.match(line, /!=/, `the warning must show both hashes:\n${line}`);
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }
 });
 
 test('the mirror gate does not apply where there is no mirror', () => {
-  // mirror:false — the vault's own plans. Gating these would make every vault
-  // plan unrunnable, so the gate must step aside rather than invent a mirror.
+  // mirror:false: the vault's own plans have no mirror, so there is nothing to warn about.
   const f = gateFixture('notapplicable', { mirror: false });
   try {
     const r = runRunner(f, ['--execute']);
     assert.notEqual(r.code, 3, `a mirror:false plan must not be gated, got:\n${r.stdout}${r.stderr}`);
     assert.match(r.stdout, /NEEDS-AGENT/, 'the DAG must be reached');
-    assert.doesNotMatch(`${r.stdout}${r.stderr}`, /MIRROR GATE: BLOCKED/,
-      'a not-applicable gate must not be reported as a block');
+    assert.equal(mirrorWarnings(r).length, 0, 'a not-applicable gate must not warn');
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }
@@ -1446,42 +1445,35 @@ test('a dry run is never gated', () => {
     const r = runRunner(f, []);
     assert.equal(r.code, 0, `validation must not need a mirror, got ${r.code}:\n${r.stdout}${r.stderr}`);
     assert.match(r.stdout, /Validation: OK/);
-    assert.doesNotMatch(`${r.stdout}${r.stderr}`, /MIRROR GATE/);
+    assert.doesNotMatch(`${r.stdout}${r.stderr}`, /MIRROR/);
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }
 });
 
-test('the escape flag runs the DAG and says it was used', () => {
+test('--skip-mirror-gate is an accepted no-op', () => {
   const f = gateFixture('escape');
   try {
     const r = runRunner(f, ['--execute', '--skip-mirror-gate']);
-    assert.notEqual(r.code, 3, `the escape must actually escape, got:\n${r.stdout}${r.stderr}`);
-    assert.match(r.stdout, /NEEDS-AGENT/, 'the DAG must be reached');
-    // Silently passing is how an escape hatch becomes the default. It must be
-    // loud every single time it is used.
-    assert.match(`${r.stdout}${r.stderr}`, /skip-mirror-gate/,
-      'using the escape must be reported in the output');
+    assertWarnsAndRuns(r, f, 'the deprecated flag');
+    const dry = runRunner(f, ['--skip-mirror-gate']);
+    assert.equal(dry.code, 0, `the flag must not be a usage error on a dry run:\n${dry.stdout}${dry.stderr}`);
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }
 });
 
-test('an unresolvable plan fails the gate closed, not open', () => {
+test('an unresolvable plan warns with the config to fix and still executes', () => {
   const f = gateFixture('unroutable');
   try {
-    // A plan outside every registered project root. Failing open here would
-    // mean a typo'd path silently executes with no mirror, which is precisely
-    // the class of bug this gate is here to prevent.
+    // A plan outside every registered project root: the verdict cannot be
+    // reached, and the warning must point at the registry, not stay silent.
     const outside = path.join(f.base, 'elsewhere', 'plan.md');
     mkdirSync(path.dirname(outside), { recursive: true });
     writeFileSync(outside, gatePlanBody(), 'utf8');
-    const r = spawnSync(process.execPath, [RUNNER, outside, '--execute'], {
-      cwd: ROOT, encoding: 'utf8',
-      env: { ...process.env, PLAN_PUBLISH_CONFIG: f.config },
-    });
-    assert.equal(r.status, 3, `an unroutable plan must fail closed, got ${r.status}:\n${r.stdout}${r.stderr}`);
-    assert.match(`${r.stdout}${r.stderr}`, /plans\.publish\.json/, 'the block must name the file to fix');
+    const r = runRunner({ ...f, plan: outside }, ['--execute']);
+    const line = assertWarnsAndRuns(r, { plan: outside }, 'an unroutable plan');
+    assert.match(line, /plans\.publish\.json/, `the warning must name the file to fix:\n${line}`);
   } finally {
     rmSync(f.base, { recursive: true, force: true });
   }

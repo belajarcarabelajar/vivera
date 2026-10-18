@@ -16,7 +16,7 @@ import { planFreshness } from './plan-publish.mjs';
 import { strictYamlError } from './frontmatter-strict.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLISHER = path.join(__dirname, 'plan-publish.mjs');
+const SYNCER = path.join(__dirname, 'plan-sync.mjs');
 
 const SCHEMA_ID = 'ultra-plan/v1';
 
@@ -1371,61 +1371,17 @@ export function renderLedger(ledger) {
 
 // ---------- vault mirror gate ----------
 //
-// Why this is a gate and not a warning: the mirror is what a human reads when
-// they review a plan. A plan that executes without ever reaching the vault was
-// reviewed by nobody, in a place they were not looking. Making execution depend
-// on the mirror is the only point in the pipeline where "publish the plan" can
-// stop being advice.
-//
-// It runs AFTER validation and BEFORE any task step, and only for --execute.
-// A dry run deliberately never consults it: validating a plan is reading and
-// writing documents, which must work on a machine with no vault at all.
-//
-// Fail CLOSED when the verdict cannot be reached. A gate that quietly passes
-// because it could not check is worse than no gate, because it manufactures
-// confidence that was never earned — the same failure mode the CI version of
-// this check documents.
-//
-// Exit 3 is deliberately distinct: 2 is already usage error and 1 is already
-// validation or task failure, so a caller can tell "you forgot to publish" from
-// "the plan is broken" without parsing text.
+// Runs after validation and before any task step, only for --execute, so a dry
+// run works on a machine with no vault. A missing or stale mirror is derived
+// state, not a broken plan: blocking on it cost more runs than it protected, so
+// it now prints one actionable line and execution continues.
 
-export const EXIT_MIRROR_GATE = 3;
-
-function mirrorGate(planPath, { skip }) {
-  const verdict = planFreshness(planPath);
-
-  if (skip) {
-    // Loud every time. An escape hatch that passes quietly becomes the default
-    // within a week, and then nobody is publishing again.
-    console.log(`⚠️  MIRROR GATE: SKIPPED by --skip-mirror-gate — ${verdict.state}${verdict.detail ? ` — ${verdict.detail}` : ''}`);
-    console.log('   The plan executes without a current vault mirror. Re-publish, and drop the flag.\n');
-    return null;
-  }
-
-  // Not applicable means there is no mirror by design (the vault's own plans,
-  // declared mirror:false because publishing one would copy a file onto
-  // itself). It is not a pass: it is the absence of a check, and it says so.
-  if (!verdict.applicable) return null;
-  if (verdict.state === 'OK') return null;
-
-  console.error('MIRROR GATE: BLOCKED — refusing to execute a plan with no current Obsidian mirror.\n');
-  console.error(`  plan     ${path.resolve(planPath)}`);
-  if (verdict.project) console.error(`  project  ${verdict.project}`);
-  if (verdict.dest) console.error(`  mirror   ${verdict.dest}`);
-  console.error(`  state    ${verdict.state}`);
-  if (verdict.detail) console.error(`  reason   ${verdict.detail}`);
-  console.error('\n  The plan is still valid and still saved in its project repository. The mirror is');
-  console.error('  derived state, so the fix is to publish it, not to change the plan:\n');
-  // Absolute paths on purpose: the publisher resolves its input to an absolute
-  // path anyway, and the person hitting this may be in any project directory,
-  // where a repo-relative `bun scripts/plan-publish.mjs` does not exist.
-  console.error(`    bun ${PUBLISHER} ${path.resolve(planPath)}`);
-  if (process.env.PLAN_PUBLISH_CONFIG) {
-    console.error(`\n  (registry override in use: ${process.env.PLAN_PUBLISH_CONFIG})`);
-  }
-  console.error('\n  To execute anyway, pass --skip-mirror-gate. It prints a warning every time.');
-  return EXIT_MIRROR_GATE;
+function mirrorGate(planPath) {
+  const v = planFreshness(planPath);
+  // Not applicable means no mirror by design (the vault's own plans, mirror:false).
+  if (!v.applicable || v.state === 'OK') return;
+  const plan = path.resolve(planPath);
+  console.log(`⚠️  MIRROR WARNING: mirror ${v.dest ?? '(none)'} is ${v.state}${v.detail ? ` (${v.detail})` : ''}; executing anyway. Fix: bun ${SYNCER} ${plan}`);
 }
 
 function main(argv) {
@@ -1433,17 +1389,9 @@ function main(argv) {
   const file = args.find((a) => !a.startsWith('--'));
   const execute = args.includes('--execute');
   const asJson = args.includes('--json');
-  const skipGate = args.includes('--skip-mirror-gate');
   if (!file) {
-    console.error('usage: ultra-plan-runner <plan.md> [--execute] [--json] [--skip-mirror-gate]');
-    console.error('  --execute          run the DAG (requires a current Obsidian mirror; exit 3 if not)');
-    console.error('  --skip-mirror-gate run the DAG anyway, with a warning (every time)');
-    process.exit(2);
-  }
-  if (skipGate && !execute) {
-    // Refuse rather than ignore: silently discarding a flag that exists to
-    // suspend a safety check is how someone comes to believe the check is off.
-    console.error('--skip-mirror-gate only means anything with --execute; it has no effect on a dry run.');
+    console.error('usage: ultra-plan-runner <plan.md> [--execute] [--json]');
+    console.error('  --execute  run the DAG (warns when the Obsidian mirror is missing or stale)');
     process.exit(2);
   }
   const md = readFileSync(file, 'utf8');
@@ -1452,13 +1400,10 @@ function main(argv) {
   const { errors, warnings } = validatePlan(plan, body, { frontmatter });
 
   // The gate sits after validation and before any task step, and only for
-  // --execute. A plan that fails validation cannot run at all, so gating it
+  // --execute. A plan that fails validation cannot run at all, so checking it
   // would report the wrong problem: it would blame the mirror for a plan that
   // was going to be rejected anyway.
-  if (execute && !errors.length) {
-    const blocked = mirrorGate(file, { skip: skipGate });
-    if (blocked) process.exit(blocked);
-  }
+  if (execute && !errors.length) mirrorGate(file);
 
   if (asJson) {
     const { order, status, ledger } = errors.length ? { order: [], status: new Map(), ledger: [] } : executePlan(plan, { execute });

@@ -60,8 +60,9 @@ function stage(dir, files) {
   git(dir, 'add', '-f', '--', ...Object.keys(files));
 }
 
+// Staged, because --staged and --all read the ceilings from the index.
 function baseline(dir, obj) {
-  put(dir, { [BASELINE]: typeof obj === 'string' ? obj : JSON.stringify(obj) });
+  stage(dir, { [BASELINE]: typeof obj === 'string' ? obj : JSON.stringify(obj) });
 }
 
 const lastLine = (s) => s.trimEnd().split('\n').pop();
@@ -282,7 +283,7 @@ describe('CLI --staged', () => {
     stage(dir, { 'big.txt': 23000 });
     const r = run(dir);
     expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    expect(lastLine(r.out)).toBe('checked 2 files, 0 over the limit');
   });
 
   test('handles a path containing a space', () => {
@@ -320,7 +321,7 @@ describe('CLI --all', () => {
     stage(dir, { 'big.txt': 25000, 'small.txt': 10 });
     const r = run(dir, '--all');
     expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 2 files, 0 over the limit');
+    expect(lastLine(r.out)).toBe('checked 3 files, 0 over the limit');
   });
 });
 
@@ -398,5 +399,35 @@ describe('repo exemptions', () => {
 
   test.each(['README.md', 'skills/sucp-rules/SKILL.md', 'scripts/ci-targeted.mjs'])('%s is still checked (control)', (p) => {
     expect(attr(p)).toBe('unspecified');
+  });
+});
+
+describe('ceilings come from the index', () => {
+  test('an unstaged ceiling raise does not let a grown file through', () => {
+    const dir = repo();
+    baseline(dir, { 'a.txt': 25000 });
+    stage(dir, { 'a.txt': 26000 });
+    put(dir, { [BASELINE]: JSON.stringify({ 'a.txt': 30000 }) });
+    const r = run(dir);
+    expect(r.code).toBe(1);
+    expect(r.err).toContain('a.txt');
+  });
+
+  test('a staged ceiling raise lets the grown file through', () => {
+    const dir = repo();
+    baseline(dir, { 'a.txt': 30000 });
+    stage(dir, { 'a.txt': 26000 });
+    const r = run(dir);
+    expect([r.code, r.err]).toEqual([0, '']);
+  });
+
+  test('an unstaged, broken baseline is ignored in favour of the staged one', () => {
+    const dir = repo();
+    baseline(dir, { 'a.txt': 25000 });
+    stage(dir, { 'a.txt': 26000 });
+    put(dir, { [BASELINE]: '{nope' });
+    const r = run(dir);
+    expect(r.code).toBe(1);
+    expect(r.err).not.toContain('invalid baseline JSON');
   });
 });

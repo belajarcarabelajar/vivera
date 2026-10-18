@@ -368,7 +368,7 @@ install_hooks() {
     has_graphify=true
   else
     # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
-    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable (the hook is still enabled for the file size gate)." >&2
+    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable (the hook still carries the file size gate)." >&2
   fi
   if repo_is_own_checkout; then
     if [ "$DRY_RUN" = true ]; then

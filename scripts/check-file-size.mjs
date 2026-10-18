@@ -166,7 +166,7 @@ function renderStale(stale, baselineName) {
       : s.reason === 'within-limit' ? `now ${s.bytes} bytes, within the limit` : `now ${s.bytes} bytes`;
     lines.push(`  ${s.path}: ceiling ${s.ceiling} bytes, ${now}`);
   }
-  lines.push(`Lower them with: ${REWRITE_CMD}`);
+  lines.push(`Lower them with: ${REWRITE_CMD}, then stage ${BASELINE_REL}`);
   return lines.join('\n');
 }
 
@@ -229,6 +229,18 @@ function readBaseline(file) {
     if (e.code === 'ENOENT') return { baseline: null };
     throw e;
   }
+  return parseBaseline(text, file);
+}
+
+// The staged copy, so a ceiling raise counts only when it is part of the commit,
+// exactly like the sizes it is compared with. Not in the index means no ceilings.
+function readStagedBaseline(root) {
+  const r = spawnSync('git', ['cat-file', 'blob', `:${BASELINE_REL}`], { cwd: root, encoding: 'utf8' });
+  if (r.status !== 0) return { baseline: null };
+  return parseBaseline(r.stdout, `${path.join(root, BASELINE_REL)} (staged copy)`);
+}
+
+function parseBaseline(text, file) {
   let obj;
   try {
     obj = JSON.parse(text);
@@ -276,7 +288,8 @@ export function main(argv, cwd = process.cwd()) {
     only = stagedPaths(root);
     if (!only.length) return 0;
   }
-  const { baseline, error } = readBaseline(file);
+  // --write-baseline edits the working-tree file; judging reads what is staged.
+  const { baseline, error } = opts.baseline || opts.mode === '--write-baseline' ? readBaseline(file) : readStagedBaseline(root);
   if (error) return usageError(error);
   const entries = indexEntries(root, only);
   const overLimit = entries.filter((e) => e.bytes > LIMIT_BYTES).length;

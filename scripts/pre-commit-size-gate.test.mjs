@@ -143,3 +143,19 @@ test('a small file commits', () => {
   assert.equal(r.status, 0, outputOf(r));
   assert.notEqual(repo.head(), '');
 });
+
+test('a ceiling raise that is not staged does not let a grown file through', () => {
+  const repo = sizeGateRepo();
+  repo.write('scripts/file-size-baseline.json', '{\n  "seeded.txt": 25000\n}\n');
+  repo.write('seeded.txt', 'y'.repeat(25000));
+  repo.git(['add', '-A']);
+  const first = repo.commit('seed');
+  assert.equal(first.status, 0, outputOf(first));
+  const before = repo.head();
+  repo.write('seeded.txt', 'y'.repeat(26000));
+  repo.write('scripts/file-size-baseline.json', '{\n  "seeded.txt": 30000\n}\n');
+  repo.git(['add', 'seeded.txt']);
+  const r = repo.commit('grow without staging the raise');
+  assert.notEqual(r.status, 0, outputOf(r));
+  assert.equal(repo.head(), before, 'a blocked commit must not move HEAD');
+});

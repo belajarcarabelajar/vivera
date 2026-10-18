@@ -49,7 +49,7 @@
       "slug": "execution-model",
       "order": 2,
       "title": "Execution Model: Subagent-First, High Fan-Out",
-      "description": "The parent agent splits work into small verifiable chunks, dispatches 10 or more subagents when it can, then gathers and synthesizes their reports.",
+      "description": "The parent agent splits work into small verifiable chunks, sizes the subagent batch to the disjoint chunks (inline, 2 to 4, at most 15), then gathers and synthesizes their reports.",
       "source": {
         "file": "README.md",
         "heading": "Execution Model: Subagent-First, High Fan-Out"

@@ -190,7 +190,7 @@ Pre-execution walkthrough: refresh the active project profile and inspect the pl
 Execution handoff: fan-out is proportional to the work, and the reason for the chosen width is stated at the handoff.
 1. Inline for a genuinely atomic task (atomic scope, no subagent tool in this runtime, or inseparable shared state).
 2. Two to four subagents for the usual plan: chunk each task into small verifiable units, dispatch, then gather and synthesize their reports.
-3. Ten or more only when the scopes are disjoint, every chunk with one owner and no two writing the same file.
+3. 10 to 15 only for that many disjoint scopes, at most 15 in flight, every chunk with one owner and no two writing the same file.
 
 ### 📤 Plan Publishing
 > 📤 **Component 2b — Reachability:** a plan that exists only inside a project repository cannot be searched, rendered, or re-read months later. Publishing is a required step of finishing a plan, not an optional convenience.

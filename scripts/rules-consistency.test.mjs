@@ -17,7 +17,7 @@ function mdUnder(dir) {
 }
 
 function corpus() {
-  const files = [...mdUnder('skills'), ...mdUnder('templates'), ...mdUnder('snippets'), 'README.md', ORCHESTRATOR];
+  const files = [...mdUnder('skills'), ...mdUnder('templates'), ...mdUnder('snippets'), 'README.md', 'apps/docs/pages.json', 'snippets.manifest.json', ORCHESTRATOR];
   return files.map((rel) => ({ rel, lines: fs.readFileSync(path.join(ROOT, rel), 'utf8').split('\n') }));
 }
 

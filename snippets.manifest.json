@@ -8,7 +8,7 @@
       "uuid": "87f42bad-9b3f-441e-ab97-632ceeba4728",
       "keyword": ";'",
       "name": "Implementation Plan",
-      "description": "Plan + TDD + WAJIB subagent fan-out (chunking, batch manifest, high fan-out floor, parent diff audit), debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-ngoding-plan.md"
+      "description": "Plan + TDD + WAJIB subagent fan-out (chunking, batch manifest, proportional fan-out, parent diff audit), debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-ngoding-plan.md"
     },
     {
       "source": "snippets/orkestrasi-debugging.md",

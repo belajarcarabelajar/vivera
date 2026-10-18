@@ -22,7 +22,7 @@
   "scripts/export-opencode-history.test.mjs": 38988,
   "scripts/gen-sprite-agents.test.mjs": 21350,
   "scripts/graphify-plugin-drift.test.mjs": 26388,
-  "scripts/install-portability.test.mjs": 22719,
+  "scripts/install-portability.test.mjs": 22664,
   "scripts/install-ps1-run.test.mjs": 32178,
   "scripts/install-ps1.test.mjs": 24955,
   "scripts/install-sprites.test.mjs": 21515,

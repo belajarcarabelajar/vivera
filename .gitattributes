@@ -6,3 +6,10 @@ scripts/install/tiers.tsv text eol=lf
 .githooks/* text eol=lf
 # The website is not part of the release archive.
 apps/ export-ignore
+# Not written by an agent, so the file size gate skips them: lockfiles, generated output, vendored code.
+*.lock -size-gate
+diagrams/*.svg -size-gate
+examples/graph-viewer-demo.html -size-gate
+.claude/agents/*.md -size-gate
+.opencode/skills/graphify/** -size-gate
+.opencode/plugins/graphify.js -size-gate

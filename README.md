@@ -103,7 +103,7 @@ vivera/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
 ├── .githooks/
-│   └── pre-commit                               # Non-blocking: refresh graphify graph when a commit includes Markdown
+│   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                               # CI: bun install, render, drift gate, validate, test
@@ -138,6 +138,11 @@ vivera/
 │   ├── check-runner-contract.mjs                # Fast structural check for runner frontmatter keys
 │   ├── check-duplicate-defs.mjs                 # Diff-scoped gate: a definition a branch adds whose name already exists elsewhere
 │   ├── check-duplicate-defs.test.mjs            # Languages, skips, waiver, exit codes, and the calibration rules
+│   ├── check-file-size.mjs                      # Commit gate: a staged text file over 5,000 tokens (bytes / 4) is blocked
+│   ├── check-file-size.test.mjs                 # Modes, skips, ratchet, exit codes, and the split instructions
+│   ├── file-size-baseline.json                  # Ceilings for files already over the limit; they only go down
+│   ├── file-size-gate-contract.test.mjs         # Pins the hook, install, package and docs wiring of the gate
+│   ├── pre-commit-size-gate.test.mjs            # The hook blocks on the size gate and stays non-blocking for graphify
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)
@@ -302,7 +307,7 @@ A plain `./install.sh` runs the `standard` tier (see Prerequisites) and does thi
 | Links the skills | The skill package (`SKILL.md`, the seven `sucp-*` phase skills, `templates/`, `examples/` and the two Mermaid configs) is linked into each target with absolute paths into this checkout, so keep the checkout where it is. `--copy` copies the files instead. |
 | Picks the targets | `~/.config/ai` and `~/.agents/skills` always. Every other harness only when it is detected (its directory under your home, or its CLI on `PATH`, `~/.local/bin` or `~/.bun/bin`; the table below names the directory and the CLI of each target, and the CLI is looked for in all three places for every row) or named with `--only ID,ID`. A bare home gets just those two. |
 | Renders the sprite agents | The seven Harvest Sprite subagent files are generated, not linked, for each detected harness among Claude Code, OpenCode, Codex, Cursor, Copilot and Antigravity. This needs `bun`, so tier `minimal` skips it. |
-| Enables the git hook | Sets `core.hooksPath=.githooks` in this checkout, only when `graphify` is installed and the checkout has its own `.git`. Undo it with `git -C <checkout> config --unset core.hooksPath`. |
+| Enables the git hook | Sets `core.hooksPath=.githooks` in this checkout when it has its own `.git`, whether or not `graphify` is installed, because the hook carries the file size gate. Undo it with `git -C <checkout> config --unset core.hooksPath`. |
 | Protects your files | A file or directory already at a destination that is not the installer's own is moved to `<name>.vivera-bak-<UTC time>` first (a `[BACKUP]` line), so nothing is overwritten. |
 
 Look before you install, and check afterwards:
@@ -1548,6 +1553,25 @@ because they hide real duplicates: exported definitions only, and skipping
 `checkDiff`. The limit is that it matches names only, so a helper rewritten under
 another name is not found, and 5 same-name different-job pairs remain.
 
+### File size: the split-it rule as a gate
+
+A file an agent cannot read in one go gets read in parts and edited blind. `bun run size:check`
+blocks a text file over 5,000 tokens (bytes / 4, limit 20,000 bytes). Three modes:
+
+```bash
+bun run size:check                                   # --staged (default, the hook): staged files, size from the index
+bun scripts/check-file-size.mjs --all                # every tracked file plus stale ceilings (end of bun run ci)
+bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, then only lower or drop them
+```
+
+Exit 0 is a pass, 1 is a violation or a stale ceiling, and 2 is a usage error, a missing
+git repository, an invalid baseline, or a failed git call. Files that
+were over the limit when the gate landed keep their size as a ceiling in
+`scripts/file-size-baseline.json`, a ratchet: shrinking is free, growing is blocked. Ceilings are read from the staged copy of that file. When a
+split is out of scope, raise the ceiling by hand and stage it in the same commit and name the follow-up in
+the PR body. A renamed file counts as new, so move its ceiling. After a split, `git grep` the
+old path and update references (`validate-skill` pins skill paths).
+
 ### Strict retries: `retry_if`
 
 ```yaml
@@ -1824,22 +1848,26 @@ it also runs automatically through a committed git hook.
 
 ### The pre-commit hook
 
-`.githooks/pre-commit` keeps the graph consistent with what a commit actually contains,
-without the agent having to remember: when code changed it runs `graphify update .` (local
-AST), then `bun run graphify:sync` adds the Markdown's structural nodes last. `install.sh`
-enables it with `git config core.hooksPath .githooks`.
+`.githooks/pre-commit` has two parts. The file size gate runs first and is the only part that
+can block a commit. The graph refresh then keeps the graph consistent with what a commit
+actually contains, without the agent having to remember: when code changed it runs
+`graphify update .` (local AST), then `bun run graphify:sync` adds the Markdown's structural
+nodes last. `install.sh` enables it with `git config core.hooksPath .githooks`.
 
 | Concern | How it is handled |
 |---|---|
-| Not blocking | Every path exits 0. The graph is derived, local and regenerable, so a failed step prints a bounded warning and the commit proceeds. A red graph must never block history. |
+| Size gate (blocking) | `bun scripts/check-file-size.mjs` blocks a staged text file over 5,000 tokens (bytes / 4, so 20,000 bytes), measured from the index, not the working tree. Only staged files are judged. Symlinks, submodules, binaries, and paths marked `-size-gate` in `.gitattributes` (lockfiles, rendered diagrams, vendored files) are skipped. The error prints split advice per file kind. `bun run size:check` runs it by hand. |
+| Ratchet | Files already over the limit carry a ceiling in `scripts/file-size-baseline.json`: they may shrink, not grow. `--write-baseline` only lowers or drops ceilings; raising one is a hand edit in the same commit, visible in review, with the follow-up named in the PR body. |
+| Graph refresh not blocking | Every graphify step exits 0, and a missing bun or checker, or a checker exit 2, skips the size gate with `[size-gate] skipped: <reason>`. The graph is derived, local and regenerable, so a failed step prints a bounded warning and the commit proceeds. A red graph must never block history. |
 | Ordering | `graphify update` runs **before** the sync, never after. `update` rebuilds `graph.json` and its writer is not guaranteed to preserve foreign nodes, so the structural layer must be the last writer or the document nodes can vanish. Measured 2026-10-03: `update` took 5.3 s, grew the graph 2342 → 2832 nodes, preserved the semantic layers (concept 284 → 274, rationale 156 → 158), and the following sync restored the document layer to 2984 nodes with `graphify:check` CURRENT. |
 | Gating / cost | Nothing runs when the staged diff is empty or there is no graph to update. A **Markdown-only** commit runs the sync alone and skips the 5.3 s code rebuild; a commit with **any non-Markdown** file runs `update` then the sync. Both steps are local: no LLM, no network. |
 | Why a git hook and not an OpenCode plugin hook | OpenCode v2's only session-lifecycle event is `session.idle`, which fires after **every** assistant turn rather than at a session end, so a plugin hook there would re-scan constantly. A git hook is harness-agnostic (OpenCode, Claude Code, a terminal all end in `git commit`) and is a committed file rather than machine-local plugin state. |
-| Enable / disable | `git config core.hooksPath .githooks` enables it; `GRAPHIFY_SYNC_SKIP=1 git commit ...` disables it for one commit; `git config --unset core.hooksPath` reverts to the default `.git/hooks`. Neither touches `graphify-out/`. |
+| Enable / disable | `git config core.hooksPath .githooks` enables it; `GRAPHIFY_SYNC_SKIP=1 git commit ...` skips only the graph refresh for one commit; `git commit --no-verify` skips the whole hook, and `bun run ci` still catches an oversized file; `git config --unset core.hooksPath` reverts to the default `.git/hooks`. None of these touches `graphify-out/`. |
 
-This is deliberately **not** part of `bun run ci`: it writes a gitignored, machine-local
-artifact whose correctness depends on the vault and the installed graphify, neither of
-which a portable CI runner can see.
+The graph refresh is deliberately **not** part of `bun run ci`: it writes a gitignored,
+machine-local artifact whose correctness depends on the vault and the installed graphify,
+neither of which a portable CI runner can see. The size check is: `bun run ci` ends with
+`bun scripts/check-file-size.mjs --all`.
 
 ### Getting sessions to query the graph
 

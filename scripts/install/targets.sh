@@ -345,38 +345,44 @@ repo_is_own_checkout() {
   [ "$(cd -P "$top" 2>/dev/null && pwd -P)" = "$(cd -P "$REPO_DIR" && pwd -P)" ]
 }
 
-# Enable the committed git hooks. `.githooks/pre-commit` keeps the repo's
-#    graph consistent with each commit: when code changed it runs
-#    `graphify update .` (local AST), then `bun run graphify:sync` adds the
-#    Markdown's structural nodes last. A Markdown-only commit pays only for the
-#    sync. core.hooksPath is repo-local config, so this changes nothing outside
-#    this checkout and is undone with one unset. The hook itself never blocks a
-#    commit: every path exits 0, because the graph is derived state.
-#    graphify is an optional tool, so when it is absent install.sh skips this
-#    setup entirely: the hook would only print its one-line "graphify CLI not
-#    found" note, the same no-op it already performs on machines without it.
+# Enable the committed git hooks. `.githooks/pre-commit` has one blocking path:
+#    the file size gate, which rejects a commit whose staged files exceed the
+#    size limit. Its graphify part never blocks, because the graph is derived
+#    state: when code changed it runs `graphify update .` (local AST), then
+#    `bun run graphify:sync` adds the Markdown's structural nodes last, and
+#    without graphify it only prints a one-line note. So the hook is enabled
+#    whether or not graphify is installed; a missing graphify costs only the
+#    graph refresh, and the run warns about that once. core.hooksPath is
+#    repo-local config, so this changes nothing outside this checkout and is
+#    undone with one unset.
 #    Tier minimal skips the step: it needs git, which that tier does not require. A copy of this
 #    repo inside some other git repo (no .git of its own) is skipped too: core.hooksPath would be
 #    written into the outer repo's config, which is not this installer's to change.
 install_hooks() {
   if [ "$TIER" = minimal ]; then
     echo "[SKIP] git hooks: tier minimal needs no git"
-  elif ! tool_available graphify; then
-    # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
-    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable, so skipping core.hooksPath setup (the pre-commit hook no-ops without graphify anyway)." >&2
+    return 0
+  fi
+  local has_graphify=false
+  if tool_available graphify; then
+    has_graphify=true
   else
-    if repo_is_own_checkout; then
-      if [ "$DRY_RUN" = true ]; then
-        echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
-        echo "[DRY-RUN]   - .githooks/pre-commit -> non-blocking: graphify update (code) then graphify:sync (docs)"
-      else
-        git -C "$REPO_DIR" config core.hooksPath .githooks
-        echo "[OK] Enabled git hooks: core.hooksPath=.githooks"
-        echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
-      fi
+    # The one graphify warning of the run: prereq.sh leaves it to this step (OPTIONAL_WARNED_LATER).
+    echo "⚠️  WARNING: optional tool 'graphify' not found; knowledge-graph query and the pre-commit graph refresh are unavailable (the hook still carries the file size gate)." >&2
+  fi
+  if repo_is_own_checkout; then
+    if [ "$DRY_RUN" = true ]; then
+      echo "[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks"
+      echo "[DRY-RUN]   - .githooks/pre-commit -> blocking file size gate on staged files, then non-blocking graphify update and graphify:sync"
     else
-      echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
+      git -C "$REPO_DIR" config core.hooksPath .githooks
+      echo "[OK] Enabled git hooks: core.hooksPath=.githooks"
+      echo "     (revert: git -C \"$REPO_DIR\" config --unset core.hooksPath)"
     fi
+  else
+    echo "[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in)."
+  fi
+  if [ "$has_graphify" = true ]; then
     # Printed in a dry run too: install.sh only names this command and never runs it, since the command
     # changes Claude Code settings outside this repository.
     echo "[INFO] graphify: to wire it into Claude Code sessions (opt-in, not done here), run from $REPO_DIR: bun run graphify:hooks --install (revert: bun run graphify:hooks --uninstall)"

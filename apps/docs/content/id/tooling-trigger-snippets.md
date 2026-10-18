@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: README.md#Trigger Snippets
-source_hash: "920433bc06eb"
+source_hash: "fe5a5e364c56"
 ---
 
 <a id="trigger-snippets"></a>
@@ -213,6 +213,29 @@ dibaca. Dua aturan dicoba di atas kertas lalu ditolak karena menyembunyikan dupl
 sungguhan: hanya memeriksa definisi yang diekspor, dan melewati `checkDiff`. Batasnya,
 perintah ini hanya mencocokkan nama, jadi helper yang ditulis ulang dengan nama lain tidak
 ditemukan, dan 5 pasangan bernama sama dengan tugas berbeda masih tersisa.
+
+<a id="file-size-the-split-it-rule-as-a-gate"></a>
+## Ukuran file: aturan pecah-file sebagai gate
+
+File yang tidak bisa dibaca agent sekaligus akan dibaca per bagian lalu diedit tanpa melihat
+keseluruhannya. `bun run size:check` memblokir file teks yang lebih dari 5.000 token (byte / 4,
+batas 20.000 byte). Ada tiga mode:
+
+```bash
+bun run size:check                                   # --staged (default, the hook): staged files, size from the index
+bun scripts/check-file-size.mjs --all                # every tracked file plus stale ceilings (end of bun run ci)
+bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, then only lower or drop them
+```
+
+Exit 0 berarti lulus, 1 berarti pelanggaran atau plafon basi, dan 2 berarti kesalahan pemakaian,
+bukan repositori git, baseline tidak valid, atau panggilan git yang gagal.
+File yang sudah melewati batas saat gate ini masuk mempertahankan ukurannya sebagai plafon di
+`scripts/file-size-baseline.json`, sebuah ratchet: menyusut itu bebas, membesar diblokir. Plafon
+dibaca dari salinan file itu yang sudah di-stage. Bila pemecahan file berada di luar cakupan,
+naikkan plafonnya secara manual dan stage di commit yang sama, lalu
+sebutkan tindak lanjutnya di body PR. File yang di-rename dihitung sebagai file baru, jadi
+pindahkan plafonnya. Setelah memecah file, jalankan `git grep` pada path lama dan perbarui
+rujukannya (`validate-skill` mengunci path skill).
 
 <a id="strict-retries-retry_if"></a>
 ## Retry ketat: `retry_if`
@@ -505,22 +528,26 @@ otomatis melalui git hook yang di-commit.
 <a id="the-pre-commit-hook"></a>
 ## Hook pre-commit
 
-`.githooks/pre-commit` menjaga graph tetap konsisten dengan isi commit yang sebenarnya,
-tanpa agent harus mengingatnya: saat kode berubah, ia menjalankan `graphify update .` (AST
+`.githooks/pre-commit` terdiri atas dua bagian. Gate ukuran file berjalan lebih dulu dan menjadi
+satu-satunya bagian yang bisa memblokir commit. Refresh graph lalu menjaga graph tetap konsisten
+dengan isi commit yang sebenarnya, tanpa agent harus mengingatnya: saat kode berubah, ia menjalankan `graphify update .` (AST
 lokal), lalu `bun run graphify:sync` menambahkan node struktural Markdown paling akhir. `install.sh`
 mengaktifkannya dengan `git config core.hooksPath .githooks`.
 
 | Aspek | Cara penanganannya |
 |---|---|
-| Tidak memblokir | Setiap jalur keluar dengan kode 0. Graph bersifat turunan, lokal, dan bisa dibuat ulang, sehingga langkah yang gagal mencetak peringatan yang panjangnya dibatasi dan commit tetap berlanjut. Graph yang merah tidak boleh memblokir riwayat. |
+| Gate ukuran (memblokir) | `bun scripts/check-file-size.mjs` memblokir file teks yang di-stage bila lebih dari 5.000 token (byte / 4, jadi 20.000 byte), diukur dari index, bukan working tree. Hanya file yang di-stage yang dinilai. Symlink, submodule, file biner, dan path bertanda `-size-gate` di `.gitattributes` (lockfile, diagram hasil render, file vendor) dilewati. Pesan galatnya mencetak saran pemecahan per jenis file. `bun run size:check` menjalankannya secara manual. |
+| Ratchet | File yang sudah melewati batas memiliki plafon di `scripts/file-size-baseline.json`: boleh menyusut, tidak boleh membesar. `--write-baseline` hanya menurunkan atau menghapus plafon; menaikkannya adalah edit manual di commit yang sama, terlihat saat review, dengan tindak lanjut disebut di body PR. |
+| Refresh graph tidak memblokir | Setiap langkah graphify keluar dengan kode 0, dan bun atau checker yang tidak ada, atau checker yang keluar dengan kode 2, membuat gate ukuran dilewati dengan `[size-gate] skipped: <reason>`. Graph bersifat turunan, lokal, dan bisa dibuat ulang, sehingga langkah yang gagal mencetak peringatan yang panjangnya dibatasi dan commit tetap berlanjut. Graph yang merah tidak boleh memblokir riwayat. |
 | Urutan | `graphify update` berjalan **sebelum** sync, tidak pernah sesudahnya. `update` membangun ulang `graph.json` dan penulisnya tidak dijamin mempertahankan node asing, sehingga lapisan struktural harus menjadi penulis terakhir atau node document bisa hilang. Diukur 2026-10-03: `update` memakan 5,3 detik, menumbuhkan graph 2342 → 2832 node, mempertahankan lapisan semantik (concept 284 → 274, rationale 156 → 158), dan sync berikutnya memulihkan lapisan document menjadi 2984 node dengan `graphify:check` CURRENT. |
 | Gating / biaya | Tidak ada yang berjalan saat diff yang di-stage kosong atau tidak ada graph untuk diperbarui. Commit yang **hanya berisi Markdown** menjalankan sync saja dan melewati rebuild kode 5,3 detik; commit dengan **file non-Markdown apa pun** menjalankan `update` lalu sync. Kedua langkah bersifat lokal: tanpa LLM, tanpa jaringan. |
 | Mengapa git hook dan bukan plugin hook OpenCode | Satu-satunya event siklus hidup sesi di OpenCode v2 adalah `session.idle`, yang terpicu setelah **setiap** giliran asisten, bukan di akhir sesi, sehingga plugin hook di sana akan memindai ulang terus-menerus. Git hook tidak bergantung pada harness (OpenCode, Claude Code, dan terminal semuanya berakhir di `git commit`) dan merupakan file yang di-commit, bukan state plugin yang lokal di mesin. |
-| Mengaktifkan / menonaktifkan | `git config core.hooksPath .githooks` mengaktifkannya; `GRAPHIFY_SYNC_SKIP=1 git commit ...` menonaktifkannya untuk satu commit; `git config --unset core.hooksPath` mengembalikannya ke `.git/hooks` default. Tidak satu pun menyentuh `graphify-out/`. |
+| Mengaktifkan / menonaktifkan | `git config core.hooksPath .githooks` mengaktifkannya; `GRAPHIFY_SYNC_SKIP=1 git commit ...` hanya melewati refresh graph untuk satu commit; `git commit --no-verify` melewati seluruh hook, dan `bun run ci` tetap menangkap file yang terlalu besar; `git config --unset core.hooksPath` mengembalikannya ke `.git/hooks` default. Tidak satu pun menyentuh `graphify-out/`. |
 
-Ini sengaja **tidak** menjadi bagian dari `bun run ci`: hook ini menulis artefak lokal mesin
+Refresh graph sengaja **tidak** menjadi bagian dari `bun run ci`: ia menulis artefak lokal mesin
 yang di-gitignore, yang kebenarannya bergantung pada vault dan graphify yang terpasang, dan
-keduanya tidak bisa dilihat oleh runner CI portabel.
+keduanya tidak bisa dilihat oleh runner CI portabel. Pemeriksaan ukuran justru menjadi bagiannya:
+`bun run ci` diakhiri dengan `bun scripts/check-file-size.mjs --all`.
 
 <a id="getting-sessions-to-query-the-graph"></a>
 ## Membuat sesi melakukan query ke graph

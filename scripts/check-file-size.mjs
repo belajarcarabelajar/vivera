@@ -128,26 +128,56 @@ export function sizeRaiseProblems(text, plansDir) {
   return problems;
 }
 
-function renderRaises(raises, problems) {
+function renderRaises(raises, problems, where) {
   return [
-    `[size-gate] blocked: ceilings raised in ${BASELINE_REL} without a valid size-raise line:`,
+    `[size-gate] blocked: ceilings raised in ${BASELINE_REL}${where} without a valid size-raise line:`,
     ...raises.map((r) => `  ${r.path}: ${r.from === null ? 'no ceiling' : `ceiling ${r.from}`} -> ${r.to} bytes`),
     ...problems.map((p) => `  ${p}`),
-    'Split the file instead, or add this line to the commit message (with --base, any commit since the base):',
+    'Split the file instead, or add this line to the message of the commit that raises it:',
     `  size-raise: <plan-id> <why the split waits>, where ${PLANS_REL}/<plan-id>.md exists`,
   ].join('\n');
 }
 
+// This checkout's plans, else the main checkout's: a session worktree has none
+// of its own because the directory is gitignored. Null when neither exists.
+function plansDir(root) {
+  const common = gitText(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim();
+  return [root, path.dirname(common)].map((d) => path.join(d, PLANS_REL)).find((d) => fs.existsSync(d)) ?? null;
+}
+
 // Exit code for a raise check; prints the report or the no-plans-directory note.
-function judgeRaises(root, before, after, text) {
-  const raises = raisedCeilings(before, after);
+// `only` limits the check to those paths, `where` names the commit in the report.
+function judgeRaises(root, before, after, text, { only = null, where = '' } = {}) {
+  const raises = raisedCeilings(before, after).filter((r) => !only || only.has(r.path));
   if (!raises.length) return 0;
-  const dir = path.join(root, PLANS_REL);
-  const hasDir = fs.existsSync(dir);
-  const problems = sizeRaiseProblems(text, hasDir ? dir : null);
-  if (problems.length) return (err(renderRaises(raises, problems)), 1);
-  if (!hasDir) out(`[size-gate] no ${PLANS_REL} here, so a well-formed plan id covers the raised ceilings`);
+  const dir = plansDir(root);
+  const problems = sizeRaiseProblems(text, dir);
+  if (problems.length) return (err(renderRaises(raises, problems, where)), 1);
+  if (!dir) out(`[size-gate] no ${PLANS_REL} here or in the main checkout, so a well-formed plan id covers the raise`);
   return 0;
+}
+
+// Each commit since the merge-base must cover, in its own message, the raises it
+// makes; a raise a later commit takes back is not judged, so only net raises count.
+function judgeBranch(root, base) {
+  const mergeBase = gitText(root, ['merge-base', base, 'HEAD']).trim();
+  const net = readBaselineAt(root, mergeBase);
+  const head = readBaselineAt(root, 'HEAD');
+  if (net.error || head.error) return usageError(net.error ?? head.error);
+  const only = new Set(raisedCeilings(net.baseline, head.baseline).map((r) => r.path));
+  if (!only.size) return 0;
+  const log = gitText(root, ['log', '--reverse', '--format=%H%x00%B%x00', `${mergeBase}..HEAD`, '--', BASELINE_REL]);
+  const fields = nulFields(log);
+  let status = 0;
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const [sha, msg] = [fields[i].trim(), fields[i + 1]];
+    const before = readBaselineAt(root, `${sha}^`);
+    const after = readBaselineAt(root, sha);
+    if (before.error || after.error) return usageError(before.error ?? after.error);
+    const where = ` by ${sha.slice(0, 7)} ${msg.split('\n')[0]}`;
+    status = Math.max(status, judgeRaises(root, before.baseline, after.baseline, msg, { only, where }));
+  }
+  return status;
 }
 
 const ADVICE = {
@@ -362,14 +392,7 @@ export function main(argv, cwd = process.cwd()) {
   if (violations.length) err(renderReport(violations, opts.mode === '--staged' ? 'staged' : ''));
   const stale = opts.mode === '--all' ? staleCeilings(entries, baseline) : [];
   if (stale.length) err(renderStale(stale, path.relative(root, file) || file));
-  let raised = 0;
-  if (opts.base) {
-    const mergeBase = gitText(root, ['merge-base', opts.base, 'HEAD']).trim();
-    const before = readBaselineAt(root, mergeBase);
-    const after = readBaselineAt(root, 'HEAD');
-    if (before.error || after.error) return usageError(before.error ?? after.error);
-    raised = judgeRaises(root, before.baseline, after.baseline, gitText(root, ['log', '--format=%B', `${mergeBase}..HEAD`]));
-  }
+  const raised = opts.base ? judgeBranch(root, opts.base) : 0;
   out(`checked ${checked} files, ${violations.length} over the limit`);
   return violations.length || stale.length || raised ? 1 : 0;
 }

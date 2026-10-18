@@ -25,11 +25,12 @@ export const FULL_CI = [
   { name: 'sync-snippets', cmd: ['bun', 'scripts/sync-snippets.mjs', '--check'] },
 ];
 
+const AGENTS_SKIP = 'nothing under agents/, .claude/agents/, or the agent scripts changed';
 const SKIP_REASON = {
   'render-diagrams': 'no diagram source, mermaid config, changed mermaid block, or renderer script changed',
   'validate-skill': 'nothing under skills/, templates/, examples/, the root docs, or the validator changed',
-  'validate-agents': 'nothing under agents/, .claude/agents/, or the agent scripts changed',
-  'gen-sprite-agents': 'nothing under agents/, .claude/agents/, or the agent scripts changed',
+  'validate-agents': AGENTS_SKIP,
+  'gen-sprite-agents': AGENTS_SKIP,
   tests: 'no test reaches the changed files',
   'sync-snippets': 'nothing under snippets/, snippets.manifest.json, or the sync script changed',
 };
@@ -209,7 +210,7 @@ function testsForOther(p, sources) {
 function fullPlan(base, reasons, ignored = []) {
   return {
     full: true,
-    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), copySuite(base)],
+    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), ...docsSuites(reasons), copySuite(base)],
     skipped: [],
     ignored,
   };
@@ -226,16 +227,10 @@ function copySuite(base) {
 const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
   || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
 
-// English only: Indonesian twins may lag while the docs site is frozen.
-function docsGenSuite(paths) {
-  const reasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed`);
-  return reasons.length ? { name: 'docs-gen', cmd: ['bun', 'scripts/docs-gen.mjs', '--check', '--scope', 'en'], reasons } : null;
-}
+// Indonesian twins may lag while the docs site is frozen: `--warn` only reports them.
+const docsSuites = (reasons) => [['docs-gen', '--check', '--scope', 'en'], ['docs-warn', '--warn']]
+  .map(([name, ...flags]) => ({ name, cmd: ['bun', 'scripts/docs-gen.mjs', ...flags], reasons: [...reasons] }));
 
-/**
- * Pure planner. `index.sources` maps every file under scripts/ to its text;
- * `index.mermaidChanged` lists markdown files whose mermaid blocks differ from the base.
- */
 /** True when two package.json texts differ only inside `scripts`; a side that fails to parse never does. */
 export function scriptsOnlyChange(before, after) {
   try {
@@ -249,6 +244,7 @@ export function scriptsOnlyChange(before, after) {
   }
 }
 
+/** Planner: `index.sources` maps scripts/ files to text, `index.mermaidChanged` lists changed mermaid blocks. */
 export function planChecks(changed, index, { base = 'origin/main' } = {}) {
   const sources = index.sources ?? {};
   const mermaidChanged = new Set(index.mermaidChanged ?? []);
@@ -320,8 +316,8 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
       skipped.push({ name: s.name, reason: SKIP_REASON[s.name] });
     }
   }
-  const docsGen = docsGenSuite(paths);
-  if (docsGen) suites.push(docsGen);
+  const docsReasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed`);
+  if (docsReasons.length) suites.push(...docsSuites(docsReasons));
   suites.push(copySuite(base));
   return { full: false, suites, skipped, ignored };
 }

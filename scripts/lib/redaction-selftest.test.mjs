@@ -26,8 +26,7 @@
 // FRAGMENTS, so a reader can see at a glance that no test run can print a real
 // credential. Nothing in this file opens `~/.local/share/opencode/opencode.db`
 // and nothing reads the Obsidian vault; the real database is never touched,
-// read-only or otherwise. `buildFixtureDb` from test-fixture-db.mjs exists for
-// anything that genuinely needs a database, and this file does not.
+// read-only or otherwise.
 //
 // A note on what is NOT asserted: nothing here claims the patterns are good.
 // A pattern that matches too little is invisible to every assertion in this
@@ -37,7 +36,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { PATTERNS, PATTERN_NAMES, redact, assertPatterns, markerFor } from './redact.mjs';
 
 // ---------- planted synthetic secrets ----------
@@ -260,8 +259,7 @@ test('no module under scripts/lib/ reaches the secret table or reads its value c
   }
 
   // The negative control, which is the false-positive guard: prose that NAMES
-  // the table is not a query, and opencode-db.mjs and test-fixture-db.mjs both
-  // do it in their headers.
+  // the table is not a query.
   const prose = [
     '// No query in this file touches the `cred' + 'ential` table, which holds real secrets.',
     "const T = 'cred" + 'ential\'; // never selected',
@@ -429,80 +427,3 @@ test('every redaction is a known marker and one grep finds all of them', () => {
   });
   console.log(`[redaction-selftest] planted-secret inventory: ${JSON.stringify(inventory)}`);
 });
-
-// ---------- 8. optional integration with the renderer ----------
-
-// render-session.mjs is written in parallel by another task. This test must
-// pass whether or not it exists, so its absence is a SKIP with a reason, never a
-// failure and never a silent pass.
-const RENDER_SESSION_URL = new URL('./render-session.mjs', import.meta.url);
-const rendererPresent = existsSync(RENDER_SESSION_URL);
-
-test(
-  'a rendered session does not leak a planted secret (integration, skipped when the renderer is absent)',
-  { skip: rendererPresent ? false : 'scripts/lib/render-session.mjs does not exist yet; nothing to integrate with' },
-  async () => {
-    let renderSession;
-    try {
-      ({ renderSession } = await import('./render-session.mjs'));
-    } catch (err) {
-      // Belt and braces: existsSync said yes but the module cannot be loaded, or
-      // it was removed between the two reads. Either way there is no renderer
-      // to test, and saying so is more useful than a stack trace.
-      assert.fail(`render-session.mjs exists but could not be imported: ${err && err.message}`);
-    }
-    assert.equal(typeof renderSession, 'function', 'render-session.mjs does not export renderSession');
-
-    // The documented T6 signature is renderSession(session, messages, opts) and
-    // it returns a markdown string. Coupled to that signature on purpose: a
-    // redaction guard that adapts to whatever the renderer happens to be would
-    // not be a guard.
-    const epoch = 1_756_000_000_000;
-    const session = {
-      id: 'ses_selftest_0001',
-      title: 'planted secret session',
-      directory: '/fixture/project-a',
-      slug: 'planted-secret-session',
-      projectId: 'prj_fixture',
-      timeCreated: epoch,
-      timeUpdated: epoch + 5000,
-    };
-    const messages = [
-      {
-        id: 'msg_selftest_0',
-        sessionId: 'ses_selftest_0001',
-        type: 'user',
-        seq: 0,
-        timeCreated: epoch + 10,
-        timeUpdated: epoch + 10,
-        data: JSON.stringify({ time: { created: epoch + 10 }, text: `my key is ${AWS_KEY}`, files: [], agents: [] }),
-      },
-      {
-        id: 'msg_selftest_1',
-        sessionId: 'ses_selftest_0001',
-        type: 'assistant',
-        seq: 1,
-        timeCreated: epoch + 20,
-        timeUpdated: epoch + 20,
-        data: JSON.stringify({
-          time: { created: epoch + 20 },
-          agent: 'build',
-          model: { id: 'fixture-model-1' },
-          content: [{ type: 'text', text: `token=${GH_CLASSIC}`, state: { time: {} } }],
-          finish: 'stop',
-          cost: 0,
-        }),
-      },
-    ];
-
-    const rendered = renderSession(session, messages);
-    assert.equal(typeof rendered, 'string', 'renderSession did not return a string');
-    for (const [name, secret] of Object.entries(SAMPLES)) {
-      assert.equal(rendered.includes(secret), false, `a rendered session leaked the planted secret for "${name}"`);
-    }
-    // The marker's presence is the half of the assertion that keeps the test
-    // honest: a renderer that returned an empty string would pass every leak
-    // check above.
-    assert.ok(rendered.length > 0, 'the renderer produced an empty document, so "no leak" means nothing');
-  },
-);

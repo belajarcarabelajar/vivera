@@ -180,8 +180,7 @@ vivera/
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
 │   ├── sync-snippets.mjs                        # Drift guard: snippets/ <-> Snipset database
 │   ├── sync-snippets.test.mjs                   # Normalization + drift-detection tests
-│   ├── export-opencode-history.mjs              # OpenCode SQLite session history -> Obsidian notes mirror
-│   ├── lib/                                     # Exporter & chunk utilities (db, redact, note-name, sync-writer, etc.)
+│   ├── lib/                                     # Shared utilities (redact, chunk schema, note-name, sync-writer, etc.)
 │   │   ├── install-sandbox.mjs                  # Temp HOME and a limited PATH for the installer tests
 │   │   └── prereq.mjs                           # Reads scripts/install/tiers.tsv (shared with validate-skill.mjs)
 │   ├── plan-publish.mjs                         # Publish plans into the Obsidian vault (one-way mirror)
@@ -198,9 +197,7 @@ vivera/
 │   ├── graphify-sync.mjs                        # Union repo Markdown chunk nodes into graphify-out/graph.json
 │   ├── graphify-sync.test.mjs                   # Remap, idempotency, retention, and gate tests
 │   ├── vault-index.mjs                          # Vault index scanner & worklist generator
-│   ├── vault-index-verify.mjs                   # Verify coverage, privacy boundaries, and graphify read paths
 │   ├── vault-index-rebuild.mjs                  # Rebuild merged knowledge graph from structural + semantic chunks
-│   ├── vault-index-cluster.mjs                  # Leiden clustering pass for knowledge graph
 │   └── plan-mirror-check.sh                     # Local drift watchdog (systemd --user timer, check only)
 ├── snippets.manifest.json                      # Maps trigger prompts to Snipset database slots
 ├── plans.publish.json                          # Vault path, destination template, and project roots for the plan mirror (local config, gitignored; plans.publish.example.json is the committed template)
@@ -225,7 +222,6 @@ vivera/
 │   ├── progress-log-template.md                 # Persistent task state across sessions
 │   ├── adr-template.md                          # Architecture Decision Record with decision tree
 │   ├── subagent-contract-template.md            # Subagent task contract & parent audit gate
-│   ├── vault-index-subagent-contract.md         # Subagent contract for note reading & semantic extraction
 │   ├── code-review-template.md                  # Reviewer output contract & verdict
 │   ├── deep-research-report-template.md         # Citation-grounded long-form research report
 │   ├── follow-up-injection-template.md          # Session-close debt sweep & follow-up question
@@ -280,14 +276,16 @@ comment. Test files (`*.test.mjs`) sit next to the script they cover and are omi
 | `mermaid-batch.mjs` | Renders a list of `.mmd` files from stdin with a batch-and-bisect fallback, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
 | `puppeteer-browser.mjs` | Points `mmdc` at a system Chromium or Chrome on PATH when `~/.cache/puppeteer` is absent and `PUPPETEER_EXECUTABLE_PATH` is unset, shared by `render-diagrams.sh` and `validate-skill.mjs`. |
 | `skill-corpus.mjs` | Holds the list of phase skills and `readSkillCorpus`, which reads the master skill and the phase skills together for the validators. |
-| `make-graph-demo.py` | Regenerates `examples/graph-viewer-demo.html` from a seeded synthetic graph. Needs `numpy`. |
-| `vault-index-batch.mjs` | Splits the unindexed vault between parallel extraction subagents by bytes, not by file count. |
-| `vault-index-resolve-chunk.mjs` | Turns a subagent's draft chunk into a final chunk whose `source_file` paths are the exact ones from `batches.json`. |
-| `vault-index-ids.mjs` | Searches node ids that chunks already emitted, by substring, so a subagent does not invent a duplicate. |
 | `vault-index-merge.mjs` | Joins the chunks into one `graph.json`. |
-| `vault-index-fold-rationale.mjs` | Folds `rationale_for` edges into a `rationale` attribute on the target node. |
-| `vault-index-narration.py` | Reduces a rendered session transcript to its narration by dropping the tool-call traffic. |
-| `vault-index-cluster.py` | Computes communities over the merged vault graph, because `graphify cluster-only` refuses to write on it. |
+
+### Frozen surfaces
+
+These surfaces keep their code and tests, but get no new features and no deploys until the first tagged release (the freeze lifts once a `v*` tag exists):
+
+- The docs site under `apps/docs`.
+- The Windows installer: `install.ps1` and `scripts/install/windows-*.ps1`.
+- The container setup: `Dockerfile` and `.devcontainer`.
+- The release tooling: `scripts/bootstrap.sh` and `scripts/release`.
 
 ---
 
@@ -874,7 +872,6 @@ Agents can instantly scaffold structured artifacts using the ready-to-use templa
 - **[`progress-log-template.md`](templates/progress-log-template.md)**: Persistent task state log - the single source of truth for a task across multiple sessions (checklist, decisions, evidence trail, session log).
 - **[`adr-template.md`](templates/adr-template.md)**: Architecture Decision Record (ADR) - structured decision tree, alternative trade-off comparison, and consequences.
 - **[`subagent-contract-template.md`](templates/subagent-contract-template.md)**: Subagent task contract - task chunking and fan-out plan, strict scope isolation, permitted target files, gather & synthesize checkpoint, and parent diff audit gate sequence.
-- **[`vault-index-subagent-contract.md`](templates/vault-index-subagent-contract.md)**: Vault Index Extraction Contract (Semantic Layer). Subagent task contract for reading notes and emitting `concept` / attribute nodes into isolated chunk files with strict `source_file` provenance and chunk-schema validation.
 - **[`code-review-template.md`](templates/code-review-template.md)**: Reviewer output contract - Standards and Spec axes run as two parallel reviewers, rule attribution precedence, 8-point bug qualification filter, an assumed load recorded per review and a scale lens (check-then-write race, unbounded growth, query per item, per-process state) applied under that same filter, P0–P3 priority with confidence, exhaustiveness and dedupe rules, non-blocking design notes from a twelve-smell baseline, suggestion block format, and the binary `correct` / `not correct` verdict.
 - **[`deep-research-report-template.md`](templates/deep-research-report-template.md)**: Citation-grounded long-form research report - executive summary, `##` themes with `###` subsections, inline `[n]` citations, LaTeX notation, and a closing synthesis.
 - **[`follow-up-injection-template.md`](templates/follow-up-injection-template.md)**: Session-close debt sweep - harvested debt candidates, `NOW`/`LATER` classification, the ranked 3-5 follow-up set, the batched multi-select question, the execution record, and the deferred backlog.
@@ -937,8 +934,10 @@ claim with nothing to compare against is a comment, not a test.
 
 | Site | Old shape | Measured old | New |
 |---|---|---|---|
-| `check-anchors.mjs` `parseAnchors` | forward walk from every `[` | 250 KB → **3.0 s** | 1.4 ms |
+| `check-anchors.mjs` `parseAnchors` (retired 2026-10-19) | forward walk from every `[` | 250 KB → **3.0 s** | 1.4 ms |
 | `vault-index-structural.mjs` `stripFrontmatter` | `/^([\s\S]*?)^---[ \t]*(?:\r?\n\|$)/m` | 781 KB → **3.8 s**; 3 MB → 30 s | ~2 ms |
+
+The anchor auditor and its control test were retired on 2026-10-19 with the rest of the vault chunk tooling; its row stays as the measured record.
 
 Both had the same underlying cause: **an unbounded lazy prefix with no literal for
 the engine to jump to**. `[\s\S]*?` matches the empty string at every position, so
@@ -1756,9 +1755,8 @@ machine-specific path can run on a machine that is not this one:
 
 | Variable | Read by | Default |
 |---|---|---|
-| `OBSIDIAN_VAULT` | `spike-skipif-corpus.mjs` | `$HOME/Dokumen/Obsidian Vault` |
-| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs`, `vault-index-cluster.mjs` / `.py` | unset: the `graphifySitePackages` key in gitignored `local.config.json` (see `local.config.example.json`), else an actionable error |
-| `GRAPHIFY_PYTHON` | `vault-index.mjs`, `vault-index-cluster.mjs` | unset: the `graphifyPython` key in `local.config.json`, else an actionable error |
+| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs` | unset: the `graphifySitePackages` key in gitignored `local.config.json` (see `local.config.example.json`), else an actionable error |
+| `GRAPHIFY_PYTHON` | `vault-index.mjs` | unset: the `graphifyPython` key in `local.config.json`, else an actionable error |
 
 `bun test scripts/` **skips, rather than fails,** the tests whose premise the
 current host cannot satisfy: a checkout elsewhere, a machine without the
@@ -1946,123 +1944,13 @@ systemctl --user reset-failed plan-mirror-check.service
 
 ---
 
-## Exporting OpenCode History to Obsidian
-
-`scripts/export-opencode-history.mjs` provides a deterministic, one-way mirror from the local OpenCode SQLite session database (`~/.local/share/opencode/opencode.db`) into Obsidian markdown notes under `05 - Conversations/<Project>/`.
-
-```bash
-bun run export:history [options]
-bun scripts/export-opencode-history.mjs --dry-run --limit 5
-bun scripts/export-opencode-history.mjs --project-dir ~/vivera
-```
-
-### Safety and Content Guarantees
-
-| Concern | How it is handled |
-|---|---|
-| Read-Only SQLite Access | The database is opened with `readonly: true` (`openReadonly()`). No query touches the `credential` table; there is no code path capable of writing to the database. |
-| Inlined Attachments | Inline session images and binary attachments are hashed with sha256 and unpacked into `.attachments/`. Timestamps are preserved across runs (`restoreUnchangedAttachmentTimes`) so `obsidian-git` avoids false-positive commits on unchanged images. |
-| Spill Containment | Large tool execution outputs spilled to disk are read safely within an allowed root. Path traversal (`..` and symlinks pointing outside the root) is strictly refused, and output exceeding `maxBytes` is truncated with a clear visible marker. |
-| Secret Redaction | 8 distinct secret signatures are redacted from messages before writing: AWS access keys, GitHub classic & fine-grained PATs, PEM private keys, JWTs, Bearer tokens, TOTP codes, and generic API key assignments. |
-| Change Detection | `sync-writer.mjs` checks note contents before writing. A re-run against an unchanged database performs zero disk writes. |
-| Failure Containment | Writes are buffered: individual broken sessions are logged and skipped, but if more than half of the batch fails, the run exits non-zero having written nothing. |
-
-### CLI Options
-
-| Flag | Purpose |
-|---|---|
-| `--dry-run` | Render and resolve sessions without writing notes or attachments to disk. |
-| `--limit N` | Process at most N sessions, oldest first (0 processes none). |
-| `--vault PATH` | Destination Obsidian vault root (defaults to `$OPENCODE_EXPORT_VAULT`, else the `vaultRoot` key in `local.config.json`; see `local.config.example.json`). |
-| `--db PATH` | Path to the OpenCode SQLite database (defaults to `~/.local/share/opencode/opencode.db`). |
-| `--project-dir PATH` | Filter to export only sessions associated with PATH or its subdirectories. |
-
----
-
 ## Vault Indexing & Knowledge Graph Verification
 
 This repository maintains the extraction contracts, scripts, and verification gates for building a comprehensive knowledge graph of the local Obsidian vault and archived conversations without cloud extraction costs:
 
 - **Structural Layer (`vault-index-structural.mjs`)**: Local deterministic extraction of document nodes, ATX headings (`contains` edges), and `[[wikilinks]]` (`references` edges).
-- **Semantic Layer (`vault-index/semantic/`)**: Subagents extract high-signal `concept` nodes and decision attributes into isolated chunk files using [`templates/vault-index-subagent-contract.md`](templates/vault-index-subagent-contract.md), strictly adhering to `scripts/lib/chunk-schema.mjs`.
+- **Semantic Layer (`vault-index/semantic/`)**: Subagents extract high-signal `concept` nodes and decision attributes into isolated chunk files strictly adhering to `scripts/lib/chunk-schema.mjs`.
 - **Manifest (`vault-index/manifest.json`)**: Records tracked roots, sha256 content hashes, byte sizes, and node counts across 9,600+ lines.
-- **Community Clustering (`vault-index-cluster.mjs` / `.py`)**: Runs graphify's native Leiden community detection algorithm locally on the assembled graph.
-
-### Verification Gate (`scripts/vault-index-verify.mjs`)
-
-Task T12 verification proves that the hand-authored graph satisfies all structural, privacy, and query contracts:
-
-```bash
-bun scripts/vault-index-verify.mjs                 # full gate: coverage + privacy + live graphify read paths
-bun scripts/vault-index-verify.mjs --no-graphify   # fast gate: coverage and privacy rules only (~2s, CI-safe)
-```
-
-| Assertion | Contract |
-|---|---|
-| Coverage | Every path in the worklist is verified as a `source_file` in the graph or recorded in the manifest skip list. |
-| Privacy Boundary | Verifies that no node `source_file` falls under excluded sensitive directories (e.g. `Satset/`). Boundary violations fail loudly. |
-| Read Path Integrity | Verifies that `graphify query`, `graphify explain`, and `graphify path` execute with exit 0 and non-empty output against the assembled graph. |
-
----
-
-## Mathematical Utilities
-
-Three pure-function modules provide mathematical foundations for workflow decisions. They are deterministic, dependency-free, and fully tested with hand-computed fixtures.
-
-### Bayesian Confidence Aggregation (`scripts/bayesian-confidence.mjs`)
-
-Combines independent findings from multiple subagents into a single posterior probability using the odds form of Bayes' theorem:
-
-```
-posterior_odds = prior_odds × ∏(p_i / (1 - p_i))
-```
-
-| Export | Purpose |
-|---|---|
-| `combineConfidence(findings, prior)` | Combine independent findings into a posterior |
-| `classifyVerdict(posterior)` | Map posterior to `auto-merge`, `human-review`, or `reject` |
-| `weightOfEvidence(confidence)` | Log-likelihood ratio (nats) for a single finding |
-| `aggregateFindings(findings, prior)` | Full verdict object with counts |
-
-**Thresholds:** `>= 0.95` auto-merge, `>= 0.70` human review, `< 0.70` reject.
-
-```bash
-bun run math:bayes
-```
-
-### Formal Logic Invariants (`scripts/formal-invariants.mjs`)
-
-Structural predicates that must hold for a plan to be well-formed. Each returns `true` or a violation string.
-
-| Export | Invariant |
-|---|---|
-| `isAcyclic(graph)` | Dependency graph is a DAG (no cycles) |
-| `hasReferentialIntegrity(graph, taskIds)` | All dependencies reference existing tasks |
-| `hasMutuallyExclusiveScopes(scopes)` | No two tasks claim the same file |
-| `hasValidGateOrdering(tasks)` | Verification comes after implementation |
-| `hasUniqueIdempotencyKeys(tasks)` | No duplicate idempotency keys |
-| `validateInvariants(plan)` | Run all checks, return violation list |
-
-```bash
-bun run math:invariants
-```
-
-### Queueing Theory Batch Sizing (`scripts/queueing-batch.mjs`)
-
-M/M/c queue model for optimal subagent dispatch. Computes wait probabilities, queue lengths, and cost-minimizing batch sizes.
-
-| Export | Formula |
-|---|---|
-| `erlangC(λ, μ, c)` | Probability an arriving task must wait |
-| `averageQueueLength(λ, μ, c)` | Mean queue length `L_q` |
-| `averageWaitTime(λ, μ, c)` | Mean wait time `W_q = L_q / λ` |
-| `optimalBatchSize(λ, μ, costs)` | Cost-minimizing batch size |
-| `completionProbability(λ, μ, c, t)` | `P(T <= t)` |
-
-```bash
-bun run math:batch
-```
-
 
 ---
 
@@ -2095,73 +1983,6 @@ Reads a runner execution log and applies `[x]` ticks to plan `[ ]` step lines fo
 bun scripts/plan-mark-done.mjs --from runner.log docs/code-plan/plans/<plan>.md
 bun scripts/plan-mark-done.mjs --task T3 docs/code-plan/plans/<plan>.md  # assert, no evidence
 ```
-
----
-
-## Vault Chunk Quality Gates
-
-Scripts for maintaining correctness of the `vault-index/semantic/` chunk corpus produced by the vault-indexing subagent pipeline.
-
-### Anchor Audit (`scripts/check-anchors.mjs`)
-
-Verifies that every `[path:LN]` anchor in a semantic chunk points to a real line containing the quoted words verbatim. Four silent failure modes it prevents: vacuous zero-count (bracket imbalance swallows pattern), fabricated quotes (keyword overlap ≠ verbatim), synthetic harness padding (quotes sourced from `session-event: synthetic` blocks), and wrong anchor side (commentary before `[path:LN]` instead of after).
-
-```bash
-bun scripts/check-anchors.mjs rem-154          # one chunk, exit 1 on any failure
-bun scripts/check-anchors.mjs --all            # full corpus, report only
-bun scripts/check-anchors.mjs --all --quiet    # only chunks with failures
-```
-
-The anchor scan tracks `[` `]` depth, because a path's own trailing `[ses_…]`
-group has to close before the anchor does. That tracking used to walk forward from
-every `[` to find its closer, which is correct and **quadratic**: an unbalanced
-`[` sends the walk to the end of the string and the next `[` repeats the trip.
-Measured on `text [more words here and there\n` repeated (ordinary prose with a
-bracket and no closer, which is what a session note full of markdown links looks
-like when the closing bracket is outside the quoted span):
-
-| Input | Old | New |
-|---|---|---|
-| 63 KB | 123 ms | 2.3 ms |
-| 125 KB | 759 ms | 8.1 ms |
-| 250 KB | **3032 ms** | 1.4 ms |
-| 200 KB, fully unbalanced | **96 s** | not recorded |
-
-A bracket stack answers the same question in one pass, and is equivalent by
-construction: the `]` that brings depth to 0 from position `i` is exactly the
-bracket matching `i` under standard matching. `scripts/check-anchors-perf.test.mjs`
-asserts the equivalence over a 22-case corpus **and** re-measures the quadratic
-control, so the claim stays falsifiable instead of becoming a comment.
-
-### Anchor Repair (`scripts/repair-anchors.mjs`)
-
-Automatically repairs pre-§4a anchors that fail the verbatim test using a tiered strategy:
-
-| Tier | Strategy |
-|---|---|
-| T1 | Quote IS verbatim somewhere in the file: rewrite anchor to the correct line number. |
-| T2 | Quote wraps two consecutive lines: split into two anchors per §4a. |
-| T3 | Quote absent, but `source_location` names a supporting line: replace with a verbatim slice. |
-| T4 | Nothing verifiable: **left alone and reported, never guessed.** |
-
-```bash
-bun scripts/repair-anchors.mjs --survey            # tier counts, no writes
-bun scripts/repair-anchors.mjs --tier 1 --apply    # rewrite correct line numbers
-bun scripts/repair-anchors.mjs --chunk 037 --apply # one chunk, any tier
-```
-
-### Chunk Validation & Acceptance (`scripts/verify-chunk.sh`, `scripts/accept-chunks.sh`)
-
-Parent-side gather-and-synthesize helpers:
-
-```bash
-./scripts/verify-chunk.sh rem-090              # validate one chunk with cross-chunk link resolution
-./scripts/accept-chunks.sh rem-127 075         # dry run: gate + structural diff
-./scripts/accept-chunks.sh --commit -m 'msg' rem-127
-./scripts/accept-chunks.sh --commit            # all dirty chunks
-```
-
-`accept-chunks.sh` enforces that node ids, order, and links array match HEAD unless the chunk declared a case-3 deletion, the one change allowed to alter structure.
 
 ---
 
@@ -2209,12 +2030,6 @@ bun test scripts/
 
 # Trigger prompts vs the Snipset database (skips cleanly where no database exists)
 bun run snippets:check
-
-# Fast knowledge graph verification (coverage and boundary rules, ~2s)
-bun scripts/vault-index-verify.mjs --no-graphify
-
-# OpenCode history exporter dry run
-bun run export:history --dry-run --limit 1
 ```
 
 Or run the whole gate in order with `bun run ci`. For a commit or PR, run `bun run ci:targeted` instead and quote its `--rencana` plan; it chooses the full CI itself when the change needs it.

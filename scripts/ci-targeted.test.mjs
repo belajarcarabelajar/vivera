@@ -37,7 +37,7 @@ const testFiles = (plan) => {
 };
 
 describe('planChecks', () => {
-  test('a changed module selects its own test and the test of a module that imports it transitively', () => {
+  test('a changed module selects its own test and those of its transitive importers', () => {
     const plan = planChecks(['scripts/core.mjs'], INDEX);
     expect(plan.full).toBe(false);
     expect(testFiles(plan)).toEqual(['./scripts/core.test.mjs', './scripts/top.test.mjs']);
@@ -140,7 +140,7 @@ describe('planChecks', () => {
     expect(gen.cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
   });
 
-  test('a claude-agents file selects validate-agents and gen-sprite-agents instead of the full list', () => {
+  test('a claude-agents file selects validate-agents and gen-sprite-agents, not the full list', () => {
     const plan = planChecks(['.claude/agents/staid.md'], INDEX);
     expect(plan.full).toBe(false);
     expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules']);
@@ -173,10 +173,10 @@ describe('planChecks', () => {
     expect(names(planChecks(['snippets.manifest.json'], INDEX))).toContain('sync-snippets');
   });
 
-  test('a docs markdown file selects only the docs-gen warning, file-size, and the copy check', () => {
+  test('a docs markdown file selects only the docs-gen, file-size, and copy checks', () => {
     const plan = planChecks(['docs/guide.md'], INDEX);
     expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'copy-rules']);
+    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'docs-warn', 'copy-rules']);
     expect(plan.suites.at(-1).cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
     expect(plan.skipped.map((s) => s.name)).toEqual([
       'render-diagrams', 'validate-skill', 'validate-agents', 'gen-sprite-agents', 'tests', 'sync-snippets',
@@ -185,7 +185,7 @@ describe('planChecks', () => {
 
   test('a markdown file whose mermaid block changed selects render-diagrams', () => {
     const plan = planChecks(['docs/guide.md'], { sources: SOURCES, mermaidChanged: ['docs/guide.md'] });
-    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'copy-rules']);
+    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'docs-warn', 'copy-rules']);
   });
 
   test('a diagram source selects render-diagrams', () => {
@@ -193,15 +193,18 @@ describe('planChecks', () => {
     expect(names(planChecks(['mermaid.dark.config.json'], INDEX))).toContain('render-diagrams');
   });
 
-  test('the copy check uses the given base', () => {
-    const plan = planChecks(['docs/guide.md'], INDEX, { base: 'upstream/dev' });
-    expect(plan.suites.at(-1).cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'upstream/dev']);
+  test('the copy, size, and both docs checks run with their flags, targeted or full', () => {
+    for (const p of ['docs/guide.md', 'bun.lock']) {
+      const cmd = (n) => planChecks([p], INDEX, { base: 'u/d' }).suites.find((s) => s.name === n)?.cmd.slice(2);
+      expect(['copy-rules', 'file-size', 'docs-gen', 'docs-warn'].map(cmd))
+        .toEqual([['--diff', 'u/d'], ['--all', '--base', 'u/d'], ['--check', '--scope', 'en'], ['--warn']]);
+    }
   });
 
   test('bun.lock forces the full ci list', () => {
     const plan = planChecks(['bun.lock'], INDEX);
     expect(plan.full).toBe(true);
-    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'copy-rules']);
+    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'docs-warn', 'copy-rules']);
     expect(plan.suites[0].reasons.join('\n')).toContain('bun.lock');
     expect(plan.skipped).toEqual([]);
   });
@@ -243,15 +246,13 @@ describe('planChecks', () => {
 
   test('file-size runs before the tests and the snippet check', () => {
     const n = names(planChecks(['bun.lock'], INDEX));
-    expect(n.slice(n.indexOf('gen-sprite-agents'), -1)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
+    expect(n.slice(n.indexOf('gen-sprite-agents'), -3)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
   test('a docs-only change still runs file-size over the index', () => {
     const plan = planChecks(['docs/x.md'], { sources: {} });
     const suite = plan.suites.find((s) => s.name === 'file-size');
-    expect({ full: plan.full, cmd: suite?.cmd, reasons: suite?.reasons }).toEqual({
-      full: false, cmd: ['bun', 'scripts/check-file-size.mjs', '--all'], reasons: ['always: a few git calls over the index'],
-    });
+    expect({ full: plan.full, reasons: suite?.reasons }).toEqual({ full: false, reasons: ['always: a few git calls over the index'] });
     expect(plan.skipped.map((s) => s.name)).not.toContain('file-size');
   });
 
@@ -262,16 +263,14 @@ describe('planChecks', () => {
   });
 });
 
-describe('docs-gen warning check', () => {
-  const DOCS_GEN_CMD = ['bun', 'scripts/docs-gen.mjs', '--warn'];
+describe('docs-gen check', () => {
   const docsGen = (plan) => plan.suites.filter((s) => s.name === 'docs-gen');
 
   for (const p of ['README.md', 'docs/x.md', 'apps/docs/src/main.rs']) {
-    test(`a ${p} change adds the docs-gen warning and stays targeted`, () => {
+    test(`a ${p} change adds the docs-gen check and stays targeted`, () => {
       const plan = planChecks([p], INDEX);
       const [suite] = docsGen(plan);
-      expect({ full: plan.full, cmd: suite?.cmd }).toEqual({ full: false, cmd: DOCS_GEN_CMD });
-      expect(suite.reasons.join('\n')).toContain(p);
+      expect([plan.full, suite.reasons.join('\n').includes(p)]).toEqual([false, true]);
     });
   }
 
@@ -394,7 +393,7 @@ describe('package.json limited to scripts', () => {
     expect(scriptsOnlyChange('', pkg({ ci: 'a' }))).toBe(false);
   });
 
-  test('a scripts-only package.json change is targeted and selects the tests that read package.json', () => {
+  test('a scripts-only package.json change is targeted, selecting the tests that read package.json', () => {
     const sources = { 'scripts/pkg.test.mjs': "readFileSync('package.json')", 'scripts/other.test.mjs': 'nothing' };
     const plan = planChecks(['package.json'], { sources, packageScriptsOnly: ['package.json'] });
     expect(plan.full).toBe(false);
@@ -410,7 +409,7 @@ describe('package.json limited to scripts', () => {
 describe('untracked local file', () => {
   const BAK = 'plan.issues.json.bak-20261012-other-session';
 
-  test('an untracked non-code file outside the recognized paths is ignored, not a reason for the full ci', () => {
+  test('an untracked non-code file outside the recognized paths is ignored, not a full ci reason', () => {
     const plan = planChecks([BAK, 'docs/note.md'], { sources: {}, untracked: [BAK] });
     expect(plan.full).toBe(false);
     expect(plan.ignored.map((i) => i.path)).toEqual([BAK]);

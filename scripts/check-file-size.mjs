@@ -12,6 +12,15 @@
 //   --staged          paths from `git diff --cached` (added, copied, modified, renamed)
 //   --all             every index path, plus stale ceilings in the baseline
 //   --write-baseline  rewrite the baseline from the index (seed or tighten)
+//   --all --base <ref>  also compare the baseline at HEAD with the one at the
+//                     merge-base of <ref> and HEAD (see RAISES below)
+//   --commit-msg <file>  for .githooks/commit-msg: compare the staged baseline
+//                     with HEAD's, judging only RAISES, not sizes
+//
+// RAISES. A ceiling may rise, or a path gain one, only when a commit message
+// carries a line `size-raise: <plan-id> <reason>` naming an existing
+// docs/code-plan/plans/<plan-id>.md (owner decision 2026-10-19). That directory
+// is local and gitignored, so where it does not exist any well-formed id passes.
 //
 // SKIPPED. Symlinks (mode 120000), submodules (160000), binary files (`i/-text`
 // in `git ls-files --eol`), and paths whose `size-gate` attribute is unset, that
@@ -23,7 +32,7 @@
 //
 // defer: tokens are bytes / 4, not a tokenizer, so code with long identifiers and Indonesian prose can be off; upgrade when a measured tokenizer comparison shows a file judged wrongly by more than 20 percent
 //
-// Usage: bun scripts/check-file-size.mjs [--staged | --all | --write-baseline] [--root <dir>] [--baseline <path>]
+// Usage: bun scripts/check-file-size.mjs [--staged | --all [--base <ref>] | --write-baseline | --commit-msg <file>] [--root <dir>] [--baseline <path>]
 // Exit: 0 pass, 1 violation or stale ceiling, 2 usage error, not a git repository,
 // invalid baseline, or a git failure.
 
@@ -37,8 +46,10 @@ export const LIMIT_BYTES = 20000;
 const LIMIT_TOKENS = LIMIT_BYTES / 4;
 const BASELINE_REL = 'scripts/file-size-baseline.json';
 const REWRITE_CMD = 'bun scripts/check-file-size.mjs --write-baseline';
-const MODES = ['--staged', '--all', '--write-baseline'];
-const USAGE = 'usage: bun scripts/check-file-size.mjs [--staged | --all | --write-baseline] [--root <dir>] [--baseline <path>]';
+const PLANS_REL = 'docs/code-plan/plans';
+const PLAN_ID = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MODES = ['--staged', '--all', '--write-baseline', '--commit-msg'];
+const USAGE = 'usage: bun scripts/check-file-size.mjs [--staged | --all [--base <ref>] | --write-baseline | --commit-msg <file>] [--root <dir>] [--baseline <path>]';
 
 export function tokensOf(bytes) {
   return Math.ceil(bytes / 4);
@@ -97,6 +108,78 @@ export function tightenBaseline(entries, baseline) {
   return next;
 }
 
+// Every path whose ceiling rose or appeared between two baselines (null means none).
+export function raisedCeilings(before, after) {
+  return Object.keys(after ?? {}).sort()
+    .filter((p) => ceilingOf(before, p) === null || after[p] > before[p])
+    .map((p) => ({ path: p, from: ceilingOf(before, p), to: after[p] }));
+}
+
+// Why the size-raise lines in `text` do not cover a raise; empty means they do.
+// `plansDir` null means there is no plans directory, so only the id's form counts.
+export function sizeRaiseProblems(text, plansDir) {
+  const ids = [...text.matchAll(/^size-raise:[ \t]*(\S*)/gm)].map((m) => m[1]);
+  if (!ids.length) return ['no line starting with size-raise: in the commit message'];
+  const problems = [];
+  for (const id of ids) {
+    if (!PLAN_ID.test(id)) problems.push(`size-raise: "${id}" is not a plan id like 2026-10-19-short-name`);
+    else if (plansDir && !fs.existsSync(path.join(plansDir, `${id}.md`))) problems.push(`size-raise: ${id} names a missing plan, ${PLANS_REL}/${id}.md`);
+  }
+  return problems;
+}
+
+function renderRaises(raises, problems, where) {
+  return [
+    `[size-gate] blocked: ceilings raised in ${BASELINE_REL}${where} without a valid size-raise line:`,
+    ...raises.map((r) => `  ${r.path}: ${r.from === null ? 'no ceiling' : `ceiling ${r.from}`} -> ${r.to} bytes`),
+    ...problems.map((p) => `  ${p}`),
+    'Split the file instead, or add this line to the message of the commit that raises it:',
+    `  size-raise: <plan-id> <why the split waits>, where ${PLANS_REL}/<plan-id>.md exists`,
+  ].join('\n');
+}
+
+// This checkout's plans, else the main checkout's: a session worktree has none
+// of its own because the directory is gitignored. Null when neither exists.
+function plansDir(root) {
+  const common = gitText(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).trim();
+  return [root, path.dirname(common)].map((d) => path.join(d, PLANS_REL)).find((d) => fs.existsSync(d)) ?? null;
+}
+
+// Exit code for a raise check; prints the report or the no-plans-directory note.
+// `only` limits the check to those paths, `where` names the commit in the report.
+function judgeRaises(root, before, after, text, { only = null, where = '' } = {}) {
+  const raises = raisedCeilings(before, after).filter((r) => !only || only.has(r.path));
+  if (!raises.length) return 0;
+  const dir = plansDir(root);
+  const problems = sizeRaiseProblems(text, dir);
+  if (problems.length) return (err(renderRaises(raises, problems, where)), 1);
+  if (!dir) out(`[size-gate] no ${PLANS_REL} here or in the main checkout, so a well-formed plan id covers the raise`);
+  return 0;
+}
+
+// Each commit since the merge-base must cover, in its own message, the raises it
+// makes; a raise a later commit takes back is not judged, so only net raises count.
+function judgeBranch(root, base) {
+  const mergeBase = gitText(root, ['merge-base', base, 'HEAD']).trim();
+  const net = readBaselineAt(root, mergeBase);
+  const head = readBaselineAt(root, 'HEAD');
+  if (net.error || head.error) return usageError(net.error ?? head.error);
+  const only = new Set(raisedCeilings(net.baseline, head.baseline).map((r) => r.path));
+  if (!only.size) return 0;
+  const log = gitText(root, ['log', '--reverse', '--format=%H%x00%B%x00', `${mergeBase}..HEAD`, '--', BASELINE_REL]);
+  const fields = nulFields(log);
+  let status = 0;
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const [sha, msg] = [fields[i].trim(), fields[i + 1]];
+    const before = readBaselineAt(root, `${sha}^`);
+    const after = readBaselineAt(root, sha);
+    if (before.error || after.error) return usageError(before.error ?? after.error);
+    const where = ` by ${sha.slice(0, 7)} ${msg.split('\n')[0]}`;
+    status = Math.max(status, judgeRaises(root, before.baseline, after.baseline, msg, { only, where }));
+  }
+  return status;
+}
+
 const ADVICE = {
   test: [
     'Split by describe concern into <name>-<concern>.test.mjs beside it, as vault-index-structural.test.mjs',
@@ -109,7 +192,7 @@ const ADVICE = {
   ],
   skill: [
     'Move a self-contained section into a phase skill or references/<topic>.md, leave a one-line pointer,',
-    'then update every scripts/validate-skill.mjs needle that names the old file.',
+    'then run bun scripts/validate-skill.mjs (its invariants match the moved text in any skill file).',
   ],
   markdown: ['Split at H2 headings into sibling files and keep a short index of links in the original.'],
   data: ['Split by key or range into several files loaded together, or mark the file generated if a script writes it.'],
@@ -125,7 +208,7 @@ const FOOTER = [
   '  2. Stage the new files and commit again.',
   "If the file is a lockfile, generated, or vendored: add '<path> -size-gate' to .gitattributes instead.",
   `If splitting is out of scope for this change: raise its ceiling in ${BASELINE_REL} in this`,
-  '  commit and name the follow-up in the PR body. The raise is visible in review.',
+  '  commit and add a line size-raise: <plan-id> <reason> to its message, naming the plan of the follow-up.',
   'A renamed file counts as new: move its ceiling to the new path in the same commit.',
 ];
 
@@ -225,12 +308,12 @@ function readBaseline(file) {
   return parseBaseline(text, file);
 }
 
-// The staged copy, so a ceiling raise counts only when it is part of the commit,
-// exactly like the sizes it is compared with. Not in the index means no ceilings.
-function readStagedBaseline(root) {
-  const r = spawnSync('git', ['cat-file', 'blob', `:${BASELINE_REL}`], { cwd: root, encoding: 'utf8' });
+// The staged copy by default, so a ceiling raise counts only when it is part of
+// the commit, exactly like the sizes it is compared with. Absent means no ceilings.
+function readBaselineAt(root, rev = '') {
+  const r = spawnSync('git', ['cat-file', 'blob', `${rev}:${BASELINE_REL}`], { cwd: root, encoding: 'utf8' });
   if (r.status !== 0) return { baseline: null };
-  return parseBaseline(r.stdout, `${path.join(root, BASELINE_REL)} (staged copy)`);
+  return parseBaseline(r.stdout, `${path.join(root, BASELINE_REL)} (${rev || 'staged'} copy)`);
 }
 
 function parseBaseline(text, file) {
@@ -246,21 +329,23 @@ function parseBaseline(text, file) {
 }
 
 function parseArgs(argv) {
-  const opts = { mode: null, root: null, baseline: null };
+  const opts = { mode: null, root: null, baseline: null, base: null, msg: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (MODES.includes(a)) {
       if (opts.mode && opts.mode !== a) return { error: `pick one of ${MODES.join(', ')}` };
       opts.mode = a;
-    } else if (a === '--root' || a === '--baseline') {
+    }
+    if (['--root', '--baseline', '--base', '--commit-msg'].includes(a)) {
       const v = argv[++i];
       if (v === undefined || v.startsWith('-')) return { error: `${a} needs a value, got: ${v ?? 'nothing'}` };
-      opts[a.slice(2)] = v;
-    } else {
+      opts[a === '--commit-msg' ? 'msg' : a.slice(2)] = v;
+    } else if (!MODES.includes(a)) {
       return { error: `unknown argument: ${a}` };
     }
   }
   opts.mode ??= '--staged';
+  if (opts.base && opts.mode !== '--all') return { error: '--base only works with --all' };
   return opts;
 }
 
@@ -276,13 +361,20 @@ export function main(argv, cwd = process.cwd()) {
   if (!root) return usageError(`not a git repository: ${dir}`);
   const file = opts.baseline ? path.resolve(cwd, opts.baseline) : path.join(root, BASELINE_REL);
 
+  if (opts.mode === '--commit-msg') {
+    const staged = readBaselineAt(root);
+    const head = readBaselineAt(root, 'HEAD');
+    if (staged.error || head.error) return usageError(staged.error ?? head.error);
+    return judgeRaises(root, head.baseline, staged.baseline, fs.readFileSync(path.resolve(cwd, opts.msg), 'utf8'));
+  }
+
   let only = null;
   if (opts.mode === '--staged') {
     only = stagedPaths(root);
     if (!only.length) return 0;
   }
   // --write-baseline edits the working-tree file; judging reads what is staged.
-  const { baseline, error } = opts.baseline || opts.mode === '--write-baseline' ? readBaseline(file) : readStagedBaseline(root);
+  const { baseline, error } = opts.baseline || opts.mode === '--write-baseline' ? readBaseline(file) : readBaselineAt(root);
   if (error) return usageError(error);
   const entries = indexEntries(root, only);
   const overLimit = entries.filter((e) => e.bytes > LIMIT_BYTES).length;
@@ -300,8 +392,9 @@ export function main(argv, cwd = process.cwd()) {
   if (violations.length) err(renderReport(violations, opts.mode === '--staged' ? 'staged' : ''));
   const stale = opts.mode === '--all' ? staleCeilings(entries, baseline) : [];
   if (stale.length) err(renderStale(stale, path.relative(root, file) || file));
+  const raised = opts.base ? judgeBranch(root, opts.base) : 0;
   out(`checked ${checked} files, ${violations.length} over the limit`);
-  return violations.length || stale.length ? 1 : 0;
+  return violations.length || stale.length || raised ? 1 : 0;
 }
 
 // A git or filesystem failure is not a size verdict, so it is exit 2 (the hook skips).

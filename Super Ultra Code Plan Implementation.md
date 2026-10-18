@@ -1,6 +1,6 @@
 ---
 name: super-ultra-code-plan
-description: Ultimate all-in-one AI coding pipeline for complex development tasks. Covers idea, design, spike, planning, strict TDD, subagent-first execution with high fan-out and chunk gathering, systematic debugging, verification gates, and finishing.
+description: Ultimate all-in-one AI coding pipeline for complex development tasks. Covers idea, design, spike, planning, strict TDD, proportional subagent fan-out and chunk gathering, systematic debugging, verification gates, and finishing.
 triggers:
   - coding task
   - feature implementation
@@ -14,6 +14,7 @@ triggers:
 Unified pipeline for AI coding agents: idea → design → plan → implementation → verification. Merges brainstorming, writing-plans, TDD, verification-before-completion.
 ## HARD GATE
 No implementation, no scaffolding, no code — until human partner approves stated intent. Applies to every path, every task. Ceremony scales with task size. Approval gate never scales down.
+Approval is never skipped, only batched: independent non-risky gates may share one question-tool call (`sucp-rules`, Confirmation Protocol).
 Every approval gate is asked through the Confirmation Protocol in `sucp-rules`: a call to the harness's own question tool with ready-made options, never a plain-text question that makes the user type the answer.
 
 ## ⚖️ Instruction Precedence

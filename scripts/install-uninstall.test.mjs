@@ -45,10 +45,13 @@ const kinds = (sb) => sb.snapshot().map((line) => line.split('|')[1]);
 const uninstall = (sb, ...args) => sb.run(['--uninstall', ...args]);
 
 // The number of links a bare install makes: ai-config's one, plus the agents package (master file,
-// one per phase skill, templates, examples, two mermaid configs).
+// one per phase skill, one per phase skill that has a references dir, templates, examples, two
+// mermaid configs).
 function linkCount(sb) {
-  const phases = fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).length;
-  return 1 + phases + 5;
+  const skills = path.join(sb.repo, 'skills');
+  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('sucp-'));
+  const withRefs = phases.filter((n) => fs.existsSync(path.join(skills, n, 'references'))).length;
+  return 1 + phases.length + withRefs + 5;
 }
 
 describe('uninstall: removing links and directories', () => {

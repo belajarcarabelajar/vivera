@@ -13,7 +13,7 @@ name: CI Validation
 # instead, and locally they are strictly stronger because they can see the real
 # vault, the real Snipset database, and the real working tree:
 #
-#     bun run ci        # render-diagrams + validate-skill + agents + tests + snippets
+#     bun run ci        # render-diagrams + validate-skill + agents + file size + tests + snippets
 #
 # `workflow_dispatch` is retained deliberately. It costs nothing until someone
 # presses Run, which makes this file documentation of what CI would do plus a
@@ -109,6 +109,9 @@ jobs:
 
       - name: Check the sprite agents match their role templates
         run: bun scripts/gen-sprite-agents.mjs --check
+
+      - name: Check no tracked file is over 5,000 tokens or its ceiling
+        run: bun scripts/check-file-size.mjs --all
 
       - name: Run Unit Tests
         run: bun test --timeout 30000 scripts/

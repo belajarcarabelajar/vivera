@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
+import { assertSandbox, makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const IDS = [
@@ -311,14 +311,15 @@ describe('entries', () => {
     const lines = entryLines(sb, 'agents');
     const phases = phaseDirs(sb);
     expect(phases.length).toBeGreaterThan(0);
-    expect(lines.length).toBe(5 + phases.length);
+    const entries = phaseEntries(sb.repo);
+    expect(lines.length).toBe(5 + entries.length);
     const pkg = at(sb, `.agents/skills/${PKG}`);
     const master = path.join(sb.repo, MASTER);
     expect(lines[0]).toEqual([master, `${pkg}/SKILL.md`]);
-    expect(lines.slice(1, 1 + phases.length)).toEqual(
-      phases.map((n) => [path.join(sb.repo, 'skills', n, 'SKILL.md'), at(sb, `.agents/skills/${n}/SKILL.md`)]),
+    expect(lines.slice(1, 1 + entries.length)).toEqual(
+      entries.map((e) => [path.join(sb.repo, 'skills', e), at(sb, `.agents/skills/${e}`)]),
     );
-    expect(lines.slice(1 + phases.length)).toEqual([
+    expect(lines.slice(1 + entries.length)).toEqual([
       [path.join(sb.repo, 'templates'), `${pkg}/templates`],
       [path.join(sb.repo, 'examples'), `${pkg}/examples`],
       [path.join(sb.repo, 'mermaid.config.json'), `${pkg}/mermaid.config.json`],
@@ -333,7 +334,7 @@ describe('entries', () => {
       const dir = table(sb, 'target_skills_dir', id).out;
       const siblings = path.dirname(dir);
       const lines = entryLines(sb, id);
-      expect({ id, count: lines.length }).toEqual({ id, count: 5 + phases.size });
+      expect({ id, count: lines.length }).toEqual({ id, count: 5 + phaseEntries(sb.repo).length });
       for (const [desired, dest] of lines) {
         expect(fs.existsSync(desired)).toBe(true);
         const underPackage = dest.startsWith(`${dir}/`);

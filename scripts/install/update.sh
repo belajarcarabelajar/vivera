@@ -37,6 +37,7 @@ prune_stale_skills() {
         continue
       fi
       rm -f "$skill_md"
+      prune_stale_references "$entry"
       if marker_regular "$entry/.vivera-managed"; then
         rm -f "$entry/.vivera-managed"
       fi
@@ -47,6 +48,32 @@ prune_stale_skills() {
       fi
     done 3<<< "$(stale_phase_dirs "$id")"
   done
+}
+
+# Removes <entry>/references when the installer placed it, judged like SKILL.md above: in a marked
+# copy dir a real directory whose digest still matches the marker's record, otherwise a vivera link.
+# Anything else is the user's and stays, so the rmdir after this keeps the directory.
+prune_stale_references() {
+  local entry="$1"
+  local refs="$1/references"
+  local recorded current
+  if [ ! -e "$refs" ] && [ ! -L "$refs" ]; then
+    return 0
+  fi
+  if marker_regular "$entry/.vivera-managed"; then
+    if [ -L "$refs" ] || [ ! -d "$refs" ]; then
+      return 0
+    fi
+    recorded="$(recorded_digest "$refs")"
+    current="$(entry_digest "$refs")"
+    if [ -n "$current" ] && [ "$current" = "$recorded" ]; then
+      rm -rf "$refs"
+    fi
+    return 0
+  fi
+  case "$(classify_dest "$refs" "$REPO_DIR/skills/$(basename "$entry")/references")" in
+    ok | ours-stale) rm -f "$refs" ;;
+  esac
 }
 
 # The closing line is sprites_exit_if_failed's to change: it ends the run with a failure, or with a count

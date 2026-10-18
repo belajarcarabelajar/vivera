@@ -16,7 +16,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const VIA = 'is reached through a symlinked directory; left alone';
@@ -64,7 +64,6 @@ function sandbox(tools = []) {
 }
 
 const at = (sb, rel) => path.join(sb.home, rel);
-const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
 const links = (lines) => lines.filter((l) => l.split('|')[1] === 'l');
 const lastLine = (out) => out.trim().split('\n').pop();
 
@@ -73,7 +72,7 @@ function destsIn(sb, skillsRel) {
   const dir = at(sb, skillsRel);
   return [
     ...ENTRIES.map((e) => path.join(dir, PACKAGE, e)),
-    ...phases(sb).map((p) => path.join(dir, p, 'SKILL.md')),
+    ...phaseEntries(sb.repo).map((e) => path.join(dir, e)),
   ];
 }
 

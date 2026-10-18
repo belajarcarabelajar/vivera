@@ -32,6 +32,7 @@ import {
   checkGateCatalog,
 } from './validate-lib.mjs';
 import * as lib from './validate-lib.mjs';
+import { readSkillText } from './skill-corpus.mjs';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -681,6 +682,5 @@ test('checkGateCatalog stops reading at the first line that is not a table row',
 });
 
 test('the real gate catalog in skills/sucp-rules/SKILL.md has a valid shape', () => {
-  const file = path.join(import.meta.dirname, '..', 'skills', 'sucp-rules', 'SKILL.md');
-  assert.deepEqual(checkGateCatalog(fs.readFileSync(file, 'utf8')), []);
+  assert.deepEqual(checkGateCatalog(readSkillText(path.join(import.meta.dirname, '..'), 'skills/sucp-rules/SKILL.md')), []);
 });

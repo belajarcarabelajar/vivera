@@ -17,6 +17,8 @@ is merely outdated (still exactly what this script placed) is refreshed without 
 through a linked directory (a dotfiles repo behind ~\.claude\skills), a link there and a destination that does
 not exist yet included, is left alone and counted on the last line, as is anything inside this checkout. Sprite agents are NOT rendered here (the generator needs bun):
 use ./install.sh from WSL or Git Bash. -Tier is accepted and ignored: skills only at every tier.
+Like install.sh, an install or -Update now enables the repo's git hooks (core.hooksPath=.githooks) in a checkout
+with its own .git; the hook needs bash from Git for Windows and bun, and is unverified on Windows.
 
 Run it with a bypass that lasts for this one process, and never change the machine's policy:
 

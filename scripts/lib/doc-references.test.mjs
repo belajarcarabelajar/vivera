@@ -112,3 +112,33 @@ test('a fully valid line produces no findings', () => {
   expect(findings).toEqual([]);
   expect(checked).toBe(3);
 });
+
+test('a flag counts only as a whole dashed token, so English words in the source do not pass', () => {
+  const f = fixture(`${TICK}bun scripts/size.mjs --length --return --each${TICK}\n`);
+  writeFileSync(path.join(f.root, 'scripts', 'size.mjs'), 'for (const each of list) { if (each.length) return each; }\n');
+  const { findings } = checkDocReferences(f);
+  expect(findings.map((x) => x.message)).toEqual([
+    'scripts/size.mjs has no flag --length',
+    'scripts/size.mjs has no flag --return',
+    'scripts/size.mjs has no flag --each',
+  ]);
+});
+
+test('a dashed flag in a prefix test, a template, or a regex passes, and a longer flag does not stand in for a shorter one', () => {
+  const f = fixture(`${TICK}bun scripts/forms.mjs --tier x --out y --base z --all --dry${TICK}\n`);
+  writeFileSync(
+    path.join(f.root, 'scripts', 'forms.mjs'),
+    "a.startsWith('--tier=');\nconst u = `--out=${o}`;\nif (/^--base$/.test(a)) {}\nconst s = '--all-files --dry-run';\n",
+  );
+  const { findings } = checkDocReferences(f);
+  expect(findings.map((x) => x.message)).toEqual([
+    'scripts/forms.mjs has no flag --all',
+    'scripts/forms.mjs has no flag --dry',
+  ]);
+});
+
+test('an unprefixed npm name is checked against package.json unless it is a generic other-project example', () => {
+  const { findings, checked } = run(`${TICK}bun run metricz${TICK}, ${TICK}bun run test${TICK}, ${TICK}bun run lint${TICK}\n`);
+  expect(checked).toBe(2);
+  expect(findings.map((x) => x.message)).toEqual(['bun run metricz: no such script in package.json']);
+});

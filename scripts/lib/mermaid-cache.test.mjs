@@ -10,6 +10,7 @@ import {
   partition,
   recordResults,
   rendererVersion,
+  makeGlobalVersion,
 } from './mermaid-cache.mjs';
 
 let dir;
@@ -104,19 +105,37 @@ test('recordResults removes a stale entry when the same key now fails', () => {
   expect(cache).toEqual({});
 });
 
-test('rendererVersion reads the mermaid-cli package version', () => {
-  const pkgDir = path.join(dir, 'node_modules', '@mermaid-js', 'mermaid-cli');
-  fs.mkdirSync(pkgDir, { recursive: true });
-  fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name: '@mermaid-js/mermaid-cli', version: '11.4.2' }));
-  expect(rendererVersion(dir)).toBe('11.4.2');
+const writePkg = (rel, version) => {
+  fs.mkdirSync(path.join(dir, rel), { recursive: true });
+  fs.writeFileSync(path.join(dir, rel, 'package.json'), JSON.stringify({ version }));
+};
+
+test('rendererVersion names both the mermaid-cli and the mermaid package versions', () => {
+  writePkg('node_modules/@mermaid-js/mermaid-cli', '11.4.2');
+  writePkg('node_modules/mermaid', '11.12.0');
+  const noGlobal = () => { throw new Error('a local mermaid-cli must not ask the global mmdc'); };
+  expect(rendererVersion(dir, { globalVersion: noGlobal })).toBe('mermaid-cli@11.4.2 mermaid@11.12.0');
+  writePkg('node_modules/mermaid', '11.13.0');
+  expect(rendererVersion(dir, { globalVersion: noGlobal })).toBe('mermaid-cli@11.4.2 mermaid@11.13.0');
 });
 
-test('rendererVersion is unknown when the package is missing or unreadable', () => {
-  expect(rendererVersion(dir)).toBe('unknown');
-  const pkgDir = path.join(dir, 'node_modules', '@mermaid-js', 'mermaid-cli');
-  fs.mkdirSync(pkgDir, { recursive: true });
-  fs.writeFileSync(path.join(pkgDir, 'package.json'), 'not json');
-  expect(rendererVersion(dir)).toBe('unknown');
+test('rendererVersion marks an unreadable local package as unknown', () => {
+  writePkg('node_modules/@mermaid-js/mermaid-cli', '11.4.2');
+  fs.writeFileSync(path.join(dir, 'node_modules/@mermaid-js/mermaid-cli/package.json'), 'not json');
+  expect(rendererVersion(dir, { globalVersion: () => 'x' })).toBe('mermaid-cli@unknown mermaid@unknown');
+});
+
+test('rendererVersion uses the global mmdc version when there is no local mermaid-cli', () => {
+  expect(rendererVersion(dir, { globalVersion: () => '11.4.2' })).toBe('global mmdc@11.4.2');
+});
+
+test('makeGlobalVersion asks once per process and reports a failing lookup as unknown', () => {
+  let calls = 0;
+  const lookup = makeGlobalVersion(() => { calls += 1; return '11.4.2\n'; });
+  expect(lookup()).toBe('11.4.2');
+  expect(lookup()).toBe('11.4.2');
+  expect(calls).toBe(1);
+  expect(makeGlobalVersion(() => { throw new Error('no mmdc'); })()).toBe('unknown');
 });
 
 test('DEFAULT_CACHE_REL points inside node_modules/.cache', () => {

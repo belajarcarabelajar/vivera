@@ -14,9 +14,9 @@ import path from 'node:path';
  */
 export const INVARIANTS = [
   { label: 'master skill forbids subagent git writes', text: 'Git Ownership Is Parent-Only' },
-  { label: 'master skill requires per-merge verification', text: 'pr-registry.mjs surface' },
-  { label: 'master skill requires a body file', text: '--body-file' },
-  { label: 'master skill claims a derived branch', text: 'pr-registry.mjs claim' },
+  { label: 'master skill requires per-merge verification', text: 'Verify locally after every single merge' },
+  { label: 'master skill requires a body file', text: 'Write the body to a file, post with `--body-file`' },
+  { label: 'master skill claims a derived branch', text: 'The branch name and the worktree path are **derived by a tool, never chosen by the agent**' },
   { label: 'master skill states the unprefixed branch shape', text: '`<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**' },
   { label: 'dismissal is not approval', text: 'A dismissed question is not an approval' },
   { label: 'dismissal quotes the HARD GATE accurately', text: 'no implementation, scaffolding or code, as the HARD GATE says' },
@@ -41,6 +41,14 @@ export const INVARIANTS = [
   { label: 'automatic continuations are capped', text: 'Automatic continuations are capped' },
   { label: 'failed entry check still writes nothing', text: 'A failed check still writes nothing' },
   { label: 'the sweep question needs an interactive client', text: 'only when the harness has an interactive client' },
+  { label: 'every approval gate goes through the Confirmation Protocol', text: 'Every approval gate is asked through the Confirmation Protocol' },
+  { label: 'a red result is never turned green by weakening the check', text: 'Never turn a red result green by weakening the check' },
+  { label: 'no commit or push directly to the base branch', text: 'Committing or pushing directly to the base branch' },
+  { label: 'merging into the base branch waits for a human', text: 'The standing gate is on **merging into the base branch**' },
+  { label: 'four early endings are refused while work is owed', text: 'Four endings are refused while work is owed' },
+  { label: 'the handoff is written right after the entry gate', text: 'the first file the run writes is the handoff' },
+  { label: 'a stale running handoff means the run died', text: 'still says `running` with no live process' },
+  { label: 'the sweep asks the closeout gate before the final merge', text: "before the merge of the session's final PR" },
 ];
 
 /** Invariants whose sentence appears nowhere in the corpus. Empty means fine. */

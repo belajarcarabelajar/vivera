@@ -8,7 +8,8 @@
 // always safe and just costs one full render on the next run.
 
 import { createHash } from 'node:crypto';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { writeFileAtomic } from './atomic-write.mjs';
 
@@ -16,8 +17,9 @@ export const DEFAULT_CACHE_REL = path.join('node_modules', '.cache', 'vivera', '
 
 /**
  * sha256 hex over the block source, the mermaid config file contents, and the
- * mmdc version. JSON-encoding the triple keeps field boundaries, so text that
- * moves from one field to the next cannot produce the same key.
+ * renderer version (see rendererVersion). JSON-encoding the triple keeps field
+ * boundaries, so text that moves from one field to the next cannot produce the
+ * same key.
  */
 export function cacheKey({ block, config, rendererVersion: version }) {
   return createHash('sha256')
@@ -66,12 +68,39 @@ export function recordResults(cache, results) {
   return cache;
 }
 
-/** Version of the installed @mermaid-js/mermaid-cli, or 'unknown'. */
-export function rendererVersion(root) {
+function packageVersion(file) {
   try {
-    const pkg = JSON.parse(readFileSync(path.join(root, 'node_modules', '@mermaid-js', 'mermaid-cli', 'package.json'), 'utf8'));
+    const pkg = JSON.parse(readFileSync(file, 'utf8'));
     return typeof pkg.version === 'string' && pkg.version ? pkg.version : 'unknown';
   } catch {
     return 'unknown';
   }
+}
+
+/** Wrap a version lookup so it runs at most once per process; a throw reads as 'unknown'. */
+export function makeGlobalVersion(run) {
+  let value;
+  return () => {
+    if (value === undefined) {
+      try {
+        value = String(run()).trim() || 'unknown';
+      } catch {
+        value = 'unknown';
+      }
+    }
+    return value;
+  };
+}
+
+const globalMmdcVersion = makeGlobalVersion(() => execSync('mmdc --version', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+
+/**
+ * Everything that versions the renderer: the local mermaid-cli and mermaid
+ * packages, or, with no local mermaid-cli, the output of the global `mmdc --version`.
+ */
+export function rendererVersion(root, { globalVersion = globalMmdcVersion } = {}) {
+  const cli = path.join(root, 'node_modules', '@mermaid-js', 'mermaid-cli', 'package.json');
+  if (!existsSync(cli)) return `global mmdc@${globalVersion()}`;
+  const mermaid = path.join(root, 'node_modules', 'mermaid', 'package.json');
+  return `mermaid-cli@${packageVersion(cli)} mermaid@${packageVersion(mermaid)}`;
 }

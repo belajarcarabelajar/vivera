@@ -1162,7 +1162,7 @@ hash still covers the full plan: a prefix with a marker, never a summary.
 
 **The issue number is never written into the plan's frontmatter.** The vault mirror
 hashes the entire plan text, so injecting a number would change `source_hash` and
-instantly make every vault mirror stale, which blocks `--execute` with exit 3. The
+instantly make every vault mirror stale, so every `--execute` warns. The
 number lives in a sidecar, `plan.issues.json`, which is why the plan file stays
 byte-stable.
 
@@ -1310,23 +1310,28 @@ isolated → active → verified → open → merged
 |---|---|
 | A PR number cannot be recorded before `verified` | Recording one implies the work is finished and checked, so `isolated → open` would skip the gate that makes a merge safe |
 | Only an `open` session with a PR can merge | A green local run alone is not a mergeable session |
-| `merged` needs a `Complete` plan and a closed issue | The plan flips to `Complete` after the debt sweep, so a merge recorded with an open plan or issue means a closing step was skipped. `state <s> merged` exits 1 and prints the fix commands; `--allow-open-plan` overrides with a warning, and `--repo <path>` points it at another repository's plan |
 | `merged` and `closed` are terminal | Reverting or redoing a session is a new session with a new branch. A file that can "un-merge" hides the revert from the merge order |
 | A closed session did not move the base | `merged` is a rebase reason because it advanced `origin/main`; `closed` is not, so `surface` never lists it as landed, while `order` still treats it as a satisfied dependency |
 | A duplicate branch or worktree is refused | A registry that reports success for a layout that will lose work is worse than no registry |
 
 ```bash
-bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> [--depends-on <slug>,<slug>]
+bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> --worktree [--depends-on <slug>,<slug>]
 bun scripts/pr-registry.mjs state <session> <isolated|active|verified|open|merged|closed>
-bun scripts/pr-registry.mjs state <session> merged [--repo <path>] [--allow-open-plan]
-bun scripts/pr-registry.mjs pr <session> --number 42
+bun scripts/pr-registry.mjs state <session> merged [--repo <path>]
+bun scripts/pr-registry.mjs open <session> --title "<t>" --body-file <f> [--draft]
+bun scripts/pr-registry.mjs pr <session> --number 42   # a PR opened by hand
+bun scripts/pr-registry.mjs reconcile [--dry-run] [--stale-days N] [--close-stale]
 bun scripts/pr-registry.mjs order       # topological merge order
 bun scripts/pr-registry.mjs surface w3  # what must rebase first, what blocks it
 bun scripts/pr-registry.mjs status
 ```
 
-`claim` prints the exact `git worktree add` command to run, and is idempotent: a retried
-claim after a crashed session returns the same slot rather than allocating a second one.
+`claim --worktree` runs `git worktree prune`, `fetch` and `worktree add` itself, and is
+idempotent: a retried claim after a crashed session returns the same slot. `open` refuses
+a session that is not `verified`, pushes the branch, runs `gh pr create`, and records the number. `state <s>
+merged` never refuses over the plan: it prints close-out gaps as warnings and records the
+merge. `reconcile` records `merged` or `closed` from `gh pr view`, skips by name what it
+cannot read or match, and closes PR-less stale sessions only with `--close-stale`.
 
 The derived branch is `<plan-id>/<session-slug>`, with no tool or workflow prefix. There
 used to be an `ai/` prefix, and it was removed on the same reasoning as the

@@ -16,6 +16,7 @@ export const GENERIC_NPM_NAMES = new Set(['lint', 'format', 'typecheck', 'build'
 
 // A flag counts only as a whole dashed token: '--x', "--x", `--x=${v}`, or /^--x$/.
 // A bare word such as `length` or a longer flag such as `--x-y` does not count.
+// dup-defs: allow a regex over script source, not the parsed flag list of block-git-writes.mjs
 function hasFlag(source, flag) {
   const escaped = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`).test(source);

@@ -66,8 +66,9 @@ test('every command snippet carries its own terms and no prohibited runtime', ()
 });
 
 test('a command snippet contract can fail: removing a pinned term is detected', () => {
-  const body = readSnip('cmd-merge.md').replace('--admin', '');
-  assert.deepEqual(findMissingTerms(body, COMMAND_SNIPPET_CONTRACTS['cmd-merge.md']), ['--admin']);
+  const term = 'Do not deploy, publish, or delete branches or worktrees';
+  const body = readSnip('cmd-merge.md').replace(term, '');
+  assert.deepEqual(findMissingTerms(body, COMMAND_SNIPPET_CONTRACTS['cmd-merge.md']), [term]);
 });
 
 test('every required snippet is tracked in the manifest (or it never reaches the DB)', () => {
@@ -108,8 +109,8 @@ test('snippet checks fail when a term is deleted (negative controls)', () => {
   const body = readSnip('orkestrasi-pr-review.md');
   const extra = SNIPPET_CONTRACTS['orkestrasi-pr-review.md'];
   // Remove one shared term and one phase term; each must be reported.
-  const withoutShared = body.replaceAll('TASK-CHUNKING', 'XXXXXXXX');
-  assert.ok(checkSnippetContract(withoutShared, extra).includes('TASK-CHUNKING'));
+  const withoutShared = body.replaceAll('subagent-contract-template.md', 'XXXXXXXX');
+  assert.ok(checkSnippetContract(withoutShared, extra).includes('subagent-contract-template.md'));
   const phaseTerm = extra.find((t) => body.includes(t));
   assert.ok(phaseTerm, 'phase-term list names nothing the snippet contains, so this test proves nothing');
   const withoutPhase = body.replaceAll(phaseTerm, 'YYYYYYYY');
@@ -291,7 +292,7 @@ test('the skip counter is reported in the summary, not just incremented', () => 
 test('a tree missing gitignored state exits 0 and still refuses a clean pass', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-freshclone-'));
   try {
-    const ls = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const ls = spawnSync('git', ['ls-files', '-z', '--cached'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
     const files = ls.stdout.split('\0').filter(Boolean);
     assert.ok(files.length > 50, `expected a real tree, listed ${files.length} tracked files`);
@@ -342,9 +343,9 @@ test('a tree missing gitignored state exits 0 and still refuses a clean pass', (
   }
 });
 
-// Runs the real gate on a fresh-clone tree, since the skill needles live inline in the validator rather than in validate-lib.
+// Runs the real gate on a fresh-clone tree.
 const copyTrackedTree = (dest) => {
-  const ls = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const ls = spawnSync('git', ['ls-files', '-z', '--cached'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   assert.equal(ls.status, 0, `git ls-files failed: ${ls.stderr}`);
   const files = ls.stdout.split('\0').filter(Boolean);
   const tar = spawnSync('tar', ['-C', ROOT, '--null', '-T', '-', '-cf', '-'], {
@@ -368,31 +369,6 @@ const runGateWithoutMmdc = (tree, noMmdc, extraEnv = {}) => {
   });
   return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
-
-test('the gate refuses a debt sweep that drops the plan-mark-done.mjs tick step', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-ticksteps-'));
-  const noMmdc = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-nommdc-'));
-  try {
-    copyTrackedTree(tmp);
-    fs.writeFileSync(path.join(noMmdc, 'mmdc'), '#!/bin/sh\nexit 127\n', { mode: 0o755 });
-    const sweep = path.join(tmp, 'skills', 'sucp-debt-sweep', 'SKILL.md');
-    const body = fs.readFileSync(sweep, 'utf8').replaceAll('plan-mark-done.mjs', '');
-    const missing = 'missing: debt sweep ticks task steps from runner evidence: literal "plan-mark-done.mjs" not found in skills/sucp-debt-sweep/SKILL.md';
-
-    fs.writeFileSync(sweep, body);
-    const without = runGateWithoutMmdc(tmp, noMmdc);
-    assert.equal(without.status, 1, `a sweep without the tick step must fail the gate\n${without.out.slice(-600)}`);
-    assert.ok(without.out.includes(missing), `the failure must name the needle\n${without.out.slice(-600)}`);
-
-    fs.writeFileSync(sweep, `${body}\nTick the steps with \`bun scripts/plan-mark-done.mjs\`.\n`);
-    const withStep = runGateWithoutMmdc(tmp, noMmdc);
-    assert.ok(!withStep.out.includes(missing), `a sweep naming the tick step must pass this needle\n${withStep.out.slice(-600)}`);
-    assert.match(withStep.out, /present: debt sweep ticks task steps from runner evidence/);
-  } finally {
-    fs.rmSync(tmp, { recursive: true, force: true });
-    fs.rmSync(noMmdc, { recursive: true, force: true });
-  }
-});
 
 // The sync CLI and the merged gate both read ISSUES_STORE, so the validator has
 // to check that same file, not a hardcoded <root>/plan.issues.json.

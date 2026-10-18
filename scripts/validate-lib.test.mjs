@@ -80,9 +80,8 @@ test('checkSnippetContract combines shared and extra terms', () => {
 });
 
 test('checkSnippetContract reports missing shared terms', () => {
-  const body = 'Has only todowrite';
-  const result = checkSnippetContract(body, ['todowrite']);
-  assert.ok(result.includes('SUBAGENT-FIRST'));
+  const result = checkSnippetContract('Has only todowrite', ['todowrite']);
+  assert.ok(result.includes(SUBAGENT_CONTRACT_TERMS[0]));
 });
 
 test('checkSnippetContract reports missing extra terms', () => {

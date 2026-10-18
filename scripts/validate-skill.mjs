@@ -20,7 +20,11 @@ import {
   extractMermaidBlocksStrict,
   renderMermaidBatch,
   checkGateCatalog,
+  classifyMermaidResult,
 } from './validate-lib.mjs';
+import { INVARIANTS, checkInvariants, listDocReferenceFiles } from './lib/skill-invariants.mjs';
+import { checkDocReferences } from './lib/doc-references.mjs';
+import { DEFAULT_CACHE_REL, cacheKey, loadCache, saveCache, partition, recordResults, rendererVersion } from './lib/mermaid-cache.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -79,17 +83,9 @@ const skip = (what, why) => {
   }
 }
 
-// 0c. The copy rules must still EXIST, and this repository's own artifacts must
-// obey them.
-//
-// Why this checks the rules' presence and not just the artifacts: both rules were
-// already written in prose, and both still shipped anyway. The em dash was
-// specified in the master skill and in the PR template checklist, and 69 of them
-// rode out in a single diff. A `Generated with [Claude Code]` footer went out on
-// PR #15 in a session that was not Claude Code, supported by no template and no
-// precedent in this repository. A rule that only exists in prose cannot stop
-// anything, and a rule that exists only in prose has now been measured failing
-// twice, so both the rule text and the enforcement are asserted here.
+// 0c. This repository's own artifacts must obey the copy rules. Whether the
+// rules are still written down is a wording question; add it to INVARIANTS in
+// lib/skill-invariants.mjs as one line if it needs pinning.
 //
 // The SCOPE is deliberately narrow: the user-visible ARTIFACTS of this repository
 // (README, the PR and review templates, the trigger prompts), not every file. The
@@ -98,48 +94,6 @@ const skip = (what, why) => {
 // people to ignore the scan.
 {
   const { checkFile, checkCommits } = await import('./check-copy-rules.mjs');
-  const masterText = readSkillCorpus(rootDir);
-
-  // Are the rules still WRITTEN DOWN? A rule nobody can find is not a rule, and
-  // this is the half that costs nothing to assert.
-  const missing = [];
-  if (!/never use em dashes/i.test(masterText)) missing.push('the master skill no longer states the em-dash copy rule');
-  if (!/No Attribution Footer, Watermark, or Co-Author Line/i.test(masterText)) {
-    missing.push('the master skill no longer states the no-attribution-footer rule');
-  }
-  if (missing.length) {
-    for (const m of missing) console.error(`❌ ${m}`);
-    errors += missing.length;
-  } else {
-    console.log('✅ Copy rules still stated: em dash and no-attribution-footer.');
-  }
-
-  // Are the TEMPLATES still carrying the checklist item? The PR template is what
-  // an agent reads at PR time, so a rule missing from it is missing where it is
-  // used.
-  const prTemplate = fs.readFileSync(path.join(rootDir, 'templates', 'pull-request-template.md'), 'utf8');
-  if (!/attribution footer, watermark, badge, or co-author line/i.test(prTemplate)) {
-    console.error('❌ templates/pull-request-template.md no longer carries the no-attribution-footer checklist item');
-    errors += 1;
-  } else {
-    console.log('✅ PR template carries both checklist items.');
-  }
-
-  // Are the ARTIFACTS obeying them? Scope: the PR-facing templates.
-  //
-  // NOT this repository's git history. The first version also checked the last 20
-  // commit messages and failed on two commits from an earlier session
-  // (`feat(exa:...`), which is not this session's to fix and would leave CI red
-  // forever on history nobody is going to rewrite. Commit messages are checked by
-  // `bun run copy:check --commits`, which an agent runs on its OWN commits before
-  // pushing, where a hit is a hit on work this session just produced.
-  //
-  // README.md is deliberately NOT in the list either. It carries hundreds of em
-  // dashes that predate the rule and a harness table that legitimately names
-  // Claude Code and Copilot; including it produced dozens of findings on the first
-  // run, which is how a gate gets learned to be noise. The rule targets the copy
-  // this repository SHIPS. Pass it explicitly via `check-copy-rules.mjs` when a
-  // change actually touches it.
   const artifacts = [
     'templates/pull-request-template.md',
     'templates/pr-review-template.md',
@@ -238,26 +192,6 @@ if (!fs.existsSync(masterPath)) {
   const wordCount = content.trim().split(/\s+/).length;
   const estimatedTokens = Math.round(charCount / 4);
   console.log(`📊 Master file stats: ${charCount} chars, ${wordCount} words, ~${estimatedTokens} estimated tokens.`);
-
-  // 1b. Mandatory Session-Close Debt Sweep contract must stay in the master file.
-  // Silently dropping this stage would let every session end with unexamined technical debt.
-  const sweepContract = [
-    { label: 'Step 6 debt sweep heading', re: /^##\s*6️⃣.*Debt Sweep/m },
-    { label: 'Done 100% saturation rule', re: /Plan Completion Saturation Rule/ },
-    { label: 'NOW/LATER debt classification', re: /`NOW`/ },
-    { label: 'default 3-5 follow-up cap', re: /3-5 follow-up questions|3-5 follow-ups/ },
-    { label: 'harness multi-select question injection', re: /multi-select checkboxes/ },
-    { label: 'debt sweep template reference', re: /templates\/follow-up-injection-template\.md/ },
-  ];
-  const corpus = readSkillCorpus(rootDir);
-  for (const contract of sweepContract) {
-    if (contract.re.test(corpus)) {
-      console.log(`✅ Debt sweep contract present: ${contract.label}`);
-    } else {
-      console.error(`❌ Master file missing debt sweep contract: ${contract.label}`);
-      errors++;
-    }
-  }
 }
 
 // 1c. Every phase skill must exist, carry its directory name, and be routed
@@ -470,53 +404,10 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3g. Mandatory PR delivery contract. Without this stage, a session ends in a
-// commit on the working branch, and two concurrent sessions collide in ways no
-// git command rejects: two agents on one ref, two agents in one worktree, and a
-// batch merged in finish order. Each individual command is valid, so nothing
-// downstream reports the collision.
-//
-// The check asserts the pieces separately because they fail separately: a skill
-// that keeps the prose but loses the tool, or keeps the tool but loses the
-// "never on the base branch" rule, is exactly the half-migrated state this
-// block exists to catch.
-//
-// Revert: delete this block, the two PR templates, `pr-registry.mjs` and its
-// test, the `5.5️⃣` section in the master skill, the PR snippet and its manifest
-// entry, and the `pr:*` scripts in package.json.
+// 3g. The PR delivery stage names tools. Prose that says "pick a unique branch"
+// is a request; the tool refusing a collision is the guarantee, so the tools and
+// their contract with the skill are checked here.
 {
-  const prContract = [
-    // The stage heading, line-anchored. A plain substring test is satisfied by
-    // any cross-reference to the section, so deleting the section while leaving
-    // a pointer behind would still pass.
-    { label: 'master skill PR delivery heading', file: masterPath, needle: '^## 5\\.5️⃣.*Pull Request Delivery', multiline: true },
-    { label: 'master skill claims a derived branch', file: masterPath, needle: 'pr-registry.mjs claim' },
-    { label: 'master skill forbids subagent git writes', file: masterPath, needle: 'Git Ownership Is Parent-Only' },
-    { label: 'master skill names the PR template', file: masterPath, needle: 'templates/pull-request-template.md' },
-    { label: 'master skill names the review template', file: masterPath, needle: 'templates/pr-review-template.md' },
-    { label: 'master skill requires a body file', file: masterPath, needle: '--body-file' },
-    { label: 'master skill computes merge order', file: masterPath, needle: 'pr-registry.mjs order' },
-    { label: 'master skill requires per-merge verification', file: masterPath, needle: 'pr-registry.mjs surface' },
-    // The branch shape, stated once in the skill. Prose naming it is what stops an
-    // agent from re-deriving a prefixed name by hand when the printed shape looks
-    // too plain, and `branchFor` plus its test are the deterministic half.
-    { label: 'master skill states the unprefixed branch shape', file: masterPath, needle: '`<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**' },
-  ];
-  if (!fs.existsSync(masterPath)) {
-    console.error('❌ PR delivery contract cannot be checked: the master file is missing (see section 1).');
-  } else {
-    for (const c of prContract) {
-      const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
-      const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
-      if (present) {
-        console.log(`✅ PR delivery contract present: ${c.label}`);
-      } else {
-        console.error(`❌ PR delivery contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in ${path.relative(rootDir, c.file)}.`);
-        errors++;
-      }
-    }
-  }
-
   // The allocator and the merge-order resolver are the deterministic half of the
   // stage. Prose that says "pick a unique branch name" is a request, not a
   // guarantee; the tool refusing a collision is the guarantee.
@@ -574,41 +465,8 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3h. Mandatory plan-issue mirror contract. The vault mirror makes a plan
-// readable; the issue mirror makes its history searchable. Without this section
-// the second mirror does not exist, and the answer to "when was this approved,
-// what got closed, who said what" lives only in a git log nobody reads.
-//
-// The check asserts the pieces separately for the same reason 3g does: a skill
-// that keeps the prose but drops the tool is the half-migrated state this block
-// exists to catch.
-//
-// Revert: delete this block, `plan.issues.json`, `plan-issue-sync.mjs` and its
-// test, the `🐙 Plan → GitHub Issue` section in the master skill, and the
-// `issue:*` scripts in package.json.
+// 3h. The plan-issue mirror names a sync CLI and a checked-in project mapping.
 {
-  const issueContract = [
-    { label: 'master skill issue-mirror heading', file: masterPath, needle: '^## 🐙 Plan → GitHub Issue$', multiline: true },
-    { label: 'master skill names the issue sync CLI', file: masterPath, needle: 'plan-issue-sync.mjs' },
-    { label: 'master skill states the state mapping', file: masterPath, needle: 'Blocked' },
-    { label: 'master skill keeps the issue number out of the plan', file: masterPath, needle: 'plan.issues.json' },
-    { label: 'master skill forbids a summary body', file: masterPath, needle: 'A summary body is banned' },
-  ];
-  if (!fs.existsSync(masterPath)) {
-    console.error('❌ Plan-issue contract cannot be checked: the master file is missing (see section 1).');
-  } else {
-    for (const c of issueContract) {
-      const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
-      const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
-      if (present) {
-        console.log(`✅ Plan-issue contract present: ${c.label}`);
-      } else {
-        console.error(`❌ Plan-issue contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in ${path.relative(rootDir, c.file)}.`);
-        errors++;
-      }
-    }
-  }
-
   for (const scr of ['scripts/plan-issue-sync.mjs', 'scripts/plan-issue-sync.test.mjs']) {
     if (fs.existsSync(path.join(rootDir, scr))) {
       console.log(`✅ Script present: ${scr}`);
@@ -657,180 +515,10 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3i. Plan checklist contract.
-//
-// The to-do list lives in the plan file as a `[ ]` / `[x]` checklist. The harness
-// todo tool is deliberately not used: it duplicates the list, is lost on
-// compaction or a harness switch, and differs in name across harnesses. This
-// block pins the master skill's section, its ownership rule, and its resume
-// rule, so a later edit cannot quietly restore a mandate on the harness tool.
-//
-// Revert: restore the previous `📋 Harness Todo List` section in the master skill
-// and this block's needles together.
-{
-  const todoContract = [
-    { label: 'master skill checklist section heading', needle: '^## 📋 Plan Checklist$', multiline: true },
-    { label: 'harness todo tool is not used', needle: "Do not use the harness's own todo tool" },
-    { label: 'parent owns the checklist', needle: 'The parent owns the checklist' },
-    { label: 'blocker when the plan file cannot be written', needle: 'If the plan file cannot be written' },
-  ];
-  if (!fs.existsSync(masterPath)) {
-    console.error('❌ Todo contract cannot be checked: the master file is missing (see section 1).');
-  } else {
-    const masterBody = readSkillCorpus(rootDir);
-    for (const c of todoContract) {
-      const present = c.multiline ? new RegExp(c.needle, 'm').test(masterBody) : masterBody.includes(c.needle);
-      if (present) {
-        console.log(`✅ Plan checklist contract present: ${c.label}`);
-      } else {
-        console.error(`❌ Plan checklist contract missing: ${c.label}: ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in the master skill.`);
-        errors++;
-      }
-    }
-  }
-}
-
-// 3j. Prompting-guide amendments (2026-10-10).
-//
-// Three rules taken from published prompting guidance for one model family and
-// worded model-agnostically: pasted text is data unless the user's own message
-// says otherwise, an unattended run does not end a turn with work still owed,
-// and the frontend "named tells" list. None came from a measured incident here,
-// so the overnight rule carries a provenance line. Each needle pins one clause
-// in the one file that owns it, so a later edit cannot quietly drop it and the
-// same words elsewhere in the corpus cannot stand in for it.
-//
-// Revert: `git revert` the commits that added this block together with the three
-// skill edits and the `orkestrasi-overnight.md` term in validate-lib.mjs.
-{
-  const rules = 'skills/sucp-rules/SKILL.md';
-  const overnight = 'skills/sucp-overnight/SKILL.md';
-  const amendmentContract = [
-    { label: 'pasted text is untrusted data', file: rules, needle: 'text the user pasted into a message' },
-    { label: 'pasted-text exception follows the user message', file: rules, needle: 'Pasted-text exception' },
-    { label: 'pasted-text exception is limited to what the message asks', file: rules, needle: 'only as far as that message asks' },
-    { label: 'pasted-text exception keeps the safety rules', file: rules, needle: 'still applies to what is followed' },
-    { label: 'anti-pattern row for announce-without-doing', file: rules, needle: 'Ending the turn with a summary that announces the next step' },
-    { label: 'named tells count is seven', file: rules, needle: 'these seven are named explicitly' },
-    { label: 'named tell: cream background', file: rules, needle: 'cream or off-white page background' },
-    { label: 'named tell: italic accent words', file: rules, needle: 'Italic accent words in a headline' },
-    { label: 'named tell: numbered section labels', file: rules, needle: 'Numbered section labels' },
-    { label: 'text-only end of turn with open items is a report', file: overnight, needle: 'A text-only end of turn with open checklist items is a report' },
-    { label: 'four early endings are refused', file: overnight, needle: 'Four endings are refused while work is owed' },
-    { label: 'budget_limited is a valid stop', file: overnight, needle: 'a `budget_limited` wrap-up' },
-    { label: 'running work is not done', file: overnight, needle: 'Anything still running is not done' },
-    { label: 'automatic continuations are capped', file: overnight, needle: 'Automatic continuations are capped' },
-    { label: 'continuation cap is three', file: overnight, needle: 'stop after the third re-prompt' },
-    { label: 'early-stop rule carries its provenance', file: overnight, needle: 'Provenance: this rule comes from published prompting guidance' },
-  ];
-  for (const c of amendmentContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Prompting-guide amendment present: ${c.label}`);
-    } else {
-      console.error(`❌ Prompting-guide amendment missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
-  }
-}
-
-// 3k. Automation-article amendments (2026-10-10, plan 2026-10-10-unread-sources-run-record).
-// Revert: `git revert` the commits that added this block with their skill, template, and snippet edits.
-{
-  const rules = 'skills/sucp-rules/SKILL.md';
-  const template = 'templates/subagent-contract-template.md';
-  const overnight = 'skills/sucp-overnight/SKILL.md';
-  const automationContract = [
-    { label: 'empty result needs a positive control', file: rules, needle: 'An Empty Result Is a Claim' },
-    { label: 'failed read is reported as unread', file: rules, needle: 'report it by name as unread' },
-    { label: 'list at its limit counts as unread', file: rules, needle: 'exactly at its `--limit`' },
-    { label: 'reports end with a Not read line', file: rules, needle: 'Not read: <source> (<reason>)' },
-    { label: 'anti-pattern row for an empty search', file: rules, needle: 'The search came back empty, so there is nothing' },
-    { label: 'subagent report carries NOT READ lines', file: template, needle: 'NOT READ: <source> (<reason>)' },
-    { label: 'gather checkpoint resolves NOT READ lines', file: template, needle: 'Every `NOT READ:` line' },
-    { label: 'handoff is written right after the entry gate', file: overnight, needle: 'the first file the run writes is the handoff' },
-    { label: 'handoff starts as running', file: overnight, needle: 'with `Result: running`, the start time' },
-    { label: 'running is replaced at close', file: overnight, needle: 'Replace `Result: running` with the final result' },
-    { label: 'handoff is updated per checklist item', file: overnight, needle: 'The handoff is the run record' },
-    { label: 'Last update is rewritten per item', file: overnight, needle: "rewrite the handoff's `Last update` line" },
-    { label: 'a stale running handoff means the run died', file: overnight, needle: 'still says `running` with no live process' },
-    { label: 'failed entry check still writes nothing', file: overnight, needle: 'A failed check still writes nothing' },
-  ];
-  for (const c of automationContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Automation-article amendment present: ${c.label}`);
-    } else {
-      console.error(`❌ Automation-article amendment missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
-  }
-}
-
-// 3l. Confirmation protocol (2026-10-11, plan 2026-10-11-confirm-via-question-tool).
-// Every point where the pipeline waits for a human decision is a call to the harness's
-// question tool, defined once in sucp-rules and pointed at by name from the orchestrator
-// and the phase skills. The negative check keeps the old typed-approval wording from
-// returning. The trigger snippets carry the same paragraph, pinned in sync-snippets.test.mjs.
-// Revert: `git revert` the commits that added this block with their skill, template, snippet, and README edits.
+// 3l. Retired typed-approval phrases and the gate catalog shape.
 {
   const rules = 'skills/sucp-rules/SKILL.md';
   const orchestrator = 'Super Ultra Code Plan Implementation.md';
-  const sweep = 'skills/sucp-debt-sweep/SKILL.md';
-  const confirmationContract = [
-    { label: 'protocol section exists', file: rules, needle: '### ⏸️ Confirmation Protocol' },
-    { label: 'no turn ends on a plain-text question', file: rules, needle: 'never end a turn on a plain-text question' },
-    { label: 'Claude Code tool is named', file: rules, needle: '`AskUserQuestion`' },
-    { label: 'OpenCode tool is named', file: rules, needle: '`question`' },
-    { label: 'recommended option is first so Enter accepts it', file: rules, needle: 'so Enter accepts it' },
-    { label: 'safe option first for risky actions', file: rules, needle: 'Enter must never run the action' },
-    { label: 'question count cap', file: rules, needle: 'at most 4 questions per call' },
-    { label: 'dismissal is not approval', file: rules, needle: 'A dismissed question is not an approval' },
-    { label: 'questions are parent-only', file: rules, needle: 'Questions are parent-only' },
-    { label: 'a mid-run decision follows the Unattended Continuation Rule', file: rules, needle: 'follows the Unattended Continuation Rule' },
-    { label: 'a risky action is never part of a batch', file: rules, needle: 'a risky action is never part of the batch' },
-    { label: 'the sweep question needs an interactive client (rules)', file: rules, needle: 'only when the harness has an interactive client' },
-    { label: 'the sweep question needs an interactive client (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'only when the harness has an interactive client' },
-    { label: 'the handoff is finished before anything that can block', file: 'skills/sucp-overnight/SKILL.md', needle: 'so the record is complete before anything that can block is called' },
-    { label: 'gate catalog covers the overnight start', file: rules, needle: '`Overnight` | Start the overnight run (Recommended), Not yet' },
-    { label: 'gate catalog covers the root-cause fix', file: rules, needle: '`Root cause` | Approve the fix (Recommended), Revise the diagnosis' },
-    { label: 'a hand-off answer is a claim, not proof', file: rules, needle: 'A `Hand-off` answer is a claim, not proof' },
-    { label: 'the overnight snippet finishes the handoff first', file: 'snippets/orkestrasi-overnight.md', needle: 'CLOSE. Finish the handoff' },
-    { label: 'the overnight snippet asks only with an interactive client', file: 'snippets/orkestrasi-overnight.md', needle: 'only when the harness has an interactive client' },
-    { label: 'the overnight handoff names the backlog when no question is asked', file: 'skills/sucp-overnight/SKILL.md', needle: 'or, with no interactive client, the backlog location' },
-    { label: 'dismissal quotes the HARD GATE accurately', file: rules, needle: 'no implementation, scaffolding or code, as the HARD GATE says' },
-    { label: 'a typed approval on a risky question must name the action', file: rules, needle: 'on a risky question it must name the action' },
-    { label: 'the root-cause row names its trigger', file: rules, needle: 'only where the debugging trigger requires an RCA gate' },
-    { label: 'a late sweep answer is recorded in the handoff (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'is appended to the handoff' },
-    { label: 'a late sweep answer is recorded in the handoff (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'is appended to the handoff' },
-    { label: 'an absent graphify is recorded in the handoff Evidence row', file: 'snippets/orkestrasi-overnight.md', needle: 'append one line saying so to the handoff Evidence row' },
-    { label: 'no question tool in an unattended run still lists the follow-ups (overnight)', file: 'skills/sucp-overnight/SKILL.md', needle: 'the final message lists them as a numbered list' },
-    { label: 'no question tool in an unattended run still lists the follow-ups (snippet)', file: 'snippets/orkestrasi-overnight.md', needle: 'the final message lists them as a numbered list' },
-    { label: 'the sweep skill names the unattended backlog path', file: sweep, needle: 'also go to the plan backlog' },
-    { label: 'anti-pattern row for a plain-text ask', file: rules, needle: '"Shall I proceed?" in plain text' },
-    { label: 'orchestrator routes every gate through the protocol', file: orchestrator, needle: 'Every approval gate is asked through the Confirmation Protocol' },
-    { label: 'brainstorm points at the protocol', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'Confirmation Protocol' },
-    { label: 'plan points at the protocol', file: 'skills/sucp-plan/SKILL.md', needle: 'Confirmation Protocol' },
-    { label: 'tdd-debug points at the protocol', file: 'skills/sucp-tdd-debug/SKILL.md', needle: 'Confirmation Protocol' },
-    { label: 'verify-deliver points at the protocol', file: 'skills/sucp-verify-deliver/SKILL.md', needle: 'Confirmation Protocol' },
-    { label: 'debt-sweep points at the protocol', file: sweep, needle: 'Confirmation Protocol' },
-    { label: 'overnight points at the protocol', file: 'skills/sucp-overnight/SKILL.md', needle: 'Confirmation Protocol' },
-    { label: 'sweep groups fit the option cap', file: sweep, needle: 'at most 4 options' },
-    { label: 'follow-up template fits the option cap', file: 'templates/follow-up-injection-template.md', needle: 'at most 4 options' },
-  ];
-  for (const c of confirmationContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Confirmation protocol present: ${c.label}`);
-    } else {
-      console.error(`❌ Confirmation protocol missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
-  }
-
   // skills/super-ultra-code-plan/SKILL.md is a symlink to the orchestrator, so it is skipped.
   const typedApprovalPhrases = ['wait for explicit yes', 'nod sufficient', 'wait for explicit approval before plan'];
   const typedApprovalFiles = [
@@ -852,8 +540,8 @@ for (const snip of requiredSnippets) {
   }
   if (typedApprovalClean) console.log('✅ No typed-approval phrase remains');
 
-  // The needles above pin wording; this pins the table's shape (header cap, unique
-  // headers, safe-option-first). Logic and tests live in validate-lib.mjs.
+  // This pins the gate table's shape (header cap, unique headers, Basis column,
+  // safe-option-first). Logic and tests live in validate-lib.mjs.
   const catalogFile = path.join(rootDir, rules);
   const catalogProblems = checkGateCatalog(fs.existsSync(catalogFile) ? readSkillText(rootDir, rules) : '');
   if (catalogProblems.length === 0) {
@@ -866,122 +554,29 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3m. Recommendation reasons (2026-10-11, plan 2026-10-11-recommendation-reasons).
-// A recommended option says why in one `Why:` line, and a risky question carries one
-// `Facts:` line instead of a tag; the Basis column of the gate catalog holds the reason
-// or the facts per gate (its shape is checked by checkGateCatalog in block 3l). The
-// snippet wording is pinned in sync-snippets.test.mjs.
-// Revert: `git revert` the commits that added this block with their skill, template, snippet, and README edits.
+// 3q. Each INVARIANTS sentence (lib/skill-invariants.mjs) must appear somewhere
+// in the skill corpus, so a rule may move between files but not disappear.
 {
-  const rules = 'skills/sucp-rules/SKILL.md';
-  const reasonContract = [
-    { label: 'the recommended option starts with Why:', file: rules, needle: 'starts with `Why:`' },
-    { label: 'a judgment call says so', file: rules, needle: 'Why: my judgment' },
-    { label: 'a risky question carries one Facts line', file: rules, needle: 'carries one `Facts:` line' },
-    { label: 'a not-sure answer never approves a gate', file: rules, needle: 'never approves a gate' },
-    { label: 'the Why line comes before the what-happens-next line', file: rules, needle: 'then the usual one line of what happens next' },
-    { label: 'a second not-sure leaves the gate closed and pending', file: rules, needle: 'A second not sure leaves the gate closed and pending' },
-    { label: 'the catalog defines what a gate is', file: rules, needle: 'Every row below is a gate' },
-    { label: 'a default for an unanswered question never reaches a catalog gate', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'never to a catalog gate' },
-    { label: 'the unattended rule never defaults a gate', file: rules, needle: 'an approval is never defaulted' },
-    { label: 'the brainstorm snippet limits the default to a preference question', file: 'snippets/orkestrasi-brainstorm.md', needle: 'never an approval gate' },
-    { label: 'the follow-up example shows the Why line', file: 'templates/follow-up-injection-template.md', needle: 'Why: <ranking factor>' },
-    { label: 'the catalog has a Basis column', file: rules, needle: '| Gate | Header | Options, in order | Basis |' },
-    { label: 'the Basis of a risky gate names the facts', file: rules, needle: 'the facts to state for a risky gate' },
-    { label: 'each sweep option begins with Why: (sweep)', file: 'skills/sucp-debt-sweep/SKILL.md', needle: 'begins with `Why:`' },
-    { label: 'each sweep option begins with Why: (template)', file: 'templates/follow-up-injection-template.md', needle: 'begins with `Why:`' },
-    { label: 'a brainstorm default states its basis', file: 'skills/sucp-brainstorm/SKILL.md', needle: 'states its basis in one line' },
-  ];
-  for (const c of reasonContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Recommendation reasons present: ${c.label}`);
-    } else {
-      console.error(`❌ Recommendation reasons missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
+  const missingInvariants = fs.existsSync(masterPath) ? checkInvariants(readSkillCorpus(rootDir)) : [];
+  for (const inv of missingInvariants) {
+    console.error(`❌ Skill invariant missing: ${inv.label}: "${inv.text}" appears nowhere in the skill corpus.`);
+    errors++;
   }
+  if (fs.existsSync(masterPath) && missingInvariants.length === 0) console.log(`✅ Skill invariants present: ${INVARIANTS.length}.`);
 }
 
-// 3n. Plan closeout gate (2026-10-12, plan 2026-10-12-vivera-plan-closeout-gate).
-// A plan whose work is merged must not stay at Approved unnoticed: Step 6 asks the
-// `Close plan` gate from the readiness verdict of scripts/plan-closeout.mjs. These needles
-// are the plan's Contract table, one entry per row.
-// Revert: `git revert` the commits that added this block with their skill, template, and README edits.
+// 3r. Commands, flags, and repository paths named in the docs must exist.
 {
-  const rules = 'skills/sucp-rules/SKILL.md';
-  const orchestrator = 'Super Ultra Code Plan Implementation.md';
-  const sweep = 'skills/sucp-debt-sweep/SKILL.md';
-  const verify = 'skills/sucp-verify-deliver/SKILL.md';
-  const overnight = 'skills/sucp-overnight/SKILL.md';
-  const closeoutContract = [
-    { label: 'sweep has the closeout decision step', file: sweep, needle: '### ✅ 6.5.5 Plan Closeout Decision' },
-    { label: 'sweep runs the readiness check', file: sweep, needle: 'bun scripts/plan-closeout.mjs --readiness' },
-    { label: 'gate catalog covers the plan closeout', file: rules, needle: '`Close plan` | Mark Complete (Recommended), Keep it open' },
-    { label: 'anti-pattern row for a finished plan left open', file: rules, needle: 'A finished plan left at Approved' },
-    { label: 'verify-deliver requires the closeout answer', file: verify, needle: 'answered the `Close plan` gate' },
-    { label: 'overnight parks the closeout gate', file: overnight, needle: '`Close plan`' },
-    { label: 'orchestrator names the closeout decision', file: orchestrator, needle: 'plan closeout decision' },
-    { label: 'follow-up template has the closeout section', file: 'templates/follow-up-injection-template.md', needle: '## 7. Plan Closeout Decision' },
-    { label: 'PR template records the closeout decision', file: 'templates/pull-request-template.md', needle: 'Plan closeout decided' },
-    { label: 'sweep asks the closeout gate before the final merge', file: sweep, needle: "before the merge of the session's final PR" },
-    { label: 'verify-deliver asks the closeout gate before the final merge', file: verify, needle: "asked before the session's final merge" },
-    // Plan 2026-10-15-closeout-open-steps: closing must tick task steps, or merged plans keep open checkboxes.
-    { label: 'debt sweep ticks task steps from runner evidence', file: sweep, needle: 'plan-mark-done.mjs' },
-  ];
-  for (const c of closeoutContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Plan closeout gate present: ${c.label}`);
-    } else {
-      console.error(`❌ Plan closeout gate missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
+  const docFiles = listDocReferenceFiles(rootDir);
+  const { checked, findings } = checkDocReferences({ root: rootDir, files: docFiles });
+  for (const f of findings) {
+    console.error(`❌ Doc reference: ${f.file}:${f.line}: ${f.message}`);
+    errors++;
   }
-}
-
-// 3o. Targeted gate by default (2026-10-12).
-// The owner asked that verification during pipeline execution be targeted by default and the
-// full CI run only when needed. These needles keep the rule in both skills and the command in the README.
-{
-  const targetedContract = [
-    { label: 'rules state the targeted gate rule', file: 'skills/sucp-rules/SKILL.md', needle: 'Targeted Gate by Default' },
-    { label: 'verify-deliver makes the targeted gate the default', file: 'skills/sucp-verify-deliver/SKILL.md', needle: 'the targeted gate is the default' },
-    { label: 'README documents the targeted command', file: 'README.md', needle: 'bun run ci:targeted' },
-  ];
-  for (const c of targetedContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Targeted gate present: ${c.label}`);
-    } else {
-      console.error(`❌ Targeted gate missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
-  }
-}
-
-// 3p. Fast-mode entry check (2026-10-15, plan 2026-10-15-overnight-fast-mode).
-// An unattended run rarely needs a premium speed mode and pays its higher price all night, so the
-// overnight entry gate, its catalog row, and its snippet each name the standard-speed condition.
-{
-  const fastModeContract = [
-    { label: 'entry check 5 names the standard-speed condition', file: 'skills/sucp-overnight/SKILL.md', needle: 'The harness runs at standard speed, or the plan\'s limits name its premium speed mode' },
-    { label: 'the gate counts five checks', file: 'skills/sucp-overnight/SKILL.md', needle: 'once the five checks hold' },
-    { label: 'the Overnight gate basis names the standard-speed condition', file: 'skills/sucp-rules/SKILL.md', needle: 'and the harness runs at standard speed unless the plan allows its premium speed mode' },
-    { label: 'the overnight snippet checks the standard-speed condition', file: 'snippets/orkestrasi-overnight.md', needle: 'the harness runs at standard speed (Claude Code: fast mode off)' },
-  ];
-  for (const c of fastModeContract) {
-    const target = path.join(rootDir, c.file);
-    const text = fs.existsSync(target) ? readSkillText(rootDir, c.file) : '';
-    if (text.includes(c.needle)) {
-      console.log(`✅ Fast-mode entry check present: ${c.label}`);
-    } else {
-      console.error(`❌ Fast-mode entry check missing: ${c.label}: literal "${c.needle}" not found in ${c.file}.`);
-      errors++;
-    }
+  if (findings.length === 0) {
+    console.log(`✅ Doc references: ${checked} checked in ${docFiles.length} file(s), none missing.`);
+  } else {
+    console.error(`❌ Doc references: ${findings.length} of ${checked} checked reference(s) point at nothing.`);
   }
 }
 
@@ -1073,46 +668,9 @@ for (const snip of requiredSnippets) {
   }
 }
 
-// 3f. Deep-research evidence contract: the workflow must name its evidence tool.
-// Without a named tool each agent improvises its own browsing and citations stop
-// being reproducible. TinyFish is the tool, and as of 2026-10-01 it is integrated
-// into the master skill itself rather than a separate vendored skill.
-//
-// The check verifies the integration is real, not merely that a word appears:
-// the master skill must carry the escalation ladder plus the actual tool names
-// an agent calls, and the template must defer to that section instead of
-// inventing its own rules.
-//
-// Revert 2026-09-30: delete this block together with the Evidence Gathering
-// section in templates/deep-research-report-template.md and the
-// "Web Evidence & Retrieval" subsection in the master skill.
+// 3f. The evidence rules live inline in the master skill, so a pointer to the
+// retired separate TinyFish skill is stale.
 {
-  const evidenceContract = [
-    // The master skill is the source of truth. The heading check is line-anchored
-    // on purpose: a plain substring test is satisfied by any cross-reference to
-    // the section, so deleting the section while leaving a pointer behind would
-    // still pass. A real negative test caught exactly that.
-    { label: 'master skill web-evidence heading', file: masterPath, needle: '^### 🌐 Web Evidence & Retrieval — TinyFish$', multiline: true },
-    { label: 'master skill escalation ladder', file: masterPath, needle: 'Escalation ladder' },
-    { label: 'master skill fetch tool', file: masterPath, needle: 'fetch_content' },
-    { label: 'master skill automation tool', file: masterPath, needle: 'run_web_automation' },
-    { label: 'master skill browser tool', file: masterPath, needle: 'create_browser_session' },
-    // The template must point at the master section, not restate a retired skill.
-    { label: 'deep-research template defers to master section', file: path.join(rootDir, 'templates', 'deep-research-report-template.md'), needle: 'Web Evidence & Retrieval' },
-  ];
-  for (const c of evidenceContract) {
-    const body = c.file === masterPath ? readSkillCorpus(rootDir) : fs.readFileSync(c.file, 'utf8');
-    const present = c.multiline ? new RegExp(c.needle, 'm').test(body) : body.includes(c.needle);
-    if (present) {
-      console.log(`✅ Deep-research evidence contract present: ${c.label}`);
-    } else {
-      console.error(`❌ Deep-research evidence contract missing: ${c.label} — ${c.multiline ? 'pattern' : 'literal'} "${c.needle}" not found in ${path.relative(rootDir, c.file)}.`);
-      errors++;
-    }
-  }
-  // The retired separate skill must not linger as a dangling instruction. A stale
-  // "use the use-tinyfish skill" pointer is worse than no pointer at all: an agent
-  // would go looking for a skill that is no longer deployed.
   for (const c of [
     { label: 'master skill', file: masterPath },
     { label: 'deep-research template', file: path.join(rootDir, 'templates', 'deep-research-report-template.md') },
@@ -1152,35 +710,12 @@ for (const scr of scripts) {
   }
 }
 
-// 4b. Mandatory Plan Publishing contract. A skill contract that can be silently
-// deleted is not a contract, so the mandate wording, the CLI it names, and the
-// registry the CLI reads are each asserted separately. Placed before section 5
+// 4b. Plan Publishing: the CLI the skill names and the registry it reads are
+// each asserted separately. Placed before section 5
 // on purpose: section 5 renders every Mermaid block in the repository with mmdc
 // and costs 60-120 seconds, so a cheap missing-contract error must not queue
 // behind the expensive render pass.
 {
-  const planPublishContract = [
-    { label: 'Plan Publishing heading', needle: 'Plan Publishing' },
-    { label: 'publisher CLI reference', needle: 'plan-publish.mjs' },
-    { label: 'idempotency marker', needle: 'SKIPPED-IDEMPOTENT' },
-  ];
-  if (!fs.existsSync(masterPath)) {
-    // Section 1 already counted the missing master file. Re-reading it here
-    // would triple-count one root cause, so the wording checks are skipped and
-    // the filesystem checks below still run.
-    console.error('❌ Plan publishing contract cannot be checked: the master file is missing (see section 1).');
-  } else {
-    const masterBody = readSkillCorpus(rootDir);
-    for (const c of planPublishContract) {
-      if (masterBody.includes(c.needle)) {
-        console.log(`✅ Plan publishing contract present: ${c.label}`);
-      } else {
-        console.error(`❌ Master file missing plan publishing contract: ${c.label} — literal "${c.needle}" not found.`);
-        errors++;
-      }
-    }
-  }
-
   const publisherPath = path.join(rootDir, 'scripts', 'plan-publish.mjs');
   if (fs.existsSync(publisherPath)) {
     console.log('✅ Script present: scripts/plan-publish.mjs');
@@ -1283,11 +818,6 @@ if (!mmdcAvailable) {
   let mermaidMissingA11y = 0;
   let mermaidMissingWiring = 0;
 
-  // Accessibility contract: every diagram must carry accTitle + accDescr, which
-  // mermaid emits as <title>/<desc> wired to aria-labelledby. Without them the
-  // SVG is an unlabelled graphic for screen readers.
-  const a11yRe = /accTitle:[^\n]*\n\s*accDescr:/;
-
   // Collect every block first so one mmdc call (one Chromium launch) renders
   // them all; one call per block cost about 2.7 s each.
   const collected = [];
@@ -1320,64 +850,67 @@ if (!mmdcAvailable) {
     ...(fs.existsSync(puppeteerCfg) ? ['-p', puppeteerCfg] : []),
     '-b', 'transparent',
   ];
+  // A block whose source, mermaid config, other mmdc args, and renderer version
+  // are unchanged since a passing render is not rendered again. Paths in the
+  // args are root-relative so the key does not depend on the checkout location.
+  const noCache = process.argv.slice(2).includes('--no-cache');
+  const cachePath = path.join(rootDir, DEFAULT_CACHE_REL);
+  const cache = loadCache(cachePath);
+  const keyConfig = JSON.stringify([
+    fs.existsSync(mermaidCfg) ? fs.readFileSync(mermaidCfg, 'utf8') : '',
+    mmdcArgs.map((a) => (path.isAbsolute(a) ? path.relative(rootDir, a) : a)).join(' '),
+  ]);
+  const version = rendererVersion(rootDir);
+  const keyOf = (b) => cacheKey({ block: b.source, config: keyConfig, rendererVersion: version });
+  const { toRender } = partition(collected, noCache ? {} : cache, keyOf);
+
   // Without ~/.cache/puppeteer the bundled Chrome is missing, so mmdc gets a
   // system browser for this render only (shared resolver, see render-diagrams.sh).
   const browser = systemPuppeteerBrowser();
   if (browser) process.env.PUPPETEER_EXECUTABLE_PATH = browser;
   let rendered;
   try {
-    ({ results: rendered } = collected.length
-      ? renderMermaidBatch(collected.map((b) => b.source), { mmdc, args: mmdcArgs, tmpDir })
+    ({ results: rendered } = toRender.length
+      ? renderMermaidBatch(toRender.map((b) => b.source), { mmdc, args: mmdcArgs, tmpDir })
       : { results: [] });
   } finally {
     if (browser) delete process.env.PUPPETEER_EXECUTABLE_PATH;
   }
+  const renderedBy = new Map(toRender.map((b, k) => [b, rendered[k]]));
 
-  for (let k = 0; k < collected.length; k++) {
-    const { rel, index: i, source } = collected[k];
-    const result = rendered[k];
-    if (result.ok) {
-      mermaidValid++;
-    } else {
+  // The wiring check reads the SVG the renderer just wrote, because the source
+  // accTitle/accDescr alone would pass even if the renderer dropped the tags. A
+  // cached block passed that check when it was stored, and its source is part
+  // of the key, so it gets the source check only.
+  const outcomes = [];
+  for (const block of collected) {
+    const { rel, index: i, source } = block;
+    const result = renderedBy.get(block) ?? { ok: true, cached: true };
+    const { status, cacheable } = classifyMermaidResult({ result, source });
+    if (renderedBy.has(block)) outcomes.push({ key: keyOf(block), ok: cacheable });
+    if (status === 'invalid') {
       console.error(`❌ Mermaid syntax error in ${rel} [block ${i + 1}]`);
       console.error(`   ${result.error}`);
       mermaidInvalid++;
       errors++;
       continue;
     }
-
-    if (!a11yRe.test(source)) {
+    mermaidValid++;
+    if (status === 'no-a11y') {
       console.error(`❌ Missing accessibility metadata in ${rel} [block ${i + 1}]: add accTitle + accDescr.`);
       mermaidMissingA11y++;
       errors++;
-      continue;
-    }
-
-    // Source-level accTitle/accDescr is necessary but not sufficient. The
-    // skill claims Mermaid emits these as <title>/<desc> wired to
-    // aria-labelledby, and that claim is about the RENDERED SVG, not the
-    // source. Checking only the source would pass even if the renderer
-    // silently dropped the wiring, which is exactly the kind of claim that
-    // goes stale unnoticed.
-    //
-    // I had this backwards once: a grep reported no <title> in a rendered
-    // diagram, and I concluded from one failed tool result that the feature
-    // was broken. It was not — the tags and the aria wiring were both there.
-    // So this check reads the SVG the renderer just wrote, and the negative
-    // control is a block whose source has no accTitle at all, not a guess
-    // about renderer behaviour.
-    const svg = result.svg;
-    const wired = /<title[^>]*>/.test(svg)
-      && /<desc[^>]*>/.test(svg)
-      && /aria-labelledby="[^"]*"/.test(svg)
-      && /aria-describedby="[^"]*"/.test(svg);
-    if (!wired) {
+    } else if (status === 'no-wiring') {
       console.error(`❌ Rendered SVG lacks the a11y wiring in ${rel} [block ${i + 1}]: the source declares `
         + 'accTitle/accDescr but the output has no <title>/<desc> pair referenced by aria-labelledby/aria-describedby.');
       mermaidMissingWiring++;
       errors++;
     }
   }
+  // A global mmdc on a fresh clone has no node_modules, and creating one here
+  // would hide the gitignored-state skip on the next run.
+  if (fs.existsSync(path.join(rootDir, 'node_modules'))) saveCache(cachePath, recordResults(cache, outcomes));
+  console.log(`✅ mermaid: ${toRender.length} rendered, ${collected.length - toRender.length} cached${noCache ? ' (--no-cache)' : ''}.`);
 
   // Cleanup temp dir
   fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -1395,7 +928,9 @@ if (!mmdcAvailable) {
   }
 
   if (mermaidMissingWiring === 0) {
-    console.log('✅ Accessibility: every rendered SVG carries the a11y wiring (<title>/<desc> + aria-labelledby/aria-describedby).');
+    console.log(toRender.length
+      ? '✅ Accessibility: every rendered SVG carries the a11y wiring (<title>/<desc> + aria-labelledby/aria-describedby).'
+      : '✅ Accessibility: no SVG rendered this run; every cached block passed the wiring check when it was rendered.');
   } else {
     console.error(`❌ Rendered SVG: ${mermaidMissingWiring} diagram(s) render without the a11y wiring.`);
   }

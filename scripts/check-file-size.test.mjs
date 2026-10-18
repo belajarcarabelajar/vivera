@@ -67,6 +67,8 @@ function baseline(dir, obj) {
 }
 
 const lastLine = (s) => s.trimEnd().split('\n').pop();
+const commit = (dir, msg, ...a) => git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', msg, ...a);
+const zero = (r, n) => expect([r.code, r.err, lastLine(r.out)]).toEqual([0, '', `checked ${n} files, 0 over the limit`]);
 
 describe('tokensOf', () => {
   test('rounds a partial token up at every boundary', () => {
@@ -169,7 +171,7 @@ describe('renderReport', () => {
       '  2. Stage the new files and commit again.',
       "If the file is a lockfile, generated, or vendored: add '<path> -size-gate' to .gitattributes instead.",
       'If splitting is out of scope for this change: raise its ceiling in scripts/file-size-baseline.json in this',
-      '  commit and name the follow-up in the PR body. The raise is visible in review.',
+      '  commit and add a line size-raise: <plan-id> <reason> to its message, naming the plan of the follow-up.',
       'A renamed file counts as new: move its ceiling to the new path in the same commit.',
     ].join('\n'));
   });
@@ -205,9 +207,7 @@ describe('CLI --staged', () => {
   test('passes a staged file of exactly 20000 bytes', () => {
     const dir = repo();
     stage(dir, { 'a.txt': 20000 });
-    const r = run(dir);
-    expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(dir), 1);
   });
 
   test('prints nothing when nothing is staged', () => {
@@ -220,9 +220,7 @@ describe('CLI --staged', () => {
     const dir = repo();
     stage(dir, { 'a.txt': 100 });
     put(dir, { 'a.txt': 30000 });
-    const r = run(dir);
-    expect(r.code).toBe(0);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(dir), 1);
   });
 
   test('judges the index, so a big staged copy fails while the working tree is small', () => {
@@ -238,35 +236,27 @@ describe('CLI --staged', () => {
     const dir = repo();
     stage(dir, { 'small.txt': 10 });
     put(dir, { 'untracked.txt': 30000 });
-    const r = run(dir);
-    expect(r.code).toBe(0);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(dir), 1);
   });
 
   test('skips a binary file', () => {
     const dir = repo();
     put(dir, { 'blob.bin': Buffer.alloc(30000) });
     git(dir, 'add', 'blob.bin');
-    const r = run(dir);
-    expect(r.code).toBe(0);
-    expect(lastLine(r.out)).toBe('checked 0 files, 0 over the limit');
+    zero(run(dir), 0);
   });
 
   test('skips a file marked -size-gate in .gitattributes', () => {
     const dir = repo();
     stage(dir, { '.gitattributes': 'bun.lock -size-gate\n', 'bun.lock': 30000 });
-    const r = run(dir);
-    expect(r.code).toBe(0);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(dir), 1);
   });
 
   test('skips a symlink', () => {
     const dir = repo();
     fs.symlinkSync('target-that-does-not-exist', path.join(dir, 'link'));
     git(dir, 'add', 'link');
-    const r = run(dir);
-    expect(r.code).toBe(0);
-    expect(lastLine(r.out)).toBe('checked 0 files, 0 over the limit');
+    zero(run(dir), 0);
   });
 
   test('blocks a file that grew past its ceiling, naming the growth', () => {
@@ -282,9 +272,7 @@ describe('CLI --staged', () => {
     const dir = repo();
     baseline(dir, { 'big.txt': 24000 });
     stage(dir, { 'big.txt': 23000 });
-    const r = run(dir);
-    expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 2 files, 0 over the limit');
+    zero(run(dir), 2);
   });
 
   test('handles a path containing a space', () => {
@@ -315,7 +303,7 @@ describe('CLI --staged', () => {
     const dir = repo();
     baseline(dir, { 'big.txt': 25000 });
     stage(dir, { 'big.txt': 25000 });
-    git(dir, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seed');
+    commit(dir, 'seed');
     git(dir, 'mv', 'big.txt', 'moved.txt');
     const r = run(dir, '--staged');
     expect(r.code).toBe(1);
@@ -340,18 +328,14 @@ describe('CLI --all', () => {
     const dir = repo();
     baseline(dir, { 'big.txt': 25000 });
     stage(dir, { 'big.txt': 25000, 'small.txt': 10 });
-    const r = run(dir, '--all');
-    expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 3 files, 0 over the limit');
+    zero(run(dir, '--all'), 3);
   });
 
   test('skips a submodule entry and does not count it as checked', () => {
     const dir = repo();
     stage(dir, { 'small.txt': 10 });
     git(dir, 'update-index', '--add', '--cacheinfo', `160000,${'a'.repeat(40)},sub`);
-    const r = run(dir, '--all');
-    expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(dir, '--all'), 1);
   });
 });
 
@@ -419,9 +403,7 @@ describe('CLI --root and --baseline', () => {
     const dir = repo();
     put(dir, { 'ceilings.json': JSON.stringify({ 'big.txt': 26000 }) });
     stage(dir, { 'big.txt': 25000 });
-    const r = run(tmpDir(), '--root', dir, '--baseline', path.join(dir, 'ceilings.json'));
-    expect([r.code, r.err]).toEqual([0, '']);
-    expect(lastLine(r.out)).toBe('checked 1 files, 0 over the limit');
+    zero(run(tmpDir(), '--root', dir, '--baseline', path.join(dir, 'ceilings.json')), 1);
   });
 });
 
@@ -470,5 +452,59 @@ describe('ceilings come from the index', () => {
     const r = run(dir);
     expect(r.code).toBe(1);
     expect(r.err).not.toContain('invalid baseline JSON');
+  });
+});
+
+const ID = '2026-10-19-x';
+const LINE = `size-raise: ${ID} split later`;
+const ROW = '  a.txt: ceiling 25000 -> 26000 bytes';
+
+// HEAD holds `before`, the index holds `after`, and MSG is the message the commit-msg hook gets.
+function commitMsg({ before = { 'a.txt': 25000 }, after = { 'a.txt': 26000 }, msg = 'grow', plans }) {
+  const dir = repo();
+  baseline(dir, before);
+  commit(dir, 'seed');
+  baseline(dir, after);
+  for (const id of plans ?? []) put(dir, { [`docs/code-plan/plans/${id}.md`]: '#' });
+  put(dir, { MSG: msg });
+  return run(dir, '--commit-msg', 'MSG');
+}
+
+describe('raised ceiling needs a size-raise line', () => {
+  test.each([
+    ['without the line fails with the remedy', {}, 1, [ROW, 'size-raise: <plan-id>']],
+    ['with a line naming an existing plan passes', { msg: `grow\n\n${LINE}\n`, plans: [ID] }, 0, []],
+    ['naming a missing plan fails', { msg: 'size-raise: 2026-10-19-y', plans: [ID] }, 1, ['docs/code-plan/plans/2026-10-19-y.md']],
+    ['as a new key needs the line too', { before: {}, after: { 'b.txt': 30000 } }, 1, ['  b.txt: no ceiling -> 30000 bytes']],
+    ['with no plans directory accepts a well-formed id', { msg: LINE }, 0, []],
+    ['with no plans directory rejects a malformed id', { msg: 'size-raise: nope' }, 1, ['nope']],
+    ['is not involved when a ceiling is lowered or dropped', { before: { 'a.txt': 25000, 'b.txt': 25000 }, after: { 'a.txt': 24000 } }, 0, []],
+  ])('raised ceiling %s', (_, opts, code, parts) => {
+    const r = commitMsg(opts);
+    expect(r.code).toBe(code);
+    for (const part of parts) expect(r.err).toContain(part);
+  });
+
+  // `base` holds 25000; the branch raises it to 26000, then adds an empty commit.
+  function branch(raiseMsg, ...args) {
+    const dir = repo();
+    const grow = (n) => stage(dir, { [BASELINE]: JSON.stringify({ 'a.txt': n }), 'a.txt': n });
+    grow(25000);
+    commit(dir, 'seed');
+    git(dir, 'branch', 'base');
+    grow(26000);
+    commit(dir, raiseMsg);
+    commit(dir, 'later', '--allow-empty');
+    return run(dir, '--all', ...args);
+  }
+
+  const BASE = ['--base', 'base'];
+  test.each([
+    ['without the line fails --all --base', 'grow', BASE, 1],
+    ['passes --all --base when one commit carries the line', `grow\n\n${LINE}`, BASE, 0],
+    ['is not judged by --all without --base', 'grow', [], 0],
+  ])('raised ceiling on a branch %s', (_, msg, args, code) => {
+    const r = branch(msg, ...args);
+    expect([r.code, r.err.includes(ROW)]).toEqual([code, code === 1]);
   });
 });

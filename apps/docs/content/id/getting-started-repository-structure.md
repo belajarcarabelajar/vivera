@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "99cb7a92288a"
+source_hash: "f2143528c3a4"
 ---
 
 <a id="repository-structure"></a>
@@ -208,7 +208,7 @@ sendiri. File test (`*.test.mjs`) berada di samping script yang diujinya dan tid
 | Script | Fungsinya |
 |---|---|
 | `install-skill-links.mjs` | Menautkan setiap skill di `skills/` ke `~/.config/opencode/skills/`, satu-satunya tempat yang dibaca tool skill OpenCode. Tidak pernah menimpa file asli atau symlink asing. `install.sh` juga menautkan phase skill; script ini adalah cara mandiri untuk menjalankan ulang atau memverifikasi bagian itu saja. `bun run skills:link` menerapkan tautan, `bun run skills:check` keluar dengan kode 1 jika ada tautan yang hilang atau usang, `--dry-run` mencetak aksinya. |
-| `ci-targeted.mjs` | `bun run ci:targeted`, gate default untuk commit dan PR. Memilih pemeriksaan berdasarkan file yang berubah terhadap `origin/main`: graf import di `scripts/`, `validate` untuk skill dan template, pemeriksaan agents dan snippets hanya saat bagian itu berubah, `render-diagrams` hanya untuk sumber diagram, dan aturan copy selalu. File konfigurasi root dan toolchain (`package.json` kecuali yang berubah hanya `scripts`-nya, `bun.lock`, installer) atau path yang tidak dikenali memilih `bun run ci` penuh. `--rencana` (`--plan`) mencetak pemeriksaan yang dipilih beserta alasannya; `--penuh` (`--full`) menjalankan `bun run ci` penuh. |
+| `ci-targeted.mjs` | `bun run ci:targeted`, gate default untuk commit dan PR. Memilih pemeriksaan berdasarkan file yang berubah terhadap `origin/main`: graf import di `scripts/`, `validate` untuk skill dan template, pemeriksaan agents dan snippets hanya saat bagian itu berubah, `render-diagrams` hanya untuk sumber diagram, serta aturan copy dan pemeriksaan ukuran file selalu. File konfigurasi root dan toolchain (`package.json` kecuali yang berubah hanya `scripts`-nya, `bun.lock`, installer) atau path yang tidak dikenali memilih `bun run ci` penuh. `--rencana` (`--plan`) mencetak pemeriksaan yang dipilih beserta alasannya; `--penuh` (`--full`) menjalankan `bun run ci` penuh. |
 | `frontmatter-strict.mjs` | Menjalankan frontmatter plan melalui pemeriksaan YAML yang ketat. Parser milik runner sendiri hanyalah subset yang longgar, jadi sebuah plan bisa lolos dari parser itu tetapi tetap bukan YAML yang valid. |
 | `validate-lib.mjs` | Bagian murni yang bisa di-import dari `validate-skill.mjs`, ditambah `renderMermaidBatch`, agar unit test bisa mengunci pemeriksaannya. |
 | `mermaid-batch.mjs` | Merender daftar file `.mmd` dari stdin dengan fallback batch-and-bisect, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |

@@ -159,3 +159,20 @@ test('a ceiling raise that is not staged does not let a grown file through', () 
   assert.notEqual(r.status, 0, outputOf(r));
   assert.equal(repo.head(), before, 'a blocked commit must not move HEAD');
 });
+
+test('a commit without bun on PATH or in ~/.bun commits and prints the skip note', () => {
+  const repo = sizeGateRepo();
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'size-gate-home-'));
+  const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'size-gate-bin-'));
+  tmpDirs.push(home, bin);
+  // Only what git and the hook's own lines call; bun is left out on purpose.
+  for (const tool of ['git', 'bash', 'sh']) fs.symlinkSync(Bun.which(tool), path.join(bin, tool));
+  assert.equal(Bun.which('bun', { PATH: bin }), null);
+  assert.ok(!fs.existsSync(path.join(home, '.bun', 'bin', 'bun')));
+  repo.write('big.txt', OVERSIZED);
+  repo.git(['add', 'big.txt']);
+  const r = repo.commit('no bun', { PATH: bin, HOME: home });
+  assert.equal(r.status, 0, outputOf(r));
+  assert.ok(outputOf(r).includes('[size-gate] skipped: bun not found'), outputOf(r));
+  assert.notEqual(repo.head(), '');
+});

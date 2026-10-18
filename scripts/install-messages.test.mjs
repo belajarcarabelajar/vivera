@@ -291,3 +291,14 @@ describe('6: a HOME that cannot be written fails with an installer line', () => 
     });
   });
 });
+
+describe('7: a dry run names what the pre-commit hook does', () => {
+  test('messages: the dry-run hook line names the blocking size gate before the graph refresh', () => {
+    const sb = sandbox({ tools: ['git', 'bun'], git: true });
+    const r = sb.run(['--dry-run']);
+    expect(r.status).toBe(0);
+    expect(lines(r.stdout)).toContain(
+      '[DRY-RUN]   - .githooks/pre-commit -> blocking file size gate on staged files, then non-blocking graphify update and graphify:sync',
+    );
+  });
+});

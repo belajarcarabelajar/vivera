@@ -5,7 +5,7 @@ category: tooling
 slug: mermaid-rendering
 order: 1
 source: README.md#Mermaid Rendering
-source_hash: "91dbb680ddc2"
+source_hash: "079215061c52"
 ---
 
 <a id="mermaid-rendering"></a>
@@ -31,7 +31,7 @@ bun install                              # pinned toolchain
 bun run render-diagrams                  # all blocks -> diagrams/
 bun run validate                         # syntax + a11y + config + hero presence
 bun test scripts/                        # unit tests for every script under scripts/
-bun run ci                               # render, validate, agents check, tests, snippet drift check
+bun run ci                               # render, validate, agents check, size check, tests, snippet drift check
 ```
 
 Perintah-perintah ini dijalankan **secara lokal, oleh Anda, sebelum commit**, bukan di hosted

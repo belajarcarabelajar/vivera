@@ -429,7 +429,7 @@ describe('repo exemptions', () => {
   const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const attr = (p) => git(REPO, 'check-attr', '--cached', 'size-gate', '--', p).trim().split(': ').pop();
 
-  // Lockfiles, rendered diagrams, the demo scripts/make-graph-demo.py writes, the sprites
+  // Lockfiles, rendered diagrams, the committed graph viewer demo, the sprites
   // scripts/gen-sprite-agents.mjs writes, and the vendored graphify skill: fix them at the source.
   test.each([
     'bun.lock', 'apps/docs/Cargo.lock', 'diagrams/lifecycle.svg', 'examples/graph-viewer-demo.html',

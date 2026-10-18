@@ -113,8 +113,7 @@ vivera/
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
 │   ├── sync-snippets.mjs                        # Drift guard: snippets/ <-> Snipset database
 │   ├── sync-snippets.test.mjs                   # Normalization + drift-detection tests
-│   ├── export-opencode-history.mjs              # OpenCode SQLite session history -> Obsidian notes mirror
-│   ├── lib/                                     # Exporter & chunk utilities (db, redact, note-name, sync-writer, etc.)
+│   ├── lib/                                     # Shared utilities (redact, chunk schema, note-name, sync-writer, etc.)
 │   │   ├── install-sandbox.mjs                  # Temp HOME and a limited PATH for the installer tests
 │   │   └── prereq.mjs                           # Reads scripts/install/tiers.tsv (shared with validate-skill.mjs)
 │   ├── plan-publish.mjs                         # Publish plans into the Obsidian vault (one-way mirror)
@@ -131,9 +130,7 @@ vivera/
 │   ├── graphify-sync.mjs                        # Union repo Markdown chunk nodes into graphify-out/graph.json
 │   ├── graphify-sync.test.mjs                   # Remap, idempotency, retention, and gate tests
 │   ├── vault-index.mjs                          # Vault index scanner & worklist generator
-│   ├── vault-index-verify.mjs                   # Verify coverage, privacy boundaries, and graphify read paths
 │   ├── vault-index-rebuild.mjs                  # Rebuild merged knowledge graph from structural + semantic chunks
-│   ├── vault-index-cluster.mjs                  # Leiden clustering pass for knowledge graph
 │   └── plan-mirror-check.sh                     # Local drift watchdog (systemd --user timer, check only)
 ├── snippets.manifest.json                      # Maps trigger prompts to Snipset database slots
 ├── plans.publish.json                          # Vault path, destination template, and project roots for the plan mirror (local config, gitignored; plans.publish.example.json is the committed template)
@@ -158,7 +155,6 @@ vivera/
 │   ├── progress-log-template.md                 # Persistent task state across sessions
 │   ├── adr-template.md                          # Architecture Decision Record with decision tree
 │   ├── subagent-contract-template.md            # Subagent task contract & parent audit gate
-│   ├── vault-index-subagent-contract.md         # Subagent contract for note reading & semantic extraction
 │   ├── code-review-template.md                  # Reviewer output contract & verdict
 │   ├── deep-research-report-template.md         # Citation-grounded long-form research report
 │   ├── follow-up-injection-template.md          # Session-close debt sweep & follow-up question
@@ -215,11 +211,14 @@ sendiri. File test (`*.test.mjs`) berada di samping script yang diujinya dan tid
 | `mermaid-batch.mjs` | Merender daftar file `.mmd` dari stdin dengan fallback batch-and-bisect, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
 | `puppeteer-browser.mjs` | Mengarahkan `mmdc` ke Chromium atau Chrome sistem di PATH saat `~/.cache/puppeteer` tidak ada dan `PUPPETEER_EXECUTABLE_PATH` tidak diset, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
 | `skill-corpus.mjs` | Menyimpan daftar phase skill dan `readSkillCorpus`, yang membaca master skill dan phase skill sekaligus untuk para validator. |
-| `make-graph-demo.py` | Membuat ulang `examples/graph-viewer-demo.html` dari graf sintetis dengan seed tetap. Membutuhkan `numpy`. |
-| `vault-index-batch.mjs` | Membagi vault yang belum terindeks ke subagent ekstraksi paralel berdasarkan ukuran byte, bukan jumlah file. |
-| `vault-index-resolve-chunk.mjs` | Mengubah draf chunk dari subagent menjadi chunk final yang path `source_file`-nya persis sama dengan yang ada di `batches.json`. |
-| `vault-index-ids.mjs` | Mencari node id yang sudah dihasilkan chunk, berdasarkan substring, agar subagent tidak mengarang duplikat. |
 | `vault-index-merge.mjs` | Menggabungkan chunk-chunk menjadi satu `graph.json`. |
-| `vault-index-fold-rationale.mjs` | Melipat edge `rationale_for` menjadi atribut `rationale` pada node target. |
-| `vault-index-narration.py` | Meringkas transkrip sesi yang sudah dirender menjadi narasinya saja dengan membuang lalu lintas tool-call. |
-| `vault-index-cluster.py` | Menghitung komunitas pada graf vault hasil merge, karena `graphify cluster-only` menolak menulis pada graf itu. |
+
+<a id="frozen-surfaces"></a>
+## Permukaan yang dibekukan
+
+Permukaan berikut tetap menyimpan kode dan tesnya, tetapi tidak mendapat fitur baru dan tidak di-deploy sampai rilis bertag pertama (pembekuan dicabut begitu ada tag `v*`):
+
+- Situs dokumentasi di `apps/docs`.
+- Installer Windows: `install.ps1` dan `scripts/install/windows-*.ps1`.
+- Setup container: `Dockerfile` dan `.devcontainer`.
+- Tooling rilis: `scripts/bootstrap.sh` dan `scripts/release`.

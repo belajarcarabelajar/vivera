@@ -5,7 +5,7 @@ category: tooling
 slug: validation
 order: 8
 source: README.md#Validation & Quality Checks
-source_hash: "9191500e5f46"
+source_hash: "8f1c40a3cd4f"
 ---
 
 <a id="validation--quality-checks"></a>
@@ -31,12 +31,6 @@ bun test scripts/
 
 # Trigger prompts vs the Snipset database (skips cleanly where no database exists)
 bun run snippets:check
-
-# Fast knowledge graph verification (coverage and boundary rules, ~2s)
-bun scripts/vault-index-verify.mjs --no-graphify
-
-# OpenCode history exporter dry run
-bun run export:history --dry-run --limit 1
 ```
 
 Atau jalankan seluruh gate secara berurutan dengan `bun run ci`. Untuk commit atau PR, jalankan `bun run ci:targeted` sebagai gantinya dan kutip plan `--rencana`-nya; perintah itu sendiri yang memilih CI penuh bila perubahan memerlukannya.

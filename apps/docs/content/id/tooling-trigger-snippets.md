@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: README.md#Trigger Snippets
-source_hash: "d66c70fca67c"
+source_hash: "c788ff0e04fd"
 ---
 
 <a id="trigger-snippets"></a>
@@ -433,9 +433,8 @@ mesin tetap bisa berjalan di mesin selain mesin ini:
 
 | Variabel | Dibaca oleh | Default |
 |---|---|---|
-| `OBSIDIAN_VAULT` | `spike-skipif-corpus.mjs` | `$HOME/Dokumen/Obsidian Vault` |
-| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs`, `vault-index-cluster.mjs` / `.py` | tidak di-set: key `graphifySitePackages` di `local.config.json` yang di-gitignore (lihat `local.config.example.json`), bila itu pun tidak ada, error yang menyebutkan langkah perbaikannya |
-| `GRAPHIFY_PYTHON` | `vault-index.mjs`, `vault-index-cluster.mjs` | tidak di-set: key `graphifyPython` di `local.config.json`, bila itu pun tidak ada, error yang menyebutkan langkah perbaikannya |
+| `GRAPHIFY_SITE_PACKAGES` | `vault-index.mjs` | tidak di-set: key `graphifySitePackages` di `local.config.json` yang di-gitignore (lihat `local.config.example.json`), bila itu pun tidak ada, error yang menyebutkan langkah perbaikannya |
+| `GRAPHIFY_PYTHON` | `vault-index.mjs` | tidak di-set: key `graphifyPython` di `local.config.json`, bila itu pun tidak ada, error yang menyebutkan langkah perbaikannya |
 
 `bun test scripts/` **melewati (skip), alih-alih menggagalkan,** test yang premisnya tidak
 bisa dipenuhi host saat ini: checkout di lokasi lain, mesin tanpa detektor graphify

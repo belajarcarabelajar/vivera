@@ -5,7 +5,7 @@ category: pipeline
 slug: executing-a-plan
 order: 5
 source: README.md#Executing an `ultra-plan/v1` Plan
-source_hash: "ad30ad5589e8"
+source_hash: "ea17546b08c1"
 ---
 
 <a id="executing-an-ultra-planv1-plan"></a>
@@ -33,8 +33,10 @@ klaim performa tanpa pembanding hanyalah komentar, bukan test.
 
 | Lokasi | Bentuk lama | Hasil ukur lama | Baru |
 |---|---|---|---|
-| `check-anchors.mjs` `parseAnchors` | berjalan maju dari setiap `[` | 250 KB → **3,0 s** | 1,4 ms |
+| `check-anchors.mjs` `parseAnchors` (dipensiunkan 2026-10-19) | berjalan maju dari setiap `[` | 250 KB → **3,0 s** | 1,4 ms |
 | `vault-index-structural.mjs` `stripFrontmatter` | `/^([\s\S]*?)^---[ \t]*(?:\r?\n\|$)/m` | 781 KB → **3,8 s**; 3 MB → 30 s | ~2 ms |
+
+Auditor anchor beserta tes kontrolnya dipensiunkan pada 2026-10-19 bersama tooling chunk vault lainnya; barisnya tetap ada sebagai catatan hasil ukur.
 
 Keduanya punya akar masalah yang sama: **prefix lazy tanpa batas yang tidak memiliki literal
 sebagai titik lompat bagi engine**. `[\s\S]*?` cocok dengan string kosong di setiap posisi,

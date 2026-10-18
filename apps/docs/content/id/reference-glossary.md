@@ -5,7 +5,7 @@ category: reference
 slug: glossary
 order: 5
 source: README.md#The Vivera Glossary
-source_hash: "e8c0f76bb025"
+source_hash: "a8bcf8e0c73b"
 ---
 
 <a id="the-vivera-glossary"></a>
@@ -20,7 +20,7 @@ Glosarium ini hanya mengikuti game PlayStation, bukan *Friends of Mineral Town* 
 | The farm | Lahan milik pemain di Mineral Village | Repositori ini |
 | Crops and seeds | Apa yang Anda tanam, rawat, dan kirim | Skill beserta file sumbernya; `install.sh` menanamnya ke setiap harness yang dideteksinya (dan selalu ke `~/.config/ai` dan `~/.agents/skills`) |
 | Power Berry | Buah beri tersembunyi yang secara permanen menaikkan stamina maksimum sebanyak 10; jumlahnya ada sepuluh | Peningkatan kemampuan yang permanen: setiap perubahan skill atau tooling yang di-merge menambah apa yang bisa dikerjakan pipeline dalam sehari |
-| Mystic Berry (Kappa's Berry) | Memangkas laju kelelahan menjadi setengah; didapat dari Kappa setelah Anda meninggalkan tiga timun di Mother Lake, satu per hari di musim semi | Pekerjaan yang memangkas kelelahan konteks menjadi setengah: hemat token, query graphify alih-alih dump mentah, `ctx_execute` alih-alih output penuh |
+| Mystic Berry (Kappa's Berry) | Memangkas laju kelelahan menjadi setengah; didapat dari Kappa setelah Anda meninggalkan tiga timun di Mother Lake, satu per hari di musim semi | Pekerjaan yang memangkas kelelahan konteks menjadi setengah: hemat token, query graphify alih-alih dump mentah, filter pipe alih-alih output penuh |
 | The seven Harvest Sprites | Chef, Nappy, Hoggy, Aqua, Bold, Timid, dan Staid, masing-masing dengan warna berbeda | Subagent. Fan-out mengirim para sprite ke ladang yang berbeda, dan setiap sprite memegang satu chunk kecil |
 | The Tea Party | Pertemuan di musim semi: pada hari cerah yang bukan hari festival, antara pukul 15.00 dan 16.00, Anda memberi ketujuh sprite masing-masing hadiah yang mereka sukai (Flour paling mudah) di dalam pondok mereka, lalu mereka mengundang Anda; hadiahnya adalah Relaxation Tea Leaves | Checkpoint gather-and-synthesize: laporan baru dikumpulkan setelah setiap sprite yang dikirim sudah melapor |
 | Affection (heart levels) | Tujuh warna dari hitam sampai merah, dihitung dalam poin (biru 20.000 sampai 29.999; hijau 30.000 sampai 39.999) | Kepercayaan yang terukur: temuan review, bukti baru, dan pekerjaan yang di-merge mengumpulkan poin; tidak ada yang disetujui hanya berdasarkan firasat |

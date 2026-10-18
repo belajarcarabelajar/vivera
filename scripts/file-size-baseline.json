@@ -45,7 +45,7 @@
   "scripts/validate-agents.test.mjs": 21143,
   "scripts/validate-lib.test.mjs": 27833,
   "scripts/validate-skill.mjs": 45320,
-  "scripts/validate-skill.test.mjs": 21620,
+  "scripts/validate-skill.test.mjs": 21552,
   "scripts/vault-index-merge.mjs": 47618,
   "scripts/vault-index-rebuild.mjs": 21092,
   "scripts/vault-index-structural.mjs": 70500,

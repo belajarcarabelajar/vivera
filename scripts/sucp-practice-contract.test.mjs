@@ -9,9 +9,10 @@
 import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { readSkillText } from './skill-corpus.mjs';
 
 const root = path.join(import.meta.dir, '..');
-const read = (rel) => fs.readFileSync(path.join(root, rel), 'utf8');
+const read = (rel) => readSkillText(root, rel);
 
 const CONTRACT = [
   {

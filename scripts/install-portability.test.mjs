@@ -16,7 +16,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
+import { assertSandbox, makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const SKILLS = '.agents/skills';
@@ -99,15 +99,10 @@ describe('D2: a marker reached through a symlinked skills dir keeps the entry li
 
   test('D2: after both targets the package marker and every phase marker still hold their entry lines', () => {
     const sb = shared();
-    const r = sb.run(ARGS);
-    expect(r.status).toBe(0);
-    const pkg = read(sb, `${PKG}/${MARKER}`);
-    expect(entryLines(pkg).map((l) => l.split(' ')[1]).sort()).toEqual(
-      ['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'templates'].sort(),
-    );
-    for (const phase of phases(sb)) {
-      expect(entryLines(read(sb, `${SKILLS}/${phase}/${MARKER}`)).map((l) => l.split(' ')[1])).toEqual(['SKILL.md']);
-    }
+    expect(sb.run(ARGS).status).toBe(0);
+    const held = (d) => entryLines(read(sb, `${d}/${MARKER}`)).map((l) => l.split(' ')[1]);
+    expect(held(PKG).sort()).toEqual(['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'templates']);
+    expect(phases(sb).flatMap((p) => held(`${SKILLS}/${p}`).map((n) => `${p}/${n}`))).toEqual(phaseEntries(sb.repo));
   });
 
   test('D2: --update of an outdated checkout refreshes the untouched copies with no backup at all', () => {

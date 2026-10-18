@@ -91,6 +91,15 @@ function resolveReal(p) {
   return path.join(fs.realpathSync(head), ...rest);
 }
 
+// The phase skill entries one package target places, as `<phase>/<entry>` in the installer's order
+// (package_entries in scripts/install/lib.sh): each phase's SKILL.md, then its references dir when the
+// repo has one. Read from the sandbox repo so a test never hard-codes which phase has references.
+export function phaseEntries(repo) {
+  const skills = path.join(repo, 'skills');
+  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('sucp-')).sort();
+  return phases.flatMap((p) => [`${p}/SKILL.md`, ...(fs.existsSync(path.join(skills, p, 'references')) ? [`${p}/references`] : [])]);
+}
+
 export function assertSandbox(env) {
   const home = env && env.HOME;
   if (!home) throw new Error('install sandbox guard: HOME is not set');

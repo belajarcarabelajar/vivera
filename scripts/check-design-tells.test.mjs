@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkText, checkDiff, expandPaths, parseDeclarations, stripeFromDeclaration, namesState, main, STATE_WORDS } from './check-design-tells.mjs';
+import { readSkillText } from './skill-corpus.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -286,7 +287,7 @@ test('a directory argument is walked, skipping node_modules and build output', (
 });
 
 test('the rule is still written down in the master skill and names this gate', () => {
-  const skill = fs.readFileSync(path.join(ROOT, 'skills', 'sucp-rules', 'SKILL.md'), 'utf8');
+  const skill = readSkillText(ROOT, 'skills/sucp-rules/SKILL.md');
   assert.match(skill, /colored left stripe/, 'the named tell left the master skill');
   assert.match(skill, /check-design-tells\.mjs/, 'the master skill no longer points at the gate');
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');

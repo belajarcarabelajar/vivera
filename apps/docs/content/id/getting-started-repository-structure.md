@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "f2143528c3a4"
+source_hash: "95aae34db773"
 ---
 
 <a id="repository-structure"></a>
@@ -176,6 +176,7 @@ vivera/
     │   ├── mermaid.config.json -> ../../mermaid.config.json
     │   └── mermaid.dark.config.json -> ../../mermaid.dark.config.json
     ├── sucp-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
+    ├── sucp-rules/references/                   # Nine rule files
     ├── sucp-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging

@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const VIA = 'is reached through a symlinked directory; left alone';
@@ -34,17 +34,16 @@ function sandbox() {
 }
 
 const at = (sb, rel) => path.join(sb.home, rel);
-const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
 const backupsUnder = (sb) => sb.snapshot(sb.root).filter((l) => l.split('|')[0].includes('.vivera-bak-'));
 const links = (lines) => lines.filter((l) => l.split('|')[1] === 'l');
 
 // Every destination of one package target, as the installer lists them: the package entries and one
-// SKILL.md per phase skill, all in <skills dir>.
+// SKILL.md per phase skill, plus a references dir for each phase skill that has one, all in <skills dir>.
 function destsIn(sb, skillsRel) {
   const dir = at(sb, skillsRel);
   return [
     ...ENTRIES.map((e) => path.join(dir, PACKAGE, e)),
-    ...phases(sb).map((p) => path.join(dir, p, 'SKILL.md')),
+    ...phaseEntries(sb.repo).map((e) => path.join(dir, e)),
   ];
 }
 

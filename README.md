@@ -71,7 +71,7 @@ What a question looks like:
 - Unattended runs ask nothing mid-run. The overnight entry gate is collected while the user is present, and a mid-run decision follows the Unattended Continuation Rule: a reversible one continues on the most reasonable reading, an irreversible one that could go either way is parked in the handoff. The debt-sweep question is the one exception, as the last act of the run, and only when the harness has an interactive client.
 - Question text follows the user's language preference, never a hardcoded language. Subagents never ask: a question goes into their report and the parent asks.
 
-The full rule is the `### ⏸️ Confirmation Protocol` section of [`skills/sucp-rules/SKILL.md`](skills/sucp-rules/SKILL.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
+The full rule is the `### ⏸️ Confirmation Protocol` section of [`references/07-completion-confirmation.md`](skills/sucp-rules/references/07-completion-confirmation.md). Its last table is the gate catalog: the header and the ordered options for each gate, from the intent lock to the merge and the debt sweep.
 The catalog also has a `Basis` column holding the standard reason for each gate, which the validator requires.
 
 ---
@@ -243,6 +243,7 @@ vivera/
     │   ├── mermaid.config.json -> ../../mermaid.config.json
     │   └── mermaid.dark.config.json -> ../../mermaid.dark.config.json
     ├── sucp-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
+    ├── sucp-rules/references/                   # Nine rule files
     ├── sucp-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research
     ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
     ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging

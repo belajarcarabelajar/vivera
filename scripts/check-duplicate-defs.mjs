@@ -51,6 +51,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { parseAddedLines } from './check-copy-rules.mjs';
+import { gitText } from './lib/git.mjs';
 
 const NAME = '([A-Za-z_$][\\w$]*)';
 const ARROW_HEAD = '(?:async\\s+)?(?:\\([^)]*\\)|[A-Za-z_$][\\w$]*)\\s*=>';
@@ -74,7 +75,6 @@ const GENERIC_NAMES = new Set([
 const SKIP_DIRS = new Set(['node_modules', 'vendor', 'dist', 'build', 'target', 'graphify-out']);
 const TEST_DIRS = new Set(['tests', '__tests__']);
 const WAIVER_RE = /dup-defs:\s*allow\b\s*(.*?)\s*(?:\*\/|-->|$)/i;
-const MAX_BUFFER = 64 * 1024 * 1024;
 
 // defer: names only, a helper rewritten under another name is not found, upgrade when a missed duplicate is observed in a review
 export function normalizeName(name) {
@@ -119,14 +119,6 @@ function isGeneric(normalized) {
   return normalized === '' || GENERIC_NAMES.has(normalized);
 }
 
-function git(cwd, args, what) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: MAX_BUFFER });
-  if (r.error || r.status !== 0) {
-    throw new Error(`${what}: ${(r.error?.message ?? r.stderr).trim() || `exit ${r.status}`}`);
-  }
-  return r.stdout;
-}
-
 const nulList = (out) => out.split('\u0000').filter(Boolean);
 
 /** The reason of a `dup-defs: allow` on the definition line or the line above; null when there is no waiver. */
@@ -144,13 +136,13 @@ export function checkDiff({ base, cwd = process.cwd() } = {}) {
   if (typeof base !== 'string' || base === '' || base.startsWith('-')) {
     throw new Error(`invalid --diff base: '${base}'`);
   }
-  const mergeBase = git(cwd, ['merge-base', base, 'HEAD'], `cannot resolve merge-base of '${base}' and HEAD`).trim();
+  const mergeBase = gitText(cwd, ['merge-base', base, 'HEAD'], { label: `cannot resolve merge-base of '${base}' and HEAD` }).trim();
   // parseAddedLines strips only a `b/` prefix, so diff.mnemonicPrefix or diff.noprefix must not change it.
-  const diff = git(cwd, ['diff', '--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', mergeBase], `git diff ${mergeBase.slice(0, 8)} failed`);
+  const diff = gitText(cwd, ['diff', '--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/', mergeBase], { label: `git diff ${mergeBase.slice(0, 8)} failed` });
   const addedLines = parseAddedLines(diff);
   // git diff never lists untracked files, so a new file not yet added would pass unread.
-  const untracked = new Set(nulList(git(cwd, ['ls-files', '-z', '--others', '--exclude-standard'], 'git ls-files --others failed')));
-  const listed = nulList(git(cwd, ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], 'git ls-files failed'));
+  const untracked = new Set(nulList(gitText(cwd, ['ls-files', '-z', '--others', '--exclude-standard'], { label: 'git ls-files --others failed' })));
+  const listed = nulList(gitText(cwd, ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { label: 'git ls-files failed' }));
 
   const byName = new Map();
   const added = [];

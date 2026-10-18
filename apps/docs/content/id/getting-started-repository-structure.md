@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "95aae34db773"
+source_hash: "4d1164a6b1ca"
 ---
 
 <a id="repository-structure"></a>

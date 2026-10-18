@@ -63,6 +63,9 @@ function expectedLayout(sb, { opencode = false, claude = false, builtin = false 
     for (const name of phaseSkills(sb)) {
       add(`${root}/${name}`, 'd');
       add(`${root}/${name}/SKILL.md`, 'l', `${REPO_REF}/skills/${name}/SKILL.md`);
+      if (fs.existsSync(path.join(sb.repo, 'skills', name, 'references'))) {
+        add(`${root}/${name}/references`, 'l', `${REPO_REF}/skills/${name}/references`);
+      }
     }
   }
   for (const s of sprites(sb)) {
@@ -140,6 +143,18 @@ test('baseline: with ~/.claude present the run also installs the Claude Code pac
   expectLayout(sb, { claude: true });
   expect(fs.lstatSync(path.join(sb.home, '.claude/skills/super-ultra-code-plan/SKILL.md')).isSymbolicLink()).toBe(true);
   expectGeneratedSprites(sb, '.claude/agents');
+});
+
+test('baseline: a phase skill with a references dir also gets a references link', () => {
+  const sb = sandbox({ tools: ['git', 'bun'] });
+  mkdirHome(sb, '.claude');
+  const refDir = path.join(sb.repo, 'skills', 'sucp-plan', 'references');
+  fs.mkdirSync(refDir, { recursive: true });
+  fs.writeFileSync(path.join(refDir, '01-probe.md'), '# probe\n');
+  const r = sb.run([]);
+  expect(r.status).toBe(0);
+  expect(fs.readlinkSync(path.join(sb.home, '.claude/skills/sucp-plan/references'))).toBe(refDir);
+  expectLayout(sb, { claude: true });
 });
 
 test('baseline: with the Antigravity builtin skills dir present the run also installs Antigravity and its CLI (changed in T06)', () => {

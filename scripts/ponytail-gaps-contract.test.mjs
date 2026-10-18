@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { readSkillText } from './skill-corpus.mjs';
 
 const ROOT = path.join(import.meta.dir, '..');
 const TMP_PREFIX = 'ponytail-gaps-';
@@ -194,7 +195,7 @@ describe('T5 wiring', () => {
   });
 
   test('sucp-rules names dups:check on the Simplicity Ladder bullet', () => {
-    const lines = readRepoFile('skills/sucp-rules/SKILL.md').split('\n');
+    const lines = readSkillText(ROOT, 'skills/sucp-rules/SKILL.md').split('\n');
     const sameLine = lines.some((line) => line.includes('The Simplicity Ladder') && line.includes('dups:check'));
     expect(sameLine).toBe(true);
   });

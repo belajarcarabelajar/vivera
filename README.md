@@ -261,6 +261,16 @@ The skill installs through `skills/super-ultra-code-plan/`, which is a set of sy
 the repo root rather than a copy. The master file stays single-sourced, and
 `render-diagrams.sh` skips symlinked files so the same diagram is never rendered twice.
 
+### Session metrics
+
+`bun run metrics` (`scripts/session-metrics.mjs`) reports what the pipeline cost and how it behaved, read only from the Claude Code transcripts in `~/.claude/projects/<slug>` and from `pr.registry.json`. It counts main sessions, subagent runs by type, API calls, tokens, cost-weighted units, first-call context, `AskUserQuestion` calls, Skill loads, merged PRs, and escapes (commits on `origin/main` with a `Fixes:` trailer).
+
+```bash
+bun run metrics -- --since 2026-10-09 --until 2026-10-19 --json
+```
+
+A session is assigned to the `--since`/`--until` window (whole UTC days) by its first timestamp, and a message id that appears in two transcript files is counted once. It prints counts only and never any transcript text, tool input, or tool result. A missing project dir exits 1, because an unread source is not an empty result.
+
 ### Scripts without a section of their own
 
 The tree lists only some of `scripts/`, and later sections document most of the rest. These have no

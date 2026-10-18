@@ -362,3 +362,22 @@ export function checkGateCatalog(text) {
   });
   return problems;
 }
+
+const MERMAID_A11Y_RE = /accTitle:[^\n]*\n\s*accDescr:/;
+
+/**
+ * Outcome of one Mermaid block. A cached block skips the render and the SVG
+ * check but still gets the source a11y check; only a block that passed every
+ * check it received may be stored as ok.
+ */
+export function classifyMermaidResult({ result, source }) {
+  if (!result.ok) return { status: 'invalid', cacheable: false };
+  if (!MERMAID_A11Y_RE.test(source)) return { status: 'no-a11y', cacheable: false };
+  if (result.cached) return { status: 'ok', cacheable: true };
+  const svg = result.svg ?? '';
+  const wired = /<title[^>]*>/.test(svg)
+    && /<desc[^>]*>/.test(svg)
+    && /aria-labelledby="[^"]*"/.test(svg)
+    && /aria-describedby="[^"]*"/.test(svg);
+  return wired ? { status: 'ok', cacheable: true } : { status: 'no-wiring', cacheable: false };
+}

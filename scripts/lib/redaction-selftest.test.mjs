@@ -1,23 +1,16 @@
 // scripts/lib/redaction-selftest.test.mjs
 //
-// THE EXECUTABLE FORM OF A DECISION SOMEONE MADE KNOWINGLY.
+// Guards two things: redact.mjs catches every planted synthetic secret, and no
+// module under scripts/lib/ queries the credential table.
 //
-// ~300 MiB of tool output — including 29,447 `shell` calls whose output may
-// contain tokens — is about to be written into a git-tracked Obsidian vault
-// that a plugin auto-commits and auto-pushes to GitHub every ten minutes. So a
-// file written here is a file published. Redaction is a best-effort net, not a
-// guarantee (that is the accepted risk, Intent Lock A9), and "best-effort" is
-// the kind of phrase that quietly becomes "no protection" the first time
-// somebody adds a pattern and forgets the fixture.
+// It makes the redaction net falsifiable in two directions:
 //
-// This file makes best-effort falsifiable in two directions:
-//
-//   FORWARD  — every pattern in PATTERNS has a planted synthetic secret here,
+//   FORWARD:  every pattern in PATTERNS has a planted synthetic secret here,
 //              and that secret must be caught. A pattern nobody planted a
 //              sample for FAILS the run (section 2). It is not skipped, because
 //              a skipped untested pattern is exactly the silent gap this file
 //              exists to close.
-//   BACKWARD — the guard that says `credential` is off limits is itself proven
+//   BACKWARD: the guard that says `credential` is off limits is itself proven
 //              to work, by feeding the validator a deliberately broken table and
 //              by scanning every module under scripts/lib/ for a query that
 //              reaches that table (sections 3 and 4).
@@ -143,12 +136,12 @@ test('every pattern in PATTERNS has a planted sample (an untested pattern fails)
 
   // Direction 1: a shipped pattern nobody planted. This is the AC-5 clause and
   // the whole reason this file exists, so it is a hard failure with the missing
-  // name in the message — never a skip, and never a "coverage" percentage.
+  // name in the message: never a skip, and never a "coverage" percentage.
   const missing = PATTERN_NAMES.filter((n) => !sampled.includes(n));
   assert.deepEqual(
     missing,
     [],
-    `patterns with no planted sample: ${missing.join(', ') || '(none)'} — add a synthetic secret to SAMPLES in this file`,
+    `patterns with no planted sample: ${missing.join(', ') || '(none)'}; add a synthetic secret to SAMPLES in this file`,
   );
 
   // Direction 2: a sample for a pattern that no longer exists. Without this,
@@ -158,7 +151,7 @@ test('every pattern in PATTERNS has a planted sample (an untested pattern fails)
   assert.deepEqual(
     extra,
     [],
-    `planted samples for patterns that are not in PATTERNS: ${extra.join(', ') || '(none)'} — remove the stale sample`,
+    `planted samples for patterns that are not in PATTERNS: ${extra.join(', ') || '(none)'}; remove the stale sample`,
   );
 
   assert.deepEqual([...sampled].sort(), [...PATTERN_NAMES].sort());
@@ -225,7 +218,7 @@ const NEEDLE_VALUE = new RegExp(['credent' + 'ial', '\\s*\\.\\s*value', '\\b'].j
 // string and template literals, so stripping strings would delete the thing
 // being hunted; leaving comments in would let a doc comment that merely NAMES
 // the table fail the build, which is the false positive this section must not
-// have (three files legitimately mention the table in prose).
+// have (redact.test.mjs and this file name the table in prose).
 function stripComments(src) {
   return src
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -352,7 +345,7 @@ test('a secret inside a PEM block is removed even though the PEM pattern outrank
   // The safety property holds, and that is what is asserted here: the secret is
   // gone and the removal is ATTRIBUTED to a pattern rather than silently
   // dropped. What is deliberately NOT asserted is jwt's count, which is 0 for
-  // this shape. That is a real limitation of the ordering — a reordering would
+  // this shape. That is a real limitation of the ordering: a reordering would
   // make this test fail, on purpose, so the trade-off gets a decision instead of
   // a quiet drift. The count is reported in the section 7 inventory as a
   // known-unattributed case.

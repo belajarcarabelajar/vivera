@@ -28,6 +28,7 @@ tasks:
         expect_exit: 0               # GREEN: passes, 0 failures
         retry: 1
         loop_until: "bun test path/to/file1.test.ts"   # optional; exit 0 = converged, non-zero = re-run inside `retry`
+        timeout_s: 240               # optional; this step's own budget in s (twice a measured run), replaces step_timeout_s
   - id: T2
     depends_on: [T1]
     impacts: ["path/to/file2.ts consumers - rg 'from .*file1' src/ ; none: bun test path/to/file2.test.ts"]

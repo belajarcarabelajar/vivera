@@ -269,7 +269,7 @@ the repo root rather than a copy. The master file stays single-sourced, and
 bun run metrics -- --since 2026-10-09 --until 2026-10-19 --json
 ```
 
-It prints counts only and never any transcript text, tool input, or tool result. A missing project dir exits 1, because an unread source is not an empty result.
+A session is assigned to the `--since`/`--until` window (whole UTC days) by its first timestamp, and a message id that appears in two transcript files is counted once. It prints counts only and never any transcript text, tool input, or tool result. A missing project dir exits 1, because an unread source is not an empty result.
 
 ### Scripts without a section of their own
 

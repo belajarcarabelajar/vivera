@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readTranscript, slugFor, summarize } from './session-metrics.mjs';
+import { readTranscript, repoMatches, slugFor, summarize } from './session-metrics.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'session-metrics.mjs');
 const SECRET = 'ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234';
@@ -125,14 +125,66 @@ describe('summarize', () => {
   });
 
   test('trims padded agent types and folds free text into <other>', () => {
-    const t = { calls: [], firstTs: '2026-10-10T00:00:00Z' };
-    const subs = [{ ...t, agentType: ' chef ' }, { ...t, agentType: `leak ${SECRET}` }];
+    const t = (id) => ({ calls: [{ id, usage: u(1, 0, 0, 1), tools: [], skills: [] }], firstTs: '2026-10-10T00:00:00Z' });
+    const subs = [{ ...t('a'), agentType: ' chef ' }, { ...t('b'), agentType: `leak ${SECRET}` }];
     const s = summarize({ mains: [], subs, registry: null, fixes: null, window: {} });
     expect(s.subagentsByType).toEqual({ chef: 1, '<other>': 1 });
   });
 });
 
+describe('cross-file dedupe and empty sessions', () => {
+  const call = (id, ctx, out = 1) => ({ id, usage: u(ctx, 0, 0, out), tools: [], skills: [] });
+  const tr = (file, calls) => ({ file, calls, firstTs: '2026-10-10T00:00:00Z', lastTs: '2026-10-10T00:00:00Z' });
+
+  test('two main files sharing message ids are counted once', () => {
+    const a = tr('/p/a.jsonl', [call('m1', 100), call('m2', 200)]);
+    const copy = tr('/p/b.jsonl', [call('m1', 100), call('m2', 200)]);
+    const s = summarize({ mains: [copy, a], subs: [], registry: null, fixes: null, window: {} });
+    expect(s.mainSessions).toBe(1);
+    expect(s.apiCalls).toBe(2);
+    expect(s.tokens.input).toBe(300);
+  });
+
+  test('subagent files sharing message ids are counted once', () => {
+    const one = { ...tr('/p/s/agent-1.jsonl', [call('s1', 50)]), agentType: 'chef' };
+    const two = { ...tr('/p/s/agent-2.jsonl', [call('s1', 50)]), agentType: 'chef' };
+    const s = summarize({ mains: [], subs: [one, two], registry: null, fixes: null, window: {} });
+    expect(s.subagentRuns).toBe(1);
+    expect(s.subagentsByType).toEqual({ chef: 1 });
+  });
+
+  test('a transcript without API calls is not a session', () => {
+    const s = summarize({ mains: [tr('/p/a.jsonl', [call('m1', 10)]), tr('/p/empty.jsonl', [])], subs: [], registry: null, fixes: null, window: {} });
+    expect(s.mainSessions).toBe(1);
+  });
+
+  test('a zero-context first call is skipped when picking the first-call context', () => {
+    const s = summarize({ mains: [tr('/p/a.jsonl', [call('m0', 0, 0), call('m1', 400)])], subs: [], registry: null, fixes: null, window: {} });
+    expect(s.medianFirstCallContext.main).toBe(400);
+  });
+});
+
+describe('repoMatches', () => {
+  test('repo field matches only on its last path component', () => {
+    expect(repoMatches({ repo: '/x/dawnbook' }, '/h/book')).toBe(false);
+    expect(repoMatches({ repo: '/x/book/' }, '/h/book')).toBe(true);
+  });
+
+  test('worktree matches only a <name>-wt component, plus ai-skills-wt for vivera', () => {
+    expect(repoMatches({ worktree: '/h/vivera/Snipset-wt/s' }, '/h/vivera')).toBe(false);
+    expect(repoMatches({ worktree: '/h/Snipset-wt/s' }, '/h/Snipset')).toBe(true);
+    expect(repoMatches({ worktree: '/h/ai-skills-wt/s' }, '/h/vivera')).toBe(true);
+    expect(repoMatches({ worktree: '/h/ai-skills-wt/s' }, '/h/Snipset')).toBe(false);
+  });
+});
+
 describe('CLI', () => {
+  test('an impossible calendar date exits 2', () => {
+    const f = fixture();
+    expect(run(f, '--since', '2026-02-31').code).toBe(2);
+    expect(run(f, '--until', '2026-13-01').code).toBe(2);
+  });
+
   test('--json reports exact counts, ratios, and escapes for the window', () => {
     const f = fixture();
     const r = run(f, '--since', '2026-10-05', '--until', '2026-10-12', '--json');

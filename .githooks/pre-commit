@@ -2,15 +2,25 @@
 # .githooks/pre-commit
 #
 # WHAT THIS IS FOR
-#   Keep this repository's graphify graph consistent with what the commit
-#   actually contains, in one step, without anyone remembering:
+#   Two jobs, in this order:
 #
-#     graphify update .        # re-extract code (local AST, no LLM, no network)
-#     bun run graphify:sync    # add the Markdown's structural chunk nodes
+#   1. Size gate. Block a commit that stages a file over 5,000 tokens
+#      (20,000 bytes), or one that grows a file past its ceiling in
+#      scripts/file-size-baseline.json:
 #
-#   `graphify update` parses code but not notes, and `graphify:sync` parses
-#   notes but knows nothing about code — so a commit that changes both must run
-#   both, in this order, or the graph describes one half of the commit.
+#        bun scripts/check-file-size.mjs --staged
+#
+#      It runs first so a blocked commit spends no time on a graph refresh.
+#
+#   2. Graph refresh. Keep this repository's graphify graph consistent with what
+#      the commit actually contains, in one step, without anyone remembering:
+#
+#        graphify update .        # re-extract code (local AST, no LLM, no network)
+#        bun run graphify:sync    # add the Markdown's structural chunk nodes
+#
+#      `graphify update` parses code but not notes, and `graphify:sync` parses
+#      notes but knows nothing about code, so a commit that changes both must run
+#      both, in this order, or the graph describes one half of the commit.
 #
 # WHY THE ORDER IS UPDATE THEN SYNC
 #   `update` rebuilds graph.json and its writer is not guaranteed to preserve
@@ -35,15 +45,22 @@
 #   Claude Code, a terminal all end in `git commit`) and is a committed file
 #   rather than machine-local plugin state.
 #
-# GATING — what runs when
-#   no staged change          -> nothing
-#   no graph to update        -> skip with a one-line note
-#   Markdown only             -> sync only      (code did not change; skip the 5.3 s rebuild)
-#   any non-Markdown staged   -> update, then sync
-#   graphify / bun not found  -> skip with a one-line note, commit proceeds
+# GATING: what runs when
+#   no staged change           -> nothing, silently
+#   size gate passes           -> continue to the graph refresh
+#   size gate finds a file     -> print the report with the split advice, exit 1
+#   size gate exits 2          -> skip with a one-line note, commit proceeds
+#   bun / checker not found    -> skip the size gate with a one-line note
+#   GRAPHIFY_SYNC_SKIP=1       -> skip the graph refresh only
+#   no graph to update         -> skip with a one-line note
+#   Markdown only              -> sync only      (code did not change; skip the 5.3 s rebuild)
+#   any non-Markdown staged    -> update, then sync
+#   graphify / bun not found   -> skip with a one-line note, commit proceeds
 #
 # CONTRACT
-#   Always exits 0. The graph is derived, local, and regenerable; a refresh that
+#   The size gate is the one blocking path: when the checker exits 1, this hook
+#   exits 1 and the checker's report reaches the terminal unchanged. Every other
+#   path exits 0. The graph is derived, local, and regenerable; a refresh that
 #   fails must never block a commit. A failure is printed as a warning.
 #
 # ENABLE
@@ -51,7 +68,9 @@
 #     git config core.hooksPath .githooks
 #
 # DISABLE (temporarily)
-#   GRAPHIFY_SYNC_SKIP=1 git commit ...
+#   GRAPHIFY_SYNC_SKIP=1 git commit ...   # skips the graph refresh only
+#   git commit --no-verify ...            # skips every hook, size gate included;
+#                                         # `bun run ci` still runs the size check
 #
 # REVERT
 #   git config --unset core.hooksPath      # back to the default .git/hooks
@@ -63,20 +82,48 @@
 # contract above.
 set -uo pipefail
 
-if [ "${GRAPHIFY_SYNC_SKIP:-}" = "1" ]; then
-  exit 0
-fi
 
 REPO_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$REPO_DIR" ]; then
   exit 0
 fi
 
+# Bun is the only sanctioned runtime; fall back to its standard install path
+# because hooks can run with a minimal environment.
+BUN_BIN="$(command -v bun || true)"
+if [ -z "$BUN_BIN" ] && [ -x "$HOME/.bun/bin/bun" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+fi
+
 # Every staged path in one newline-delimited list. `--diff-filter=ACMR` ignores
 # deletes: a deleted file is handled by the next full run, and a pre-commit hook
-# cannot know the union it wants.
+# cannot know the union it wants. Computed before the size gate so an empty
+# commit stays silent instead of printing a skip note.
 staged="$(git -C "$REPO_DIR" diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
 if [ -z "$staged" ]; then
+  exit 0
+fi
+
+# Size gate. Only stdout is captured, and only to drop the "checked N files"
+# summary on a pass; stderr carries the report and is never redirected.
+SIZE_CHECK="$REPO_DIR/scripts/check-file-size.mjs"
+if [ -z "$BUN_BIN" ]; then
+  echo "[size-gate] skipped: bun not found" >&2
+elif [ ! -f "$SIZE_CHECK" ]; then
+  echo "[size-gate] skipped: scripts/check-file-size.mjs not found" >&2
+else
+  size_output="$(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-file-size.mjs --staged)" && size_status=0 || size_status=$?
+  if [ "$size_status" -ne 0 ] && [ -n "$size_output" ]; then
+    printf '%s\n' "$size_output"
+  fi
+  if [ "$size_status" -eq 1 ]; then
+    exit 1
+  elif [ "$size_status" -ne 0 ]; then
+    echo "[size-gate] skipped: checker exited $size_status" >&2
+  fi
+fi
+
+if [ "${GRAPHIFY_SYNC_SKIP:-}" = "1" ]; then
   exit 0
 fi
 
@@ -99,14 +146,6 @@ if [ ! -f "$GRAPH" ]; then
   echo "[graphify] no graph at graphify-out/graph.json yet; skipping (run a graphify extraction first)"
   exit 0
 fi
-
-# Bun is the only sanctioned runtime; fall back to its standard install path
-# because hooks can run with a minimal environment.
-BUN_BIN="$(command -v bun || true)"
-if [ -z "$BUN_BIN" ] && [ -x "$HOME/.bun/bin/bun" ]; then
-  BUN_BIN="$HOME/.bun/bin/bun"
-fi
-
 SYNC="$REPO_DIR/scripts/graphify-sync.mjs"
 
 # 1. Code first, only when code actually changed.

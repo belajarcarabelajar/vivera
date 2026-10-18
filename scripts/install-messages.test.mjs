@@ -241,7 +241,8 @@ describe('5: a missing graphify is warned about once', () => {
       expect({ args, count: found.length }).toEqual({ args, count: 1 });
       expect(found[0]).toContain('knowledge-graph query');
       expect(found[0]).toContain('pre-commit graph refresh');
-      expect(found[0]).toContain('core.hooksPath');
+      expect(found[0]).toContain('size gate');
+      expect(found[0]).not.toContain('skipping core.hooksPath');
     }
   });
 

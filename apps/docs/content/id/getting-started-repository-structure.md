@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: README.md#Repository Structure
-source_hash: "104a82b16fb9"
+source_hash: "99cb7a92288a"
 ---
 
 <a id="repository-structure"></a>
@@ -36,7 +36,7 @@ vivera/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
 ├── .githooks/
-│   └── pre-commit                               # Non-blocking: refresh graphify graph when a commit includes Markdown
+│   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                               # CI: bun install, render, drift gate, validate, test
@@ -71,6 +71,11 @@ vivera/
 │   ├── check-runner-contract.mjs                # Fast structural check for runner frontmatter keys
 │   ├── check-duplicate-defs.mjs                 # Diff-scoped gate: a definition a branch adds whose name already exists elsewhere
 │   ├── check-duplicate-defs.test.mjs            # Languages, skips, waiver, exit codes, and the calibration rules
+│   ├── check-file-size.mjs                      # Commit gate: a staged text file over 5,000 tokens (bytes / 4) is blocked
+│   ├── check-file-size.test.mjs                 # Modes, skips, ratchet, exit codes, and the split instructions
+│   ├── file-size-baseline.json                  # Ceilings for files already over the limit; they only go down
+│   ├── file-size-gate-contract.test.mjs         # Pins the hook, install, package and docs wiring of the gate
+│   ├── pre-commit-size-gate.test.mjs            # The hook blocks on the size gate and stays non-blocking for graphify
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)

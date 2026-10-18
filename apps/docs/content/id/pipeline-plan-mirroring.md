@@ -5,7 +5,7 @@ category: pipeline
 slug: plan-mirroring
 order: 6
 source: "README.md#Plan Mirroring: Obsidian and GitHub Issues"
-source_hash: "e8db92333a54"
+source_hash: "05fdfe35c699"
 ---
 
 <a id="plan-mirroring-obsidian-and-github-issues"></a>
@@ -36,7 +36,7 @@ tidak pernah ringkasan.
 
 **Nomor issue tidak pernah ditulis ke frontmatter plan.** Mirror vault menghitung hash
 seluruh teks plan, jadi menyisipkan nomor akan mengubah `source_hash` dan seketika
-membuat setiap mirror vault usang, yang memblokir `--execute` dengan exit 3. Nomor itu
+membuat setiap mirror vault usang, sehingga setiap `--execute` memberi peringatan. Nomor itu
 disimpan di file pendamping (sidecar), `plan.issues.json`, itulah sebabnya file plan tetap
 stabil byte demi byte.
 

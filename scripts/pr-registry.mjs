@@ -30,16 +30,17 @@
 //   bun scripts/pr-registry.mjs status
 //   bun test scripts/pr-registry.test.mjs
 //
-// Pure by design: this module never runs `git`, `gh`, or anything else. It
-// reads and writes one JSON file and refuses ambiguous input. That is what makes
-// it testable without a repository, and it is the same reason
-// `plan-publish-registry.mjs` holds no vault I/O either.
+// The registry logic here runs no `git` or `gh`: it reads and writes one JSON
+// file and refuses ambiguous input, so it is testable without a repository. The
+// commands that do touch git or GitHub (reconcile, open, claim --worktree) live
+// in scripts/lib/registry-sync.mjs.
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkCloseout } from './plan-closeout.mjs';
+import { reconcile, setupWorktree, openPr } from './lib/registry-sync.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -188,11 +189,9 @@ export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY, { expect
       throw err;
     }
   }
-  // Atomic, with one generation of backup. The registry is the shipping bin: it
-  // decides which session owns which branch and worktree, and it is gitignored,
-  // so a truncated write is unrecoverable from git. `keepBackup` leaves the
-  // previous generation at `<registry>.bak` for the one case that matters — the
-  // moment right after a bad write. See scripts/lib/atomic-write.mjs.
+  // Atomic, with one backup generation at `<registry>.bak`: the registry is the
+  // shipping bin and gitignored, so a truncated write is unrecoverable from git.
+  // See scripts/lib/atomic-write.mjs.
   writeFileAtomic(registryPath, `${JSON.stringify(registry, null, 2)}\n`, { keepBackup: true });
   return registryPath;
 }
@@ -472,18 +471,20 @@ export function conflictSurface(registry, sessionId) {
 function usage(msg) {
   if (msg) console.error(`❌ ${msg}`);
   console.error('usage:');
-  console.error('  bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> [--repo <path>] [--depends-on <slug,...>]');
+  console.error('  bun scripts/pr-registry.mjs claim --plan <plan-id> --session <slug> [--repo <path>] [--depends-on <slug,...>] [--worktree]');
+  console.error('  bun scripts/pr-registry.mjs open <session> --title <t> --body-file <f> [--draft]');
   console.error('  bun scripts/pr-registry.mjs pr <session> --number <N>');
-  console.error('  bun scripts/pr-registry.mjs state <session> <' + SESSION_STATES.join('|') + '> [--repo <path>] [--allow-open-plan]');
-  console.error('    (--repo and --allow-open-plan apply to `merged` only: it is refused while the plan is not closed out)');
+  console.error('  bun scripts/pr-registry.mjs state <session> <' + SESSION_STATES.join('|') + '> [--repo <path>]');
+  console.error('    (--repo applies to `merged` only: it warns when the plan is not closed out)');
   console.error('  bun scripts/pr-registry.mjs order');
   console.error('  bun scripts/pr-registry.mjs surface <session>');
   console.error('  bun scripts/pr-registry.mjs status');
+  console.error('  bun scripts/pr-registry.mjs reconcile [--dry-run] [--stale-days N] [--close-stale]');
   process.exit(2);
 }
 
 // Flags that take no value. Every other flag still requires one.
-const BOOLEAN_FLAGS = new Set(['allow-open-plan']);
+const BOOLEAN_FLAGS = new Set(['dry-run', 'close-stale', 'worktree', 'draft']);
 
 export function parseFlags(argv) {
   const flags = {};
@@ -507,10 +508,10 @@ export function parseFlags(argv) {
   return { flags, positional };
 }
 
-// Decides whether `state <session> merged` may be recorded. The check is
-// injected so the line shapes are testable without a repository; the caller
-// prints `lines` and refuses when `proceed` is false.
-export function closeoutVerdict(session, { repoRoot, repoFromFlag = false, allowOpenPlan = false, check = checkCloseout }) {
+// What `state <session> merged` warns about. Never a refusal: the merge already
+// happened on GitHub, so the registry records it and the gaps stay visible. The
+// check is injected so the line shapes are testable without a repository.
+export function closeoutVerdict(session, { repoRoot, repoFromFlag = false, check = checkCloseout }) {
   const { skipped, gaps } = check({ repoRoot, planSlug: session.plan });
   const lines = [];
   // Matches the reason `checkCloseout` gives for a missing plan file. Without a
@@ -530,18 +531,15 @@ export function closeoutVerdict(session, { repoRoot, repoFromFlag = false, allow
   } else if (skipped) {
     lines.push(`note: close-out not fully checked: ${skipped}`);
   }
-  if (gaps.length === 0) return { proceed: true, lines };
+  if (gaps.length === 0) return { lines };
 
-  lines.push(allowOpenPlan
-    ? `warning: recording "${session.session}" as merged with an unclosed plan (--allow-open-plan)`
-    : `refusing to record "${session.session}" as merged: plan ${session.plan} is not closed out.`);
+  lines.push(`warning: recording "${session.session}" as merged, but plan ${session.plan} is not closed out:`);
   for (const g of gaps) {
     lines.push(`  - [${g.code}] ${g.message}`, `    fix: ${g.fix}`);
   }
   const planFile = path.resolve(repoRoot, 'docs', 'code-plan', 'plans', `${session.plan}.md`);
   lines.push(`readiness: bun scripts/plan-closeout.mjs --readiness ${planFile}`);
-  if (!allowOpenPlan) lines.push('Override with --allow-open-plan to record it anyway.');
-  return { proceed: allowOpenPlan, lines };
+  return { lines };
 }
 
 // Where `state <s> merged` looks for the plan: the flag, then the repository the
@@ -583,6 +581,7 @@ function main(argv) {
       }
       console.log(`${created ? '✅ claimed' : '♻️  already claimed'}: ${session.session}`);
       printSession(session);
+      if (flags.worktree) return setupWorktree(session, repoRoot);
       if (created) {
         console.log('');
         console.log('Next, in the repository, before any subagent writes:');
@@ -616,10 +615,8 @@ function main(argv) {
           const verdict = closeoutVerdict(session, {
             repoRoot: resolveMergeRepo(session, flags.repo),
             repoFromFlag: Boolean(flags.repo),
-            allowOpenPlan: flags['allow-open-plan'] === true,
           });
           for (const line of verdict.lines) console.error(line);
-          if (!verdict.proceed) return 1;
         }
       }
       const { result } = mutateRegistry(
@@ -629,6 +626,9 @@ function main(argv) {
       console.log(`✅ ${result.session.session} -> ${result.session.state}`);
       return 0;
     }
+
+    if (command === 'reconcile') return reconcile({ registryPath, rootDir, flags });
+    if (command === 'open') return openPr({ registryPath, rootDir, positional, flags });
 
     if (command === 'order') {
       const order = mergeOrder(loadRegistry(registryPath));

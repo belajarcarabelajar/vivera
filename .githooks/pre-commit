@@ -50,6 +50,8 @@
 #   size gate passes           -> continue to the graph refresh
 #   size gate finds a file     -> print the report with the split advice, exit 1
 #   size gate exits 2          -> skip with a one-line note, commit proceeds
+#   checker crashes            -> any other exit, or exit 1 without a
+#                                 [size-gate] line: print a blocked note, exit 1
 #   bun / checker not found    -> skip the size gate with a one-line note
 #   GRAPHIFY_SYNC_SKIP=1       -> skip the graph refresh only
 #   no graph to update         -> skip with a one-line note
@@ -58,9 +60,9 @@
 #   graphify / bun not found   -> skip with a one-line note, commit proceeds
 #
 # CONTRACT
-#   The size gate is the one blocking path: when the checker exits 1, this hook
-#   exits 1 and the checker's report reaches the terminal unchanged. Every other
-#   path exits 0. The graph is derived, local, and regenerable; a refresh that
+#   The size gate is the one blocking path: when the checker exits 1, or
+#   crashes, this hook exits 1 and the checker's stderr reaches the terminal
+#   unchanged. Every other path exits 0. The graph is derived, local, and regenerable; a refresh that
 #   fails must never block a commit. A failure is printed as a warning.
 #
 # ENABLE
@@ -104,23 +106,36 @@ if [ -z "$staged" ]; then
   exit 0
 fi
 
-# Size gate. Only stdout is captured, and only to drop the "checked N files"
-# summary on a pass; stderr carries the report and is never redirected.
+# Size gate. stdout is captured only to drop the "checked N files" summary on a
+# pass. stderr goes to a temp file so an exit 1 can be told apart: a real report
+# has a line starting with [size-gate], a crash at import does not. The file is
+# printed unchanged either way.
 SIZE_CHECK="$REPO_DIR/scripts/check-file-size.mjs"
 if [ -z "$BUN_BIN" ]; then
   echo "[size-gate] skipped: bun not found" >&2
 elif [ ! -f "$SIZE_CHECK" ]; then
   echo "[size-gate] skipped: scripts/check-file-size.mjs not found" >&2
 else
-  size_output="$(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-file-size.mjs --staged)" && size_status=0 || size_status=$?
+  size_stderr="$(mktemp)"
+  trap 'rm -f "$size_stderr"' EXIT
+  size_output="$(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-file-size.mjs --staged 2>"$size_stderr")" && size_status=0 || size_status=$?
+  cat "$size_stderr" >&2
   if [ "$size_status" -ne 0 ] && [ -n "$size_output" ]; then
     printf '%s\n' "$size_output"
   fi
   if [ "$size_status" -eq 1 ]; then
+    if ! grep -q '^\[size-gate\]' "$size_stderr"; then
+      echo "[size-gate] blocked: the checker failed before judging (exit 1). Fix it, or commit with --no-verify." >&2
+    fi
     exit 1
+  elif [ "$size_status" -eq 2 ]; then
+    echo "[size-gate] skipped: checker exited 2" >&2
   elif [ "$size_status" -ne 0 ]; then
-    echo "[size-gate] skipped: checker exited $size_status" >&2
+    echo "[size-gate] blocked: the checker crashed (exit $size_status). Fix it, or commit with --no-verify." >&2
+    exit 1
   fi
+  rm -f "$size_stderr"
+  trap - EXIT
 fi
 
 if [ "${GRAPHIFY_SYNC_SKIP:-}" = "1" ]; then

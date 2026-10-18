@@ -682,6 +682,5 @@ test('checkGateCatalog stops reading at the first line that is not a table row',
 });
 
 test('the real gate catalog in skills/sucp-rules/SKILL.md has a valid shape', () => {
-  const root = path.join(import.meta.dirname, '..');
-  assert.deepEqual(checkGateCatalog(readSkillText(root, 'skills/sucp-rules/SKILL.md')), []);
+  assert.deepEqual(checkGateCatalog(readSkillText(path.join(import.meta.dirname, '..'), 'skills/sucp-rules/SKILL.md')), []);
 });

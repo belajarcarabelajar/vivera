@@ -4,8 +4,8 @@ description: Permintaan diklasifikasikan sebagai Spike, Bounded, atau Architectu
 category: pipeline
 slug: execution-lifecycle
 order: 1
-source: README.md#Execution Lifecycle
-source_hash: "ebd1e6713b7d"
+source: docs/guide/pipeline-execution-lifecycle.md
+source_hash: "f87a20ced832"
 ---
 
 <a id="execution-lifecycle"></a>
@@ -13,7 +13,7 @@ source_hash: "ebd1e6713b7d"
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="/docs/generated/lifecycle-dark.svg">
-  <img alt="Siklus hidup eksekusi: sebuah permintaan diklasifikasikan sebagai Spike, Bounded, atau Architectural; semua jalur bertemu di Brainstorming (Gate 1), lalu Visual Implementation Plan (Gate 2, persetujuan manusia yang wajib); Deep Research opsional dengan preflight Graphify dapat menyisipkan bukti; eksekusi diarahkan ke TDD, Systematic Debugging (RCA 4 fase), atau Subagent Orchestration (chunk → fan-out 10+ → gather → loop audit); gerbang Verification (Gate 3) mendahului Finishing dan Git Hygiene; sesi ditutup dengan Debt Sweep (penyisiran utang) dan pertanyaan tindak lanjut multi-select; Compaction menjaga state tetap utuh saat konteks di-reset." src="/docs/generated/lifecycle.svg" width="820">
+  <img alt="Siklus hidup eksekusi: sebuah permintaan diklasifikasikan sebagai Spike, Bounded, atau Architectural; semua jalur bertemu di Brainstorming (Gate 1), lalu Visual Implementation Plan (Gate 2, persetujuan manusia yang wajib); Deep Research opsional dengan preflight Graphify dapat menyisipkan bukti; eksekusi diarahkan ke TDD, Systematic Debugging (RCA 4 fase), atau Subagent Orchestration (chunk → fan-out proporsional → gather → loop audit); gerbang Verification (Gate 3) mendahului Finishing dan Git Hygiene; sesi ditutup dengan Debt Sweep (penyisiran utang) dan pertanyaan tindak lanjut multi-select; Compaction menjaga state tetap utuh saat konteks di-reset." src="/docs/generated/lifecycle.svg" width="820">
 </picture>
 
 <p align="center">

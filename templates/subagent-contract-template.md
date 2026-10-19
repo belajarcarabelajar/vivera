@@ -23,7 +23,7 @@ You edit files and run tests. You do **not** touch git state.
 - Your report states what you changed and the verification output. The parent stages, commits, and pushes.
 
 ## 1b. Task Chunking & Fan-Out Plan (written before dispatch)
-The parent chunks the work into the smallest independently verifiable units, then assigns one unit per subagent. Target 10+ narrow subagents when the task supports it.
+The parent chunks the work into the smallest independently verifiable units, then assigns one unit per subagent. Size the batch proportionally: 2 to 4 for medium work, 10 to 15 only for that many disjoint chunks.
 
 | Chunk ID | Single-purpose scope | Owner subagent | Permitted target files | Expected output | Verification command |
 |---|---|---|---|---|---|
@@ -31,7 +31,7 @@ The parent chunks the work into the smallest independently verifiable units, the
 | C2 | [...] | [...] | `path` | [...] | `cmd` |
 | CN | [...] | [...] | `path` | [...] | `cmd` |
 
-- **Fan-out count:** [N] subagents (below the 10 floor? state the reason: atomic task, no subagent tool in this runtime, or inseparable shared state)
+- **Fan-out count:** [N] subagents (one? state why the task is atomic; a sequential follow-up reuses a live subagent via SendMessage)
 - **Chunk boundary check:** [ ] every chunk has exactly one owner, [ ] every planned unit is covered, [ ] no two chunks write the same file
 - **Disjoint scopes are a safety property, not a licence to ignore the seams.** Every chunk's `impacts` (frontmatter of the parent plan) names the surfaces it can break, including ones no chunk owns. Before dispatch, the parent checks each of those surfaces against the chunk list and gives it an owner. A surface that belongs to no chunk is still a consumer: either it is assigned, or it is recorded in the parent plan's follow-up backlog with a finish line. The gap between chunks is where a broken consumer lives, and the per-chunk file scope is what would otherwise hide it.
 - **Re-dispatch rule:** a red chunk is re-chunked and re-dispatched alone, never by restarting the whole batch

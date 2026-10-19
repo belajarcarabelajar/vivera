@@ -31,7 +31,7 @@ flowchart TD
     ExecRoute -->|Bug Isolation| Debug["🐞 4.1 Systematic Debugging\nFeedback Loop First\nHypothesis → Probe → Observation"]
     ExecRoute -->|Parallel Workstreams| ChunkPlan["📦 Chunk into smallest\nindependently verifiable units"]
 
-    ChunkPlan --> FanOut["🚀 Fan-out: 10+ narrow\nsubagents dispatched"]
+    ChunkPlan --> FanOut["🚀 Proportional fan-out:\n2 to 4, at most 15 subagents"]
     FanOut --> SubWork["🤖 Subagents execute\nin isolated workspaces"]
     SubWork --> Gather["🔗 Gather & synthesize\nreports · dedup · re-verify"]
     Gather --> AuditChunk{"Chunk\naudit OK?"}

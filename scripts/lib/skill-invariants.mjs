@@ -49,6 +49,14 @@ export const INVARIANTS = [
   { label: 'the handoff is written right after the entry gate', text: 'the first file the run writes is the handoff' },
   { label: 'a stale running handoff means the run died', text: 'still says `running` with no live process' },
   { label: 'the sweep asks the closeout gate before the final merge', text: "before the merge of the session's final PR" },
+  { label: 'approval is batched, never skipped', text: 'Approval is never skipped, only batched' },
+  { label: 'a Bounded plan is validated before the Design question', text: 'For Bounded work the plan is validated before the Design question, so one call approves both' },
+  { label: 'the Bounded Design call doubles as Gate 2', text: 'the Design call is Gate 2 when the plan was validated first' },
+  { label: 'follow-ups and close plan share one call', text: 'The Follow-ups and Close plan questions are asked in one call' },
+  { label: 'a failed follow-up keeps the plan open', text: 'if a selected follow-up fails, the plan stays open' },
+  { label: 'the merge question is always its own call', text: 'The Merge question is always its own call' },
+  { label: 'the Bounded design names the PR as its deliverable', text: 'The Bounded design names the pull request as its deliverable, so no separate Publish question follows' },
+  { label: 'mark complete needs a fresh readiness verdict', text: 'Mark Complete applies only if a readiness run after the follow-ups land is still `READY`' },
 ];
 
 /** Invariants whose sentence appears nowhere in the corpus. Empty means fine. */

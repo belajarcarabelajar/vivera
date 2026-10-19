@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan Step 5 (verification before c
 
 # Verification and Delivery
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too. Next phase after the evidence gate: `sucp-debt-sweep`.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase after the evidence gate: `sucp-debt-sweep`.
 
 ## 🏗️ Professional Engineering Gates
 Apply the gates relevant to the approved scope. Record `N/A` with a reason when a gate does not apply; never claim a gate passed without its evidence.

@@ -5,7 +5,7 @@ description: Phase skill for super-ultra-code-plan Step 2 (path process). Covers
 
 # Brainstorming and Research
 
-> Part of `super-ultra-code-plan`. Read `sucp-rules` too. Next phase after design approval: `sucp-plan`.
+> Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase after design approval: `sucp-plan`.
 
 ## 🧠 Adaptive Reasoning Modes
 Activate only the reasoning lenses relevant to the task. Always use the core lenses; add conditional lenses when the scope or risk requires them. Do not expose private chain-of-thought. Report the selected lenses through their conclusions, assumptions, decisions, risks, artifacts, and evidence.
@@ -212,12 +212,12 @@ Treat unknown elements according to their epistemic nature before asking the use
 ### Bounded
 1. Explore project context — files, docs, recent commits
 2. Ask clarifying questions through the Confirmation Protocol in frontier rounds (see Two Kinds of Unknowns), only ones that matter
-3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, and itemized pre-execution todo checklist (`[ ]`)
-4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve
+3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, itemized pre-execution todo checklist (`[ ]`), and the delivery. The Bounded design names the pull request as its deliverable, so no separate Publish question follows.
+4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve. For Bounded work the plan is validated before the Design question, so one call approves both: when step 6 requires a plan file, it reaches `Validation: OK` first, its path goes in the design, and this call is also Gate 2.
 5. Implement — chunk the checklist into small verifiable units, fan out to subagents, then gather and synthesize their reports; TDD applies
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:
    - **One task, one file, no dependency:** no plan file. The in-chat Mermaid diagram and the `[ ]` checklist are the plan. Writing a file here is ceremony the skill already promised to scale away.
-   - **Two or more tasks, any `depends_on` edge, or anything a subagent will own:** write a real plan to `docs/code-plan/plans/YYYY-MM-DD-<name>.md` with `ultra-plan/v1` frontmatter, and validate it with `bun scripts/ultra-plan-runner.mjs <plan.md>`. The point is not the document; it is that the runner can then check the DAG, the Mermaid contract, and each task's `run[]`/`skip_if` hook mechanically. A Bounded task that fans out to subagents with no runner behind it is the least-checked work in the whole pipeline.
+   - **Two or more tasks, any `depends_on` edge, or anything a subagent will own:** write a real plan to `docs/code-plan/plans/YYYY-MM-DD-<name>.md` with `ultra-plan/v1` frontmatter, and validate it with `bun scripts/ultra-plan-runner.mjs <plan.md>` before the `Design` question in step 4. The point is not the document; it is that the runner can then check the DAG, the Mermaid contract, and each task's `run[]`/`skip_if` hook mechanically. A Bounded task that fans out to subagents with no runner behind it is the least-checked work in the whole pipeline.
 ### 🧠 Architectural — Brainstorming → Design
 1. Phase 1 — Ground in Environment: Non-mutating exploration of project context, configs, dependencies, and architecture before asking questions.
 2. Phase 2 — Intent Chat: Clarify goal, success criteria, constraints, and tradeoffs using the Two Kinds of Unknowns protocol.

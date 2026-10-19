@@ -29,7 +29,7 @@ export const register: Register = (on, options) => {
     const role = ROSTER[sprite]
     if (!role || !READ_ONLY_ROLES.has(role)) return next(e)
     if (!EXPENSIVE_PARENT.test(e.parentModel)) return next(e)
-    $.ui.log(`sprite-model-router: ${sprite} (${role}) → ${target}, parent ${e.parentModel}`)
+    $.ui.log(`${sprite} (${role}) → ${target}, parent ${e.parentModel}`)
     return next({ ...e, model: target })
   })
 }

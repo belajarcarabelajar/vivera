@@ -37,6 +37,15 @@ describe('read-only sprites under an Opus parent', () => {
     on('agent.spawn', async (_$, e) => ({ model: e.model ?? e.parentModel }))
     expect((await $.agent.spawn(spawn({ subagentType: 'staid', parentModel: 'claude-fable-5-1' }))).model).toBe('sonnet')
   })
+
+  // The engine already puts the plugin name in front of every $.ui.log line.
+  test('the log line does not repeat the plugin name', async ($, on) => {
+    const lines: string[] = []
+    on('ui.log', async (_$, e) => (lines.push(e.text), { value: undefined }))
+    on('agent.spawn', async (_$, e) => ({ model: e.model ?? e.parentModel }))
+    await $.agent.spawn(spawn({ subagentType: 'staid' }))
+    expect(lines).toEqual([`staid (reviewer) → sonnet, parent ${OPUS}`])
+  })
 })
 
 describe('everything else keeps the parent or the caller decision', () => {

@@ -42,7 +42,7 @@ const phaseSkills = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter(
 
 const AGENTS = '.agents/skills';
 const ANTI = '.gemini/config/skills';
-const PACKAGE_LINKS = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
+const PACKAGE_LINKS = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
 
 // The stale and the protected entries of ~/.agents/skills, as one fixture.
 function prunable(sb) {

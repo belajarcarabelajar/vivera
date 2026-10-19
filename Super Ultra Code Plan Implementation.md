@@ -7,6 +7,11 @@ triggers:
   - bug fix
   - refactoring
   - system architecture
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: 'for f in "$CLAUDE_PROJECT_DIR/.claude/skills/super-ultra-code-plan/require-exit-code.mjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/super-ultra-code-plan/require-exit-code.mjs"; do if [ -f "$f" ]; then exec bun "$f"; fi; done; exit 0'
 ---
 
 # Super Ultra Code Plan Implementation

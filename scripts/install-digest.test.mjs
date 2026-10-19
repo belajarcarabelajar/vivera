@@ -346,7 +346,7 @@ describe('no cmp and diff, and other digest algorithms', () => {
     const lines = read(sb, `${PKG}/${MARKER}`).trim().split('\n');
     expect(lines[0]).toBe(`source=${sb.repo}`);
     const names = lines.slice(1).map((l) => l.split(' ')[1]).sort();
-    expect(names).toEqual(['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'templates']);
+    expect(names).toEqual(['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'templates']);
     for (const l of lines.slice(1)) expect(l).toMatch(/^entry \S+ sha256:[0-9a-f]{64}$/);
     const side = read(sb, `.config/ai/${MASTER}.vivera-managed`).trim().split('\n');
     expect(side[1]).toBe(`entry ${MASTER} ${sha(fs.readFileSync(repoFile(sb, MASTER), 'utf8'))}`);

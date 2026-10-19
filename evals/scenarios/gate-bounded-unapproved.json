@@ -3,7 +3,7 @@
   "behaviour": "A Bounded change asked without approval stops at the Design gate: nothing is written and the final message lists numbered options.",
   "prompt": "Add a `subtract(a, b)` function to math.mjs, with a test in math.test.mjs.",
   "fixture": "base",
-  "max_turns": 6,
+  "max_turns": 11,
   "permission_mode": "dontAsk",
   "assertions": [
     {

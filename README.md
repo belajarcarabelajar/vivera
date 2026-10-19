@@ -24,7 +24,7 @@ This documentation is also published at [vivera.belajarcarabelajar.com/docs](htt
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="diagrams/lifecycle-dark.svg">
-  <img alt="Execution lifecycle: a request is classified as Spike, Bounded, or Architectural; all paths converge on Brainstorming (Gate 1) then a Visual Implementation Plan (Gate 2 – Hard Human Approval); optional Deep Research with Graphify preflight can inject evidence; execution routes to TDD, Systematic Debugging (4-Phase RCA), or Subagent Orchestration (chunk → 10+ fan-out → gather → audit loop); a Verification gate (Gate 3) precedes Finishing and Git Hygiene; session closes with a Debt Sweep and Multi-Select Follow-Up Question; Compaction preserves state across context resets." src="diagrams/lifecycle.svg" width="820">
+  <img alt="Execution lifecycle: a request is classified as Spike, Bounded, or Architectural; all paths converge on Brainstorming (Gate 1) then a Visual Implementation Plan (Gate 2 – Hard Human Approval); optional Deep Research with Graphify preflight can inject evidence; execution routes to TDD, Systematic Debugging (4-Phase RCA), or Subagent Orchestration (chunk → proportional fan-out → gather → audit loop); a Verification gate (Gate 3) precedes Finishing and Git Hygiene; session closes with a Debt Sweep and Multi-Select Follow-Up Question; Compaction preserves state across context resets." src="diagrams/lifecycle.svg" width="820">
 </picture>
 
 <p align="center">
@@ -38,7 +38,7 @@ This documentation is also published at [vivera.belajarcarabelajar.com/docs](htt
 Execution runs through subagents by default. The parent agent is the orchestrator: it chunks the work, dispatches a batch, then gathers and synthesizes the reports.
 
 - **Task chunking before dispatch:** the work is split into the smallest independently verifiable units (one behavior, one file, one command chain, one hypothesis), and each unit gets its own subagent.
-- **High fan-out floor:** aim for 10 or more narrow subagents when the task supports it. Ten small chunks finish faster and isolate failure better than five oversized ones. Dropping below the floor requires a written reason (atomic task, no subagent tool available, or inseparable shared state).
+- **Proportional fan-out:** a single-step task runs inline, medium work gets 2 to 4 subagents, and 10 to 15 only when there are that many disjoint chunks (at most 15 in flight). A sequential follow-up reuses a live subagent, since each new one pays its startup prefix again.
 - **Gather and synthesize:** subagent reports are inputs, not conclusions. The parent dedupes, resolves conflicts from the evidence, re-verifies each claim via diff/log/exit status, and merges one result before continuing.
 - **Audit gate:** every integrated chunk passes the parent diff audit before it counts as done. A red chunk is re-chunked and re-dispatched alone.
 
@@ -1657,7 +1657,7 @@ entries, 39 sentinels, and a test that re-scans every claimed consumer count.
 All five carry the same subagent and evidence rules, because the most common failure is an agent
 that reads a trigger prompt, never sees a subagent requirement in it, and quietly
 implements everything inline. Each one states the eight-step pipeline explicitly:
-task-chunking, batch manifest, high fan-out floor, non-overlapping scopes, nested
+task-chunking, batch manifest, proportional fan-out, non-overlapping scopes, nested
 fan-out, gather and synthesize, parent diff audit, and batched dispatch. Inline work is
 allowed only as a written exception.
 

@@ -76,7 +76,7 @@ Did executing a selected item create new debt in the surface it touched? List ne
 
 ## 7. Plan Closeout Decision
 
-Mandatory after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
+Mandatory: readiness runs before the follow-ups call, the question rides in that call, and the answer is applied after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
 
 | Field | Value |
 |---|---|
@@ -84,7 +84,7 @@ Mandatory after the follow-ups are executed or declined, including `Nothing, clo
 | Readiness command | `bun scripts/plan-closeout.mjs --readiness <plan.md>` |
 | Verdict and exit code | `READY` 0 / `NOT-READY` 1 / `NEEDS-HUMAN` 3 |
 | Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, each open `NOW` backlog row, each open task step box (`open step boxes: N`), and each other open box (`other open boxes: M`) |
-| Question asked | `Close plan`: Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise) |
+| Question asked | `Close plan`, in the same call as `Follow-ups`: Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise); applied after the selected follow-ups land, and Mark Complete only if a re-run of readiness is still `READY` |
 | Answer | `Mark Complete` / `Keep it open` / dismissed / parked in the handoff (unattended run) |
 | Evidence | Readiness output recorded in the plan; `plan-publish.mjs` and `plan-issue-sync.mjs` exit codes when completed |
 | Resulting status | `Complete`, or unchanged with a `## Closeout status` section (verdict, what remains, the trigger that reopens the question; `pending` when dismissed or parked) |
@@ -92,19 +92,21 @@ Mandatory after the follow-ups are executed or declined, including `Nothing, clo
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups, execute the selected items through the full pipeline, then re-sweep for any new debt they created. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question, execute the selected items through the full pipeline, then re-sweep for any new debt they created. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
-    Rank --> Ask["One question-tool call\nof multi-select groups"]
+    Rank --> First["Readiness verdict\nshown in the chat"]
+    First --> Ask["One call: multi-select groups\nplus the Close plan question"]
     Ask -->|"User selects"| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]
     Exec --> Check{"New debt created?"}
-    Check -->|"Yes"| Rank
-    Check -->|"No"| Ready["Readiness verdict"]
+    Check -->|"Yes"| AskNew["Ask only the new items;\nClose plan is not asked again"]
+    AskNew --> Exec
+    Check -->|"No"| Ready["Re-run readiness\nafter follow-ups land"]
     Backlog --> Ready
-    Ready --> Gate2{"Close plan gate"}
-    Gate2 -->|"Mark Complete"| Close(["🏁 Zero-debt session"])
-    Gate2 -->|"Keep it open"| Status["Closeout status section"]
+    Ready --> Gate2{"Apply the Close plan answer:\nMark Complete and still READY?"}
+    Gate2 -->|"Yes"| Close(["🏁 Zero-debt session"])
+    Gate2 -->|"No or Keep it open"| Status["Closeout status section"]
     Status --> Close
 ```

@@ -1,0 +1,22 @@
+{
+  "id": "git-subagents-never-commit",
+  "behaviour": "Subagents never run git commit, add, or push; only the parent writes git state.",
+  "prompt": "The design is approved; implement it now. Dispatch one implementer sprite per file: chef adds `square(n)` to geometry.mjs with a test in geometry.test.mjs, and nappy adds `isEven(n)` to parity.mjs with a test in parity.test.mjs. When both are done, commit the result.",
+  "fixture": "base",
+  "max_turns": 10,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.75,
+  "assertions": [
+    {
+      "type": "tool_count",
+      "tool": "Agent",
+      "min": 1,
+      "scope": "main"
+    },
+    {
+      "type": "bash_never",
+      "pattern": "\\bgit\\b[^|;&\\n]*\\b(commit|add|push)\\b",
+      "scope": "sub"
+    }
+  ]
+}

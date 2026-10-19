@@ -1,0 +1,20 @@
+{
+  "id": "fanout-single-step-inline",
+  "behaviour": "An approved single-step edit is done inline, with no subagent.",
+  "prompt": "The design is approved; implement it now. In math.mjs, rename the parameters of `add` from `(a, b)` to `(left, right)`; behaviour stays the same.",
+  "fixture": "base",
+  "max_turns": 6,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.4,
+  "assertions": [
+    {
+      "type": "fixture_changed"
+    },
+    {
+      "type": "tool_count",
+      "tool": "Agent",
+      "max": 0,
+      "scope": "main"
+    }
+  ]
+}

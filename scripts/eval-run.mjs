@@ -31,7 +31,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
-import { DISALLOWED_TOOLS, allowedTools, bwrapArgs, childEnv, runInGroup, scratchRoot } from './lib/eval-sandbox.mjs';
+import { DISALLOWED_TOOLS, EVAL_NOTE, allowedTools, bwrapArgs, childEnv, runInGroup, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
@@ -207,6 +207,7 @@ async function runClaude(scenario, dir, budget, invoke, root, bwrap) {
     '--permission-mode', scenario.permission_mode,
     '--allowedTools', allowedTools(scenario, dir).join(','),
     '--disallowedTools', DISALLOWED_TOOLS.join(','),
+    '--append-system-prompt', EVAL_NOTE,
     '--no-session-persistence',
     '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',

@@ -212,7 +212,7 @@ Treat unknown elements according to their epistemic nature before asking the use
 ### Bounded
 1. Explore project context — files, docs, recent commits
 2. Ask clarifying questions through the Confirmation Protocol in frontier rounds (see Two Kinds of Unknowns), only ones that matter
-3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, and itemized pre-execution todo checklist (`[ ]`)
+3. Present short design in chat: MANDATORY Mermaid diagram (even a 3-node `flowchart LR`), approach, files touched (including `GLOSSARY.md` when a term was resolved), testing plan, itemized pre-execution todo checklist (`[ ]`), and the delivery. The Bounded design names the pull request as its deliverable, so no separate Publish question follows.
 4. STOP and ask through the Confirmation Protocol (header `Design`); implement only after the answer is Approve. For Bounded work the plan is validated before the Design question, so one call approves both: when step 6 requires a plan file, it reaches `Validation: OK` first, its path goes in the design, and this call is also Gate 2.
 5. Implement — chunk the checklist into small verifiable units, fan out to subagents, then gather and synthesize their reports; TDD applies
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:

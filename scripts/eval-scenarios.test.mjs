@@ -15,6 +15,14 @@ const SCOPES = ['main', 'sub', 'all'];
 const MAX_BUDGET_USD = 0.75;
 const MAX_FIXTURE_FILE_BYTES = 2048;
 
+const SKILL_DIR = join(ROOT, 'skills');
+const SKILLS = readdirSync(SKILL_DIR).filter((name) => statSync(join(SKILL_DIR, name)).isDirectory());
+// invoke, when present, names the skill the runner prefixes as /<skill>, or is false for a bare prompt.
+const invokeOk = (value) => value === undefined || value === false || (isNamed(value) && SKILLS.includes(value));
+function isNamed(value) {
+  return typeof value === 'string' && value.length > 0;
+}
+
 const scenarioFiles = existsSync(SCENARIO_DIR)
   ? readdirSync(SCENARIO_DIR).filter((name) => name.endsWith('.json')).sort()
   : [];
@@ -118,6 +126,10 @@ describe('eval scenarios', () => {
         expect(s.assertions.length).toBeGreaterThan(0);
       });
 
+      test('invoke, when present, is false or names a directory under skills/', () => {
+        expect(invokeOk(s.invoke)).toBe(true);
+      });
+
       test('allowed_tools, when present, lists strings that never allow rm, push, or gh', () => {
         if (s.allowed_tools === undefined) return;
         expect(Array.isArray(s.allowed_tools)).toBe(true);
@@ -152,6 +164,11 @@ describe('eval scenarios', () => {
 });
 
 describe('eval fixtures', () => {
+  test('the invoke check accepts false or a skill directory and rejects anything else', () => {
+    expect([undefined, false, 'super-ultra-code-plan', 'sucp-rules'].every(invokeOk)).toBe(true);
+    expect(['no-such-skill', '', 3, true, null].some(invokeOk)).toBe(false);
+  });
+
   test('every fixture file stays under 2 KB', () => {
     const big = existsSync(FIXTURE_DIR)
       ? walk(FIXTURE_DIR)

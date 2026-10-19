@@ -9,7 +9,11 @@
 // Usage:
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
-//                            [--scenarios <dir>]
+//                            [--no-invoke] [--scenarios <dir>]
+//
+// A scenario's prompt is sent as `/<invoke> <prompt>`, invoke defaulting to the
+// orchestrator skill, because a plain headless prompt never loads the pipeline
+// rules. `invoke: false` or --no-invoke sends it bare, as a bare-model control.
 //
 // --scenarios exists for the tests; fixtures are read from <dir>/../fixtures.
 // EVAL_CLAUDE_BIN replaces the claude binary (tests use a stub), EVAL_TMP_ROOT
@@ -26,6 +30,7 @@ import { parseStream, score } from './eval-score.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUN_TIMEOUT_MS = 300_000;
+const DEFAULT_INVOKE = 'super-ultra-code-plan';
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
 // --setting-sources project,local also drops the user's PreToolUse hooks (rm-tmp-guard),
 // so the tool lists below are the only fence between an agent under test and this machine.
@@ -35,7 +40,7 @@ const DEFAULT_ALLOWED_TOOLS = [
   'Bash(git add *)', 'Bash(git commit *)', 'Bash(ls*)', 'Bash(cat *)', 'Bash(rg *)', 'Bash(wc *)', 'Bash(head *)', 'Bash(tail *)',
 ];
 const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--scenarios <dir>]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--scenarios <dir>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -52,7 +57,7 @@ class UsageError extends Error {}
 class RefusedError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { list: false, only: null, budget: 15, out: null, baseline: null, keep: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, only: null, budget: 15, out: null, baseline: null, keep: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -62,6 +67,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a === '--list') opts.list = true;
     else if (a === '--keep') opts.keep = true;
+    else if (a === '--no-invoke') opts.noInvoke = true;
     else if (a === '--only') opts.only = value(i++, a).split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--budget-usd') {
       opts.budget = Number(value(i++, a));
@@ -74,7 +80,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-function validateScenario(s, file) {
+function validateScenario(s, file, skills) {
   const bad = (why) => new UsageError(`${file}: ${why}`);
   if (!s || typeof s !== 'object') throw bad('not a JSON object');
   for (const k of ['id', 'prompt', 'fixture']) if (typeof s[k] !== 'string' || !s[k]) throw bad(`missing ${k}`);
@@ -87,12 +93,22 @@ function validateScenario(s, file) {
   }
   if (typeof s.budget_usd !== 'number' || !(s.budget_usd > 0)) throw bad('budget_usd must be a positive number');
   if (!Array.isArray(s.assertions) || s.assertions.length === 0) throw bad('assertions must be a non-empty array');
+  if (s.invoke !== undefined && s.invoke !== false && !(typeof s.invoke === 'string' && skills.has(s.invoke))) {
+    throw bad(`invoke must be false or one of the installed skills, got ${JSON.stringify(s.invoke)}`);
+  }
   if (s.overlay != null && (typeof s.overlay !== 'object' || Array.isArray(s.overlay))) throw bad('overlay must be a map of path to content');
   return s;
 }
 
+// The skill directories installRules copies into every fixture.
+function installedSkills() {
+  const src = path.join(ROOT, 'skills');
+  return new Set(fs.readdirSync(src).filter((n) => fs.statSync(fs.realpathSync(path.join(src, n))).isDirectory()));
+}
+
 function loadScenarios(dir) {
   if (!fs.existsSync(dir)) throw new UsageError(`scenario directory not found: ${dir}`);
+  const skills = installedSkills();
   const scenarios = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort().map((f) => {
     let data;
     try {
@@ -100,7 +116,7 @@ function loadScenarios(dir) {
     } catch (err) {
       throw new UsageError(`${f}: ${err.message}`);
     }
-    return validateScenario(data, f);
+    return validateScenario(data, f, skills);
   });
   const seen = new Set();
   for (const s of scenarios) {
@@ -177,10 +193,10 @@ function money(n) {
   return String(Math.round(n * 10000) / 10000);
 }
 
-function runClaude(scenario, dir, budget) {
+function runClaude(scenario, dir, budget, invoke) {
   const bin = process.env.EVAL_CLAUDE_BIN || 'claude';
   const args = [
-    '-p', scenario.prompt,
+    '-p', invoke ? `/${invoke} ${scenario.prompt}` : scenario.prompt,
     '--output-format', 'stream-json', '--verbose',
     '--max-turns', String(scenario.max_turns),
     '--permission-mode', scenario.permission_mode,
@@ -232,10 +248,10 @@ function contextTokens(usage) {
     .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
 }
 
-function runScenario(scenario, fixturesDir, runDir, budget) {
+function runScenario(scenario, fixturesDir, runDir, budget, invoke) {
   const started = Date.now();
   const dest = path.join(runDir, scenario.id);
-  const base = { id: scenario.id, turns: null, cost: 0, usage: null, permission_denials: [] };
+  const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
   let initialSha;
   try {
     initialSha = buildFixture(scenario, fixturesDir, dest);
@@ -243,7 +259,7 @@ function runScenario(scenario, fixturesDir, runDir, budget) {
     if (!(err instanceof RefusedError)) throw err;
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
   }
-  const run = runClaude(scenario, dest, budget);
+  const run = runClaude(scenario, dest, budget, invoke);
   const parsed = parseStream(run.stdout);
   const results = score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions);
   if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_MS / 1000} s` });
@@ -274,14 +290,29 @@ function localDate(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function compareBaseline(file, scenarios) {
+// A baseline entry without invoke predates the field, and every run then was bare.
+function readBaseline(file) {
   let data;
   try {
     data = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch (err) {
     throw new UsageError(`cannot read baseline ${file}: ${err.message}`);
   }
-  const before = new Map((data.scenarios ?? []).map((s) => [s.id, Boolean(s.pass)]));
+  return new Map((data.scenarios ?? []).map((s) => [s.id, { pass: Boolean(s.pass), invoke: s.invoke ?? false }]));
+}
+
+// A bare-model run and an orchestrated run measure different things, so they never compare.
+function refuseInvokeMismatch(baseline, scenarios, invokeOf) {
+  const off = scenarios.filter((s) => baseline.has(s.id) && baseline.get(s.id).invoke !== invokeOf(s));
+  if (off.length) {
+    const s = off[0];
+    throw new UsageError(`baseline invoke differs for ${off.length} scenario(s), first ${s.id}: `
+      + `baseline ${JSON.stringify(baseline.get(s.id).invoke)}, this run ${JSON.stringify(invokeOf(s))}`);
+  }
+}
+
+function compareBaseline(baseline, scenarios) {
+  const before = new Map([...baseline].map(([id, b]) => [id, b.pass]));
   const regressions = [];
   const improvements = [];
   for (const s of scenarios) {
@@ -306,6 +337,9 @@ function main(argv) {
     for (const s of scenarios) console.log(`${s.id}  ${s.behaviour ?? ''}`);
     return 0;
   }
+  const invokeOf = (s) => (opts.noInvoke ? false : s.invoke ?? DEFAULT_INVOKE);
+  const baseline = opts.baseline ? readBaseline(opts.baseline) : null;
+  if (baseline) refuseInvokeMismatch(baseline, scenarios, invokeOf);
   const fixturesDir = path.join(path.dirname(opts.scenarios), 'fixtures');
   const date = localDate();
   const commit = (spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout ?? '').trim();
@@ -319,9 +353,9 @@ function main(argv) {
   try {
     for (const s of scenarios) {
       if (spent >= opts.budget) {
-        done.push({ id: s.id, pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
+        done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
-        const r = runScenario(s, fixturesDir, runDir, Math.min(s.budget_usd, opts.budget - spent));
+        const r = runScenario(s, fixturesDir, runDir, Math.min(s.budget_usd, opts.budget - spent), invokeOf(s));
         spent += r.cost;
         done.push(r);
       }
@@ -343,8 +377,8 @@ function main(argv) {
   console.log(`wrote ${out}`);
 
   let regressed = false;
-  if (opts.baseline) {
-    const { regressions, improvements } = compareBaseline(opts.baseline, done);
+  if (baseline) {
+    const { regressions, improvements } = compareBaseline(baseline, done);
     for (const id of regressions) console.log(`regression: ${id}`);
     for (const id of improvements) console.log(`improvement: ${id}`);
     regressed = regressions.length > 0;

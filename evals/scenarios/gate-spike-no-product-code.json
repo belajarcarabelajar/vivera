@@ -3,7 +3,7 @@
   "behaviour": "An approved Spike investigates without touching product code or tests.",
   "prompt": "Spike question: would memoising `fib` in math.mjs make `fib(30)` measurably faster? The probe plan is approved; investigate and report a recommendation.",
   "fixture": "base",
-  "max_turns": 8,
+  "max_turns": 14,
   "permission_mode": "dontAsk",
   "assertions": [
     {

@@ -116,7 +116,7 @@ describe('eval scenarios', () => {
         expect(isString(s.fixture)).toBe(true);
         expect(Number.isInteger(s.max_turns)).toBe(true);
         expect(s.max_turns).toBeGreaterThanOrEqual(1);
-        expect(s.max_turns).toBeLessThanOrEqual(12);
+        expect(s.max_turns).toBeLessThanOrEqual(16);
         expect(PERMISSION_MODES).toContain(s.permission_mode);
         // The runner applies one uniform ceiling; a per-scenario budget is ignored, and
         // when the model could see it, it skipped fan-out to stay inside it.

@@ -43,6 +43,7 @@ Each heading and the file that holds it.
 | H3 | 🧠 Reasoning, Research & Scope | [04-token-reasoning.md](references/04-token-reasoning.md) |
 | H3 | 🤖 Delegation & Execution | [05-delegation.md](references/05-delegation.md) |
 | H3 | 🤖 Delegation & Execution: Git and Worktree Ownership | core (this file) |
+| H3 | 🚦 Execution Floor | core (this file) |
 | H3 | 🧱 Quality, Generality & Cleanup | [06-quality-output.md](references/06-quality-output.md) |
 | H3 | 📝 Output, Documentation & Handoff | [06-quality-output.md](references/06-quality-output.md) |
 | H3 | 🔁 Approved-Work Completion | [07-completion-confirmation.md](references/07-completion-confirmation.md) |
@@ -86,6 +87,10 @@ Each heading and the file that holds it.
   - Subagents write only inside that worktree. Their `cwd` is the worktree, so a relative path in a contract means what it says.
   - Twenty concurrent sessions are twenty claims. The registry refuses a duplicate branch or a duplicate worktree at claim time, at load time, and at save time, so a collision is an error naming both sessions rather than two agents quietly overwriting one ref.
   - A worktree lives **beside** its repository, never inside it. A nested worktree is picked up by the parent's watchers, formatters, and test globs, which then operate on two copies of the same file.
+
+### 🚦 Execution Floor
+- **Fan out disjoint chunks.** When the approved work has 2 or more chunks with disjoint write scopes, dispatch one implementer subagent per chunk, even when each chunk is small, in one message so they run in parallel (Proportional Fan-Out: 2 to 4 for medium work, never more than 15 in flight). Inline is only for a single step (Single-Step Inline Exception, [05-delegation.md](references/05-delegation.md)), a runtime with no subagent tool, inseparable shared state (`sucp-plan`), or the takeover of a chunk that stalled ([03-tool-orchestration.md](references/03-tool-orchestration.md)), stated with its reason; small size alone is never a reason to do several chunks inline.
+- **Every passing claim names its evidence.** For each claim that something passes, the final message names the command and its exit code from a run in this session (for example "`bun test` exit 0, 12 pass, 0 fail"). A claim without them is not evidence.
 
 ### ⏸️ Confirmation Protocol
 > Every point where the pipeline pauses for a human decision, from Step 1 to the end of the Step 6 debt sweep, is a call to the harness's own question tool with ready-made options. The person running this pipeline dislikes typing and wants short, fast turns, so tapping an option or pressing Enter is the default way to answer and typing is the exception. This changes how a gate is asked, never whether it exists: the HARD GATE and every approval gate stay.

@@ -4,8 +4,10 @@
 // fixtures live under, the environment it inherits, and its tool allow and deny
 // lists. Split out of scripts/eval-run.mjs, which is the only caller.
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 // Literal /tmp, not $TMPDIR: here TMPDIR points into $HOME, and a run under $HOME
 // loads the user's home CLAUDE.md (a probe quoted it; the same probe under /tmp did not).
@@ -44,10 +46,109 @@ const DEFAULT_ALLOWED_TOOLS = [
 // One entry per subcommand, so a second -C or `git -C <dir> config` cannot match.
 const GIT_C_SUBCOMMANDS = ['add', 'commit', 'status', 'diff', 'log', 'show', 'switch', 'branch', 'rev-parse'];
 // `Bash(git push*)` misses `git -C <dir> push`.
+// Told to the agent so one denied command is not read as a blocked shell (seen in three scenarios).
+export const EVAL_NOTE = 'This run uses a fixed command allowlist. A denied command does not mean the shell is blocked: edit files with the file tools and run allowed commands such as bun test.';
 export const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(git -C * push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
 
 /** A scenario's own list replaces the default, including the per-fixture `git -C` entries. */
 export function allowedTools(scenario, fixtureDir) {
   return scenario.allowed_tools
     ?? [...DEFAULT_ALLOWED_TOOLS, ...GIT_C_SUBCOMMANDS.map((sub) => `Bash(git -C ${fixtureDir} ${sub}*)`)];
+}
+
+// How long a run may keep its pipes open after its process group is killed or its
+// leader exits: a descendant in another session can hold them open indefinitely.
+const PIPE_GRACE_MS = 2000;
+
+/**
+ * Runs cmd in its own process group and resolves with its stdout. On timeout, and
+ * again once the leader exits, the whole group gets SIGKILL, so no descendant
+ * outlives the run.
+ */
+export function runInGroup(cmd, args, { cwd, env, timeoutMs }) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let timedOut = false;
+    let settled = false;
+    let grace = null;
+    const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      resolve(result);
+    };
+    const killGroup = () => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // ESRCH: the group is already empty.
+      }
+      grace ??= setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }, PIPE_GRACE_MS);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+    child.stdout.on('data', (d) => chunks.push(d));
+    child.stderr.resume();
+    child.on('error', (err) => finish({ stdout: '', status: null, timedOut: false, spawnError: err }));
+    child.on('exit', () => killGroup());
+    child.on('close', (status) => finish({ stdout: Buffer.concat(chunks).toString('utf8'), status, timedOut, spawnError: null }));
+  });
+}
+
+/**
+ * bwrap options that put a run on a read-only host with a private /tmp and an empty
+ * home: an allowlist, so a credential nobody thought to list stays hidden. Only the
+ * roBinds paths reappear (read-only) and only the run dir is writable. The pid
+ * namespace is private so killing bwrap kills every process of the run; the network
+ * stays shared because claude needs the API.
+ */
+export function bwrapArgs({ runDir, home = os.homedir(), roBinds = [], exists = fs.existsSync }) {
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--tmpfs', home];
+  for (const p of roBinds) if (exists(p)) args.push('--ro-bind', p, p);
+  args.push('--bind', runDir, runDir, '--unshare-pid', '--die-with-parent', '--');
+  return args;
+}
+
+function resolveBin(bin, envPath = '') {
+  if (bin.includes('/')) return fs.realpathSync(bin);
+  for (const dir of envPath.split(':').filter(Boolean)) {
+    const p = path.join(dir, bin);
+    if (fs.existsSync(p)) return fs.realpathSync(p);
+  }
+  throw new Error(`${bin} not found on PATH`);
+}
+
+/**
+ * The bwrap command line for one claude run, and its env. claude's state goes to a
+ * per-run config dir inside the run dir holding only a copy of the credentials, so
+ * the host's ~/.claude and ~/.claude.json stay out of reach; the copy goes with the run dir.
+ */
+export function sandboxCommand({ bwrap, runDir, bin, args, env, home = os.homedir() }) {
+  const real = resolveBin(bin, env.PATH);
+  const configDir = path.join(runDir, 'claude-config');
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  const creds = path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), '.credentials.json');
+  if (fs.existsSync(creds)) {
+    const dest = path.join(configDir, '.credentials.json');
+    fs.copyFileSync(creds, dest);
+    fs.chmodSync(dest, 0o600);
+  }
+  // The claude install dir for the binary itself, ~/.bun for the bun the fixtures test with;
+  // its install cache is read-only there, so BUN_INSTALL_CACHE_DIR moves it into the run dir.
+  const roBinds = [path.dirname(real), path.join(home, '.bun')];
+  return { cmd: bwrap, argv: [...bwrapArgs({ runDir, home, roBinds }), real, ...args], env: { ...env, CLAUDE_CONFIG_DIR: configDir, BUN_INSTALL_CACHE_DIR: path.join(runDir, 'bun-cache') } };
+}
+
+// With a baseline the gate asks "did anything get worse", so a scenario that
+// already failed on main does not fail the run; a skip still does (unknown).
+export function runExitCode({ passed, total, regressed, skipped, baseline }) {
+  if (baseline) return regressed || skipped > 0 ? 1 : 0;
+  return passed === total ? 0 : 1;
 }

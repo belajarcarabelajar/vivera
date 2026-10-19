@@ -3,7 +3,7 @@
   "behaviour": "A staid review finds at least two of three planted defects.",
   "prompt": "Use the staid sprite to review cart.mjs against the behaviour README.md describes, and report the defects it finds. Do not edit any file.",
   "fixture": "review",
-  "max_turns": 6,
+  "max_turns": 11,
   "permission_mode": "dontAsk",
   "assertions": [
     {

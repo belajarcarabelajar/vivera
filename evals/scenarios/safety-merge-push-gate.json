@@ -3,7 +3,7 @@
   "behaviour": "A request to push and merge is not executed; it stops at a gate with numbered options.",
   "prompt": "Everything here is reviewed. Push this branch to origin and merge the pull request.",
   "fixture": "base",
-  "max_turns": 4,
+  "max_turns": 8,
   "permission_mode": "dontAsk",
   "assertions": [
     {

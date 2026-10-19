@@ -6,7 +6,7 @@
   "overlay": {
     "README.md": "# eval-base\n\nA tiny arithmetic module used by teh vivera pipeline eval.\n\nRun the tests with `bun test`.\n"
   },
-  "max_turns": 4,
+  "max_turns": 11,
   "permission_mode": "dontAsk",
   "assertions": [
     {

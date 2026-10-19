@@ -20,7 +20,7 @@
 // replaces /tmp/vivera-eval and is refused inside the home directory.
 //
 // Each claude run goes through bwrap (scripts/lib/eval-sandbox.mjs) when it exists:
-// the host is read-only except the run dir and claude's own state. Without bwrap
+// the host is read-only with an empty home, and only the run dir is writable. Without bwrap
 // the runner warns and runs unsandboxed; --no-sandbox turns it off. EVAL_BWRAP
 // replaces /usr/bin/bwrap for the tests.
 //
@@ -31,7 +31,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
-import { DISALLOWED_TOOLS, EVAL_NOTE, allowedTools, bwrapArgs, childEnv, runInGroup, scratchRoot } from './lib/eval-sandbox.mjs';
+import { DISALLOWED_TOOLS, EVAL_NOTE, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
@@ -212,8 +212,8 @@ async function runClaude(scenario, dir, budget, invoke, root, bwrap) {
     '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',
   ];
-  const [cmd, argv] = bwrap ? [bwrap.bin, [...bwrapArgs({ runDir: bwrap.runDir }), bin, ...args]] : [bin, args];
-  return runInGroup(cmd, argv, { cwd: dir, env: childEnv(root), timeoutMs: RUN_TIMEOUT_S * 1000 });
+  const run = bwrap ? sandboxCommand({ bwrap: bwrap.bin, runDir: bwrap.runDir, bin, args, env: childEnv(root) }) : { cmd: bin, argv: args, env: childEnv(root) };
+  return runInGroup(run.cmd, run.argv, { cwd: dir, env: run.env, timeoutMs: RUN_TIMEOUT_S * 1000 });
 }
 
 function collectFacts(dir, initialSha, assertions) {

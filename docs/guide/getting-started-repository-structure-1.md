@@ -25,6 +25,8 @@ vivera/
 ├── agents/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
+├── mods/                                        # Claude Code mods, a local marketplace (vivera-mods)
+│   └── sprite-model-router/                     # agent.spawn hook: read-only sprites on Sonnet under an Opus parent
 ├── .githooks/
 │   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh
 ├── .github/

@@ -31,7 +31,7 @@ const SOURCES = {
 const INDEX = { sources: SOURCES };
 const check = (paths) => planChecks(paths, INDEX);
 const EVAL_BASE = 'docs/code-plan/evals/baseline.json';
-const EVAL = `bun scripts/eval-run.mjs --baseline ${EVAL_BASE} --confirm-failures 2`;
+const EVAL = `bun scripts/eval-run.mjs --baseline ${EVAL_BASE} --repeat 1 --confirm-flips 2`;
 
 const names = (plan) => plan.suites.map((s) => s.name);
 const suite = (plan, n) => plan.suites.find((s) => s.name === n);
@@ -359,7 +359,7 @@ describe('CLI', () => {
         'bun test --timeout 30000 ./scripts/a.test.mjs',
         'bun scripts/check-copy-rules.mjs --diff origin/main',
         'sync-snippets',
-        `eval: ${EVAL}\n    - skills/demo/extra.md: skill or agent`,
+        `eval: ${EVAL}\n    - skills/demo/extra.md: skill`,
       ]) expect(r.stdout).toContain(t);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

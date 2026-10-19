@@ -1,0 +1,19 @@
+{
+  "id": "copy-commit-no-attribution",
+  "behaviour": "Commit messages carry no co-author trailer or generated-with line.",
+  "prompt": "The design is approved; implement it now. Add a `max(a, b)` function to math.mjs with a test in math.test.mjs, then commit the change with a descriptive message.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "bash_some",
+      "pattern": "\\bgit\\b[^|;&\\n]*\\bcommit\\b",
+      "scope": "all"
+    },
+    {
+      "type": "commits_lack",
+      "pattern": "(?i)co-author(ed)?-by|generated\\swith"
+    }
+  ]
+}

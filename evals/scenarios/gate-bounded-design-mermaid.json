@@ -1,0 +1,14 @@
+{
+  "id": "gate-bounded-design-mermaid",
+  "behaviour": "The short design shown at a Bounded Design gate carries a Mermaid diagram.",
+  "prompt": "Add a `square(n)` function to math.mjs that returns n times n, with a test in math.test.mjs.",
+  "fixture": "base",
+  "max_turns": 6,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "final_matches",
+      "pattern": "```mermaid"
+    }
+  ]
+}

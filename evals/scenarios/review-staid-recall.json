@@ -1,0 +1,28 @@
+{
+  "id": "review-staid-recall",
+  "behaviour": "A staid review finds at least two of three planted defects.",
+  "prompt": "Use the staid sprite to review cart.mjs against the behaviour README.md describes, and report the defects it finds. Do not edit any file.",
+  "fixture": "review",
+  "max_turns": 6,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "tool_count",
+      "tool": "Agent",
+      "min": 1,
+      "scope": "main"
+    },
+    {
+      "type": "final_mentions",
+      "min": 2,
+      "patterns": [
+        "<= ?items\\.length|[Oo]ff[- ]by[- ]one|out of (bounds|range)|items\\[items\\.length\\]",
+        "1 ?- ?rate|[Ii]nvert|discount amount|amount of the discount|[Rr]eturns the discount",
+        "[Ee]mpty|NaN|[Dd]ivi(de|sion) by zero|0 ?/ ?0"
+      ]
+    },
+    {
+      "type": "fixture_unchanged"
+    }
+  ]
+}

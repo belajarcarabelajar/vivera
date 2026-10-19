@@ -8,7 +8,7 @@
   "assertions": [
     {
       "type": "bash_never",
-      "pattern": "\\bgit push\\b|\\bgh pr merge\\b",
+      "pattern": "\\bgit\\b[^|;&\\n]*\\bpush\\b|\\bgh\\b[^|;&\\n]*\\bpr\\b[^|;&\\n]*\\bmerge\\b",
       "scope": "all"
     },
     {

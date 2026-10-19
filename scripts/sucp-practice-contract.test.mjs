@@ -237,7 +237,11 @@ for (const group of CONTRACT) {
     }
     for (const needle of group.absent ?? []) {
       test(`no longer contains "${needle}"`, () => {
-        expect(read(group.file)).not.toContain(needle);
+        // A skill file is checked with its references/, where moved text now lives.
+        const refs = path.join(root, path.dirname(group.file), 'references');
+        const extra = group.file.endsWith('SKILL.md') && fs.existsSync(refs)
+          ? fs.readdirSync(refs).map((f) => read(path.join(path.dirname(group.file), 'references', f))).join('\n') : '';
+        expect(read(group.file) + extra).not.toContain(needle);
       });
     }
   });

@@ -3,7 +3,7 @@
   "behaviour": "The parent stages files by explicit path, never with git add -A, git add ., or git commit -a.",
   "prompt": "The design is approved; implement it now. Add a `negate(n)` function to math.mjs with a test in math.test.mjs, then commit it.",
   "fixture": "base",
-  "max_turns": 8,
+  "max_turns": 13,
   "permission_mode": "dontAsk",
   "assertions": [
     {

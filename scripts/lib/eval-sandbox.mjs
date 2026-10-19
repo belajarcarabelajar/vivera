@@ -102,28 +102,46 @@ export function runInGroup(cmd, args, { cwd, env, timeoutMs }) {
   });
 }
 
-// Writable because claude writes its session and config state there.
-const CLAUDE_STATE = ['.claude', '.claude.json'];
-// Home paths holding credentials or personal data the agent under test has no reason to read.
-const SECRET_DIRS = ['cloudflare', '.config/tinyfish', '.ssh', '.local/share/bmp-cli', '.config/amo',
-  'iwan-kurniawan', 'Dokumen', '.mozilla', '.config/mozilla'];
+/**
+ * bwrap options that put a run on a read-only host with a private /tmp and an empty
+ * home: an allowlist, so a credential nobody thought to list stays hidden. Only the
+ * roBinds paths reappear (read-only) and only the run dir is writable. The pid
+ * namespace is private so killing bwrap kills every process of the run; the network
+ * stays shared because claude needs the API.
+ */
+export function bwrapArgs({ runDir, home = os.homedir(), roBinds = [], exists = fs.existsSync }) {
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--tmpfs', home];
+  for (const p of roBinds) if (exists(p)) args.push('--ro-bind', p, p);
+  args.push('--bind', runDir, runDir, '--unshare-pid', '--die-with-parent', '--');
+  return args;
+}
+
+function resolveBin(bin, envPath = '') {
+  if (bin.includes('/')) return fs.realpathSync(bin);
+  for (const dir of envPath.split(':').filter(Boolean)) {
+    const p = path.join(dir, bin);
+    if (fs.existsSync(p)) return fs.realpathSync(p);
+  }
+  throw new Error(`${bin} not found on PATH`);
+}
 
 /**
- * bwrap options that put a run on a read-only host with a private /tmp: only the
- * run dir and claude's own state are writable, secret dirs are empty, and the
- * pid namespace is private so killing bwrap kills every process of the run. The
- * network stays shared because claude needs the API.
+ * The bwrap command line for one claude run, and its env. claude's state goes to a
+ * per-run config dir inside the run dir holding only a copy of the credentials, so
+ * the host's ~/.claude and ~/.claude.json stay out of reach; the copy goes with the run dir.
  */
-export function bwrapArgs({ runDir, home = os.homedir(), exists = fs.existsSync }) {
-  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--bind', runDir, runDir];
-  for (const rel of CLAUDE_STATE) {
-    const p = path.join(home, rel);
-    if (exists(p)) args.push('--bind', p, p);
+export function sandboxCommand({ bwrap, runDir, bin, args, env, home = os.homedir() }) {
+  const real = resolveBin(bin, env.PATH);
+  const configDir = path.join(runDir, 'claude-config');
+  fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
+  const creds = path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), '.credentials.json');
+  if (fs.existsSync(creds)) {
+    const dest = path.join(configDir, '.credentials.json');
+    fs.copyFileSync(creds, dest);
+    fs.chmodSync(dest, 0o600);
   }
-  for (const rel of SECRET_DIRS) {
-    const p = path.join(home, rel);
-    if (exists(p)) args.push('--tmpfs', p);
-  }
-  args.push('--unshare-pid', '--die-with-parent', '--');
-  return args;
+  // The claude install dir for the binary itself, ~/.bun for the bun the fixtures test with;
+  // its install cache is read-only there, so BUN_INSTALL_CACHE_DIR moves it into the run dir.
+  const roBinds = [path.dirname(real), path.join(home, '.bun')];
+  return { cmd: bwrap, argv: [...bwrapArgs({ runDir, home, roBinds }), real, ...args], env: { ...env, CLAUDE_CONFIG_DIR: configDir, BUN_INSTALL_CACHE_DIR: path.join(runDir, 'bun-cache') } };
 }

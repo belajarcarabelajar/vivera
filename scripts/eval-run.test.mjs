@@ -85,7 +85,7 @@ function run(ctx, ...args) {
   for (const [k, v] of Object.entries(env)) if (v === undefined) delete env[k];
   // The real sandbox hides /tmp, where the stub lives; sandbox tests use a fake bwrap instead.
   const sandbox = ctx.sandbox ? [] : ['--no-sandbox'];
-  const r = spawnSync(process.execPath, [SCRIPT, '--scenarios', ctx.scenDir, ...sandbox, ...args], {
+  const r = spawnSync(process.execPath, [SCRIPT, '--scenarios', ctx.scenDir, ...sandbox, '--repeat', '1', ...args], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env,

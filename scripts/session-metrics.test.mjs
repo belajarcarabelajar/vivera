@@ -130,6 +130,14 @@ describe('summarize', () => {
     const s = summarize({ mains: [], subs, registry: null, fixes: null, window: {} });
     expect(s.subagentsByType).toEqual({ chef: 1, '<other>': 1 });
   });
+
+  test('agent types and skill loads list by count descending, then name ascending', () => {
+    const t = (id, agentType, skills) => ({ calls: [{ id, usage: u(1, 0, 0, 1), tools: [], skills }], firstTs: '2026-10-10T00:00:00Z', agentType });
+    const subs = [t('a', 'nappy', ['zeta']), t('b', 'chef', ['beta']), t('c', 'bold', ['zeta']), t('d', 'nappy', ['alpha'])];
+    const s = summarize({ mains: [], subs, registry: null, fixes: null, window: {} });
+    expect(Object.entries(s.subagentsByType)).toEqual([['nappy', 2], ['bold', 1], ['chef', 1]]);
+    expect(Object.entries(s.skills)).toEqual([['zeta', 2], ['alpha', 1], ['beta', 1]]);
+  });
 });
 
 describe('cross-file dedupe and empty sessions', () => {

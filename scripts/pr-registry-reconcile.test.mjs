@@ -132,7 +132,7 @@ test('reconcile names a gh failure and an unresolvable repository as skipped and
     assert.match(all, /skipped f1 .*HTTP 502/);
     assert.match(all, /skipped n1 /);
     assert.equal(f.state('f1').state, 'open');
-    assert.match(r.out, /^reconciled 11: merged 3, closed 1, stale 1, skipped 4$/m);
+    assert.match(r.out, /^reconciled 11: merged 3, closed 1, stale 1, stale-closed 0, skipped 4$/m);
   } finally { f.cleanup(); }
 });
 
@@ -147,6 +147,16 @@ test('reconcile lists a stale PR-less session without closing it unless --close-
     assert.equal(f.state('s1').state, 'closed');
     assert.ok(f.state('s1').closed_at);
     assert.equal(f.state('y1').state, 'active');
+  } finally { f.cleanup(); }
+});
+
+test('reconcile --close-stale counts the stale sessions it closed apart from PR closures', () => {
+  const f = fixture();
+  try {
+    const dry = f.run('--dry-run', '--close-stale');
+    assert.match(dry.out, /^reconciled 11: merged 3, closed 1, stale 1, stale-closed 0, skipped 4$/m);
+    const r = f.run('--close-stale');
+    assert.match(r.out, /^reconciled 11: merged 3, closed 1, stale 1, stale-closed 1, skipped 4$/m);
   } finally { f.cleanup(); }
 });
 

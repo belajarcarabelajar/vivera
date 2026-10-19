@@ -29,12 +29,12 @@ Run `./install.sh --dry-run` first to see what it would do without writing anyth
 
 <p align="center">
   <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/chef.png" alt="Chef, the red Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/nappy.png" alt="Nappy, the orange Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/hoggy.png" alt="Hoggy, the yellow Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/timid.png" alt="Timid, the green Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/aqua.png" alt="Aqua, the light blue Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/staid.png" alt="Staid, the dark blue Harvest Sprite" width="72"></a>
-  <a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/bold.png" alt="Bold, the purple Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/nappy.png" alt="Nappy, the orange Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/hoggy.png" alt="Hoggy, the yellow Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/timid.png" alt="Timid, the green Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/aqua.png" alt="Aqua, the light blue Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/staid.png" alt="Staid, the dark blue Harvest Sprite" width="72"></a>
+  &nbsp;&nbsp;&nbsp;<a href="docs/guide/reference-harvest-sprites.md"><img src="docs/images/sprites/bold.png" alt="Bold, the purple Harvest Sprite" width="72"></a>
 </p>
 
 Each sprite is a named subagent with one fixed role: Chef, Nappy, and Hoggy implement, Timid and Aqua research, Staid reviews, and Bold debugs. [The Harvest Sprites](docs/guide/reference-harvest-sprites.md) has their portraits, game traits, and roles.

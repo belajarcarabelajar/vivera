@@ -1,6 +1,5 @@
 {
   "MEMORY.md": 29733,
-  "README.md": 190619,
   "apps/docs/content/id/getting-started-quick-start.md": 65260,
   "apps/docs/content/id/getting-started-repository-structure.md": 21474,
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
@@ -14,7 +13,7 @@
   "scripts/check-duplicate-defs.test.mjs": 20224,
   "scripts/ci-targeted.test.mjs": 21603,
   "scripts/container.test.mjs": 23423,
-  "scripts/docs-gen.mjs": 26332,
+  "scripts/docs-gen.mjs": 23436,
   "scripts/docs-gen.test.mjs": 26824,
   "scripts/gen-sprite-agents.test.mjs": 21350,
   "scripts/graphify-plugin-drift.test.mjs": 26388,
@@ -39,8 +38,8 @@
   "scripts/pr-registry.test.mjs": 46318,
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,
-  "scripts/ultra-plan-runner.mjs": 69538,
-  "scripts/ultra-plan-runner.test.mjs": 105939,
+  "scripts/ultra-plan-runner.mjs": 69534,
+  "scripts/ultra-plan-runner.test.mjs": 105935,
   "scripts/validate-agents.test.mjs": 21143,
   "scripts/validate-lib.test.mjs": 27833,
   "scripts/validate-skill.mjs": 45320,
@@ -51,10 +50,6 @@
   "scripts/vault-index-structural.test.mjs": 94265,
   "scripts/vault-index.mjs": 23535,
   "scripts/vault-index.test.mjs": 31712,
-  "skills/sucp-brainstorm/SKILL.md": 33183,
-  "skills/sucp-debt-sweep/SKILL.md": 30231,
-  "skills/sucp-plan/SKILL.md": 44167,
-  "skills/sucp-verify-deliver/SKILL.md": 44431,
-  "snippets/orkestrasi-ngoding-plan.md": 22617,
-  "snippets/orkestrasi-pr-review.md": 20370
+  "snippets/orkestrasi-ngoding-plan.md": 22606,
+  "snippets/orkestrasi-pr-review.md": 20359
 }

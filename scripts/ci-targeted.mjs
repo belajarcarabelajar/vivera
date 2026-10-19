@@ -49,7 +49,7 @@ const CATEGORIES = [
   {
     suites: ['validate-skill'],
     scripts: ['scripts/validate-skill.mjs', 'scripts/validate-lib.mjs'],
-    match: (p) => ['skills/', 'templates/', 'examples/'].some((d) => p.startsWith(d))
+    match: (p) => ['skills/', 'templates/', 'examples/', 'docs/guide/'].some((d) => p.startsWith(d))
       || ['Super Ultra Code Plan Implementation.md', 'README.md', 'AGENTS.md'].includes(p),
   },
   {

@@ -232,7 +232,7 @@ const EVAL_INPUT = /^(?:skills|agents|\.claude\/agents|evals\/scenarios|evals\/f
 function evalSuites(paths) {
   const reasons = paths.filter((p) => EVAL_INPUT.test(p))
     .map((p) => `${p}: ${p.startsWith('evals/') ? 'eval scenario or fixture' : 'skill or agent rules'} changed`);
-  return reasons.length ? [{ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASELINE], requires: EVAL_BASELINE, reasons }] : [];
+  return reasons.length ? [{ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASELINE, '--repeat', '1', '--confirm-flips', '2'], requires: EVAL_BASELINE, reasons }] : [];
 }
 
 // docs/code-plan/ holds session records, not docs pages.

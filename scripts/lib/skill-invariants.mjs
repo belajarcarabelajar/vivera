@@ -55,6 +55,7 @@ export const INVARIANTS = [
   { label: 'follow-ups and close plan share one call', text: 'The Follow-ups and Close plan questions are asked in one call' },
   { label: 'a failed follow-up keeps the plan open', text: 'if a selected follow-up fails, the plan stays open' },
   { label: 'the merge question is always its own call', text: 'The Merge question is always its own call' },
+  { label: 'the Bounded design names the PR as its deliverable', text: 'The Bounded design names the pull request as its deliverable, so no separate Publish question follows' },
   { label: 'mark complete needs a fresh readiness verdict', text: 'Mark Complete applies only if a readiness run after the follow-ups land is still `READY`' },
 ];
 

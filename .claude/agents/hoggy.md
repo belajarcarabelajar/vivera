@@ -7,7 +7,7 @@ skills:
 maxTurns: 40
 hooks:
   PreToolUse:
-    - matcher: "Bash"
+    - matcher: "Bash|Monitor"
       hooks:
         - type: command
           command: "bun \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-git-writes.mjs"

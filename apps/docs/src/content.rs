@@ -262,6 +262,11 @@ pub enum ContentError {
         key: String,
         missing: Lang,
     },
+    Part {
+        lang: Lang,
+        file: String,
+        message: String,
+    },
 }
 
 impl fmt::Display for ContentError {
@@ -280,6 +285,7 @@ impl fmt::Display for ContentError {
             ContentError::MissingTwin { lang, file, key, missing } => {
                 write!(f, "{lang}/{file} ({key}) has no {missing} twin")
             }
+            ContentError::Part { lang, file, message } => write!(f, "{lang}/{file}: {message}"),
         }
     }
 }
@@ -299,14 +305,15 @@ pub fn load_dir(lang: Lang, dir: &Path) -> Result<Vec<DocPage>, ContentError> {
         }
     }
     files.sort();
-    files
+    let named = files
         .iter()
         .map(|path| {
             let src = fs::read_to_string(path).map_err(|e| io(path, e))?;
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
-            DocPage::parse(lang, name, &src)
+            Ok((name.to_string(), src))
         })
-        .collect()
+        .collect::<Result<Vec<_>, ContentError>>()?;
+    crate::parts::assemble(lang, named)
 }
 
 #[derive(Debug)]

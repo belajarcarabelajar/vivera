@@ -5,7 +5,7 @@ category: getting-started
 slug: introduction
 order: 1
 source: README.md
-source_hash: "89aed0a0430c"
+source_hash: "8ace0ec53e79"
 ---
 
 <p align="center">
@@ -35,15 +35,17 @@ Jalankan `./install.sh --dry-run` lebih dulu untuk melihat apa yang akan dilakuk
 
 **Vivera** adalah nama fiktif yang terinspirasi dari Elli, salah satu karakter dalam *Harvest Moon: Back to Nature*. Kosakata di sekitar pipeline ini meminjam dari game yang sama: skill adalah tanaman, pull request adalah lamaran Blue Feather (bulu biru), subagent adalah tujuh Harvest Sprites (peri panen; menyiram berarti keep-alive, merawat hewan berarti aset berumur panjang, memanen berarti shipping), dan registry PR adalah shipping bin (kotak pengiriman). Nuansa ini hanya kosmetik; setiap perintah, path, dan perilaku dalam dokumen ini bermakna harfiah. Lihat [Glosarium Vivera](/id/docs/reference/glossary-full/).
 
-<p align="center">
-  <a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/chef.png" alt="Chef, Harvest Sprite merah" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/nappy.png" alt="Nappy, Harvest Sprite oranye" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/hoggy.png" alt="Hoggy, Harvest Sprite kuning" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/timid.png" alt="Timid, Harvest Sprite hijau" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/aqua.png" alt="Aqua, Harvest Sprite biru muda" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/staid.png" alt="Staid, Harvest Sprite biru tua" width="72"></a>
-  &nbsp;&nbsp;&nbsp;<a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/bold.png" alt="Bold, Harvest Sprite ungu" width="72"></a>
-</p>
+<table align="center">
+  <tr>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/chef.png" alt="Chef, Harvest Sprite merah" width="72"></a><br><b>Chef</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/nappy.png" alt="Nappy, Harvest Sprite oranye" width="72"></a><br><b>Nappy</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/hoggy.png" alt="Hoggy, Harvest Sprite kuning" width="72"></a><br><b>Hoggy</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/timid.png" alt="Timid, Harvest Sprite hijau" width="72"></a><br><b>Timid</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/aqua.png" alt="Aqua, Harvest Sprite biru muda" width="72"></a><br><b>Aqua</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/staid.png" alt="Staid, Harvest Sprite biru tua" width="72"></a><br><b>Staid</b></td>
+    <td align="center"><a href="/id/docs/reference/harvest-sprites/"><img src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/sprites/bold.png" alt="Bold, Harvest Sprite ungu" width="72"></a><br><b>Bold</b></td>
+  </tr>
+</table>
 
 Setiap sprite adalah subagent bernama dengan satu peran tetap: Chef, Nappy, dan Hoggy mengimplementasikan, Timid dan Aqua meriset, Staid me-review, dan Bold men-debug. Potret, sifat di dalam game, dan peran mereka ada di [Harvest Sprites](/id/docs/reference/harvest-sprites/).
 

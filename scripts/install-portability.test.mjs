@@ -101,7 +101,7 @@ describe('D2: a marker reached through a symlinked skills dir keeps the entry li
     const sb = shared();
     expect(sb.run(ARGS).status).toBe(0);
     const held = (d) => entryLines(read(sb, `${d}/${MARKER}`)).map((l) => l.split(' ')[1]);
-    expect(held(PKG).sort()).toEqual(['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'templates']);
+    expect(held(PKG).sort()).toEqual(['SKILL.md', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'templates']);
     expect(phases(sb).flatMap((p) => held(`${SKILLS}/${p}`).map((n) => `${p}/${n}`))).toEqual(phaseEntries(sb.repo));
   });
 

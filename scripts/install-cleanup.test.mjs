@@ -21,7 +21,7 @@ import { makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const VIA = 'is reached through a symlinked directory; left alone';
 const PACKAGE = 'super-ultra-code-plan';
-const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
+const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
 const LINK = ['--tier', 'minimal', '--only', 'claude,opencode'];
 const COPY = ['--copy', ...LINK];
 
@@ -107,7 +107,7 @@ function dotfiles() {
 // relative links, its phase skills real files): every entry there is foreign to the installer.
 function otherCheckout(sb) {
   const other = path.join(sb.root, 'other');
-  for (const rel of ['skills', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', MASTER]) {
+  for (const rel of ['skills', '.claude/hooks', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', MASTER]) {
     copyTree(path.join(sb.repo, rel), path.join(other, rel));
   }
   fs.mkdirSync(at(sb, '.claude'), { recursive: true });

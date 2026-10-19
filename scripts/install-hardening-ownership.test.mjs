@@ -101,7 +101,7 @@ describe('H1: a destination inside this checkout is never touched', () => {
     const sb = sandbox();
     mkdir(sb, AGENTS);
     fs.symlinkSync(path.join(sb.repo, 'skills/super-ultra-code-plan'), at(sb, PKG));
-    const names = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
+    const names = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
     const targets = names.map((n) => fs.readlinkSync(path.join(sb.repo, 'skills/super-ultra-code-plan', n)));
     runEveryMode(sb);
     // Uninstall says it kept them, on its own and not only by doing nothing.

@@ -240,5 +240,7 @@ function Get-TargetEntries($T) {
         [pscustomobject]@{ Src = (Join-Path $RepoDir 'examples'); Dest = (Join-Path $dir 'examples'); IsDir = $true }
         [pscustomobject]@{ Src = (Join-Path $RepoDir 'mermaid.config.json'); Dest = (Join-Path $dir 'mermaid.config.json'); IsDir = $false }
         [pscustomobject]@{ Src = (Join-Path $RepoDir 'mermaid.dark.config.json'); Dest = (Join-Path $dir 'mermaid.dark.config.json'); IsDir = $false }
+        # The Stop hook in the orchestrator's frontmatter runs this script from the installed package.
+        [pscustomobject]@{ Src = (Join-Path (Join-Path (Join-Path $RepoDir '.claude') 'hooks') 'require-exit-code.mjs'); Dest = (Join-Path $dir 'require-exit-code.mjs'); IsDir = $false }
     }
 }

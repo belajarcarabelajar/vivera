@@ -9,7 +9,7 @@
 // Usage:
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
-//                            [--no-invoke] [--scenarios <dir>]
+//                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
 //
 // A scenario's prompt is sent as `/<invoke> <prompt>`, invoke defaulting to the
 // orchestrator skill, because a plain headless prompt never loads the pipeline
@@ -19,6 +19,11 @@
 // EVAL_CLAUDE_BIN replaces the claude binary (tests use a stub), EVAL_TMP_ROOT
 // replaces /tmp/vivera-eval and is refused inside the home directory.
 //
+// Each claude run goes through bwrap (scripts/lib/eval-sandbox.mjs) when it exists:
+// the host is read-only except the run dir and claude's own state. Without bwrap
+// the runner warns and runs unsandboxed; --no-sandbox turns it off. EVAL_BWRAP
+// replaces /usr/bin/bwrap for the tests.
+//
 // Exit: 0 all scenarios pass, 1 any failure, skip, or baseline regression, 2 usage.
 
 import fs from 'node:fs';
@@ -26,15 +31,16 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
-import { DISALLOWED_TOOLS, allowedTools, childEnv, scratchRoot } from './lib/eval-sandbox.mjs';
+import { DISALLOWED_TOOLS, allowedTools, bwrapArgs, childEnv, runInGroup, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const RUN_TIMEOUT_MS = 300_000;
+// EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
+const RUN_TIMEOUT_S = Number(process.env.EVAL_SCENARIO_TIMEOUT_S) > 0 ? Number(process.env.EVAL_SCENARIO_TIMEOUT_S) : 300;
 const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--scenarios <dir>]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -51,7 +57,7 @@ class UsageError extends Error {}
 class RefusedError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, only: null, budget: 15, out: null, baseline: null, keep: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -62,6 +68,7 @@ function parseArgs(argv) {
     if (a === '--list') opts.list = true;
     else if (a === '--keep') opts.keep = true;
     else if (a === '--no-invoke') opts.noInvoke = true;
+    else if (a === '--no-sandbox') opts.noSandbox = true;
     else if (a === '--only') opts.only = value(i++, a).split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--budget-usd') {
       opts.budget = Number(value(i++, a));
@@ -191,7 +198,7 @@ function money(n) {
   return String(Math.round(n * 10000) / 10000);
 }
 
-function runClaude(scenario, dir, budget, invoke, root) {
+async function runClaude(scenario, dir, budget, invoke, root, bwrap) {
   const bin = process.env.EVAL_CLAUDE_BIN || 'claude';
   const args = [
     '-p', invoke ? `/${invoke} ${scenario.prompt}` : scenario.prompt,
@@ -204,17 +211,8 @@ function runClaude(scenario, dir, budget, invoke, root) {
     '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',
   ];
-  const r = spawnSync(bin, args, {
-    cwd: dir,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: RUN_TIMEOUT_MS,
-    killSignal: 'SIGKILL',
-    maxBuffer: 256 * 1024 * 1024,
-    env: childEnv(root),
-  });
-  const timedOut = r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGKILL';
-  return { stdout: r.stdout ?? '', status: r.status, timedOut, spawnError: timedOut ? null : r.error };
+  const [cmd, argv] = bwrap ? [bwrap.bin, [...bwrapArgs({ runDir: bwrap.runDir }), bin, ...args]] : [bin, args];
+  return runInGroup(cmd, argv, { cwd: dir, env: childEnv(root), timeoutMs: RUN_TIMEOUT_S * 1000 });
 }
 
 function collectFacts(dir, initialSha, assertions) {
@@ -246,7 +244,7 @@ function contextTokens(usage) {
     .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
 }
 
-function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index) {
+async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
   const dest = path.join(runDir, String(index + 1).padStart(2, '0'), 'project');
@@ -258,13 +256,13 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index)
     if (!(err instanceof RefusedError)) throw err;
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
   }
-  const run = runClaude(scenario, dest, budget, invoke, path.dirname(runDir));
+  const run = await runClaude(scenario, dest, budget, invoke, path.dirname(runDir), bwrap && { bin: bwrap, runDir });
   // Beside the fixture, not inside it, so the stream never shows up in its git status.
   const stream = keep ? path.join(runDir, `${scenario.id}.stream.jsonl`) : undefined;
   if (stream) fs.writeFileSync(stream, run.stdout);
   const parsed = parseStream(run.stdout);
   const results = score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions);
-  if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_MS / 1000} s` });
+  if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_S} s` });
   else if (run.spawnError) results.unshift({ type: 'run', pass: false, detail: `could not start claude: ${run.spawnError.code ?? run.spawnError.message}` });
   else if (parsed.result.subtype == null) results.unshift({ type: 'run', pass: false, detail: `no result event (exit ${run.status})` });
   return {
@@ -272,7 +270,9 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index)
     pass: results.every((r) => r.pass),
     results,
     turns: parsed.result.num_turns,
-    cost: Number(parsed.result.total_cost_usd) || 0,
+    // Unknown, not zero: a run killed before its result event may have spent up to its ceiling.
+    cost: run.timedOut && parsed.result.subtype == null ? null : Number(parsed.result.total_cost_usd) || 0,
+    timed_out: run.timedOut,
     usage: parsed.result.usage,
     permission_denials: deniedToolNames(parsed.events),
     seconds: Math.round((Date.now() - started) / 100) / 10,
@@ -285,7 +285,7 @@ function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  $${money(r.cost)}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
 }
 
 function localDate(d = new Date()) {
@@ -326,7 +326,7 @@ function compareBaseline(baseline, scenarios) {
   return { regressions, improvements };
 }
 
-function main(argv) {
+async function main(argv) {
   const opts = parseArgs(argv);
   let scenarios = loadScenarios(opts.scenarios);
   if (opts.only) {
@@ -351,6 +351,11 @@ function main(argv) {
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
   const runDir = path.join(scratch, runId);
   const width = Math.max(...scenarios.map((s) => s.id.length), 2);
+  let bwrap = opts.noSandbox ? null : process.env.EVAL_BWRAP || '/usr/bin/bwrap';
+  if (bwrap && !fs.existsSync(bwrap)) {
+    console.error(`warning: bwrap not found at ${bwrap}; running claude without the OS sandbox`);
+    bwrap = null;
+  }
 
   const done = [];
   let spent = 0;
@@ -359,8 +364,9 @@ function main(argv) {
       if (spent >= opts.budget) {
         done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
-        const r = runScenario(s, fixturesDir, runDir, ceiling(opts.budget - spent), invokeOf(s), opts.keep, index);
-        spent += r.cost;
+        const cap = ceiling(opts.budget - spent);
+        const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap);
+        spent += r.cost ?? cap;
         done.push(r);
       }
       console.log(line(done[done.length - 1], width));
@@ -391,7 +397,7 @@ function main(argv) {
 }
 
 try {
-  process.exitCode = main(process.argv.slice(2));
+  process.exitCode = await main(process.argv.slice(2));
 } catch (err) {
   if (err instanceof UsageError) {
     console.error(`${err.message}\n${USAGE}`);

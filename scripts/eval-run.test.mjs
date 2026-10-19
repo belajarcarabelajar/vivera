@@ -37,6 +37,7 @@ case "$prompt" in
   /*) prompt="\${prompt#* }" ;;
 esac
 case "$prompt" in
+  hang) sleep 60 & echo $! > "$log.grandchild"; sleep 60; exit 0 ;;
   write:*) prompt="\${prompt#write:}"; echo hello > greeting.txt ;;
 esac
 cat "@STREAMS@/$prompt.jsonl"
@@ -81,10 +82,13 @@ function setup(scenarios, { mcp = false } = {}) {
 function run(ctx, ...args) {
   const env = { ...process.env, EVAL_CLAUDE_BIN: ctx.stub, EVAL_TMP_ROOT: ctx.tmpRoot, ...ctx.env };
   for (const [k, v] of Object.entries(env)) if (v === undefined) delete env[k];
-  const r = spawnSync(process.execPath, [SCRIPT, '--scenarios', ctx.scenDir, ...args], {
+  // The real sandbox hides /tmp, where the stub lives; sandbox tests use a fake bwrap instead.
+  const sandbox = ctx.sandbox ? [] : ['--no-sandbox'];
+  const r = spawnSync(process.execPath, [SCRIPT, '--scenarios', ctx.scenDir, ...sandbox, ...args], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
     env,
+    timeout: 60_000,
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
@@ -100,6 +104,14 @@ const DEFAULT_ALLOWED = 'Read,Edit,Write,Glob,Grep,Agent,Skill,TodoWrite,Bash(bu
   + 'Bash(echo *),Bash(printf *),Bash(sed -n *),Bash(grep *),Bash(pwd*),Bash(which *),Bash(bun --version*)';
 const DISALLOWED = 'Bash(rm *),Bash(git push*),Bash(git -C * push*),Bash(gh *),Bash(curl *),Bash(wget *)';
 const cwdOf = (ctx) => stubLog(ctx).match(/^CWD (.*)$/m)?.[1];
+// A killed process may linger as a zombie until its new parent reaps it; that counts as gone.
+const gone = (pid) => {
+  try {
+    return fs.readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1][0] === 'Z';
+  } catch {
+    return true;
+  }
+};
 const GATE = [{ type: 'fixture_unchanged' }, { type: 'final_options', min: 2 }];
 
 describe('eval-run', () => {
@@ -173,6 +185,25 @@ describe('eval-run', () => {
     expect(stubLog(ctx).match(/^RUN$/gm)).toHaveLength(1);
     expect(r.out).toMatch(/b-second\s+SKIP/);
     expect(stubLog(ctx)).toContain(argLines('--max-budget-usd', '0.10'));
+  });
+
+  test('a run past the timeout is killed with its whole process group', async () => {
+    const ctx = setup([{ id: 'hung', prompt: 'hang', assertions: GATE }]);
+    ctx.env = { EVAL_SCENARIO_TIMEOUT_S: '1' };
+    const r = run(ctx, '--out', path.join(ctx.root, 'o.json'));
+    const pid = Number(fs.readFileSync(`${ctx.log}.grandchild`, 'utf8'));
+    for (let i = 0; i < 20 && !gone(pid); i++) await Bun.sleep(100);
+    expect([r.code, gone(pid)]).toEqual([1, true]);
+    expect(r.out).toMatch(/hung\s+FAIL\s+run: timed out after 1 s/);
+  });
+
+  test('a killed run with no result event records cost null and is charged its ceiling', () => {
+    const ctx = setup([{ id: 'a-hung', prompt: 'hang', assertions: GATE }, { id: 'b-next', prompt: 'ask', assertions: GATE }]);
+    ctx.env = { EVAL_SCENARIO_TIMEOUT_S: '1' };
+    const out = path.join(ctx.root, 'o.json');
+    run(ctx, '--budget-usd', '2.5', '--out', out);
+    expect(JSON.parse(fs.readFileSync(out, 'utf8')).scenarios[0]).toMatchObject({ id: 'a-hung', cost: null, timed_out: true });
+    expect(stubLog(ctx)).toContain(argLines('--max-budget-usd', '0.50'));
   });
 
   test('each fixture sits at a neutral numbered path that never names the scenario', () => {

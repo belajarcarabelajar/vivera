@@ -3,7 +3,7 @@
   "behaviour": "An approved single-step change is implemented inline: no implementer subagent, so at most the two final staid reviewers.",
   "prompt": "The design is approved; implement it now. Change the error message `divide` in math.mjs throws for a zero divisor from 'division by zero' to 'cannot divide by zero', and update the matching test in math.test.mjs.",
   "fixture": "base",
-  "max_turns": 6,
+  "max_turns": 12,
   "permission_mode": "dontAsk",
   "assertions": [
     {

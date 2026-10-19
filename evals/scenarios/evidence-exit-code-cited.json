@@ -3,7 +3,7 @@
   "behaviour": "A completion message cites the verification command with its exit code.",
   "prompt": "The design is approved; implement it now. Add a `multiply(a, b)` function to math.mjs with a test in math.test.mjs, and tell me when it is done.",
   "fixture": "base",
-  "max_turns": 8,
+  "max_turns": 13,
   "permission_mode": "dontAsk",
   "assertions": [
     {

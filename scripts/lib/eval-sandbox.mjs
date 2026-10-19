@@ -4,8 +4,10 @@
 // fixtures live under, the environment it inherits, and its tool allow and deny
 // lists. Split out of scripts/eval-run.mjs, which is the only caller.
 
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 // Literal /tmp, not $TMPDIR: here TMPDIR points into $HOME, and a run under $HOME
 // loads the user's home CLAUDE.md (a probe quoted it; the same probe under /tmp did not).
@@ -50,4 +52,76 @@ export const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(git -C *
 export function allowedTools(scenario, fixtureDir) {
   return scenario.allowed_tools
     ?? [...DEFAULT_ALLOWED_TOOLS, ...GIT_C_SUBCOMMANDS.map((sub) => `Bash(git -C ${fixtureDir} ${sub}*)`)];
+}
+
+// How long a run may keep its pipes open after its process group is killed or its
+// leader exits: a descendant in another session can hold them open indefinitely.
+const PIPE_GRACE_MS = 2000;
+
+/**
+ * Runs cmd in its own process group and resolves with its stdout. On timeout, and
+ * again once the leader exits, the whole group gets SIGKILL, so no descendant
+ * outlives the run.
+ */
+export function runInGroup(cmd, args, { cwd, env, timeoutMs }) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    let timedOut = false;
+    let settled = false;
+    let grace = null;
+    const child = spawn(cmd, args, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      resolve(result);
+    };
+    const killGroup = () => {
+      try {
+        process.kill(-child.pid, 'SIGKILL');
+      } catch {
+        // ESRCH: the group is already empty.
+      }
+      grace ??= setTimeout(() => {
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+      }, PIPE_GRACE_MS);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killGroup();
+    }, timeoutMs);
+    child.stdout.on('data', (d) => chunks.push(d));
+    child.stderr.resume();
+    child.on('error', (err) => finish({ stdout: '', status: null, timedOut: false, spawnError: err }));
+    child.on('exit', () => killGroup());
+    child.on('close', (status) => finish({ stdout: Buffer.concat(chunks).toString('utf8'), status, timedOut, spawnError: null }));
+  });
+}
+
+// Writable because claude writes its session and config state there.
+const CLAUDE_STATE = ['.claude', '.claude.json'];
+// Home paths holding credentials or personal data the agent under test has no reason to read.
+const SECRET_DIRS = ['cloudflare', '.config/tinyfish', '.ssh', '.local/share/bmp-cli', '.config/amo',
+  'iwan-kurniawan', 'Dokumen', '.mozilla', '.config/mozilla'];
+
+/**
+ * bwrap options that put a run on a read-only host with a private /tmp: only the
+ * run dir and claude's own state are writable, secret dirs are empty, and the
+ * pid namespace is private so killing bwrap kills every process of the run. The
+ * network stays shared because claude needs the API.
+ */
+export function bwrapArgs({ runDir, home = os.homedir(), exists = fs.existsSync }) {
+  const args = ['--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--bind', runDir, runDir];
+  for (const rel of CLAUDE_STATE) {
+    const p = path.join(home, rel);
+    if (exists(p)) args.push('--bind', p, p);
+  }
+  for (const rel of SECRET_DIRS) {
+    const p = path.join(home, rel);
+    if (exists(p)) args.push('--tmpfs', p);
+  }
+  args.push('--unshare-pid', '--die-with-parent', '--');
+  return args;
 }

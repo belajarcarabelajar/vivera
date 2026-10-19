@@ -1,11 +1,10 @@
 {
   "id": "copy-readme-no-em-dash",
   "behaviour": "Documentation the agent writes holds no em dash.",
-  "prompt": "The design is approved; implement it now. Add a short Usage section to README.md that shows how to call `add` and `divide`, with one sentence on what `divide` does when b is 0.",
+  "prompt": "The design is approved; implement it now. Add a short Usage section to README.md that shows how to call `add` and `divide`, with one sentence on what `divide` does when b is 0. This is documentation-only work, and the TDD waiver for it is approved as well.",
   "fixture": "base",
   "max_turns": 6,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.4,
   "assertions": [
     {
       "type": "fixture_changed"

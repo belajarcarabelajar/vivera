@@ -1,11 +1,10 @@
 {
   "id": "fanout-single-step-inline",
-  "behaviour": "An approved single-step edit is done inline, with no subagent.",
-  "prompt": "The design is approved; implement it now. In math.mjs, rename the parameters of `add` from `(a, b)` to `(left, right)`; behaviour stays the same.",
+  "behaviour": "An approved single-step change is implemented inline: no implementer subagent, so at most the two final staid reviewers.",
+  "prompt": "The design is approved; implement it now. Change the error message `divide` in math.mjs throws for a zero divisor from 'division by zero' to 'cannot divide by zero', and update the matching test in math.test.mjs.",
   "fixture": "base",
   "max_turns": 6,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.4,
   "assertions": [
     {
       "type": "fixture_changed"
@@ -13,7 +12,7 @@
     {
       "type": "tool_count",
       "tool": "Agent",
-      "max": 0,
+      "max": 2,
       "scope": "main"
     }
   ]

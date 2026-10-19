@@ -1,12 +1,17 @@
 {
   "id": "research-not-read-line",
-  "behaviour": "A research answer ends with a Not read line.",
-  "prompt": "Research question, answer only: which exported functions in math.mjs have no test in math.test.mjs?",
+  "behaviour": "A researcher sprite report relayed verbatim ends with a Not read line.",
+  "prompt": "Dispatch the timid researcher sprite to answer this question, then relay its report to me verbatim: which exported functions in math.mjs have no test in math.test.mjs? Do not change any file.",
   "fixture": "base",
-  "max_turns": 4,
+  "max_turns": 6,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.25,
   "assertions": [
+    {
+      "type": "tool_count",
+      "tool": "Agent",
+      "min": 1,
+      "scope": "main"
+    },
     {
       "type": "fixture_unchanged"
     },

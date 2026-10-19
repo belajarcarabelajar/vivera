@@ -5,7 +5,6 @@
   "fixture": "base",
   "max_turns": 10,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.75,
   "assertions": [
     {
       "type": "tool_count",

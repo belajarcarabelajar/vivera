@@ -31,15 +31,19 @@ import { parseStream, score } from './eval-score.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUN_TIMEOUT_MS = 300_000;
 const DEFAULT_INVOKE = 'super-ultra-code-plan';
+// One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
+const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
 // --setting-sources project,local also drops the user's PreToolUse hooks (rm-tmp-guard),
 // so the tool lists below are the only fence between an agent under test and this machine.
 const DEFAULT_ALLOWED_TOOLS = [
   'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'TodoWrite',
   'Bash(bun *)', 'Bash(bunx *)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)', 'Bash(git show*)',
-  'Bash(git add *)', 'Bash(git commit *)', 'Bash(ls*)', 'Bash(cat *)', 'Bash(rg *)', 'Bash(wc *)', 'Bash(head *)', 'Bash(tail *)',
+  'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git checkout -b *)', 'Bash(git branch*)',
+  'Bash(git rev-parse*)', 'Bash(ls*)', 'Bash(cat *)', 'Bash(rg *)', 'Bash(wc *)', 'Bash(head *)', 'Bash(tail *)',
 ];
-const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
+// `Bash(git push*)` misses `git -C <dir> push`, which the per-run `git -C` allowance would let through.
+const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(git -C * push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
 const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--scenarios <dir>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
@@ -91,7 +95,6 @@ function validateScenario(s, file, skills) {
     || !s.allowed_tools.every((t) => typeof t === 'string' && t.trim() !== ''))) {
     throw bad('allowed_tools must be a non-empty array of tool names');
   }
-  if (typeof s.budget_usd !== 'number' || !(s.budget_usd > 0)) throw bad('budget_usd must be a positive number');
   if (!Array.isArray(s.assertions) || s.assertions.length === 0) throw bad('assertions must be a non-empty array');
   if (s.invoke !== undefined && s.invoke !== false && !(typeof s.invoke === 'string' && skills.has(s.invoke))) {
     throw bad(`invoke must be false or one of the installed skills, got ${JSON.stringify(s.invoke)}`);
@@ -189,6 +192,11 @@ function buildFixture(scenario, fixturesDir, dest) {
   return gitOk(dest, ['rev-parse', 'HEAD']).trim();
 }
 
+// Rounded down to the cent so the cap never exceeds what is left, and never zero.
+function ceiling(remaining) {
+  return Math.max(0.01, Math.floor(Math.min(RUN_CEILING_USD, remaining) * 100 + 1e-9) / 100);
+}
+
 function money(n) {
   return String(Math.round(n * 10000) / 10000);
 }
@@ -200,10 +208,10 @@ function runClaude(scenario, dir, budget, invoke) {
     '--output-format', 'stream-json', '--verbose',
     '--max-turns', String(scenario.max_turns),
     '--permission-mode', scenario.permission_mode,
-    '--allowedTools', (scenario.allowed_tools ?? DEFAULT_ALLOWED_TOOLS).join(','),
+    '--allowedTools', (scenario.allowed_tools ?? [...DEFAULT_ALLOWED_TOOLS, `Bash(git -C ${dir} *)`]).join(','),
     '--disallowedTools', DISALLOWED_TOOLS.join(','),
     '--no-session-persistence',
-    '--max-budget-usd', money(budget),
+    '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',
   ];
   const r = spawnSync(bin, args, {
@@ -248,9 +256,10 @@ function contextTokens(usage) {
     .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
 }
 
-function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep) {
+function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index) {
   const started = Date.now();
-  const dest = path.join(runDir, scenario.id);
+  // A path naming the scenario tells the agent what is tested and leaks into scored commands.
+  const dest = path.join(runDir, String(index + 1).padStart(2, '0'), 'project');
   const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
   let initialSha;
   try {
@@ -277,7 +286,7 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep) {
     usage: parsed.result.usage,
     permission_denials: deniedToolNames(parsed.events),
     seconds: Math.round((Date.now() - started) / 100) / 10,
-    ...(stream ? { stream } : {}),
+    ...(stream ? { stream, fixture: dest } : {}),
   };
 }
 
@@ -286,7 +295,7 @@ function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  $${money(r.cost)}  ${r.seconds}s${r.stream ? `  stream=${r.stream}` : ''}`;
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  $${money(r.cost)}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
 }
 
 function localDate(d = new Date()) {
@@ -355,11 +364,11 @@ function main(argv) {
   const done = [];
   let spent = 0;
   try {
-    for (const s of scenarios) {
+    for (const [index, s] of scenarios.entries()) {
       if (spent >= opts.budget) {
         done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
-        const r = runScenario(s, fixturesDir, runDir, Math.min(s.budget_usd, opts.budget - spent), invokeOf(s), opts.keep);
+        const r = runScenario(s, fixturesDir, runDir, ceiling(opts.budget - spent), invokeOf(s), opts.keep, index);
         spent += r.cost;
         done.push(r);
       }

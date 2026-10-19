@@ -248,7 +248,7 @@ function contextTokens(usage) {
     .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
 }
 
-function runScenario(scenario, fixturesDir, runDir, budget, invoke) {
+function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep) {
   const started = Date.now();
   const dest = path.join(runDir, scenario.id);
   const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
@@ -260,6 +260,9 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke) {
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
   }
   const run = runClaude(scenario, dest, budget, invoke);
+  // Beside the fixture, not inside it, so the stream never shows up in its git status.
+  const stream = keep ? path.join(runDir, `${scenario.id}.stream.jsonl`) : undefined;
+  if (stream) fs.writeFileSync(stream, run.stdout);
   const parsed = parseStream(run.stdout);
   const results = score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions);
   if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_MS / 1000} s` });
@@ -274,6 +277,7 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke) {
     usage: parsed.result.usage,
     permission_denials: deniedToolNames(parsed.events),
     seconds: Math.round((Date.now() - started) / 100) / 10,
+    ...(stream ? { stream } : {}),
   };
 }
 
@@ -282,7 +286,7 @@ function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  $${money(r.cost)}  ${r.seconds}s`;
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  $${money(r.cost)}  ${r.seconds}s${r.stream ? `  stream=${r.stream}` : ''}`;
 }
 
 function localDate(d = new Date()) {
@@ -355,7 +359,7 @@ function main(argv) {
       if (spent >= opts.budget) {
         done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
-        const r = runScenario(s, fixturesDir, runDir, Math.min(s.budget_usd, opts.budget - spent), invokeOf(s));
+        const r = runScenario(s, fixturesDir, runDir, Math.min(s.budget_usd, opts.budget - spent), invokeOf(s), opts.keep);
         spent += r.cost;
         done.push(r);
       }

@@ -8,7 +8,7 @@ The micro-eval measures whether an agent following this branch's pipeline rules 
 - Invocation: each prompt is sent as `/super-ultra-code-plan <prompt>` by default, so scenarios run through the orchestrator the way the owner's trigger prompts do; a scenario's `invoke` names another skill or is `false`, and `bun run eval --no-invoke` is the bare-model control. Baselines with a different invocation are refused.
 - The runner copies the fixture to a scratch directory, installs the branch's skills and sprites into its `.claude/`, runs a capped headless `claude -p`, and scores the stream and the resulting files.
 
-Run it with `bun run eval`. Each scenario has its own `budget_usd` cap (at most $0.75); a full run of about 20 scenarios costs roughly $2 to $12. The scenario schema test is free: `bun test ./scripts/eval-scenarios.test.mjs`.
+Run it with `bun run eval`; add `--keep` to keep each scratch fixture and the raw `claude` stream beside it (`<scratch>/<id>.stream.jsonl`, path printed per scenario) for diagnosing a failure. Each scenario has its own `budget_usd` cap (at most $0.75); a full run of about 20 scenarios costs roughly $2 to $12. The scenario schema test is free: `bun test ./scripts/eval-scenarios.test.mjs`.
 
 Gates are scored in their headless form. Print mode has no question tool, so a gate passes when the fixture is unchanged after the run and the final message holds a numbered list of options, which is the Confirmation Protocol's form for a runtime with no interactive client. The question tool itself is not observed.
 

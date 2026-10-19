@@ -24,14 +24,14 @@
 // the runner warns and runs unsandboxed; --no-sandbox turns it off. EVAL_BWRAP
 // replaces /usr/bin/bwrap for the tests.
 //
-// Exit: 0 all scenarios pass, 1 any failure, skip, or baseline regression, 2 usage.
+// Exit: 0 all pass (with --baseline: no regression and no skip), else 1; 2 usage.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
-import { DISALLOWED_TOOLS, EVAL_NOTE, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
+import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
@@ -394,7 +394,7 @@ async function main(argv) {
     for (const id of improvements) console.log(`improvement: ${id}`);
     regressed = regressions.length > 0;
   }
-  return passed === done.length && !regressed ? 0 : 1;
+  return runExitCode({ passed, total: done.length, regressed, skipped, baseline: Boolean(baseline) });
 }
 
 try {

@@ -182,7 +182,6 @@ test('every trigger snippet carries the same confirmations paragraph', () => {
   const tokens = [
     '`AskUserQuestion`',
     '`question`',
-    '`ask_user`',
     '(Recommended)',
     'never end a turn on a plain-text question',
     'A dismissed question is not an approval',

@@ -38,7 +38,7 @@
   "scripts/pr-registry.test.mjs": 46318,
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,
-  "scripts/ultra-plan-runner.mjs": 69538,
+  "scripts/ultra-plan-runner.mjs": 69534,
   "scripts/ultra-plan-runner.test.mjs": 105939,
   "scripts/validate-agents.test.mjs": 21143,
   "scripts/validate-lib.test.mjs": 27833,

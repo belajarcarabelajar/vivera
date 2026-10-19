@@ -36,6 +36,17 @@ substitution that is not the value of an assignment (`x=$(git commit)` is blocke
 line behind the contract text, not the only one. It also does not stop a `Bash` call from writing ordinary files, so the "does not edit files"
 rule of the researcher and the reviewer is a contract, not an enforced limit.
 
+The sprites carry no `model:` line, because the other five harnesses have no translation for it, so in
+Claude Code every sprite runs on the parent's model. The optional mod `mods/sprite-model-router` changes
+that at `agent.spawn`: when the parent runs on Opus or Fable, the read-only sprites (`timid`, `aqua`,
+`staid`) start on Sonnet, while the implementers, the debugger, built-in agents, forks, resumed runs,
+teammates, and any call that passes its own `model` keep theirs. It never routes up. Install it once with
+`claude plugin marketplace add ~/vivera/mods` and `claude plugin install sprite-model-router@vivera-mods`;
+Claude Code then reads it from this folder, so an edit here takes effect after `/reload-plugins`.
+`readOnlyModel` in `/config` picks `sonnet`, `haiku`, or `off` (the kill switch), and each routed spawn
+logs one `sprite-model-router:` line. `scripts/sprite-model-router.test.mjs` fails when its roster drifts
+from `agents/crew.json`, and runs the mod's own tests through `claude plugin test`.
+
 Things that are easy to get wrong:
 
 - **There is no `CLAUDE.md` on purpose.** Claude Code reads `AGENTS.md` itself only when no `CLAUDE.md`

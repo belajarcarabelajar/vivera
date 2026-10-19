@@ -437,7 +437,7 @@ describe('install.ps1: markers, backups, entries, tags, and exit codes match the
 
   test('the entries are the ones package_entries makes', () => {
     const entries = body(libSh, 'package_entries');
-    for (const name of ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'sucp-*']) {
+    for (const name of ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'sucp-*']) {
       expect({ name, bash: entries.includes(name) }).toEqual({ name, bash: true });
       expect({ name, ps1: code.includes(`'${name}'`) }).toEqual({ name, ps1: true });
     }

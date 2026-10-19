@@ -31,6 +31,7 @@ const SOURCES = {
 const INDEX = { sources: SOURCES };
 const check = (paths) => planChecks(paths, INDEX);
 const EVAL_BASE = 'docs/code-plan/evals/baseline.json';
+const EVAL = `bun scripts/eval-run.mjs --baseline ${EVAL_BASE} --confirm-failures 2`;
 
 const names = (plan) => plan.suites.map((s) => s.name);
 const suite = (plan, n) => plan.suites.find((s) => s.name === n);
@@ -99,8 +100,7 @@ describe('planChecks', () => {
     const plan = check(['skills/demo/SKILL.md']);
     targeted(plan);
     expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules', 'eval']);
-    expect(plan.suites.at(-1)).toEqual({ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASE],
-      requires: EVAL_BASE, reasons: ['skills/demo/SKILL.md: skill or agent rules changed'] });
+    expect(plan.suites.at(-1)).toEqual({ name: 'eval', cmd: EVAL.split(' '), requires: EVAL_BASE, reasons: ['skills/demo/SKILL.md: skill or agent rules changed'] });
     expect(testFiles(plan)).toEqual(['./scripts/skills-reader.test.mjs']);
   });
 
@@ -359,7 +359,7 @@ describe('CLI', () => {
         'bun test --timeout 30000 ./scripts/a.test.mjs',
         'bun scripts/check-copy-rules.mjs --diff origin/main',
         'sync-snippets',
-        `eval: bun scripts/eval-run.mjs --baseline ${EVAL_BASE}\n    - skills/demo/extra.md: skill or agent`,
+        `eval: ${EVAL}\n    - skills/demo/extra.md: skill or agent`,
       ]) expect(r.stdout).toContain(t);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

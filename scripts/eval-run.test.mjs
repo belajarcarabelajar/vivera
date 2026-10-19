@@ -10,6 +10,7 @@ const SCRIPT = path.join(HERE, 'eval-run.mjs');
 const STREAMS = path.join(HERE, '..', 'evals', 'fixtures', 'streams');
 
 // The stub stands in for the claude binary: the prompt names a recorded stream,
+// a leading "/<skill> " (the orchestrator invocation) is dropped before the lookup,
 // and a prompt of the form "write:<stream>" also writes a file into the fixture,
 // so a test can see both an unchanged and a changed fixture.
 const STUB = `#!/bin/sh
@@ -28,6 +29,9 @@ done
   echo "AGENTS $(ls .claude/agents | wc -l)"
   echo "COMMITS $(git log --format=%an:%ae | tr '\\n' ' ')"
 } >> "$log"
+case "$prompt" in
+  /*) prompt="\${prompt#* }" ;;
+esac
 case "$prompt" in
   write:*) prompt="\${prompt#write:}"; echo hello > greeting.txt ;;
 esac
@@ -87,6 +91,8 @@ function runWith(ctx, streams, ...args) {
 }
 
 const stubLog = (ctx) => (fs.existsSync(ctx.log) ? fs.readFileSync(ctx.log, 'utf8') : '');
+const SUCP = 'super-ultra-code-plan';
+const promptArg = (ctx) => stubLog(ctx).match(/^ARG -p\nARG (.*)$/m)?.[1];
 const argLines = (...args) => args.map((a) => `ARG ${a}`).join('\n');
 const DEFAULT_ALLOWED = 'Read,Edit,Write,Glob,Grep,Agent,Skill,TodoWrite,Bash(bun *),Bash(bunx *),Bash(git status*),Bash(git diff*),'
   + 'Bash(git log*),Bash(git show*),Bash(git add *),Bash(git commit *),Bash(ls*),Bash(cat *),Bash(rg *),Bash(wc *),Bash(head *),Bash(tail *)';
@@ -123,7 +129,7 @@ describe('eval-run', () => {
     expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
     const log = stubLog(ctx);
     expect(log).toContain(argLines(
-      '-p', 'ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
+      '-p', '/super-ultra-code-plan ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
       '--allowedTools', DEFAULT_ALLOWED, '--disallowedTools', DISALLOWED,
       '--no-session-persistence', '--max-budget-usd', '0.5', '--setting-sources', 'project,local',
     ));
@@ -169,7 +175,7 @@ describe('eval-run', () => {
       { id: 'gate-a', prompt: 'ask', assertions: GATE },
     ]);
     const baseline = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate-w', pass: true }, { id: 'gate-a', pass: false }] }));
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate-w', pass: true, invoke: SUCP }, { id: 'gate-a', pass: false, invoke: SUCP }] }));
     const r = run(ctx, '--only', 'gate-w,gate-a', '--baseline', baseline, '--out', path.join(ctx.root, 'o.json'));
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/regression: gate-w/i);
@@ -233,6 +239,50 @@ describe('eval-run', () => {
     const text = fs.readFileSync(out, 'utf8');
     expect(JSON.parse(text).scenarios[0].permission_denials).toEqual(['Bash']);
     expect(text).not.toContain('planted-target');
+  });
+
+  test('a scenario runs through the orchestrator skill by default, and the out file records it', () => {
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
+    const out = path.join(ctx.root, 'o.json');
+    expect(run(ctx, '--out', out).code).toBe(0);
+    expect(promptArg(ctx)).toBe(`/${SUCP} ask`);
+    expect(JSON.parse(fs.readFileSync(out, 'utf8')).scenarios[0].invoke).toBe(SUCP);
+  });
+
+  test('a scenario invoke names another skill, or false for a bare prompt', () => {
+    for (const [invoke, prompt] of [['sucp-rules', '/sucp-rules ask'], [false, 'ask']]) {
+      const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke, assertions: GATE }]);
+      expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
+      expect(promptArg(ctx)).toBe(prompt);
+    }
+  });
+
+  test('--no-invoke sends every prompt bare and records invoke false', () => {
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke: 'sucp-rules', assertions: GATE }]);
+    const out = path.join(ctx.root, 'o.json');
+    expect(run(ctx, '--no-invoke', '--out', out).code).toBe(0);
+    expect(promptArg(ctx)).toBe('ask');
+    expect(JSON.parse(fs.readFileSync(out, 'utf8')).scenarios[0].invoke).toBe(false);
+  });
+
+  test('an invoke naming no installed skill is a usage error before any run', () => {
+    for (const invoke of ['no-such-skill', '', 3]) {
+      const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke, assertions: GATE }]);
+      expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(2);
+      expect(stubLog(ctx)).toBe('');
+    }
+  });
+
+  test('a baseline taken with a different invoke is refused before any run', () => {
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
+    const baseline = path.join(ctx.root, 'base.json');
+    // A baseline from before invoke existed carries no field: those runs were bare.
+    for (const entry of [{ id: 'gate-a', pass: true, invoke: false }, { id: 'gate-a', pass: true }]) {
+      fs.writeFileSync(baseline, JSON.stringify({ scenarios: [entry] }));
+      const r = run(ctx, '--baseline', baseline, '--out', path.join(ctx.root, 'o.json'));
+      expect([r.code, r.err.includes('invoke')]).toEqual([2, true]);
+    }
+    expect(stubLog(ctx)).toBe('');
   });
 
   test('usage errors exit 2', () => {

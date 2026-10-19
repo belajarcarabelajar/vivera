@@ -10,6 +10,8 @@
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
 //                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
+//                            [--repeat <n>] [--confirm-failures <k>]
+// The last two take a majority verdict: scripts/lib/eval-repeat.mjs.
 //
 // A scenario's prompt is sent as `/<invoke> <prompt>`, invoke defaulting to the
 // orchestrator skill, because a plain headless prompt never loads the pipeline
@@ -31,6 +33,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
+import { baselineMap, compareBaseline, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -40,7 +43,7 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <n>] [--confirm-failures <k>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -57,7 +60,7 @@ class UsageError extends Error {}
 class RefusedError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 1, confirmFailures: 0, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -75,7 +78,11 @@ function parseArgs(argv) {
       if (!Number.isFinite(opts.budget) || opts.budget <= 0) throw new UsageError('--budget-usd needs a positive number');
     } else if (a === '--out') opts.out = path.resolve(value(i++, a));
     else if (a === '--baseline') opts.baseline = path.resolve(value(i++, a));
-    else if (a === '--scenarios') opts.scenarios = path.resolve(value(i++, a));
+    else if (a === '--repeat' || a === '--confirm-failures') {
+      const n = parseCount(value(i++, a), a === '--repeat' ? 1 : 0);
+      if (Number.isNaN(n)) throw new UsageError(`${a} needs a whole number, at least ${a === '--repeat' ? 1 : 0}`);
+      opts[a === '--repeat' ? 'repeat' : 'confirmFailures'] = n;
+    } else if (a === '--scenarios') opts.scenarios = path.resolve(value(i++, a));
     else throw new UsageError(`unknown argument: ${a}`);
   }
   return opts;
@@ -245,10 +252,11 @@ function contextTokens(usage) {
     .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
 }
 
-async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap) {
+async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
-  const dest = path.join(runDir, String(index + 1).padStart(2, '0'), 'project');
+  const nth = attempt ? `-${attempt + 1}` : '';
+  const dest = path.join(runDir, `${String(index + 1).padStart(2, '0')}${nth}`, 'project');
   const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
   let initialSha;
   try {
@@ -259,7 +267,7 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
   }
   const run = await runClaude(scenario, dest, budget, invoke, path.dirname(runDir), bwrap && { bin: bwrap, runDir });
   // Beside the fixture, not inside it, so the stream never shows up in its git status.
-  const stream = keep ? path.join(runDir, `${scenario.id}.stream.jsonl`) : undefined;
+  const stream = keep ? path.join(runDir, `${scenario.id}${nth}.stream.jsonl`) : undefined;
   if (stream) fs.writeFileSync(stream, run.stdout);
   const parsed = parseStream(run.stdout);
   const results = score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions);
@@ -286,7 +294,8 @@ function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
+  const tally = r.attempts > 1 ? `  passes=${r.passes}/${r.attempts}` : '';
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
 }
 
 function localDate(d = new Date()) {
@@ -294,7 +303,6 @@ function localDate(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// A baseline entry without invoke predates the field, and every run then was bare.
 function readBaseline(file) {
   let data;
   try {
@@ -302,29 +310,7 @@ function readBaseline(file) {
   } catch (err) {
     throw new UsageError(`cannot read baseline ${file}: ${err.message}`);
   }
-  return new Map((data.scenarios ?? []).map((s) => [s.id, { pass: Boolean(s.pass), invoke: s.invoke ?? false }]));
-}
-
-// A bare-model run and an orchestrated run measure different things, so they never compare.
-function refuseInvokeMismatch(baseline, scenarios, invokeOf) {
-  const off = scenarios.filter((s) => baseline.has(s.id) && baseline.get(s.id).invoke !== invokeOf(s));
-  if (off.length) {
-    const s = off[0];
-    throw new UsageError(`baseline invoke differs for ${off.length} scenario(s), first ${s.id}: `
-      + `baseline ${JSON.stringify(baseline.get(s.id).invoke)}, this run ${JSON.stringify(invokeOf(s))}`);
-  }
-}
-
-function compareBaseline(baseline, scenarios) {
-  const before = new Map([...baseline].map(([id, b]) => [id, b.pass]));
-  const regressions = [];
-  const improvements = [];
-  for (const s of scenarios) {
-    if (s.skipped || !before.has(s.id)) continue;
-    if (before.get(s.id) && !s.pass) regressions.push(s.id);
-    if (!before.get(s.id) && s.pass) improvements.push(s.id);
-  }
-  return { regressions, improvements };
+  return baselineMap(data);
 }
 
 async function main(argv) {
@@ -345,7 +331,8 @@ async function main(argv) {
   if (error) throw new UsageError(error);
   const invokeOf = (s) => (opts.noInvoke ? false : s.invoke ?? DEFAULT_INVOKE);
   const baseline = opts.baseline ? readBaseline(opts.baseline) : null;
-  if (baseline) refuseInvokeMismatch(baseline, scenarios, invokeOf);
+  const mismatch = baseline && invokeMismatch(baseline, scenarios, invokeOf);
+  if (mismatch) throw new UsageError(mismatch);
   const fixturesDir = path.join(path.dirname(opts.scenarios), 'fixtures');
   const date = localDate();
   const commit = (spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout ?? '').trim();
@@ -363,12 +350,14 @@ async function main(argv) {
   try {
     for (const [index, s] of scenarios.entries()) {
       if (spent >= opts.budget) {
-        done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
+        done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, attempts: 0, passes: 0, pass_rate: null, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
-        const cap = ceiling(opts.budget - spent);
-        const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap);
-        spent += r.cost ?? cap;
-        done.push(r);
+        done.push(await runRepeated(async (attempt) => {
+          const cap = ceiling(opts.budget - spent);
+          const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt);
+          spent += r.cost ?? cap;
+          return r;
+        }, { repeat: opts.repeat, confirmFailures: opts.confirmFailures, canRun: () => spent < opts.budget }));
       }
       console.log(line(done[done.length - 1], width));
     }

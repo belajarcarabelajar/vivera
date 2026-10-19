@@ -11,7 +11,7 @@
   "scripts/check-copy-rules.mjs": 21116,
   "scripts/check-design-tells.mjs": 22188,
   "scripts/check-duplicate-defs.test.mjs": 20224,
-  "scripts/ci-targeted.test.mjs": 21603,
+  "scripts/ci-targeted.test.mjs": 21601,
   "scripts/container.test.mjs": 23423,
   "scripts/docs-gen.mjs": 23436,
   "scripts/docs-gen.test.mjs": 26824,

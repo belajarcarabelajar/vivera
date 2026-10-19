@@ -256,7 +256,7 @@ describe('hooks structure', () => {
     withHooks(
       [
         '  PreToolUse:',
-        '    - matcher: Bash',
+        '    - matcher: Edit',
         '      hooks:',
         '        - type: command',
         '          command: ./check.sh',
@@ -431,7 +431,7 @@ describe('hook script existence', () => {
         'description: Has a hook.',
         'hooks:',
         '  PreToolUse:',
-        '    - matcher: Bash',
+        '    - matcher: Edit',
         '      hooks:',
         '        - type: command',
         `          command: ${yamlCommand}`,

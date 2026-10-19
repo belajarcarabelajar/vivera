@@ -60,6 +60,10 @@ export const INVARIANTS = [
   { label: 'two or more disjoint chunks get one implementer each', text: 'dispatch one implementer subagent per chunk, even when each chunk is small' },
   { label: 'the Bounded Design gate shows a Mermaid diagram', text: 'The short design shown at the Bounded `Design` gate includes a Mermaid diagram' },
   { label: 'a passing claim names its command and exit code', text: 'names the command and its exit code' },
+  { label: 'one notification is a background until-loop, not a Monitor', text: 'Not a Monitor with `tail -f` or `while true`, which stays armed after the event' },
+  { label: 'a watch filter matches every terminal state', text: 'Silence is not success: the filter matches every terminal state' },
+  { label: 'an expired watch is re-armed, not read as success', text: 'treats an expiry with zero events as a question about the filter, not as quiet success' },
+  { label: 'shell guards match Monitor as well as Bash', text: 'PreToolUse guards match `Bash|Monitor`, never `Bash` alone' },
 ];
 
 /** Invariants whose sentence appears nowhere in the corpus. Empty means fine. */

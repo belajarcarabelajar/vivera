@@ -89,7 +89,7 @@ Each heading and the file that holds it.
   - A worktree lives **beside** its repository, never inside it. A nested worktree is picked up by the parent's watchers, formatters, and test globs, which then operate on two copies of the same file.
 
 ### 🚦 Execution Floor
-- **Fan out disjoint chunks.** When the approved work has 2 or more chunks with disjoint write scopes, dispatch one implementer subagent per chunk, even when each chunk is small, in one message so they run in parallel (Proportional Fan-Out: 2 to 4 for medium work, never more than 15 in flight). Inline is only for a single step (Single-Step Inline Exception, [05-delegation.md](references/05-delegation.md)); small chunks are not a reason to do several inline.
+- **Fan out disjoint chunks.** When the approved work has 2 or more chunks with disjoint write scopes, dispatch one implementer subagent per chunk, even when each chunk is small, in one message so they run in parallel (Proportional Fan-Out: 2 to 4 for medium work, never more than 15 in flight). Inline is only for a single step (Single-Step Inline Exception, [05-delegation.md](references/05-delegation.md)), a runtime with no subagent tool, inseparable shared state (`sucp-plan`), or the takeover of a chunk that stalled ([03-tool-orchestration.md](references/03-tool-orchestration.md)), stated with its reason; small size alone is never a reason to do several chunks inline.
 - **Every passing claim names its evidence.** For each claim that something passes, the final message names the command and its exit code from a run in this session (for example "`bun test` exit 0, 12 pass, 0 fail"). A claim without them is not evidence.
 
 ### ⏸️ Confirmation Protocol

@@ -153,7 +153,7 @@ const CONTRACT = [
     present: ['Prototype Location', 'docs/code-plan/spikes/<spike-id>/', 'Question this prototype answers'],
   },
   {
-    task: 'T8', gaps: '1, 3, 8, 13', file: 'README.md',
+    task: 'T8', gaps: '1, 3, 8, 13', file: 'docs/guide/reference-companion-templates.md',
     present: ['templates/spec-template.md', 'red-capable feedback loop', 'Standards and Spec axes', 'before and after evidence'],
     absent: ['4-phase RCA state machine (REPRODUCE -> DIAGNOSE -> FIX -> VERIFY)'],
   },
@@ -237,7 +237,11 @@ for (const group of CONTRACT) {
     }
     for (const needle of group.absent ?? []) {
       test(`no longer contains "${needle}"`, () => {
-        expect(read(group.file)).not.toContain(needle);
+        // A skill file is checked with its references/, where moved text now lives.
+        const refs = path.join(root, path.dirname(group.file), 'references');
+        const extra = group.file.endsWith('SKILL.md') && fs.existsSync(refs)
+          ? fs.readdirSync(refs).map((f) => read(path.join(path.dirname(group.file), 'references', f))).join('\n') : '';
+        expect(read(group.file) + extra).not.toContain(needle);
       });
     }
   });

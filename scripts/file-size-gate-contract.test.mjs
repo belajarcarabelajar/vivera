@@ -21,22 +21,22 @@ function section(text, heading) {
 }
 
 describe('T4 docs', () => {
-  test('the README pre-commit section documents the size gate', () => {
-    const body = section(readRepoFile('README.md'), '### The pre-commit hook');
+  test('the guide pre-commit section documents the size gate', () => {
+    const body = section(readRepoFile('docs/guide/tooling-trigger-snippets-3.md'), '## The pre-commit hook');
     for (const term of ['size:check', '5,000 tokens', '-size-gate', 'scripts/file-size-baseline.json']) {
       expect({ term, found: body.includes(term) }).toEqual({ term, found: true });
     }
     expect(body).not.toContain('Every path exits 0');
   });
 
-  test('the README install row no longer ties the hook to graphify', () => {
-    const row = readRepoFile('README.md').split('\n').find((l) => l.startsWith('| Enables the git hook |'));
+  test('the guide install row no longer ties the hook to graphify', () => {
+    const row = readRepoFile('docs/guide/getting-started-quick-start-1.md').split('\n').find((l) => l.startsWith('| Enables the git hook |'));
     expect(row).toBeDefined();
     expect(row).not.toContain('only when `graphify` is installed');
   });
 
-  test('the README scripts tree lists the checker and its baseline', () => {
-    const readme = readRepoFile('README.md');
+  test('the guide scripts tree lists the checker and its baseline', () => {
+    const readme = readRepoFile('docs/guide/getting-started-repository-structure-1.md');
     expect(readme).toMatch(/[│├└─ ]+check-file-size\.mjs\s+#/);
     expect(readme).toMatch(/[│├└─ ]+file-size-baseline\.json\s+#/);
   });

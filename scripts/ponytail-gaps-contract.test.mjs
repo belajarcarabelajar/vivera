@@ -190,8 +190,8 @@ describe('T5 wiring', () => {
     assertFileContains('.claude/agents/staid.md', SCRIPT);
   });
 
-  test('the README names dups:check', () => {
-    assertFileContains('README.md', 'dups:check');
+  test('the guide names dups:check', () => {
+    assertFileContains('docs/guide/tooling-trigger-snippets-1.md', 'dups:check');
   });
 
   test('sucp-rules names dups:check on the Simplicity Ladder bullet', () => {

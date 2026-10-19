@@ -104,6 +104,10 @@ export function repoMatches(entry, repo) {
 
 // dup-defs: allow the skipif-registry-audit bump is private to that CLI module
 const bump = (obj, k) => { obj[k] = (obj[k] ?? 0) + 1; };
+// Code point order, not localeCompare, so ties sort the same under every locale.
+const byCountThenName = (obj) => Object.fromEntries(
+  Object.entries(obj).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0)),
+);
 
 // Claude Code can leave one conversation in two transcript files (a resumed or
 // copied session), so a message id is counted once across the whole set. The
@@ -185,10 +189,10 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     costUnits,
     medianFirstCallContext: { main: median(firsts(M)), subagent: median(firsts(S)) },
     startupPrefixShare: round(median(shares)),
-    subagentsByType,
+    subagentsByType: byCountThenName(subagentsByType),
     agentToolCalls: agentCalls,
     askUserQuestion: ask,
-    skills,
+    skills: byCountThenName(skills),
     mergedPrs,
     escapes,
     perMergedPr: {
@@ -269,7 +273,7 @@ function renderText(s, notes) {
   const width = Math.max(...rows.map(([k]) => k.length));
   const lines = rows.map(([k, v]) => `${k.padEnd(width)}  ${fmt(v)}`);
   const block = (title, obj) => {
-    const keys = Object.keys(obj).sort((a, b) => obj[b] - obj[a] || a.localeCompare(b));
+    const keys = Object.keys(byCountThenName(obj));
     lines.push('', title, ...(keys.length ? keys.map((k) => `  ${k.padEnd(width - 2)}  ${obj[k]}`) : ['  (none)']));
   };
   block('subagent runs by agentType', s.subagentsByType);

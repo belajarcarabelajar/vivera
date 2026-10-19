@@ -70,6 +70,8 @@ vivera/
 │   ├── pre-commit-size-gate.test.mjs            # The hook blocks on the size gate and stays non-blocking for graphify
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
+│   ├── validate-agents-monitor.test.mjs         # PreToolUse guards must cover Monitor when they cover Bash
+│   ├── sprite-model-router.test.mjs             # Mod roster matches agents/crew.json; runs claude plugin test
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)
 │   ├── gen-sprite-agents.test.mjs               # CLI, hook pinning, drift, and hand-written-file guards
 │   ├── sprite-agents/                           # Renderers behind gen-sprite-agents.mjs, one file per harness

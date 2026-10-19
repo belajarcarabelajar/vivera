@@ -18,6 +18,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { rewriteLine } from './lib/docs-gen-links.mjs';
+import { sourceFiles, joinParts } from './lib/docs-gen-files.mjs';
+
+export { rewriteLine };
 
 export const GITHUB = 'https://github.com/belajarcarabelajar/vivera';
 export const RAW = 'https://raw.githubusercontent.com/belajarcarabelajar/vivera/main';
@@ -222,107 +226,6 @@ function walkDocs(root, exclude) {
   return found;
 }
 
-// Inline rewriting
-
-function splitCode(line) {
-  const parts = [];
-  let i = 0;
-  let last = 0;
-  while (i < line.length) {
-    if (line[i] !== '`') { i++; continue; }
-    let j = i;
-    while (j < line.length && line[j] === '`') j++;
-    const len = j - i;
-    let k = j;
-    let close = -1;
-    while (k < line.length) {
-      if (line[k] !== '`') { k++; continue; }
-      let e = k;
-      while (e < line.length && line[e] === '`') e++;
-      if (e - k === len) { close = k; break; }
-      k = e;
-    }
-    if (close === -1) { i = j; continue; }
-    if (i > last) parts.push({ code: false, text: line.slice(last, i) });
-    parts.push({ code: true, text: line.slice(i, close + len) });
-    i = last = close + len;
-  }
-  if (last < line.length) parts.push({ code: false, text: line.slice(last) });
-  return parts;
-}
-
-function rewriteDest(dest, kind, rewrite) {
-  if (dest.startsWith('<') && dest.endsWith('>')) {
-    const r = rewrite(dest.slice(1, -1), kind);
-    return { dest: `<${r.url}>`, dead: r.dead };
-  }
-  const r = rewrite(dest, kind);
-  return { dest: r.url, dead: r.dead };
-}
-
-function matchBracket(s, open) {
-  let depth = 0;
-  for (let i = open; i < s.length; i++) {
-    if (s[i] === '\\') { i++; continue; }
-    if (s[i] === '[') depth++;
-    else if (s[i] === ']' && --depth === 0) return i;
-  }
-  return -1;
-}
-
-const LINK_TAIL = /^\((\s*)(<[^>\n]*>|[^\s)]+)((?:\s+(?:"[^"]*"|'[^']*'))?\s*)\)/;
-
-// A forward scan rather than a regex, so a dead link can be replaced by its
-// whole text, including a nested image or code span inside the brackets.
-function rewriteMarkdownLinks(s, rewrite) {
-  let out = '';
-  let i = 0;
-  while (i < s.length) {
-    const image = s[i] === '!' && s[i + 1] === '[';
-    if (s[i] === '[' || image) {
-      const open = image ? i + 1 : i;
-      const close = matchBracket(s, open);
-      const m = close === -1 ? null : LINK_TAIL.exec(s.slice(close + 1));
-      if (m) {
-        const text = rewriteMarkdownLinks(s.slice(open + 1, close), rewrite);
-        const r = rewriteDest(m[2], image ? 'image' : 'link', rewrite);
-        out += r.dead ? text : `${image ? '!' : ''}[${text}](${m[1]}${r.dest}${m[3]})`;
-        i = close + 1 + m[0].length;
-        continue;
-      }
-    }
-    out += s[i];
-    i++;
-  }
-  return out;
-}
-
-export function rewriteLine(line, rewrite) {
-  const codes = [];
-  let s = splitCode(line).map((p) => {
-    if (!p.code) return p.text;
-    codes.push(p.text);
-    return `${codes.length - 1}`;
-  }).join('');
-  s = s.replace(/^( {0,3}\[(?!\^)[^\]]+\]:[ \t]*)(<[^>]*>|\S+)/, (_, pre, dest) => pre + rewriteDest(dest, 'link', rewrite).dest);
-  s = rewriteMarkdownLinks(s, rewrite);
-  s = s.replace(/(\s(href|src)\s*=\s*)(["'])(.*?)\3/gi, (_, pre, attr, q, url) => {
-    const isSrc = attr.toLowerCase() === 'src';
-    const r = rewrite(url, isSrc ? 'image' : 'link');
-    return r.dead && !isSrc ? '' : `${pre}${q}${r.url}${q}`;
-  });
-  s = s.replace(/(\ssrcset\s*=\s*)(["'])(.*?)\2/gi, (_, pre, q, list) => {
-    const items = list.split(',').map((item) => {
-      const m = item.match(/^(\s*)(\S+)(.*)$/);
-      return m ? m[1] + rewrite(m[2], 'image').url + m[3] : item;
-    });
-    return `${pre}${q}${items.join(',')}${q}`;
-  });
-  // A dead href was removed above; an anchor element left with no attributes is plain text.
-  s = s.replace(/<a>([\s\S]*?)<\/a>/g, '$1');
-  return s.replace(/(\d+)/g, (_, n) => codes[Number(n)]);
-}
-
 function safeDecode(s) {
   try { return decodeURIComponent(s); } catch { return s; }
 }
@@ -369,7 +272,8 @@ export function buildModel(root) {
   map.pages.forEach((p, i) => {
     const missing = ['category', 'slug', 'title', 'description'].filter((f) => typeof p?.[f] !== 'string' || p[f] === '');
     if (typeof p?.order !== 'number') missing.push('order');
-    if (typeof p?.source?.file !== 'string' || p.source.file === '') missing.push('source.file');
+    const src = sourceFiles(p?.source);
+    if (!src) missing.push('source.file');
     if (missing.length) {
       errors.push(`${MAP_FILE}: page ${i + 1} is missing ${missing.join(', ')}`);
       return;
@@ -380,6 +284,10 @@ export function buildModel(root) {
       return;
     }
     keys.set(key, p);
+    if (src.error) {
+      errors.push(`page ${key}: ${src.error}`);
+      return;
+    }
     const file = p.source.file;
     const hasHeading = Object.prototype.hasOwnProperty.call(p.source, 'heading');
     if (file === 'README.md') {
@@ -405,19 +313,15 @@ export function buildModel(root) {
       errors.push(`page ${key}: heading is only valid for README.md`);
       return;
     }
-    const abs = path.join(root, file);
-    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
-      errors.push(`page ${key}: source file ${file} does not exist`);
+    const gone = src.files.find((f) => !fs.existsSync(path.join(root, f)) || !fs.statSync(path.join(root, f)).isFile());
+    const taken = src.files.find((f) => byFile.has(f));
+    if (gone || taken) {
+      errors.push(gone ? `page ${key}: source file ${gone} does not exist` : `page ${key}: ${taken} is already mapped by page ${byFile.get(taken).key}`);
       return;
     }
-    if (byFile.has(file)) {
-      errors.push(`page ${key}: ${file} is already mapped by page ${byFile.get(file).key}`);
-      return;
-    }
-    const lines = readText(abs).split('\n');
-    const mask = fenceMask(lines);
-    const entry = { key, page: p, kind: 'file', file, lines, mask, anchors: fileAnchors(lines, mask) };
-    byFile.set(file, entry);
+    const joined = joinParts(src.files.map((f) => ({ file: f, text: readText(path.join(root, f)) })), fenceMask);
+    const entry = { key, page: p, kind: 'file', file: src.files[0], ...joined, anchors: fileAnchors(joined.lines, joined.mask) };
+    for (const f of src.files) byFile.set(f, entry);
     valid.push(entry);
   });
 
@@ -453,10 +357,10 @@ function isDeadTarget(root, rel) {
 }
 
 function makeRewriter(entry, ctx, state) {
-  const sourceFile = entry.kind === 'section' ? 'README.md' : entry.file;
+  const at = () => `${state.file ?? 'README.md'}:${state.line}`;
   const note = (what, url) => state.findings.push(what === 'dead'
-    ? `${sourceFile}:${state.line}: dead link "${url}" (target is missing or gitignored)`
-    : `${sourceFile}:${state.line}: unknown anchor "${url}" (no heading in any mapped page)`);
+    ? `${at()}: dead link "${url}" (target is missing or gitignored)`
+    : `${at()}: unknown anchor "${url}" (no heading in any mapped page)`);
   return (url, kind = 'link') => {
     const keep = { url, dead: false };
     if (url === '' || /^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) return keep;
@@ -483,7 +387,7 @@ function makeRewriter(entry, ctx, state) {
     if (queryAt !== -1) pathPart = pathPart.slice(0, queryAt);
     const decoded = safeDecode(pathPart);
     const dirHint = decoded.endsWith('/');
-    const base = decoded.startsWith('/') ? '.' : path.posix.dirname(sourceFile);
+    const base = decoded.startsWith('/') ? '.' : path.posix.dirname(state.file ?? 'README.md');
     let rel = path.posix.normalize(path.posix.join(base, decoded.replace(/^\/+/, ''))).replace(/\/+$/, '');
     if (rel === '.') rel = '';
     if (rel === '..' || rel.startsWith('../')) return keep;
@@ -512,6 +416,8 @@ function makeRewriter(entry, ctx, state) {
     const filePage = ctx.byFile.get(rel);
     if (filePage) {
       const hit = anchor === null ? null : filePage.anchors.get(safeDecode(anchor));
+      // Another part of this same page: the anchor is on the page already.
+      if (filePage === entry && rel !== state.file && hit) return { url: `#${hit.localSlug}`, dead: false };
       return { url: pageUrl(filePage.page) + (hit && !hit.isTop ? `#${hit.localSlug}` : ''), dead: false };
     }
     const tail = anchor === null ? '' : `#${anchor}`;
@@ -545,14 +451,15 @@ function renderPage(entry, ctx) {
   for (let i = start; i < end; i++) {
     if (i === skip) continue;
     let line = lines[i];
+    state.line = entry.lineOf ? entry.lineOf[i] : i + 1;
+    state.file = entry.fileOf?.[i];
     if (!mask[i]) {
       const h = HEADING.exec(line);
       if (entry.kind === 'section' && h && h[1].length >= 2) line = line.slice(1);
-      state.line = i + 1;
       line = rewriteLine(line, rewrite);
     }
     out.push(line);
-    src.push(i + 1);
+    src.push(`${state.file ?? 'README.md'}:${state.line}`);
     fenced.push(mask[i]);
   }
   const drop = () => { out.pop(); src.pop(); fenced.pop(); };
@@ -587,8 +494,7 @@ function renderPage(entry, ctx) {
     hash,
     text: head + body,
     bodyOffset: head.split('\n').length - 1,
-    srcFile: entry.kind === 'section' ? 'README.md' : entry.file,
-    srcLines: src,
+    srcAt: src,
     linkFindings: state.findings,
   };
 }
@@ -605,7 +511,7 @@ function enFindings(model) {
   for (const p of model.pages) {
     p.body.split('\n').forEach((line, i) => {
       if (line.includes(EM_DASH)) {
-        findings.push(`${EN_DIR}/${p.name}:${p.bodyOffset + i + 1}: em dash (U+2014), from ${p.srcFile}:${p.srcLines[i]}`);
+        findings.push(`${EN_DIR}/${p.name}:${p.bodyOffset + i + 1}: em dash (U+2014), from ${p.srcAt[i]}`);
       }
     });
     findings.push(...p.linkFindings);

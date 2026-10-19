@@ -120,13 +120,17 @@ test('an Indonesian example with no rule word nearby is still a violation', () =
   assert.deepEqual(checkText(id, { where: 't' }).map((x) => x.rule), ['generated-with footer']);
 });
 
-test('the README section documenting this rule does not flag itself', () => {
-  // The real file, not a fixture. A rule document that cannot pass its own checker
-  // is a rule document whose example gets deleted instead.
-  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  const attributionHits = checkText(readme, { where: 'README.md', emDashApplies: false });
-  assert.deepEqual(attributionHits.map((v) => `${v.where} ${v.rule}`), [],
-    'the copy-rules section of README quotes the footer it forbids and must be exempt');
+test('the README and guide section documenting this rule does not flag itself', () => {
+  // The real files, not a fixture. A rule document that cannot pass its own checker
+  // is a rule document whose example gets deleted instead. The section moved from
+  // README.md into docs/guide/, so both are scanned.
+  const guideDir = path.join(ROOT, 'docs', 'guide');
+  const files = ['README.md', ...fs.readdirSync(guideDir).filter((n) => n.endsWith('.md')).sort().map((n) => `docs/guide/${n}`)];
+  const hits = files.flatMap((rel) => checkText(fs.readFileSync(path.join(ROOT, rel), 'utf8'), { where: rel, emDashApplies: false }));
+  assert.ok(files.some((rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').includes('no em dash, no attribution footer')),
+    'no scanned file holds the copy-rules section, so this test proves nothing');
+  assert.deepEqual(hits.map((v) => `${v.where} ${v.rule}`), [],
+    'the copy-rules section of the guide quotes the footer it forbids and must be exempt');
 });
 
 test('catches the em dash in shipped copy', () => {

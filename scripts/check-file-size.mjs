@@ -200,11 +200,11 @@ const ADVICE = {
 };
 const LABEL = { test: 'a test', code: 'a code', skill: 'a skill', markdown: 'a Markdown', data: 'a data', other: 'any other' };
 const SH_LINE = '  For a .sh file, move the functions into scripts/lib/<name>-<part>.sh and source it instead.';
-const README_LINE = '  For README.md, update the page map in apps/docs/pages.json and run: bun scripts/docs-gen.mjs --check --scope all';
+const README_LINE = '  For README.md, move the section to docs/guide/<page key>.md, map it in apps/docs/pages.json, run: bun scripts/docs-gen.mjs --check --scope en';
 const FOOTER = [
   'After splitting:',
   "  1. git grep -n '<old path>' and update every reference (scripts/validate-skill.mjs pins skill paths,",
-  '     scripts/ci-targeted.mjs and README.md name scripts).',
+  '     scripts/ci-targeted.mjs and docs/guide/ name scripts).',
   '  2. Stage the new files and commit again.',
   "If the file is a lockfile, generated, or vendored: add '<path> -size-gate' to .gitattributes instead.",
   `If splitting is out of scope for this change: raise its ceiling in ${BASELINE_REL} in this`,

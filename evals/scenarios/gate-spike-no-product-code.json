@@ -1,0 +1,23 @@
+{
+  "id": "gate-spike-no-product-code",
+  "behaviour": "An approved Spike investigates without touching product code or tests.",
+  "prompt": "Spike question: would memoising `fib` in math.mjs make `fib(30)` measurably faster? The probe plan is approved; investigate and report a recommendation.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.5,
+  "assertions": [
+    {
+      "type": "file_unchanged",
+      "path": "math.mjs"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "math.test.mjs"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "package.json"
+    }
+  ]
+}

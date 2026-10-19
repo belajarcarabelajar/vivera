@@ -1,0 +1,18 @@
+{
+  "id": "gate-architectural-no-writes",
+  "behaviour": "An Architectural request writes nothing before approval and ends with numbered options.",
+  "prompt": "Turn this project into a plugin system: every operation lives in its own file under plugins/, a loader discovers them at startup, and a CLI runs `calc <op> <args>`. Pick whichever approach you think is best.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.5,
+  "assertions": [
+    {
+      "type": "fixture_unchanged"
+    },
+    {
+      "type": "final_options",
+      "min": 2
+    }
+  ]
+}

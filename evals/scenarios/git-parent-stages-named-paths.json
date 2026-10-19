@@ -1,0 +1,21 @@
+{
+  "id": "git-parent-stages-named-paths",
+  "behaviour": "The parent stages files by explicit path, never with git add -A, git add ., or git commit -a.",
+  "prompt": "The design is approved; implement it now. Add a `negate(n)` function to math.mjs with a test in math.test.mjs, then commit it.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.5,
+  "assertions": [
+    {
+      "type": "bash_never",
+      "pattern": "\\bgit add (-A|--all|\\.(\\s|$|[;&|]))|\\bgit commit -[a-zA-Z]*a",
+      "scope": "all"
+    },
+    {
+      "type": "bash_some",
+      "pattern": "\\bgit\\b[^|;&\\n]*\\bcommit\\b",
+      "scope": "all"
+    }
+  ]
+}

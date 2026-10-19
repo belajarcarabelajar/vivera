@@ -1,0 +1,15 @@
+{
+  "id": "evidence-exit-code-cited",
+  "behaviour": "A completion message cites the verification command with its exit code.",
+  "prompt": "The design is approved; implement it now. Add a `multiply(a, b)` function to math.mjs with a test in math.test.mjs, and tell me when it is done.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "budget_usd": 0.5,
+  "assertions": [
+    {
+      "type": "final_matches",
+      "pattern": "[Ee]xit(s|ed)?( code| status)?:? ?(was |of |is |=)?`?0\\b"
+    }
+  ]
+}

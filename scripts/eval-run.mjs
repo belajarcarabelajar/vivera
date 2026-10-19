@@ -10,7 +10,7 @@
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
 //                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
-//                            [--repeat <n>] [--confirm-failures <k>]
+//                            [--repeat <odd n>] [--confirm-flips <even k>]
 // The last two take a majority verdict: scripts/lib/eval-repeat.mjs.
 //
 // A scenario's prompt is sent as `/<invoke> <prompt>`, invoke defaulting to the
@@ -43,7 +43,7 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <n>] [--confirm-failures <k>]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -60,7 +60,7 @@ class UsageError extends Error {}
 class RefusedError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 1, confirmFailures: 0, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -78,10 +78,11 @@ function parseArgs(argv) {
       if (!Number.isFinite(opts.budget) || opts.budget <= 0) throw new UsageError('--budget-usd needs a positive number');
     } else if (a === '--out') opts.out = path.resolve(value(i++, a));
     else if (a === '--baseline') opts.baseline = path.resolve(value(i++, a));
-    else if (a === '--repeat' || a === '--confirm-failures') {
-      const n = parseCount(value(i++, a), a === '--repeat' ? 1 : 0);
-      if (Number.isNaN(n)) throw new UsageError(`${a} needs a whole number, at least ${a === '--repeat' ? 1 : 0}`);
-      opts[a === '--repeat' ? 'repeat' : 'confirmFailures'] = n;
+    else if (a === '--repeat' || a === '--confirm-flips') {
+      const r = a === '--repeat';
+      const n = parseCount(value(i++, a), r ? 1 : 0, r ? 1 : 0);
+      if (Number.isNaN(n)) throw new UsageError(`${a} needs ${r ? 'an odd' : 'an even'} whole number, at least ${r ? 1 : 0}`);
+      opts[r ? 'repeat' : 'confirmFlips'] = n;
     } else if (a === '--scenarios') opts.scenarios = path.resolve(value(i++, a));
     else throw new UsageError(`unknown argument: ${a}`);
   }
@@ -294,7 +295,7 @@ function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  const tally = r.attempts > 1 ? `  passes=${r.passes}/${r.attempts}` : '';
+  const tally = (r.attempts > 1 ? `  passes=${r.passes}/${r.attempts}` : '') + (r.confirmed === false ? '  unconfirmed' : '');
   return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
 }
 
@@ -352,12 +353,13 @@ async function main(argv) {
       if (spent >= opts.budget) {
         done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, attempts: 0, passes: 0, pass_rate: null, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
+        // A full ceiling per attempt, so a confirmation never stops undecided.
         done.push(await runRepeated(async (attempt) => {
           const cap = ceiling(opts.budget - spent);
           const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt);
           spent += r.cost ?? cap;
           return r;
-        }, { repeat: opts.repeat, confirmFailures: opts.confirmFailures, canRun: () => spent < opts.budget }));
+        }, { repeat: opts.repeat, confirmFlips: opts.confirmFlips, expected: baseline?.get(s.id)?.pass, canRun: () => opts.budget - spent >= RUN_CEILING_USD }));
       }
       console.log(line(done[done.length - 1], width));
     }
@@ -368,8 +370,9 @@ async function main(argv) {
 
   const passed = done.filter((r) => r.pass).length;
   const skipped = done.filter((r) => r.skipped).length;
+  const unconfirmed = done.filter((r) => r.confirmed === false).length;
   const tokens = done.reduce((sum, r) => sum + contextTokens(r.usage), 0);
-  console.log(`${passed}/${done.length} passed${skipped ? `, ${skipped} skipped` : ''}, total cost $${money(spent)}, context tokens ${tokens}`);
+  console.log(`${passed}/${done.length} passed${skipped ? `, ${skipped} skipped` : ''}${unconfirmed ? `, ${unconfirmed} unconfirmed` : ''}, total cost $${money(spent)}, context tokens ${tokens}`);
 
   const out = opts.out ?? path.join(ROOT, 'docs', 'code-plan', 'evals', `${date}-${commit.slice(0, 7) || 'nocommit'}.json`);
   fs.mkdirSync(path.dirname(out), { recursive: true });
@@ -383,7 +386,7 @@ async function main(argv) {
     for (const id of improvements) console.log(`improvement: ${id}`);
     regressed = regressions.length > 0;
   }
-  return runExitCode({ passed, total: done.length, regressed, skipped, baseline: Boolean(baseline) });
+  return runExitCode({ passed, total: done.length, regressed, skipped: skipped + unconfirmed, baseline: Boolean(baseline) });
 }
 
 try {

@@ -85,38 +85,50 @@ function scripted(pattern, cost = 0.1) {
 
 describe('runRepeated', () => {
   test('repeat 3 stops after two passes and records the attempts', async () => {
-    const r = await runRepeated(scripted('PPF'), { repeat: 3, confirmFailures: 0, canRun: () => true });
+    const r = await runRepeated(scripted('PPF'), { repeat: 3, confirmFlips: 0, canRun: () => true });
     expect(r).toMatchObject({ pass: true, attempts: 2, passes: 2, pass_rate: 1, attempt_passes: [true, true] });
   });
 
   test('repeat 3 with one pass and two fails is a majority fail and keeps the last results', async () => {
-    const r = await runRepeated(scripted('PFF'), { repeat: 3, confirmFailures: 0, canRun: () => true });
+    const r = await runRepeated(scripted('PFF'), { repeat: 3, confirmFlips: 0, canRun: () => true });
     expect(r).toMatchObject({ pass: false, attempts: 3, passes: 1, attempt_passes: [true, false, false] });
     expect(r.pass_rate).toBeCloseTo(1 / 3, 5);
     expect(r.results[0].detail).toBe('3');
   });
 
   test('cost sums every attempt, and stays unknown when one attempt is unknown', async () => {
-    expect((await runRepeated(scripted('PFP', 0.25), { repeat: 3, confirmFailures: 0, canRun: () => true })).cost).toBeCloseTo(0.75, 9);
+    expect((await runRepeated(scripted('PFP', 0.25), { repeat: 3, confirmFlips: 0, canRun: () => true })).cost).toBeCloseTo(0.75, 9);
     let n = 0;
     const once = async () => ({ pass: n++ > 0, results: [], cost: n === 1 ? null : 0.1, seconds: 1 });
-    expect((await runRepeated(once, { repeat: 3, confirmFailures: 0, canRun: () => true })).cost).toBeNull();
+    expect((await runRepeated(once, { repeat: 3, confirmFlips: 0, canRun: () => true })).cost).toBeNull();
   });
 
-  test('confirm-failures does not repeat a passing first attempt', async () => {
-    const r = await runRepeated(scripted('PFF'), { repeat: 1, confirmFailures: 2, canRun: () => true });
+  test('without an expected verdict, confirm-flips does not repeat a passing first attempt', async () => {
+    const r = await runRepeated(scripted('PFF'), { repeat: 1, confirmFlips: 2, canRun: () => true });
     expect(r).toMatchObject({ pass: true, attempts: 1 });
   });
 
-  test('confirm-failures 2 reruns a failure and decides by the majority of three', async () => {
-    expect(await runRepeated(scripted('FPP'), { repeat: 1, confirmFailures: 2, canRun: () => true })).toMatchObject({ pass: true, attempts: 3, passes: 2 });
-    expect(await runRepeated(scripted('FFP'), { repeat: 1, confirmFailures: 2, canRun: () => true })).toMatchObject({ pass: false, attempts: 2 });
+  test('without an expected verdict, confirm-flips 2 reruns a failure and decides by the majority of three', async () => {
+    expect(await runRepeated(scripted('FPP'), { repeat: 1, confirmFlips: 2, canRun: () => true })).toMatchObject({ pass: true, attempts: 3, passes: 2 });
+    expect(await runRepeated(scripted('FFP'), { repeat: 1, confirmFlips: 2, canRun: () => true })).toMatchObject({ pass: false, attempts: 2 });
+  });
+
+  test('confirm-flips reruns a first attempt that disagrees with a failing baseline verdict', async () => {
+    expect(await runRepeated(scripted('PFF'), { repeat: 1, confirmFlips: 2, expected: false, canRun: () => true })).toMatchObject({ pass: false, attempts: 3 });
+    expect(await runRepeated(scripted('FPP'), { repeat: 1, confirmFlips: 2, expected: false, canRun: () => true })).toMatchObject({ pass: false, attempts: 1 });
   });
 
   test('a spent budget stops further attempts and a tie is not a pass', async () => {
     let calls = 0;
-    const r = await runRepeated(scripted('PFP'), { repeat: 3, confirmFailures: 0, canRun: () => ++calls < 2 });
-    expect(r).toMatchObject({ pass: false, attempts: 2, passes: 1, attempt_passes: [true, false] });
+    const r = await runRepeated(scripted('PFP'), { repeat: 3, confirmFlips: 0, canRun: () => ++calls < 2 });
+    expect(r).toMatchObject({ pass: false, attempts: 2, passes: 1, attempt_passes: [true, false], confirmed: false });
+  });
+
+  test('a decided scenario is confirmed and its usage tokens sum over the attempts', async () => {
+    let n = 0;
+    const once = async () => ({ pass: n++ !== 1, results: [], cost: 0.1, seconds: 1, usage: { input_tokens: 10, output_tokens: n } });
+    const r = await runRepeated(once, { repeat: 3, confirmFlips: 0, canRun: () => true });
+    expect(r).toMatchObject({ confirmed: true, attempts: 3, usage: { input_tokens: 30, output_tokens: 6 } });
   });
 });
 
@@ -126,6 +138,16 @@ describe('baseline comparison', () => {
     expect(b.get('a')).toEqual({ pass: true, invoke: false, pass_rate: 1 });
     expect(b.get('b')).toEqual({ pass: false, invoke: 'x', pass_rate: 0 });
     expect(b.get('c').pass_rate).toBe(0.67);
+  });
+
+  test('a budget-skipped baseline entry is unknown, never a fail', () => {
+    expect(baselineMap({ scenarios: [{ id: 'a', pass: false, skipped: true }] }).has('a')).toBe(false);
+  });
+
+  test('an unconfirmed scenario is never a regression or an improvement', () => {
+    const b = baselineMap({ scenarios: [{ id: 'a', pass: true }, { id: 'b', pass: false }] });
+    const now = [{ id: 'a', pass: false, pass_rate: 0.5, confirmed: false }, { id: 'b', pass: true, pass_rate: 1, confirmed: false }];
+    expect(compareBaseline(b, now)).toEqual({ regressions: [], improvements: [] });
   });
 
   test('a regression is baseline majority pass and now majority fail, with both rates', () => {
@@ -143,7 +165,7 @@ describe('baseline comparison', () => {
   });
 });
 
-describe('eval-run --repeat and --confirm-failures', () => {
+describe('eval-run --repeat and --confirm-flips', () => {
   test('--repeat 3 runs pass, fail, pass to a majority pass and sums the cost', () => {
     const ctx = setup({ flaky: 'PFP' });
     const r = run(ctx, '--repeat', '3');
@@ -152,45 +174,63 @@ describe('eval-run --repeat and --confirm-failures', () => {
     expect(report(ctx, 'flaky')).toMatchObject({ pass: true, attempts: 3, passes: 2, attempt_passes: [true, false, true] });
     expect(report(ctx, 'flaky').cost).toBeCloseTo(3 * ASK_COST, 5);
     expect(r.out).toContain(`total cost $${Math.round(3 * ASK_COST * 10000) / 10000}`);
+    expect(report(ctx, 'flaky').usage.cache_read_input_tokens).toBe(3 * 28960);
   });
 
-  test('--repeat 3 stops early once two attempts agree', () => {
+  test('--repeat defaults to 3 and stops early once two attempts agree', () => {
     const ctx = setup({ steady: 'PPF' });
-    expect(run(ctx, '--repeat', '3').code).toBe(0);
+    expect(run(ctx).code).toBe(0);
     expect(runs(ctx)).toHaveLength(2);
     expect(report(ctx, 'steady')).toMatchObject({ attempts: 2, pass_rate: 1 });
   });
 
-  test('--confirm-failures 2 reruns only the scenario whose first run failed', () => {
+  test('--confirm-flips 2 without a baseline reruns only the scenario whose first run failed', () => {
     const ctx = setup({ 'a-ok': 'PFF', 'b-flaky': 'FPP' });
-    const r = run(ctx, '--confirm-failures', '2');
+    const r = run(ctx, '--repeat', '1', '--confirm-flips', '2');
     expect(r.code).toBe(0);
     expect(runs(ctx).map((l) => l.split(' ').slice(0, 3).join(' '))).toEqual(['RUN a-ok 1', 'RUN b-flaky 1', 'RUN b-flaky 2', 'RUN b-flaky 3']);
     expect(report(ctx, 'a-ok').attempts).toBe(1);
     expect(report(ctx, 'b-flaky')).toMatchObject({ pass: true, attempts: 3, passes: 2 });
   });
 
-  test('the total budget stops further attempts and caps the next one at what is left', () => {
+  test('no further attempt starts with less than the run ceiling left, and the stop is unconfirmed', () => {
     const ctx = setup({ flaky: 'PFP' });
-    const r = run(ctx, '--repeat', '3', '--budget-usd', '0.2');
-    expect(runs(ctx)).toEqual(['RUN flaky 1 cap=0.20', 'RUN flaky 2 cap=0.06']);
-    expect(r.code).toBe(1);
-    expect(report(ctx, 'flaky')).toMatchObject({ pass: false, attempts: 2, passes: 1 });
+    run(ctx, '--repeat', '3', '--budget-usd', '0.2');
+    expect(runs(ctx)).toEqual(['RUN flaky 1 cap=0.20']);
+    expect(report(ctx, 'flaky')).toMatchObject({ attempts: 1, confirmed: false });
+  });
+
+  test('an unconfirmed scenario is no regression against the baseline but still exits 1 like a skip', () => {
+    const ctx = setup({ flaky: 'PFP' });
+    const baseline = path.join(ctx.root, 'base.json');
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'flaky', pass: true, invoke: 'super-ultra-code-plan' }] }));
+    const r = run(ctx, '--baseline', baseline, '--repeat', '3', '--budget-usd', '2.2');
+    expect(runs(ctx)).toEqual(['RUN flaky 1 cap=2.00', 'RUN flaky 2 cap=2.00']);
+    expect([r.code, r.out.includes('regression'), r.out.includes('1 unconfirmed')]).toEqual([1, false, true]);
   });
 
   test('a baseline majority pass that now fails twice is a regression printed with both rates', () => {
     const ctx = setup({ gate: 'FFP' });
     const baseline = path.join(ctx.root, 'base.json');
     fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate', pass: true, invoke: 'super-ultra-code-plan' }] }));
-    const r = run(ctx, '--baseline', baseline, '--confirm-failures', '2');
+    const r = run(ctx, '--baseline', baseline, '--repeat', '1', '--confirm-flips', '2');
     expect(r.code).toBe(1);
     expect(runs(ctx)).toHaveLength(2);
     expect(r.out).toContain('regression: gate (pass rate 1 -> 0)');
   });
 
-  test('a bad --repeat or --confirm-failures is a usage error', () => {
+  test('with a baseline, a single pass that flips a baseline fail is rerun and is no improvement', () => {
+    const ctx = setup({ 'a-flip': 'PFF', 'b-new': 'FPP' });
+    const baseline = path.join(ctx.root, 'base.json');
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'a-flip', pass: false, invoke: 'super-ultra-code-plan' }] }));
+    const r = run(ctx, '--baseline', baseline, '--repeat', '1', '--confirm-flips', '2');
+    expect(runs(ctx).map((l) => l.split(' ').slice(0, 3).join(' '))).toEqual(['RUN a-flip 1', 'RUN a-flip 2', 'RUN a-flip 3', 'RUN b-new 1', 'RUN b-new 2', 'RUN b-new 3']);
+    expect([r.code, r.out.includes('improvement')]).toEqual([0, false]);
+  });
+
+  test('an even --repeat, an odd --confirm-flips, a non-number, or the retired --confirm-failures is a usage error', () => {
     const ctx = setup({ x: 'P' });
-    for (const args of [['--repeat', '0'], ['--repeat', '1.5'], ['--confirm-failures', '-1'], ['--confirm-failures', 'two']]) {
+    for (const args of [['--repeat', '0'], ['--repeat', '1.5'], ['--confirm-flips', '-1'], ['--confirm-failures', '2'], ['--repeat', '2'], ['--confirm-flips', '1']]) {
       expect(run(ctx, ...args).code).toBe(2);
     }
     expect(runs(ctx)).toEqual([]);

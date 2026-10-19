@@ -223,3 +223,33 @@ describe("block-git-writes hook", () => {
     expect(run(JSON.stringify({ tool_input: { command: 42 } })).code).toBe(0);
   });
 });
+
+// The sprites register this hook with matcher "Bash|Monitor": a Monitor command
+// runs in the same shell, and with a Bash-only matcher a git commit went through
+// it (measured 2026-10-19). The hook reads tool_input.command whatever the tool.
+describe("Monitor payloads", () => {
+  const monitor = (command) =>
+    run(JSON.stringify({ tool_name: "Monitor", tool_input: { command, description: "t", timeout_ms: 1000 } }));
+
+  for (const [command, label] of [
+    ["git commit --allow-empty -m probe", "git commit"],
+    ["git -C /tmp/repo push", "git push"],
+    ["gh pr checks 1 --watch", "gh"],
+  ]) {
+    test(`blocks through Monitor: ${JSON.stringify(command)}`, () => {
+      const { code, stderr } = monitor(command);
+      expect(code).toBe(2);
+      expect(stderr).toContain(`(${label})`);
+    });
+  }
+
+  test("allows a watch that writes no git state", () => {
+    const { code, stderr } = monitor("tail -f /tmp/run.log | rg --line-buffered 'fail|exit'");
+    expect(code).toBe(0);
+    expect(stderr).toBe("");
+  });
+
+  test("a WebSocket watch has no command and fails open", () => {
+    expect(run(JSON.stringify({ tool_name: "Monitor", tool_input: { ws: { url: "wss://example.invalid" } } })).code).toBe(0);
+  });
+});

@@ -1,7 +1,7 @@
 <a id="claude-code-agents"></a>
 ## Agent Claude Code
 
-Subagent-nya adalah tujuh Harvest Sprites. Claude Code memberi label pada subagent yang sedang berjalan dengan nama
+Subagent-nya adalah tujuh [Harvest Sprites](/id/docs/reference/harvest-sprites/). Claude Code memberi label pada subagent yang sedang berjalan dengan nama
 agent-nya, sehingga gelombang chunk paralel yang dikirim ke satu agent peran bersama akan menampilkan satu nama berulang-ulang. Setiap
 sprite adalah salinan bernama dan berwarna dari salah satu dari empat template peran di `agents/roles/`, dan
 `agents/crew.json` menetapkan sprite ke peran. Setiap peran memuat lebih dulu (preload) skill fase tempat ia bekerja,

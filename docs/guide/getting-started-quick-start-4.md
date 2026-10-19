@@ -1,6 +1,6 @@
 ## Claude Code agents
 
-The subagents are the seven Harvest Sprites. Claude Code labels a running subagent with its agent
+The subagents are the seven [Harvest Sprites](reference-harvest-sprites.md). Claude Code labels a running subagent with its agent
 name, so a wave of parallel chunks sent to one shared role agent shows one name over and over. Each
 sprite is a named, colored copy of one of four role templates in `agents/roles/`, and
 `agents/crew.json` assigns the sprites to roles. Each role preloads the phase skill it works under,

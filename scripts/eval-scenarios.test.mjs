@@ -12,7 +12,6 @@ const PERMISSION_MODES = ['dontAsk', 'default', 'acceptEdits', 'plan'];
 const FORBIDDEN_TOOL = /\brm\b|\bpush\b|\bgh\b/;
 const UNRESTRICTED_BASH = /^Bash(\(\s*\*\s*\))?$/;
 const SCOPES = ['main', 'sub', 'all'];
-const MAX_BUDGET_USD = 0.75;
 const MAX_FIXTURE_FILE_BYTES = 2048;
 
 const SKILL_DIR = join(ROOT, 'skills');
@@ -119,9 +118,9 @@ describe('eval scenarios', () => {
         expect(s.max_turns).toBeGreaterThanOrEqual(1);
         expect(s.max_turns).toBeLessThanOrEqual(12);
         expect(PERMISSION_MODES).toContain(s.permission_mode);
-        expect(typeof s.budget_usd).toBe('number');
-        expect(s.budget_usd).toBeGreaterThan(0);
-        expect(s.budget_usd).toBeLessThanOrEqual(MAX_BUDGET_USD);
+        // The runner applies one uniform ceiling; a per-scenario budget is ignored, and
+        // when the model could see it, it skipped fan-out to stay inside it.
+        expect(s.budget_usd).toBeUndefined();
         expect(Array.isArray(s.assertions)).toBe(true);
         expect(s.assertions.length).toBeGreaterThan(0);
       });

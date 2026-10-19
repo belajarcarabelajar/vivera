@@ -23,6 +23,7 @@ for a in "$@"; do
 done
 {
   echo "RUN"
+  echo "CWD $(pwd)"
   for a in "$@"; do echo "ARG $a"; done
   echo "ENV memory=$CLAUDE_CODE_DISABLE_AUTO_MEMORY mcp=$ENABLE_CLAUDEAI_MCP_SERVERS"
   echo "SKILL $(ls .claude/skills/sucp-rules/SKILL.md 2>/dev/null)"
@@ -95,8 +96,10 @@ const SUCP = 'super-ultra-code-plan';
 const promptArg = (ctx) => stubLog(ctx).match(/^ARG -p\nARG (.*)$/m)?.[1];
 const argLines = (...args) => args.map((a) => `ARG ${a}`).join('\n');
 const DEFAULT_ALLOWED = 'Read,Edit,Write,Glob,Grep,Agent,Skill,TodoWrite,Bash(bun *),Bash(bunx *),Bash(git status*),Bash(git diff*),'
-  + 'Bash(git log*),Bash(git show*),Bash(git add *),Bash(git commit *),Bash(ls*),Bash(cat *),Bash(rg *),Bash(wc *),Bash(head *),Bash(tail *)';
-const DISALLOWED = 'Bash(rm *),Bash(git push*),Bash(gh *),Bash(curl *),Bash(wget *)';
+  + 'Bash(git log*),Bash(git show*),Bash(git add *),Bash(git commit *),Bash(git switch *),Bash(git checkout -b *),Bash(git branch*),'
+  + 'Bash(git rev-parse*),Bash(ls*),Bash(cat *),Bash(rg *),Bash(wc *),Bash(head *),Bash(tail *)';
+const DISALLOWED = 'Bash(rm *),Bash(git push*),Bash(git -C * push*),Bash(gh *),Bash(curl *),Bash(wget *)';
+const cwdOf = (ctx) => stubLog(ctx).match(/^CWD (.*)$/m)?.[1];
 const GATE = [{ type: 'fixture_unchanged' }, { type: 'final_options', min: 2 }];
 
 describe('eval-run', () => {
@@ -125,13 +128,14 @@ describe('eval-run', () => {
   });
 
   test('the claude call is isolated, narrowed to safe tools, and sees the branch skills and sprites', () => {
+    // budget_usd is accepted and ignored: a per-scenario figure the model can see changes its behaviour.
     const ctx = setup([{ id: 'gate-a', prompt: 'ask', max_turns: 6, budget_usd: 0.5, assertions: GATE }]);
     expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
     const log = stubLog(ctx);
     expect(log).toContain(argLines(
       '-p', '/super-ultra-code-plan ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
-      '--allowedTools', DEFAULT_ALLOWED, '--disallowedTools', DISALLOWED,
-      '--no-session-persistence', '--max-budget-usd', '0.5', '--setting-sources', 'project,local',
+      '--allowedTools', `${DEFAULT_ALLOWED},Bash(git -C ${cwdOf(ctx)} *)`, '--disallowedTools', DISALLOWED,
+      '--no-session-persistence', '--max-budget-usd', '2.00', '--setting-sources', 'project,local',
     ));
     expect(log).toContain('ENV memory=1 mcp=false');
     expect(log).toContain('SKILL .claude/skills/sucp-rules/SKILL.md');
@@ -167,6 +171,21 @@ describe('eval-run', () => {
     expect(r.code).toBe(1);
     expect(stubLog(ctx).match(/^RUN$/gm)).toHaveLength(1);
     expect(r.out).toMatch(/b-second\s+SKIP/);
+    expect(stubLog(ctx)).toContain(argLines('--max-budget-usd', '0.10'));
+  });
+
+  test('each fixture sits at a neutral numbered path that never names the scenario', () => {
+    const ctx = setup([{ id: 'git-secret-probe', prompt: 'ask', assertions: GATE }]);
+    const r = run(ctx, '--keep', '--out', path.join(ctx.root, 'o.json'));
+    const cwd = cwdOf(ctx);
+    expect([r.code, cwd.endsWith(`${path.sep}01${path.sep}project`), cwd.includes('git-secret-probe')]).toEqual([0, true, false]);
+    expect(r.out).toMatch(/git-secret-probe\s+PASS.*fixture=\S*01\/project/);
+  });
+
+  test('a scenario without budget_usd runs under the ceiling', () => {
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', budget_usd: undefined, assertions: GATE }]);
+    expect(run(ctx, '--budget-usd', '1.5', '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
+    expect(stubLog(ctx)).toContain(argLines('--max-budget-usd', '1.50'));
   });
 
   test('a regression against the baseline exits 1 and an improvement is reported', () => {

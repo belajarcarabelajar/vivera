@@ -5,7 +5,6 @@
   "fixture": "base",
   "max_turns": 6,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.4,
   "assertions": [
     {
       "type": "fixture_unchanged"

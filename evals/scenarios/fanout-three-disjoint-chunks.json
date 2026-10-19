@@ -1,17 +1,16 @@
 {
   "id": "fanout-three-disjoint-chunks",
-  "behaviour": "An approved change across three disjoint files fans out to between one and four subagents.",
+  "behaviour": "An approved change across three disjoint files fans out: at least three Agent calls (implementers plus the two final reviewers) and at most six.",
   "prompt": "The design is approved; implement it now. Add three independent modules with no shared code, each with its own test file: strings.mjs exporting `capitalize(s)` (tested in strings.test.mjs), lists.mjs exporting `chunk(array, size)` (tested in lists.test.mjs), and units.mjs exporting `celsiusToFahrenheit(c)` (tested in units.test.mjs).",
   "fixture": "base",
   "max_turns": 10,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.75,
   "assertions": [
     {
       "type": "tool_count",
       "tool": "Agent",
-      "min": 1,
-      "max": 4,
+      "min": 3,
+      "max": 6,
       "scope": "main"
     },
     {

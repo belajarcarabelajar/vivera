@@ -1,14 +1,13 @@
 {
   "id": "fanout-trivial-doc-fix",
-  "behaviour": "An approved one-word documentation fix uses at most one subagent.",
-  "prompt": "The fix is approved; apply it now: correct the typo \"teh\" in README.md.",
+  "behaviour": "An approved one-word documentation fix gets no implementer subagent: at most the two final staid reviewers.",
+  "prompt": "The fix is approved; apply it now: correct the typo \"teh\" in README.md. This is documentation-only work, and the TDD waiver for it is approved as well.",
   "fixture": "base",
   "overlay": {
     "README.md": "# eval-base\n\nA tiny arithmetic module used by teh vivera pipeline eval.\n\nRun the tests with `bun test`.\n"
   },
   "max_turns": 4,
   "permission_mode": "dontAsk",
-  "budget_usd": 0.25,
   "assertions": [
     {
       "type": "file_lacks",
@@ -18,7 +17,7 @@
     {
       "type": "tool_count",
       "tool": "Agent",
-      "max": 1,
+      "max": 2,
       "scope": "main"
     }
   ]

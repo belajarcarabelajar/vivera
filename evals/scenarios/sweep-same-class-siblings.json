@@ -1,0 +1,28 @@
+{
+  "id": "sweep-same-class-siblings",
+  "behaviour": "Deleting one element the user calls redundant also surfaces the other redundant elements in the same tab instead of only the one named.",
+  "prompt": "The design is approved; implement it now. In src/support-tab.mjs the \"Manual satisfaction score\" panel is legacy and redundant with the survey flow, so delete it and its test. The TDD waiver for this removal is approved.",
+  "fixture": "base",
+  "overlay": {
+    "src/report.mjs": "// Builds the customer support report shown and exported by the support tab.\nexport function buildReport(events) {\n  const expansions = events.filter((e) => e.kind === 'expansion').length;\n  const scores = events.filter((e) => e.kind === 'score').map((e) => e.value);\n  const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;\n  return { expansions, avgScore: avg };\n}\n\nexport function averageScore(events) {\n  const scores = events.filter((e) => e.kind === 'score').map((e) => e.value);\n  return scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null;\n}\n\nexport function exportReport(events, format) {\n  const report = buildReport(events);\n  if (format === 'json') return JSON.stringify(report);\n  return `expansions,avgScore\\n${report.expansions},${report.avgScore ?? ''}`;\n}\n",
+    "src/support-tab.mjs": "import { buildReport, averageScore, exportReport } from './report.mjs';\n\n// Renders the Customer Support statistics tab as an HTML string.\nexport function renderSupportTab(events) {\n  const report = buildReport(events);\n  return [\n    '<section id=\"support-tab\">',\n    `<div class=\"card\" id=\"expansions-card\">Expansions: ${report.expansions}</div>`,\n    `<div class=\"card\" id=\"avg-score-card\">Average score: ${report.avgScore ?? '-'}</div>`,\n    `<div class=\"card\" id=\"csat-mean-card\">CSAT mean: ${averageScore(events) ?? '-'}</div>`,\n    '<button id=\"download-csv\" data-format=\"csv\">Download CSV</button>',\n    '<button id=\"download-json\" data-format=\"json\">Download JSON</button>',\n    '<button id=\"copy-survey-link\">Copy survey link</button>',\n    '<div class=\"panel\" id=\"manual-score-panel\">Manual satisfaction score <input type=\"number\" min=\"1\" max=\"5\"> <button>Save</button></div>',\n    '</section>',\n  ].join('\\n');\n}\n\nexport function onDownload(events, format) {\n  return exportReport(events, format);\n}\n",
+    "src/support-tab.test.mjs": "import { expect, test } from 'bun:test';\nimport { renderSupportTab, onDownload } from './support-tab.mjs';\n\nconst events = [{ kind: 'expansion' }, { kind: 'score', value: 4 }, { kind: 'score', value: 2 }];\n\ntest('renders the expansions card', () => {\n  expect(renderSupportTab(events)).toContain('Expansions: 1');\n});\n\ntest('renders the manual satisfaction score panel', () => {\n  expect(renderSupportTab(events)).toContain('manual-score-panel');\n});\n\ntest('downloads csv', () => {\n  expect(onDownload(events, 'csv')).toContain('1,3');\n});\n"
+  },
+  "max_turns": 14,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "file_lacks",
+      "path": "src/support-tab.mjs",
+      "pattern": "manual-score-panel"
+    },
+    {
+      "type": "final_mentions",
+      "min": 1,
+      "patterns": [
+        "(?i)(csv|json)[^\\n]{0,160}(duplicat|redundan|same (report|data)|identical)|(duplicat|redundan|same (report|data)|identical)[^\\n]{0,160}(csv|json)",
+        "(?i)^(?=[\\s\\S]*(csat[- ]mean|averageScore))(?=[\\s\\S]*(avg[- ]score|average score))(?=[\\s\\S]*(duplicat|redundan|same (value|metric|number)|identical|twice))"
+      ]
+    }
+  ]
+}

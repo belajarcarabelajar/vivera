@@ -45,7 +45,8 @@ https://registry.npmjs.org/pagefind/1.5.2 (`"license": "MIT"`).
 
 ## Harvest Sprites illustration (not MIT)
 
-- Location in this repo: `docs/images/btn-harvest-sprites.jpg`, shown in `README.md`.
+- Location in this repo: `docs/images/btn-harvest-sprites.jpg`, shown in
+  `docs/guide/reference-harvest-sprites.md`.
 - What it is: an official illustration of the Harvest Sprites from the PlayStation game
   *Harvest Moon: Back to Nature* (Victor Interactive Software, 1999; English release by
   Natsume, 2000). The artwork is not original to this repository, and its copyright
@@ -57,20 +58,21 @@ https://registry.npmjs.org/pagefind/1.5.2 (`"license": "MIT"`).
 - The wiki's `Harvest Sprite <color> 1.png` files (used on the `(BTN)` sprite pages) are
   categorized "HMDS Portraits" (Nintendo DS) and are not used.
 - Modification: cropped, enlarged, and resized; no other change to the drawing.
-- Facts in the README (hut, hiring, birthdays, colors, personality, affection, skill) come from
+- Facts on the sprites page (hut, hiring, birthdays, colors, personality, affection, skill) come from
   https://www.harvestmoonbacktonatureguide.com/characters.html (PS1),
   https://fogu.com/hm/btn/harvestsprites.php (PS1),
   https://gamefaqs.gamespot.com/ps/446412-harvest-moon-back-to-nature/faqs/26294 (PS1),
   https://www.ign.com/articles/2003/03/14/harvest-moon-back-to-nature-walkthroughfaq-389474 (PS1),
   and https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN). The glossary lists every
   source, including the ones rejected.
-- Removal: delete `docs/images/btn-harvest-sprites.jpg` and the image block in the
-  "The Harvest Sprites" section of `README.md`.
+- Removal: delete `docs/images/btn-harvest-sprites.jpg` and the image block at the top of
+  `docs/guide/reference-harvest-sprites.md`.
 
 ## Harvest Sprite portraits (not MIT)
 
 - Location in this repo: `docs/images/sprites/` (`chef.png`, `nappy.png`, `hoggy.png`,
-  `timid.png`, `aqua.png`, `staid.png`, `bold.png`), shown in the sprite table of `README.md`.
+  `timid.png`, `aqua.png`, `staid.png`, `bold.png`), shown in the sprite table of
+  `docs/guide/reference-harvest-sprites.md` and the sprite strip of `README.md`.
 - What they are: portraits of the seven Harvest Sprites. The artwork is not original to this
   repository, and its copyright belongs to its respective owners. The repository's MIT license
   does not cover these files.
@@ -79,4 +81,5 @@ https://registry.npmjs.org/pagefind/1.5.2 (`"license": "MIT"`).
   linked from https://harvestmoon.fandom.com/wiki/Harvest_Sprites_(BTN), fetched 2026-10-11.
   The wiki categorizes them as "Friends of Mineral Town Portraits".
 - Modification: enlarged and resized (44 x 52 px to 352 x 416 px); no other change to the drawings.
-- Removal: delete `docs/images/sprites/` and the image column of the sprite table in `README.md`.
+- Removal: delete `docs/images/sprites/`, the image column of the sprite table in
+  `docs/guide/reference-harvest-sprites.md`, and the sprite strip in `README.md` and its Indonesian twin.

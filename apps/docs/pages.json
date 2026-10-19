@@ -234,6 +234,16 @@
       }
     },
     {
+      "category": "reference",
+      "slug": "harvest-sprites",
+      "order": 7,
+      "title": "The Harvest Sprites",
+      "description": "The seven Harvest Sprites from Harvest Moon: Back to Nature, each with its portrait, game traits, and fixed subagent role in Vivera.",
+      "source": {
+        "file": "docs/guide/reference-harvest-sprites.md"
+      }
+    },
+    {
       "category": "integrations",
       "slug": "graphify-integrity",
       "order": 1,

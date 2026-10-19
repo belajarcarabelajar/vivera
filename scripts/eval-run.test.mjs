@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EVAL_NOTE } from './lib/eval-sandbox.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, 'eval-run.mjs');
@@ -148,7 +149,7 @@ describe('eval-run', () => {
       '-p', '/super-ultra-code-plan ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
       '--allowedTools', [DEFAULT_ALLOWED, ...['add', 'commit', 'status', 'diff', 'log', 'show', 'switch', 'branch', 'rev-parse']
         .map((sub) => `Bash(git -C ${cwdOf(ctx)} ${sub}*)`)].join(','), '--disallowedTools', DISALLOWED,
-      '--no-session-persistence', '--max-budget-usd', '2.00', '--setting-sources', 'project,local',
+      '--append-system-prompt', EVAL_NOTE, '--no-session-persistence', '--max-budget-usd', '2.00', '--setting-sources', 'project,local',
     ));
     expect(log).toContain('ENV memory=1 mcp=false');
     expect(log).toContain('SKILL .claude/skills/sucp-rules/SKILL.md');

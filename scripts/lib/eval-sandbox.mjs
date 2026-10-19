@@ -46,6 +46,8 @@ const DEFAULT_ALLOWED_TOOLS = [
 // One entry per subcommand, so a second -C or `git -C <dir> config` cannot match.
 const GIT_C_SUBCOMMANDS = ['add', 'commit', 'status', 'diff', 'log', 'show', 'switch', 'branch', 'rev-parse'];
 // `Bash(git push*)` misses `git -C <dir> push`.
+// Told to the agent so one denied command is not read as a blocked shell (seen in three scenarios).
+export const EVAL_NOTE = 'This run uses a fixed command allowlist. A denied command does not mean the shell is blocked: edit files with the file tools and run allowed commands such as bun test.';
 export const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(git -C * push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
 
 /** A scenario's own list replaces the default, including the per-fixture `git -C` entries. */

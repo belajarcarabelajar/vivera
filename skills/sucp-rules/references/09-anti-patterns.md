@@ -46,6 +46,7 @@
 | "I'll optimize/refactor this later" (unmarked shortcut) | Deliberate shortcuts require `defer: <ceiling>, <upgrade-trigger>`. Without ceiling and trigger, later means never |
 | "Small diff without checking callers" | Comprehension before reduction. Patching symptoms leaves sibling callers broken |
 | "Part A is green, so I'm done" | Affected-Surface Audit: `tasks[].impacts` names what the task can break, and the runner refuses a plan that declares none. A green task proves the task, never its consumers |
+| "The user pointed at one, so I fixed one" | Same-Class Sweep: a flagged element is one instance of a class. List the rest of its container, judge each peer by the same criterion, and report the matches before closing; "nothing else referred to it" checks consumers, not peers |
 | "I'll list the affected files later" | An impact noticed and left untouched is a named follow-up with a finish line, not a silent omission. The debt sweep finds it at the end of the session; `impacts` makes it findable at the moment it is created |
 | "The subagent reported a file outside its chunk, so I'll note it mentally" | A name in a report that reaches no task and no backlog is a dropped impact. Every out-of-scope report becomes a task or a `defer:` line in the same session |
 | "Factory/interface for future extensibility" | Speculative abstraction is debt. YAGNI: 1 implementation = 0 interfaces |

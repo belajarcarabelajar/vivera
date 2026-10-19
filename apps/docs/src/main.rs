@@ -1,5 +1,6 @@
 mod content;
 mod layout;
+mod parts;
 mod routes;
 
 use std::error::Error;

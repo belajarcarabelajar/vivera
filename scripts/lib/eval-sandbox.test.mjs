@@ -102,3 +102,12 @@ describe('bwrapArgs', () => {
     expect(args.some((a) => a.startsWith('--unshare-net') || a === '--unshare-all')).toBe(false);
   });
 });
+
+test('with a baseline only a regression or a skip fails the run; without one any failure does', async () => {
+  const { runExitCode } = await import('./eval-sandbox.mjs');
+  expect(runExitCode({ passed: 18, total: 20, regressed: false, skipped: 0, baseline: true })).toBe(0);
+  expect(runExitCode({ passed: 18, total: 20, regressed: true, skipped: 0, baseline: true })).toBe(1);
+  expect(runExitCode({ passed: 19, total: 20, regressed: false, skipped: 1, baseline: true })).toBe(1);
+  expect(runExitCode({ passed: 18, total: 20, regressed: false, skipped: 0, baseline: false })).toBe(1);
+  expect(runExitCode({ passed: 20, total: 20, regressed: false, skipped: 0, baseline: false })).toBe(0);
+});

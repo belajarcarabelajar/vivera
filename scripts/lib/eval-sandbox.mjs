@@ -145,3 +145,10 @@ export function sandboxCommand({ bwrap, runDir, bin, args, env, home = os.homedi
   const roBinds = [path.dirname(real), path.join(home, '.bun')];
   return { cmd: bwrap, argv: [...bwrapArgs({ runDir, home, roBinds }), real, ...args], env: { ...env, CLAUDE_CONFIG_DIR: configDir, BUN_INSTALL_CACHE_DIR: path.join(runDir, 'bun-cache') } };
 }
+
+// With a baseline the gate asks "did anything get worse", so a scenario that
+// already failed on main does not fail the run; a skip still does (unknown).
+export function runExitCode({ passed, total, regressed, skipped, baseline }) {
+  if (baseline) return regressed || skipped > 0 ? 1 : 0;
+  return passed === total ? 0 : 1;
+}

@@ -132,12 +132,19 @@ export function reconcile({ registryPath, rootDir, flags }) {
     }
   }
 
+  // Counted from the write itself, because a stale close is dropped when the
+  // session gained a PR since the read.
+  let staleClosed = 0;
   if (facts.size > 0 && !dryRun) {
-    mutateRegistry((registry) => applyReconcile(registry, facts), { registryPath });
+    mutateRegistry((registry) => {
+      const next = applyReconcile(registry, facts);
+      staleClosed = next.sessions.filter((s, i) => s !== registry.sessions[i] && facts.get(s.session)?.stale).length;
+      return next;
+    }, { registryPath });
   }
   for (const l of lines) console.log(dryRun ? `[dry run] ${l}` : l);
   if (dryRun) console.log('dry run: nothing written');
-  console.log(`reconciled ${live.length}: merged ${counts.merged}, closed ${counts.closed}, stale ${counts.stale}, skipped ${counts.skipped}`);
+  console.log(`reconciled ${live.length}: merged ${counts.merged}, closed ${counts.closed}, stale ${counts.stale}, stale-closed ${staleClosed}, skipped ${counts.skipped}`);
   return counts.skipped > 0 ? 1 : 0;
 }
 

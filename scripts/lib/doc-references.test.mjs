@@ -142,3 +142,31 @@ test('an unprefixed npm name is checked against package.json unless it is a gene
   expect(checked).toBe(2);
   expect(findings.map((x) => x.message)).toEqual(['bun run metricz: no such script in package.json']);
 });
+
+test('a misspelled bun subcommand in a code span or a shell fence is a finding, while prose is not read', () => {
+  const doc = [
+    `Run ${TICK}bun rnu x${TICK}, ${TICK}bun tset scripts/${TICK} and ${TICK}bun test${TICK}.`,
+    `${FENCE}bash`,
+    'bun instal',
+    FENCE,
+    'In prose bun is fine.',
+  ].join('\n');
+  const { findings, checked } = run(doc);
+  expect(checked).toBe(4);
+  expect(findings.map((x) => [x.line, x.message])).toEqual([
+    [1, 'bun rnu: not a bun subcommand'],
+    [1, 'bun tset: not a bun subcommand'],
+    [3, 'bun instal: not a bun subcommand'],
+  ]);
+});
+
+test('a backticked root-level file name is checked, and a near miss of a root file is a finding', () => {
+  const f = fixture(`${TICK}package.json${TICK}, ${TICK}install.sh${TICK}, ${TICK}instal.sh${TICK}, ${TICK}packge.json${TICK}, ${TICK}SKILL.md${TICK}\n`);
+  writeFileSync(path.join(f.root, 'install.sh'), '');
+  const { findings, checked } = checkDocReferences(f);
+  expect(checked).toBe(4);
+  expect(findings.map((x) => x.message)).toEqual([
+    'path instal.sh does not exist at the repository root (did you mean install.sh?)',
+    'path packge.json does not exist at the repository root (did you mean package.json?)',
+  ]);
+});

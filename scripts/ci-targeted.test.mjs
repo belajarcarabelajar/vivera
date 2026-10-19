@@ -29,24 +29,24 @@ const SOURCES = {
   'scripts/lib/scan.test.mjs': "const FILES = readdirSync(new URL('./', import.meta.url));\n",
 };
 const INDEX = { sources: SOURCES };
+const check = (paths) => planChecks(paths, INDEX);
+const EVAL_BASE = 'docs/code-plan/evals/baseline.json';
 
 const names = (plan) => plan.suites.map((s) => s.name);
+const suite = (plan, n) => plan.suites.find((s) => s.name === n);
+const targeted = (plan) => expect(plan.full).toBe(false);
 const testFiles = (plan) => {
-  const suite = plan.suites.find((s) => s.name === 'tests');
-  return suite ? suite.cmd.slice(4) : [];
+  const t = suite(plan, 'tests');
+  return t ? t.cmd.slice(4) : [];
 };
 
 describe('planChecks', () => {
   test('a changed module selects its own test and those of its transitive importers', () => {
-    const plan = planChecks(['scripts/core.mjs'], INDEX);
-    expect(plan.full).toBe(false);
+    const plan = check(['scripts/core.mjs']);
+    targeted(plan);
     expect(testFiles(plan)).toEqual(['./scripts/core.test.mjs', './scripts/top.test.mjs']);
     expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
-  });
-
-  test('the selected tests run as one bun test invocation with the ci timeout', () => {
-    const plan = planChecks(['scripts/core.mjs'], INDEX);
-    expect(plan.suites.find((s) => s.name === 'tests').cmd.slice(0, 4)).toEqual(['bun', 'test', '--timeout', '30000']);
+    expect(plan.suites[1].cmd.slice(0, 4)).toEqual(['bun', 'test', '--timeout', '30000']);
   });
 
   test('a module named only in another module comment does not pull in that module tests', () => {
@@ -83,37 +83,36 @@ describe('planChecks', () => {
     for (const t of ['runner', 'templ', 'wrap']) expect(tests).toContain(`./scripts/${t}.test.mjs`);
   });
 
-  test('a test that names a module only in a comment is still selected', () => {
+  test('a test that names a module only in a comment, or a changed test, is selected', () => {
     const sources = { ...SOURCES, 'scripts/notes.test.mjs': '// exercises scripts/unrelated.mjs through the CLI\n' };
     expect(testFiles(planChecks(['scripts/unrelated.mjs'], { sources }))).toEqual(['./scripts/notes.test.mjs', './scripts/unrelated.test.mjs']);
-  });
-
-  test('a changed test file selects itself', () => {
-    expect(testFiles(planChecks(['scripts/unrelated.test.mjs'], INDEX))).toEqual(['./scripts/unrelated.test.mjs']);
+    expect(testFiles(check(['scripts/unrelated.test.mjs']))).toEqual(['./scripts/unrelated.test.mjs']);
   });
 
   test('a test that scans its own directory is selected for a change next to it', () => {
-    const plan = planChecks(['scripts/lib/leaf.mjs'], INDEX);
-    expect(plan.full).toBe(false);
+    const plan = check(['scripts/lib/leaf.mjs']);
+    targeted(plan);
     expect(testFiles(plan)).toEqual(['./scripts/lib/scan.test.mjs']);
   });
 
-  test('a skills file selects validate-skill and the tests that reference skills/', () => {
-    const plan = planChecks(['skills/demo/SKILL.md'], INDEX);
-    expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules']);
+  test('a skills file selects validate-skill, the eval last, and the tests that read skills/', () => {
+    const plan = check(['skills/demo/SKILL.md']);
+    targeted(plan);
+    expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules', 'eval']);
+    expect(plan.suites.at(-1)).toEqual({ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASE],
+      requires: EVAL_BASE, reasons: ['skills/demo/SKILL.md: skill or agent rules changed'] });
     expect(testFiles(plan)).toEqual(['./scripts/skills-reader.test.mjs']);
   });
 
   test('a module the validator imports selects validate-skill', () => {
-    const plan = planChecks(['scripts/validate-lib.mjs'], INDEX);
+    const plan = check(['scripts/validate-lib.mjs']);
     expect(names(plan)).toContain('validate-skill');
     expect(testFiles(plan)).toEqual(['./scripts/validate-skill.test.mjs']);
   });
 
   test('a module the agent generator imports selects both agent checks', () => {
-    const plan = planChecks(['scripts/sprite-agents/crew.mjs'], INDEX);
-    expect(plan.full).toBe(false);
+    const plan = check(['scripts/sprite-agents/crew.mjs']);
+    targeted(plan);
     expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/gen-sprite-agents.test.mjs']);
   });
@@ -128,54 +127,54 @@ describe('planChecks', () => {
   test('a CLAUDE.md change selects the tests that name it instead of the full list', () => {
     const sources = { ...SOURCES, 'scripts/claude-md.test.mjs': "writeFileSync(join(root, 'CLAUDE.md'), text);\n" };
     const plan = planChecks(['CLAUDE.md'], { sources });
-    expect(plan.full).toBe(false);
+    targeted(plan);
     expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-md.test.mjs']);
   });
 
-  test('an agents file selects validate-agents and gen-sprite-agents --check', () => {
-    const plan = planChecks(['agents/chef.md'], INDEX);
-    const gen = plan.suites.find((s) => s.name === 'gen-sprite-agents');
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules']);
+  test('an agents file selects validate-agents, gen-sprite-agents --check, and the eval', () => {
+    const plan = check(['agents/chef.md']);
+    const gen = suite(plan, 'gen-sprite-agents');
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'eval']);
     expect(gen.cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
   });
 
   test('a claude-agents file selects validate-agents and gen-sprite-agents, not the full list', () => {
-    const plan = planChecks(['.claude/agents/staid.md'], INDEX);
-    expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules']);
-    expect(plan.suites.find((s) => s.name === 'gen-sprite-agents').cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
+    const plan = check(['.claude/agents/staid.md']);
+    targeted(plan);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'eval']);
+    expect(suite(plan, 'gen-sprite-agents').cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
     expect(plan.skipped.map((s) => s.name)).toEqual(['render-diagrams', 'validate-skill', 'tests', 'sync-snippets']);
   });
 
   test('a claude-agents file keeps the test that reads it', () => {
     const sources = { ...SOURCES, 'scripts/claude-agents-reader.test.mjs': "assertFileContains('.claude/agents/staid.md', NEEDLE);\n" };
     const plan = planChecks(['.claude/agents/staid.md'], { sources });
-    expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules']);
+    targeted(plan);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules', 'eval']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-agents-reader.test.mjs']);
   });
 
   test('a path outside every category still forces full beside a claude-agents file', () => {
-    const lone = planChecks(['some/unknown/file.xyz'], INDEX);
+    const lone = check(['some/unknown/file.xyz']);
     expect(lone.full).toBe(true);
     expect(lone.suites[0].reasons).toEqual(['some/unknown/file.xyz: unrecognized path']);
-    const mixed = planChecks(['.claude/agents/staid.md', 'some/unknown/file.xyz'], INDEX);
+    const mixed = check(['.claude/agents/staid.md', 'some/unknown/file.xyz']);
     expect(mixed.full).toBe(true);
     expect(mixed.suites[0].reasons).toEqual(['some/unknown/file.xyz: unrecognized path']);
-    expect(planChecks(['.claude/settings.json'], INDEX).full).toBe(true);
+    expect(check(['.claude/settings.json']).full).toBe(true);
   });
 
   test('a snippets change selects the sync-snippets check', () => {
-    const plan = planChecks(['snippets/demo.md'], INDEX);
-    const sync = plan.suites.find((s) => s.name === 'sync-snippets');
+    const plan = check(['snippets/demo.md']);
+    const sync = suite(plan, 'sync-snippets');
     expect(sync.cmd).toEqual(['bun', 'scripts/sync-snippets.mjs', '--check']);
-    expect(names(planChecks(['snippets.manifest.json'], INDEX))).toContain('sync-snippets');
+    expect(names(check(['snippets.manifest.json']))).toContain('sync-snippets');
   });
 
   test('a docs markdown file selects only the docs-gen, file-size, and copy checks', () => {
-    const plan = planChecks(['docs/guide.md'], INDEX);
-    expect(plan.full).toBe(false);
+    const plan = check(['docs/guide.md']);
+    targeted(plan);
     expect(names(plan)).toEqual(['file-size', 'docs-gen', 'docs-warn', 'copy-rules']);
     expect(plan.suites.at(-1).cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
     expect(plan.skipped.map((s) => s.name)).toEqual([
@@ -189,8 +188,8 @@ describe('planChecks', () => {
   });
 
   test('a diagram source selects render-diagrams', () => {
-    expect(names(planChecks(['docs/diagrams-src/lifecycle.mmd'], INDEX))).toContain('render-diagrams');
-    expect(names(planChecks(['mermaid.dark.config.json'], INDEX))).toContain('render-diagrams');
+    expect(names(check(['docs/diagrams-src/lifecycle.mmd']))).toContain('render-diagrams');
+    expect(names(check(['mermaid.dark.config.json']))).toContain('render-diagrams');
   });
 
   test('the copy, size, and both docs checks run with their flags, targeted or full', () => {
@@ -202,7 +201,7 @@ describe('planChecks', () => {
   });
 
   test('bun.lock forces the full ci list', () => {
-    const plan = planChecks(['bun.lock'], INDEX);
+    const plan = check(['bun.lock']);
     expect(plan.full).toBe(true);
     expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'docs-warn', 'copy-rules']);
     expect(plan.suites[0].reasons.join('\n')).toContain('bun.lock');
@@ -211,32 +210,22 @@ describe('planChecks', () => {
 
   test('package.json, a tsconfig, a git hook, and the installer force full', () => {
     for (const p of ['package.json', 'tsconfig.base.json', '.githooks/pre-commit', 'install.sh', 'install.ps1', 'scripts/install/lib.sh']) {
-      expect({ p, full: planChecks([p], INDEX).full }).toEqual({ p, full: true });
+      expect({ p, full: check([p]).full }).toEqual({ p, full: true });
     }
   });
 
-  test('an unrecognized top-level path forces full', () => {
-    const plan = planChecks(['Dockerfile'], INDEX);
-    expect(plan.full).toBe(true);
-    expect(plan.suites[0].reasons.join('\n')).toContain('Dockerfile');
+  test('an unrecognized top-level path or a module no test reaches forces full', () => {
+    for (const p of ['Dockerfile', 'scripts/orphan.mjs']) {
+      const plan = check([p]);
+      expect([plan.full, plan.suites[0].reasons.join('\n').includes(p)]).toEqual([true, true]);
+    }
   });
 
-  test('a path under apps/ is recognized and does not force full', () => {
-    const plan = planChecks(['apps/other/src/main.rs'], INDEX);
-    expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['file-size', 'copy-rules']);
-  });
-
-  test('a module that no test reaches forces full', () => {
-    const plan = planChecks(['scripts/orphan.mjs'], INDEX);
-    expect(plan.full).toBe(true);
-    expect(plan.suites[0].reasons.join('\n')).toContain('scripts/orphan.mjs');
-  });
-
-  test('graphify-out is ignored', () => {
-    const plan = planChecks(['graphify-out/graph.json'], INDEX);
-    expect(plan.full).toBe(false);
-    expect(names(plan)).toEqual(['file-size', 'copy-rules']);
+  test('an apps/ path and graphify-out do not force full', () => {
+    for (const p of ['apps/other/src/main.rs', 'graphify-out/graph.json']) {
+      const plan = check([p]);
+      expect([plan.full, names(plan)]).toEqual([false, ['file-size', 'copy-rules']]);
+    }
   });
 
   test('the full list matches the ci script in package.json', () => {
@@ -245,21 +234,28 @@ describe('planChecks', () => {
   });
 
   test('file-size runs before the tests and the snippet check', () => {
-    const n = names(planChecks(['bun.lock'], INDEX));
+    const n = names(check(['bun.lock']));
     expect(n.slice(n.indexOf('gen-sprite-agents'), -3)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
-  test('a docs-only change still runs file-size over the index', () => {
-    const plan = planChecks(['docs/x.md'], { sources: {} });
-    const suite = plan.suites.find((s) => s.name === 'file-size');
-    expect({ full: plan.full, reasons: suite?.reasons }).toEqual({ full: false, reasons: ['always: a few git calls over the index'] });
-    expect(plan.skipped.map((s) => s.name)).not.toContain('file-size');
+  test('evals scenarios and fixtures select their tests and the eval; evals/README.md is a doc', () => {
+    const sources = { 'scripts/eval-scenarios.test.mjs': "join(ROOT, 'evals', 'scenarios')" };
+    const plan = planChecks(['evals/scenarios/x.json', 'evals/fixtures/base/package.json'], { sources });
+    expect([plan.full, testFiles(plan), names(plan).at(-1)]).toEqual([false, ['./scripts/eval-scenarios.test.mjs'], 'eval']);
+    expect(names(planChecks(['evals/README.md'], { sources }))).toEqual(['file-size', 'copy-rules']);
   });
 
-  test('a scripts-only change still runs file-size', () => {
+  test('--full adds the eval only when skills/ or agents/ changed', () => {
+    const run = (p) => planChecks([p], INDEX, { full: true });
+    expect([run('agents/a.md').full, names(run('agents/a.md')).at(-1), names(run('docs/x.md')).at(-1)]).toEqual([true, 'eval', 'copy-rules']);
+  });
+
+  test('a docs-only or scripts-only change still runs file-size over the index', () => {
+    const plan = planChecks(['docs/x.md'], { sources: {} });
+    expect({ full: plan.full, reasons: suite(plan, 'file-size')?.reasons }).toEqual({ full: false, reasons: ['always: a few git calls over the index'] });
+    expect(plan.skipped.map((s) => s.name)).not.toContain('file-size');
     const sources = { 'scripts/a.mjs': 'export const a = 1;\n', 'scripts/a.test.mjs': "import './a.mjs';\n" };
-    const plan = planChecks(['scripts/a.mjs'], { sources });
-    expect({ full: plan.full, names: names(plan) }).toEqual({ full: false, names: ['file-size', 'tests', 'copy-rules'] });
+    expect(names(planChecks(['scripts/a.mjs'], { sources }))).toEqual(['file-size', 'tests', 'copy-rules']);
   });
 });
 
@@ -268,27 +264,23 @@ describe('docs-gen check', () => {
 
   for (const p of ['README.md', 'docs/x.md', 'apps/docs/src/main.rs']) {
     test(`a ${p} change adds the docs-gen check and stays targeted`, () => {
-      const plan = planChecks([p], INDEX);
+      const plan = check([p]);
       const [suite] = docsGen(plan);
       expect([plan.full, suite.reasons.join('\n').includes(p)]).toEqual([false, true]);
     });
   }
 
   test('several docs paths add a single docs-gen check with one reason each', () => {
-    const plan = planChecks(['README.md', 'apps/docs/pages.json', 'docs/x.md'], INDEX);
+    const plan = check(['README.md', 'apps/docs/pages.json', 'docs/x.md']);
     expect(docsGen(plan)).toHaveLength(1);
     expect(docsGen(plan)[0].reasons).toHaveLength(3);
   });
 
-  test('a scripts change alone does not add the docs-gen check', () => {
-    const sources = { ...SOURCES, 'scripts/foo.mjs': 'export const foo = 1;\n', 'scripts/foo.test.mjs': "import './foo.mjs';\n" };
-    const plan = planChecks(['scripts/foo.mjs'], { sources });
-    expect({ full: plan.full, docsGen: docsGen(plan).length }).toEqual({ full: false, docsGen: 0 });
-  });
-
-  test('a docs/code-plan change alone does not add the docs-gen check', () => {
-    const plan = planChecks(['docs/code-plan/x.md'], INDEX);
-    expect({ full: plan.full, docsGen: docsGen(plan).length }).toEqual({ full: false, docsGen: 0 });
+  test('a scripts or docs/code-plan change alone does not add the docs-gen check', () => {
+    for (const p of ['scripts/core.mjs', 'docs/code-plan/x.md']) {
+      const plan = check([p]);
+      expect({ full: plan.full, docsGen: docsGen(plan).length }).toEqual({ full: false, docsGen: 0 });
+    }
   });
 });
 
@@ -315,6 +307,14 @@ describe('runSuites', () => {
     expect(results[0].status).toBe('FAIL');
   });
 
+  test('an eval without its baseline reports SKIP and why', () => {
+    const out = [];
+    const run = (requires, log = quiet) => runSuites([{ name: 'eval', cmd: ['x'], requires }], { root: ROOT, spawn: () => 1, log });
+    const { code, results } = run('no/base.json', (l) => out.push(l));
+    expect([code, results[0].status, out.join('\n').includes('no/base.json is absent')]).toEqual([0, 'SKIP', true]);
+    expect(run('package.json').code).toBe(1);
+  });
+
   test('a failing suite does not stop the next one, and the run exits 1', () => {
     const seen = [];
     const spawn = (cmd) => { seen.push(cmd[0]); return cmd[0] === 'bad' ? 3 : 0; };
@@ -337,7 +337,7 @@ describe('CLI', () => {
   };
   const cli = (...args) => spawnSync('bun', [CLI, ...args], { env, encoding: 'utf8' });
 
-  test('--rencana in a repo with a fake origin prints the chosen suites and exits 0', () => {
+  test('--rencana in a repo with a fake origin prints the chosen suites, eval included, exits 0', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-targeted-'));
     try {
       write(dir, 'scripts/a.mjs', 'export const a = 1;\n');
@@ -352,12 +352,15 @@ describe('CLI', () => {
 
       const r = cli('--rencana', '--root', dir);
       expect({ code: r.status, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
-      expect(r.stdout).toContain('scripts/a.mjs');
-      expect(r.stdout).toContain('skills/demo/extra.md');
-      expect(r.stdout).toContain('bun scripts/validate-skill.mjs');
-      expect(r.stdout).toContain('bun test --timeout 30000 ./scripts/a.test.mjs');
-      expect(r.stdout).toContain('bun scripts/check-copy-rules.mjs --diff origin/main');
-      expect(r.stdout).toContain('sync-snippets');
+      for (const t of [
+        'scripts/a.mjs',
+        'skills/demo/extra.md',
+        'bun scripts/validate-skill.mjs',
+        'bun test --timeout 30000 ./scripts/a.test.mjs',
+        'bun scripts/check-copy-rules.mjs --diff origin/main',
+        'sync-snippets',
+        `eval: bun scripts/eval-run.mjs --baseline ${EVAL_BASE}\n    - skills/demo/extra.md: skill or agent`,
+      ]) expect(r.stdout).toContain(t);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -383,25 +386,19 @@ describe('CLI', () => {
 describe('package.json limited to scripts', () => {
   const pkg = (scripts, extra = {}) => JSON.stringify({ name: 'x', dependencies: { a: '1' }, ...extra, scripts }, null, 2);
 
-  test('scriptsOnlyChange is true when only the scripts field differs', () => {
+  test('scriptsOnlyChange is true only when scripts alone differs and both sides parse', () => {
     expect(scriptsOnlyChange(pkg({ ci: 'a' }), pkg({ ci: 'a', 'ci:targeted': 'b' }))).toBe(true);
-  });
-
-  test('scriptsOnlyChange is false when anything outside scripts differs, or a side does not parse', () => {
     expect(scriptsOnlyChange(pkg({ ci: 'a' }), pkg({ ci: 'a' }, { dependencies: { a: '2' } }))).toBe(false);
     expect(scriptsOnlyChange(pkg({ ci: 'a' }), '{ broken')).toBe(false);
     expect(scriptsOnlyChange('', pkg({ ci: 'a' }))).toBe(false);
   });
 
-  test('a scripts-only package.json change is targeted, selecting the tests that read package.json', () => {
+  test('a scripts-only package.json change selects the tests that read it; any other is full', () => {
     const sources = { 'scripts/pkg.test.mjs': "readFileSync('package.json')", 'scripts/other.test.mjs': 'nothing' };
     const plan = planChecks(['package.json'], { sources, packageScriptsOnly: ['package.json'] });
-    expect(plan.full).toBe(false);
-    expect(plan.suites.find((s) => s.name === 'tests').cmd).toContain('./scripts/pkg.test.mjs');
-    expect(plan.suites.find((s) => s.name === 'tests').cmd).not.toContain('./scripts/other.test.mjs');
-  });
-
-  test('any other package.json change still selects the full ci', () => {
+    targeted(plan);
+    expect(suite(plan, 'tests').cmd).toContain('./scripts/pkg.test.mjs');
+    expect(suite(plan, 'tests').cmd).not.toContain('./scripts/other.test.mjs');
     expect(planChecks(['package.json'], { sources: {} }).full).toBe(true);
   });
 });
@@ -411,15 +408,12 @@ describe('untracked local file', () => {
 
   test('an untracked non-code file outside the recognized paths is ignored, not a full ci reason', () => {
     const plan = planChecks([BAK, 'docs/note.md'], { sources: {}, untracked: [BAK] });
-    expect(plan.full).toBe(false);
+    targeted(plan);
     expect(plan.ignored.map((i) => i.path)).toEqual([BAK]);
   });
 
-  test('the same file tracked still forces the full ci', () => {
+  test('the same file tracked, or an untracked code file at an unknown path, still forces the full ci', () => {
     expect(planChecks([BAK], { sources: {} }).full).toBe(true);
-  });
-
-  test('an untracked code file at an unknown path still forces the full ci', () => {
     expect(planChecks(['tools/new.mjs'], { sources: {}, untracked: ['tools/new.mjs'] }).full).toBe(true);
   });
 });

@@ -10,6 +10,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, gitText } from './lib/git.mjs';
+import { buildIndex } from './lib/ci-targeted-index.mjs';
+
+export { buildIndex, mermaidBlocks, scriptsOnlyChange } from './lib/ci-targeted-index.mjs';
 
 const USAGE = 'usage: ci-targeted.mjs [--base <ref>] [--root <dir>] [--plan|--rencana] [--full|--penuh]';
 const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
@@ -63,13 +66,12 @@ const CATEGORIES = [
   },
 ];
 
-const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', '.claude/agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/', 'apps/'];
+const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', '.claude/agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/', 'apps/', 'evals/'];
 const RECOGNIZED_FILES = [
   'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'Super Ultra Code Plan Implementation.md',
   'LICENSE', 'THIRD-PARTY-NOTICES.md', '.gitignore', '.graphifyignore', 'puppeteer-config.json',
 ];
 const CODE_EXT = /\.(?:mjs|cjs|js|sh|py)$/;
-const INDEX_EXT = /\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)$/;
 // Path-like tokens: imports, spawn arguments, path.join segments, shell paths.
 const REF = /[\w$./-]*[\w-]\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)(?![\w-])/g;
 // A test that lists its own directory reaches every file in it without naming any.
@@ -79,6 +81,8 @@ const isTest = (p) => p.endsWith('.test.mjs');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function toolchainReason(p) {
+  // A fixture's package.json belongs to a throwaway eval repository, not to this one.
+  if (p.startsWith('evals/fixtures/')) return null;
   const base = path.posix.basename(p);
   if (base === 'package.json' || base === 'bun.lock' || /^tsconfig.*\.json$/.test(base)) return 'root config or toolchain file';
   if (p.startsWith('.githooks/') || p === 'install.sh' || p === 'install.ps1' || p.startsWith('scripts/install/')) {
@@ -197,17 +201,19 @@ function testsForScript(p, sources, graph) {
 function testsForOther(p, sources) {
   const top = p.split('/')[0];
   const topLiteral = new RegExp(`['"\`]${escapeRe(top)}(?:['"\`]|/)`);
+  // A doc directly under evals/ (its README) is read by no test that merely names evals/.
+  const broad = p.includes('/') && !/^evals\/[^/]+$/.test(p);
   const tests = new Set();
   for (const [f, src] of Object.entries(sources)) {
-    if (isTest(f) && (mentionsPath(src, p) || (p.includes('/') && topLiteral.test(src)))) tests.add(f);
+    if (isTest(f) && (mentionsPath(src, p) || (broad && topLiteral.test(src)))) tests.add(f);
   }
   return tests;
 }
 
-function fullPlan(base, reasons, ignored = []) {
+function fullPlan(base, reasons, ignored, paths) {
   return {
     full: true,
-    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), ...docsSuites(reasons), copySuite(base)],
+    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), ...docsSuites(reasons), copySuite(base), ...evalSuites(paths)],
     skipped: [],
     ignored,
   };
@@ -220,6 +226,15 @@ function copySuite(base) {
   return { name: 'copy-rules', cmd: ['bun', 'scripts/check-copy-rules.mjs', '--diff', base], reasons: ['always: commits and added lines since the base'] };
 }
 
+const EVAL_BASELINE = 'docs/code-plan/evals/baseline.json';
+const EVAL_INPUT = /^(?:skills|agents|\.claude\/agents|evals\/scenarios|evals\/fixtures)\//;
+// Every eval run costs money, so only a change to the rules it measures selects it, even under --full.
+function evalSuites(paths) {
+  const reasons = paths.filter((p) => EVAL_INPUT.test(p))
+    .map((p) => `${p}: ${p.startsWith('evals/') ? 'eval scenario or fixture' : 'skill or agent rules'} changed`);
+  return reasons.length ? [{ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASELINE], requires: EVAL_BASELINE, reasons }] : [];
+}
+
 // docs/code-plan/ holds session records, not docs pages.
 const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
   || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
@@ -228,21 +243,8 @@ const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
 const docsSuites = (reasons) => [['docs-gen', '--check', '--scope', 'en'], ['docs-warn', '--warn']]
   .map(([name, ...flags]) => ({ name, cmd: ['bun', 'scripts/docs-gen.mjs', ...flags], reasons: [...reasons] }));
 
-/** Two package.json texts differ only inside `scripts` (an unparsable side never does). */
-export function scriptsOnlyChange(before, after) {
-  try {
-    const a = JSON.parse(before);
-    const b = JSON.parse(after);
-    delete a.scripts;
-    delete b.scripts;
-    return JSON.stringify(a) === JSON.stringify(b);
-  } catch {
-    return false;
-  }
-}
-
 /** Planner: `index.sources` maps scripts/ to text; `index.mermaidChanged` lists edited mermaid blocks. */
-export function planChecks(changed, index, { base = 'origin/main' } = {}) {
+export function planChecks(changed, index, { base = 'origin/main', full = false } = {}) {
   const sources = index.sources ?? {};
   const mermaidChanged = new Set(index.mermaidChanged ?? []);
   // A script-entry edit changes no dependency or toolchain: no full ci.
@@ -257,12 +259,13 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
     .map((p) => ({ path: p, reason: 'untracked local file outside the repository paths' }));
   const paths = all.filter((p) => !ignored.some((i) => i.path === p));
 
+  if (full) return fullPlan(base, ['--full requested'], ignored, paths);
   const fullReasons = [];
   for (const p of paths) {
     const why = scriptsOnly.has(p) ? null : toolchainReason(p) ?? (recognized(p) ? null : 'unrecognized path');
     if (why) fullReasons.push(`${p}: ${why}`);
   }
-  if (fullReasons.length) return fullPlan(base, fullReasons, ignored);
+  if (fullReasons.length) return fullPlan(base, fullReasons, ignored, paths);
 
   const graph = buildGraph(sources);
   const selectedTests = new Set();
@@ -275,7 +278,7 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
     if (tests.size) testReasons.push(`${p} -> ${[...tests].sort().join(', ')}`);
     for (const t of tests) selectedTests.add(t);
   }
-  if (fullReasons.length) return fullPlan(base, fullReasons, ignored);
+  if (fullReasons.length) return fullPlan(base, fullReasons, ignored, paths);
 
   const categoryReasons = new Map();
   const addReason = (suite, reason) => {
@@ -318,20 +321,8 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
   }
   const docsReasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed`);
   if (docsReasons.length) suites.push(...docsSuites(docsReasons));
-  suites.push(copySuite(base));
+  suites.push(copySuite(base), ...evalSuites(paths));
   return { full: false, suites, skipped, ignored };
-}
-
-/** Fenced mermaid blocks, delimited the way render-diagrams.sh extracts them. */
-export function mermaidBlocks(text) {
-  const blocks = [];
-  let buf = null;
-  for (const line of text.split('\n')) {
-    if (buf === null && /^```mermaid[ \t]*$/.test(line)) buf = '';
-    else if (buf !== null && /^```[ \t]*$/.test(line)) { blocks.push(buf); buf = null; }
-    else if (buf !== null) buf += `${line}\n`;
-  }
-  return blocks;
 }
 
 class ArgError extends Error {}
@@ -365,52 +356,6 @@ export function changedFiles(root, base) {
   return { mergeBase, files, untracked: lists[2].split('\0').filter(Boolean) };
 }
 
-function readSources(root) {
-  const sources = {};
-  const walk = (rel) => {
-    for (const e of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
-      const child = `${rel}/${e.name}`;
-      if (e.isDirectory()) {
-        if (e.name !== 'node_modules' && !e.name.startsWith('.')) walk(child);
-      } else if (e.isFile() && INDEX_EXT.test(e.name)) {
-        sources[child] = fs.readFileSync(path.join(root, child), 'utf8');
-      }
-    }
-  };
-  if (fs.existsSync(path.join(root, 'scripts'))) walk('scripts');
-  return sources;
-}
-
-function mermaidChangedFiles(root, files, mergeBase) {
-  const out = [];
-  for (const p of files) {
-    if (!p.endsWith('.md') || p.startsWith('graphify-out/')) continue;
-    const abs = path.join(root, p);
-    const now = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
-    const before = spawnSync('git', ['-C', root, 'show', `${mergeBase}:${p}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    const old = before.status === 0 ? before.stdout : '';
-    if (JSON.stringify(mermaidBlocks(now)) !== JSON.stringify(mermaidBlocks(old))) out.push(p);
-  }
-  return out;
-}
-
-function packageScriptsOnlyFiles(root, files, mergeBase) {
-  return files.filter((p) => p === 'package.json').filter((p) => {
-    const abs = path.join(root, p);
-    const before = spawnSync('git', ['-C', root, 'show', `${mergeBase}:${p}`], { encoding: 'utf8' });
-    return before.status === 0 && fs.existsSync(abs) && scriptsOnlyChange(before.stdout, fs.readFileSync(abs, 'utf8'));
-  });
-}
-
-export function buildIndex(root, files, mergeBase, untracked = []) {
-  return {
-    sources: readSources(root),
-    mermaidChanged: mermaidChangedFiles(root, files, mergeBase),
-    untracked,
-    packageScriptsOnly: packageScriptsOnlyFiles(root, files, mergeBase),
-  };
-}
-
 function printPlan(log, { base, mergeBase, files, plan }) {
   log(`base: ${base} (merge-base ${mergeBase.slice(0, 12)})`);
   log(`changed files (${files.length}):`);
@@ -436,11 +381,16 @@ function defaultSpawn(cmd, { cwd }) {
   return r.status ?? r.signal;
 }
 
-/** Runs every suite even after a failure; a suite that cannot start counts as failed. */
+/** Runs every suite even after a failure; a suite that cannot start counts as failed, one whose `requires` file is absent as SKIP. */
 export function runSuites(suites, { root, spawn = defaultSpawn, log = console.log }) {
   const results = [];
   for (const s of suites) {
     log(`\n==> ${s.name}: ${s.cmd.join(' ')}`);
+    if (s.requires && !fs.existsSync(path.join(root, s.requires))) {
+      log(`SKIP ${s.name}: ${s.requires} is absent`);
+      results.push({ name: s.name, exit: '-', seconds: 0, status: 'SKIP' });
+      continue;
+    }
     const t0 = performance.now();
     let exit;
     try {
@@ -457,7 +407,7 @@ export function runSuites(suites, { root, spawn = defaultSpawn, log = console.lo
   for (const r of results) {
     log(`${r.name.padEnd(width)}  ${String(r.exit).padStart(11)}  ${r.seconds.toFixed(1).padStart(7)}  ${r.status}`);
   }
-  return { code: results.every((r) => r.status === 'PASS') ? 0 : 1, results };
+  return { code: results.every((r) => r.status !== 'FAIL') ? 0 : 1, results };
 }
 
 export function main(argv, { log = console.log, error = console.error } = {}) {
@@ -475,9 +425,8 @@ export function main(argv, { log = console.log, error = console.error } = {}) {
   try {
     const root = path.resolve(opts.root ?? gitText(process.cwd(), ['rev-parse', '--show-toplevel']).trim());
     const { mergeBase, files, untracked } = changedFiles(root, opts.base);
-    const plan = opts.full
-      ? fullPlan(opts.base, ['--full requested'])
-      : planChecks(files, buildIndex(root, files, mergeBase, untracked), { base: opts.base });
+    const index = opts.full ? { untracked } : buildIndex(root, files, mergeBase, untracked);
+    const plan = planChecks(files, index, { base: opts.base, full: opts.full });
     printPlan(log, { base: opts.base, mergeBase, files, plan });
     if (opts.plan) return 0;
     return runSuites(plan.suites, { root, log }).code;

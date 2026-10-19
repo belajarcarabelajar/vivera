@@ -57,6 +57,9 @@ export const INVARIANTS = [
   { label: 'the merge question is always its own call', text: 'The Merge question is always its own call' },
   { label: 'the Bounded design names the PR as its deliverable', text: 'The Bounded design names the pull request as its deliverable, so no separate Publish question follows' },
   { label: 'mark complete needs a fresh readiness verdict', text: 'Mark Complete applies only if a readiness run after the follow-ups land is still `READY`' },
+  { label: 'two or more disjoint chunks get one implementer each', text: 'dispatch one implementer subagent per chunk, even when each chunk is small' },
+  { label: 'the Bounded Design gate shows a Mermaid diagram', text: 'The short design shown at the Bounded `Design` gate includes a Mermaid diagram' },
+  { label: 'a passing claim names its command and exit code', text: 'names the command and its exit code' },
 ];
 
 /** Invariants whose sentence appears nowhere in the corpus. Empty means fine. */

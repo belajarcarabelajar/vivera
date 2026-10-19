@@ -94,6 +94,8 @@ export function listDocReferenceFiles(root) {
     ...mdFilesIn(root, 'skills', { recurse: true }),
     ...mdFilesIn(root, 'templates', { recurse: false }),
     ...mdFilesIn(root, 'snippets', { recurse: false }),
+    // The README sections moved here (plan 2026-10-18-split-readme).
+    ...mdFilesIn(root, 'docs/guide', { recurse: false }),
   ];
   if (fs.existsSync(path.join(root, 'README.md'))) files.push('README.md');
   return files.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));

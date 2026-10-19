@@ -1,6 +1,5 @@
 {
   "MEMORY.md": 29733,
-  "README.md": 190619,
   "apps/docs/content/id/getting-started-quick-start.md": 65260,
   "apps/docs/content/id/getting-started-repository-structure.md": 21474,
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
@@ -14,7 +13,7 @@
   "scripts/check-duplicate-defs.test.mjs": 20224,
   "scripts/ci-targeted.test.mjs": 21603,
   "scripts/container.test.mjs": 23423,
-  "scripts/docs-gen.mjs": 26332,
+  "scripts/docs-gen.mjs": 23436,
   "scripts/docs-gen.test.mjs": 26824,
   "scripts/gen-sprite-agents.test.mjs": 21350,
   "scripts/graphify-plugin-drift.test.mjs": 26388,

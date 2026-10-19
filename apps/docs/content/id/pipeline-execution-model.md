@@ -1,5 +1,5 @@
 ---
-title: "Model Eksekusi: Subagent Lebih Dulu, Fan-Out Tinggi"
+title: "Model Eksekusi: Subagent Lebih Dulu, Fan-Out Proporsional"
 description: Agent induk memecah pekerjaan menjadi chunk kecil yang dapat diverifikasi, mengirim 10 subagent atau lebih bila memungkinkan, lalu mengumpulkan dan menyintesis laporan mereka.
 category: pipeline
 slug: execution-model

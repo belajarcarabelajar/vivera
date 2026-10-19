@@ -133,7 +133,7 @@ function isGateOrConsumer(relFile) {
 
 function evidenceFor(relFile) {
   const base = path.basename(relFile);
-  return `rg -n ${JSON.stringify(base)} scripts/ templates/ snippets/ README.md AGENTS.md`;
+  return `rg -n ${JSON.stringify(base)} scripts/ templates/ snippets/ README.md docs/guide/ AGENTS.md`;
 }
 
 function entryFor(relFile, consumers) {

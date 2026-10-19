@@ -290,8 +290,8 @@ test('the rule is still written down in the master skill and names this gate', (
   const skill = readSkillText(ROOT, 'skills/sucp-rules/SKILL.md');
   assert.match(skill, /colored left stripe/, 'the named tell left the master skill');
   assert.match(skill, /check-design-tells\.mjs/, 'the master skill no longer points at the gate');
-  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  assert.match(readme, /design:check/, 'README no longer documents the gate');
+  const guide = fs.readFileSync(path.join(ROOT, 'docs/guide/tooling-trigger-snippets-1.md'), 'utf8');
+  assert.match(guide, /design:check/, 'the guide no longer documents the gate');
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts['design:check'], 'bun scripts/check-design-tells.mjs');
 });

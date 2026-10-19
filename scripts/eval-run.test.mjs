@@ -285,6 +285,20 @@ describe('eval-run', () => {
     expect(stubLog(ctx)).toBe('');
   });
 
+  test('--keep writes the raw stream beside the kept fixture and prints its path; without it nothing is written', () => {
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
+    const out = path.join(ctx.root, 'o.json');
+    const r = run(ctx, '--keep', '--out', out);
+    const file = path.join(ctx.tmpRoot, JSON.parse(fs.readFileSync(out, 'utf8')).runId, 'gate-a.stream.jsonl');
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/gate-a\s+PASS.*stream=\S*gate-a\.stream\.jsonl/);
+    expect(fs.readFileSync(file, 'utf8')).toBe(fs.readFileSync(path.join(STREAMS, 'ask.jsonl'), 'utf8'));
+    expect(fs.existsSync(path.join(path.dirname(file), 'gate-a', 'gate-a.stream.jsonl'))).toBe(false);
+    const bare = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
+    const rb = run(bare, '--out', path.join(bare.root, 'o.json'));
+    expect([rb.code, rb.out.includes('stream='), fs.existsSync(bare.tmpRoot) && fs.readdirSync(bare.tmpRoot).length]).toEqual([0, false, 0]);
+  });
+
   test('usage errors exit 2', () => {
     const ctx = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
     expect(run(ctx, '--bogus').code).toBe(2);

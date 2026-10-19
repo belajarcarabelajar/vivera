@@ -92,6 +92,7 @@ function psFixture() {
   put(path.join(chk, 'examples', 'e.md'), 'example\n');
   put(path.join(chk, 'mermaid.config.json'), '{}\n');
   put(path.join(chk, 'mermaid.dark.config.json'), '{"dark":true}\n');
+  put(path.join(chk, '.claude', 'hooks', 'require-exit-code.mjs'), 'hook\n');
   fs.copyFileSync(path.join(ROOT, 'install.ps1'), path.join(chk, 'install.ps1'));
   const libDir = path.join(ROOT, 'scripts', 'install');
   for (const f of fs.readdirSync(libDir).filter((x) => /^windows-.*\.ps1$/.test(x))) {

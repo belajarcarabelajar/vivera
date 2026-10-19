@@ -20,7 +20,8 @@ vivera/
 ├── .claude/
 │   ├── agents/                                  # Seven Harvest Sprite subagents, generated from agents/roles
 │   └── hooks/
-│       └── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
+│       ├── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
+│       └── require-exit-code.mjs                # Stop hook: a final pass claim must name its exit code
 ├── agents/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
@@ -97,6 +98,7 @@ vivera/
 │   │   └── build-archive.sh                     # Deterministic git archive plus .sha256 for a release tag
 │   ├── install-*.test.mjs                       # Installer tests (baseline, targets, check, update, uninstall, copy, sprites, ps1, ...)
 │   ├── block-git-writes.test.mjs                # Blocked and allowed command tables for the git guard hook
+│   ├── require-exit-code.test.mjs               # Blocked and allowed final messages for the exit-code Stop hook
 │   ├── skipif-registry-audit.mjs                # Tally and classify skip_if predicates across all plans
 │   ├── ultra-plan-runner.mjs                    # ultra-plan/v1 DAG runner + visual map contract
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
@@ -159,7 +161,8 @@ vivera/
     │   ├── templates -> ../../templates
     │   ├── examples -> ../../examples
     │   ├── mermaid.config.json -> ../../mermaid.config.json
-    │   └── mermaid.dark.config.json -> ../../mermaid.dark.config.json
+    │   ├── mermaid.dark.config.json -> ../../mermaid.dark.config.json
+    │   └── require-exit-code.mjs -> ../../.claude/hooks/require-exit-code.mjs
     ├── sucp-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
     ├── sucp-rules/references/                   # Nine rule files
     ├── sucp-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research

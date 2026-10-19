@@ -312,7 +312,7 @@ describe('entries', () => {
     const phases = phaseDirs(sb);
     expect(phases.length).toBeGreaterThan(0);
     const entries = phaseEntries(sb.repo);
-    expect(lines.length).toBe(5 + entries.length);
+    expect(lines.length).toBe(6 + entries.length);
     const pkg = at(sb, `.agents/skills/${PKG}`);
     const master = path.join(sb.repo, MASTER);
     expect(lines[0]).toEqual([master, `${pkg}/SKILL.md`]);
@@ -324,6 +324,7 @@ describe('entries', () => {
       [path.join(sb.repo, 'examples'), `${pkg}/examples`],
       [path.join(sb.repo, 'mermaid.config.json'), `${pkg}/mermaid.config.json`],
       [path.join(sb.repo, 'mermaid.dark.config.json'), `${pkg}/mermaid.dark.config.json`],
+      [path.join(sb.repo, '.claude', 'hooks', 'require-exit-code.mjs'), `${pkg}/require-exit-code.mjs`],
     ]);
   });
 
@@ -334,7 +335,7 @@ describe('entries', () => {
       const dir = table(sb, 'target_skills_dir', id).out;
       const siblings = path.dirname(dir);
       const lines = entryLines(sb, id);
-      expect({ id, count: lines.length }).toEqual({ id, count: 5 + phaseEntries(sb.repo).length });
+      expect({ id, count: lines.length }).toEqual({ id, count: 6 + phaseEntries(sb.repo).length });
       for (const [desired, dest] of lines) {
         expect(fs.existsSync(desired)).toBe(true);
         const underPackage = dest.startsWith(`${dir}/`);

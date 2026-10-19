@@ -60,6 +60,7 @@ function expectedLayout(sb, { opencode = false, claude = false, builtin = false 
     add(`${pkg}/examples`, 'l', `${REPO_REF}/examples`);
     add(`${pkg}/mermaid.config.json`, 'l', `${REPO_REF}/mermaid.config.json`);
     add(`${pkg}/mermaid.dark.config.json`, 'l', `${REPO_REF}/mermaid.dark.config.json`);
+    add(`${pkg}/require-exit-code.mjs`, 'l', `${REPO_REF}/.claude/hooks/require-exit-code.mjs`);
     for (const name of phaseSkills(sb)) {
       add(`${root}/${name}`, 'd');
       add(`${root}/${name}/SKILL.md`, 'l', `${REPO_REF}/skills/${name}/SKILL.md`);

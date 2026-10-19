@@ -46,6 +46,7 @@ function makeFixture({ homeName = 'h', extraSkill = false } = {}) {
   put(path.join(chk, 'examples', 'e.md'), 'example\n');
   put(path.join(chk, 'mermaid.config.json'), '{}\n');
   put(path.join(chk, 'mermaid.dark.config.json'), '{"dark":true}\n');
+  put(path.join(chk, '.claude', 'hooks', 'require-exit-code.mjs'), 'hook\n');
   fs.copyFileSync(path.join(ROOT, 'install.ps1'), path.join(chk, 'install.ps1'));
   const libDir = path.join(ROOT, 'scripts', 'install');
   for (const f of fs.existsSync(libDir) ? fs.readdirSync(libDir).filter((x) => /^windows-.*\.ps1$/.test(x)) : []) {
@@ -544,11 +545,11 @@ describe.skipIf(!shell || win)('install.ps1 run: W3, nothing is created, moved o
     expect(fs.readdirSync(dots)).toEqual([]);
     expect(r.out).not.toContain('[OK] Copied');
     expect(r.out).not.toContain('farm planted');
-    expect(r.out).toContain('==> Vivera finished with 7 entries left alone (see the [SKIP] lines above)');
+    expect(r.out).toContain('==> Vivera finished with 8 entries left alone (see the [SKIP] lines above)');
     const up = run(fx, [...ONLY, '-Update']);
     clean(up);
     expect(fs.readdirSync(dots)).toEqual([]);
-    expect(up.out).toContain('finished with 7 entries left alone');
+    expect(up.out).toContain('finished with 8 entries left alone');
   });
 
   test('the same holds when the harness directory itself is the link and the skills directory does not exist yet', () => {

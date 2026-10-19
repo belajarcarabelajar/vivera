@@ -17,16 +17,16 @@
 //
 // --scenarios exists for the tests; fixtures are read from <dir>/../fixtures.
 // EVAL_CLAUDE_BIN replaces the claude binary (tests use a stub), EVAL_TMP_ROOT
-// replaces ~/.cache/tmp/vivera-eval.
+// replaces /tmp/vivera-eval and is refused inside the home directory.
 //
 // Exit: 0 all scenarios pass, 1 any failure, skip, or baseline regression, 2 usage.
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
+import { DISALLOWED_TOOLS, allowedTools, childEnv, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUN_TIMEOUT_MS = 300_000;
@@ -34,16 +34,6 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-// --setting-sources project,local also drops the user's PreToolUse hooks (rm-tmp-guard),
-// so the tool lists below are the only fence between an agent under test and this machine.
-const DEFAULT_ALLOWED_TOOLS = [
-  'Read', 'Edit', 'Write', 'Glob', 'Grep', 'Agent', 'Skill', 'TodoWrite',
-  'Bash(bun *)', 'Bash(bunx *)', 'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)', 'Bash(git show*)',
-  'Bash(git add *)', 'Bash(git commit *)', 'Bash(git switch *)', 'Bash(git checkout -b *)', 'Bash(git branch*)',
-  'Bash(git rev-parse*)', 'Bash(ls*)', 'Bash(cat *)', 'Bash(rg *)', 'Bash(wc *)', 'Bash(head *)', 'Bash(tail *)',
-];
-// `Bash(git push*)` misses `git -C <dir> push`, which the per-run `git -C` allowance would let through.
-const DISALLOWED_TOOLS = ['Bash(rm *)', 'Bash(git push*)', 'Bash(git -C * push*)', 'Bash(gh *)', 'Bash(curl *)', 'Bash(wget *)'];
 const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--scenarios <dir>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
@@ -201,14 +191,14 @@ function money(n) {
   return String(Math.round(n * 10000) / 10000);
 }
 
-function runClaude(scenario, dir, budget, invoke) {
+function runClaude(scenario, dir, budget, invoke, root) {
   const bin = process.env.EVAL_CLAUDE_BIN || 'claude';
   const args = [
     '-p', invoke ? `/${invoke} ${scenario.prompt}` : scenario.prompt,
     '--output-format', 'stream-json', '--verbose',
     '--max-turns', String(scenario.max_turns),
     '--permission-mode', scenario.permission_mode,
-    '--allowedTools', (scenario.allowed_tools ?? [...DEFAULT_ALLOWED_TOOLS, `Bash(git -C ${dir} *)`]).join(','),
+    '--allowedTools', allowedTools(scenario, dir).join(','),
     '--disallowedTools', DISALLOWED_TOOLS.join(','),
     '--no-session-persistence',
     '--max-budget-usd', budget.toFixed(2),
@@ -221,7 +211,7 @@ function runClaude(scenario, dir, budget, invoke) {
     timeout: RUN_TIMEOUT_MS,
     killSignal: 'SIGKILL',
     maxBuffer: 256 * 1024 * 1024,
-    env: { ...process.env, CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1', ENABLE_CLAUDEAI_MCP_SERVERS: 'false' },
+    env: childEnv(root),
   });
   const timedOut = r.error?.code === 'ETIMEDOUT' || r.signal === 'SIGKILL';
   return { stdout: r.stdout ?? '', status: r.status, timedOut, spawnError: timedOut ? null : r.error };
@@ -268,7 +258,7 @@ function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index)
     if (!(err instanceof RefusedError)) throw err;
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
   }
-  const run = runClaude(scenario, dest, budget, invoke);
+  const run = runClaude(scenario, dest, budget, invoke, path.dirname(runDir));
   // Beside the fixture, not inside it, so the stream never shows up in its git status.
   const stream = keep ? path.join(runDir, `${scenario.id}.stream.jsonl`) : undefined;
   if (stream) fs.writeFileSync(stream, run.stdout);
@@ -350,6 +340,8 @@ function main(argv) {
     for (const s of scenarios) console.log(`${s.id}  ${s.behaviour ?? ''}`);
     return 0;
   }
+  const { root: scratch, error } = scratchRoot();
+  if (error) throw new UsageError(error);
   const invokeOf = (s) => (opts.noInvoke ? false : s.invoke ?? DEFAULT_INVOKE);
   const baseline = opts.baseline ? readBaseline(opts.baseline) : null;
   if (baseline) refuseInvokeMismatch(baseline, scenarios, invokeOf);
@@ -357,8 +349,7 @@ function main(argv) {
   const date = localDate();
   const commit = (spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout ?? '').trim();
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
-  const tmpRoot = process.env.EVAL_TMP_ROOT || path.join(os.homedir(), '.cache', 'tmp', 'vivera-eval');
-  const runDir = path.join(tmpRoot, runId);
+  const runDir = path.join(scratch, runId);
   const width = Math.max(...scenarios.map((s) => s.id.length), 2);
 
   const done = [];

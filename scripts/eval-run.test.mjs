@@ -96,7 +96,8 @@ const argLines = (...args) => args.map((a) => `ARG ${a}`).join('\n');
 const DEFAULT_ALLOWED = 'Read,Edit,Write,Glob,Grep,Agent,Skill,TodoWrite,Bash(bun test*),Bash(bun add *),Bash(bun install*),'
   + 'Bash(bun run test*),Bash(git status*),Bash(git diff*),'
   + 'Bash(git log*),Bash(git show*),Bash(git add *),Bash(git commit *),Bash(git switch *),Bash(git checkout -b *),Bash(git branch*),'
-  + 'Bash(git rev-parse*),Bash(ls*),Bash(cat *),Bash(rg *),Bash(wc *),Bash(head *),Bash(tail *)';
+  + 'Bash(git rev-parse*),Bash(ls*),Bash(cat *),Bash(rg *),Bash(wc *),Bash(head *),Bash(tail *),'
+  + 'Bash(echo *),Bash(printf *),Bash(sed -n *),Bash(grep *),Bash(pwd*),Bash(which *),Bash(bun --version*)';
 const DISALLOWED = 'Bash(rm *),Bash(git push*),Bash(git -C * push*),Bash(gh *),Bash(curl *),Bash(wget *)';
 const cwdOf = (ctx) => stubLog(ctx).match(/^CWD (.*)$/m)?.[1];
 const GATE = [{ type: 'fixture_unchanged' }, { type: 'final_options', min: 2 }];

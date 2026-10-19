@@ -38,6 +38,8 @@ const DEFAULT_ALLOWED_TOOLS = [
   'Bash(git status*)', 'Bash(git diff*)', 'Bash(git log*)', 'Bash(git show*)', 'Bash(git add *)', 'Bash(git commit *)',
   'Bash(git switch *)', 'Bash(git checkout -b *)', 'Bash(git branch*)', 'Bash(git rev-parse*)',
   'Bash(ls*)', 'Bash(cat *)', 'Bash(rg *)', 'Bash(wc *)', 'Bash(head *)', 'Bash(tail *)',
+  // Seen denied in the 2026-10-19 run: an `echo "exit=$?"` tail or `bun --version` denied a whole chain.
+  'Bash(echo *)', 'Bash(printf *)', 'Bash(sed -n *)', 'Bash(grep *)', 'Bash(pwd*)', 'Bash(which *)', 'Bash(bun --version*)',
 ];
 // One entry per subcommand, so a second -C or `git -C <dir> config` cannot match.
 const GIT_C_SUBCOMMANDS = ['add', 'commit', 'status', 'diff', 'log', 'show', 'switch', 'branch', 'rev-parse'];

@@ -167,6 +167,21 @@ function checkHookScript(command, at, label, root, errors) {
   }
 }
 
+// Whether a hook matcher selects a tool name, the way Claude Code reads it:
+// absent, empty and "*" match every tool; letters, digits, "_" and "|" alone are
+// a list of exact names; anything else is a regular expression tested
+// unanchored (see the MATCHER note in graphify-hooks-install.mjs). A matcher
+// that is not a valid expression selects nothing here.
+export function matcherCovers(matcher, tool) {
+  if (matcher === undefined || matcher === '' || matcher === '*') return true;
+  if (/^[A-Za-z0-9_|]+$/.test(matcher)) return matcher.split('|').includes(tool);
+  try {
+    return new RegExp(matcher).test(tool);
+  } catch {
+    return false;
+  }
+}
+
 function checkHooks(hooks, label, root, errors) {
   if (!isPlainObject(hooks)) return errors.push(`${label}: "hooks" must be a mapping of event name to a list`);
   for (const [event, entries] of Object.entries(hooks)) {
@@ -183,6 +198,11 @@ function checkHooks(hooks, label, root, errors) {
       if (!isPlainObject(entry)) return errors.push(`${label}: ${ep} must be an object`);
       if ('matcher' in entry && typeof entry.matcher !== 'string') {
         errors.push(`${label}: ${ep}.matcher must be a string`);
+      } else if (event === 'PreToolUse' && matcherCovers(entry.matcher, 'Bash') && !matcherCovers(entry.matcher, 'Monitor')) {
+        // Measured 2026-10-19: a git commit blocked through Bash ran through Monitor,
+        // which takes a shell command too, because the guard's matcher was "Bash".
+        errors.push(`${label}: ${ep}.matcher "${entry.matcher}" matches Bash but not Monitor, so a Monitor `
+          + 'command skips this guard; use "Bash|Monitor"');
       }
       if (!Array.isArray(entry.hooks)) return errors.push(`${label}: ${ep}.hooks must be an array`);
       entry.hooks.forEach((hook, j) => {

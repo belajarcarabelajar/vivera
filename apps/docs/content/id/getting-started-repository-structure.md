@@ -4,8 +4,8 @@ description: Pohon file repositori beranotasi, ditambah lokasi aturan TinyFish d
 category: getting-started
 slug: repository-structure
 order: 2
-source: README.md#Repository Structure
-source_hash: "4d1164a6b1ca"
+source: docs/guide/getting-started-repository-structure-1.md
+source_hash: "91dd73b01b06"
 ---
 
 <a id="repository-structure"></a>
@@ -31,10 +31,13 @@ vivera/
 ├── .claude/
 │   ├── agents/                                  # Seven Harvest Sprite subagents, generated from agents/roles
 │   └── hooks/
-│       └── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
+│       ├── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
+│       └── require-exit-code.mjs                # Stop hook: a final pass claim must name its exit code
 ├── agents/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
+├── mods/                                        # Claude Code mods, a local marketplace (vivera-mods)
+│   └── sprite-model-router/                     # agent.spawn hook: read-only sprites on Sonnet under an Opus parent
 ├── .githooks/
 │   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh
 ├── .github/
@@ -78,6 +81,8 @@ vivera/
 │   ├── pre-commit-size-gate.test.mjs            # The hook blocks on the size gate and stays non-blocking for graphify
 │   ├── validate-agents.mjs                      # Lint .claude/agents frontmatter (Claude Code ignores bad fields silently)
 │   ├── validate-agents.test.mjs                 # Field, name, skills, and CLI exit-code tests
+│   ├── validate-agents-monitor.test.mjs         # PreToolUse guards must cover Monitor when they cover Bash
+│   ├── sprite-model-router.test.mjs             # Mod roster matches agents/crew.json; runs claude plugin test
 │   ├── gen-sprite-agents.mjs                    # Render the sprite crew for six harnesses (CLI over scripts/sprite-agents/)
 │   ├── gen-sprite-agents.test.mjs               # CLI, hook pinning, drift, and hand-written-file guards
 │   ├── sprite-agents/                           # Renderers behind gen-sprite-agents.mjs, one file per harness
@@ -108,6 +113,7 @@ vivera/
 │   │   └── build-archive.sh                     # Deterministic git archive plus .sha256 for a release tag
 │   ├── install-*.test.mjs                       # Installer tests (baseline, targets, check, update, uninstall, copy, sprites, ps1, ...)
 │   ├── block-git-writes.test.mjs                # Blocked and allowed command tables for the git guard hook
+│   ├── require-exit-code.test.mjs               # Blocked and allowed final messages for the exit-code Stop hook
 │   ├── skipif-registry-audit.mjs                # Tally and classify skip_if predicates across all plans
 │   ├── ultra-plan-runner.mjs                    # ultra-plan/v1 DAG runner + visual map contract
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
@@ -170,7 +176,8 @@ vivera/
     │   ├── templates -> ../../templates
     │   ├── examples -> ../../examples
     │   ├── mermaid.config.json -> ../../mermaid.config.json
-    │   └── mermaid.dark.config.json -> ../../mermaid.dark.config.json
+    │   ├── mermaid.dark.config.json -> ../../mermaid.dark.config.json
+    │   └── require-exit-code.mjs -> ../../.claude/hooks/require-exit-code.mjs
     ├── sucp-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
     ├── sucp-rules/references/                   # Nine rule files
     ├── sucp-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research
@@ -185,7 +192,7 @@ TinyFish didokumentasikan di dalam master skill itu sendiri, di bagian
 `🌐 Web Evidence & Retrieval` (TinyFish): tangga eskalasi empat anak tangga
 (`search` → `fetch_content` → `run_web_automation` → `create_browser_session`),
 set parameter yang penting, aturan pengelolaan run dan biaya, serta jebakan yang
-perlu diwaspadai. Dulu TinyFish dikirim sebagai skill vendored terpisah (`skills/use-tinyfish/`,
+perlu diwaspadai. Dulu TinyFish dikirim sebagai skill vendored terpisah (use-tinyfish,
 dipasang oleh `install.sh` §6b yang kini sudah dihapus); pemisahan itu dihentikan karena
 kedua sumber kebenaran sudah tidak sinkron, dan salinan khusus CLI tidak pernah menjelaskan
 tool MCP yang benar-benar dipanggil agent. Satu master skill, satu set aturan.
@@ -193,32 +200,3 @@ tool MCP yang benar-benar dipanggil agent. Satu master skill, satu set aturan.
 Skill dipasang melalui `skills/super-ultra-code-plan/`, yang berupa kumpulan symlink ke
 root repo, bukan salinan. File master tetap bersumber tunggal, dan
 `render-diagrams.sh` melewati file symlink sehingga diagram yang sama tidak pernah dirender dua kali.
-
-<a id="scripts-without-a-section-of-their-own"></a>
-## Script yang tidak punya bagian sendiri
-
-Pohon di atas hanya mencantumkan sebagian isi `scripts/`, dan bagian-bagian berikutnya
-mendokumentasikan sebagian besar sisanya. Script berikut tidak punya bagian sendiri, jadi
-tabel inilah tempat penjelasannya. Setiap baris diambil dari komentar header script itu
-sendiri. File test (`*.test.mjs`) berada di samping script yang diujinya dan tidak dicantumkan.
-
-| Script | Fungsinya |
-|---|---|
-| `install-skill-links.mjs` | Menautkan setiap skill di `skills/` ke `~/.config/opencode/skills/`, satu-satunya tempat yang dibaca tool skill OpenCode. Tidak pernah menimpa file asli atau symlink asing. `install.sh` juga menautkan phase skill; script ini adalah cara mandiri untuk menjalankan ulang atau memverifikasi bagian itu saja. `bun run skills:link` menerapkan tautan, `bun run skills:check` keluar dengan kode 1 jika ada tautan yang hilang atau usang, `--dry-run` mencetak aksinya. |
-| `ci-targeted.mjs` | `bun run ci:targeted`, gate default untuk commit dan PR. Memilih pemeriksaan berdasarkan file yang berubah terhadap `origin/main`: graf import di `scripts/`, `validate` untuk skill dan template, pemeriksaan agents dan snippets hanya saat bagian itu berubah, `render-diagrams` hanya untuk sumber diagram, serta aturan copy dan pemeriksaan ukuran file selalu. File konfigurasi root dan toolchain (`package.json` kecuali yang berubah hanya `scripts`-nya, `bun.lock`, installer) atau path yang tidak dikenali memilih `bun run ci` penuh. `--rencana` (`--plan`) mencetak pemeriksaan yang dipilih beserta alasannya; `--penuh` (`--full`) menjalankan `bun run ci` penuh. |
-| `frontmatter-strict.mjs` | Menjalankan frontmatter plan melalui pemeriksaan YAML yang ketat. Parser milik runner sendiri hanyalah subset yang longgar, jadi sebuah plan bisa lolos dari parser itu tetapi tetap bukan YAML yang valid. |
-| `validate-lib.mjs` | Bagian murni yang bisa di-import dari `validate-skill.mjs`, ditambah `renderMermaidBatch`, agar unit test bisa mengunci pemeriksaannya. |
-| `mermaid-batch.mjs` | Merender daftar file `.mmd` dari stdin dengan fallback batch-and-bisect, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
-| `puppeteer-browser.mjs` | Mengarahkan `mmdc` ke Chromium atau Chrome sistem di PATH saat `~/.cache/puppeteer` tidak ada dan `PUPPETEER_EXECUTABLE_PATH` tidak diset, dipakai bersama oleh `render-diagrams.sh` dan `validate-skill.mjs`. |
-| `skill-corpus.mjs` | Menyimpan daftar phase skill dan `readSkillCorpus`, yang membaca master skill dan phase skill sekaligus untuk para validator. |
-| `vault-index-merge.mjs` | Menggabungkan chunk-chunk menjadi satu `graph.json`. |
-
-<a id="frozen-surfaces"></a>
-## Permukaan yang dibekukan
-
-Permukaan berikut tetap menyimpan kode dan tesnya, tetapi tidak mendapat fitur baru dan tidak di-deploy sampai rilis bertag pertama (pembekuan dicabut begitu ada tag `v*`):
-
-- Situs dokumentasi di `apps/docs`.
-- Installer Windows: `install.ps1` dan `scripts/install/windows-*.ps1`.
-- Setup container: `Dockerfile` dan `.devcontainer`.
-- Tooling rilis: `scripts/bootstrap.sh` dan `scripts/release`.

@@ -20,6 +20,7 @@ import path from 'node:path';
 import YAML from 'yaml';
 import { rewriteLine } from './lib/docs-gen-links.mjs';
 import { sourceFiles, joinParts } from './lib/docs-gen-files.mjs';
+import { idFindings } from './lib/docs-gen-id.mjs';
 
 export { rewriteLine };
 
@@ -29,7 +30,6 @@ export const USAGE = 'usage: bun scripts/docs-gen.mjs [--root <dir>] (--write [-
 const EM_DASH = '\u2014';
 const MAP_FILE = 'apps/docs/pages.json';
 const EN_DIR = 'apps/docs/content/en';
-const ID_DIR = 'apps/docs/content/id';
 const STATIC_DIR = 'apps/docs/static/generated';
 const HEADING = /^(#{1,6})[ \t]+(.*?)[ \t]*$/;
 
@@ -515,42 +515,6 @@ function enFindings(model) {
       }
     });
     findings.push(...p.linkFindings);
-  }
-  return findings;
-}
-
-function readSourceHash(text) {
-  const m = text.replace(/\r\n?/g, '\n').match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
-  if (!m) return null;
-  try {
-    const fm = YAML.parse(m[1], { schema: 'failsafe' });
-    return fm && typeof fm.source_hash === 'string' ? fm.source_hash : null;
-  } catch {
-    return null;
-  }
-}
-
-function idFindings(model, root) {
-  const findings = [];
-  const idAbs = path.join(root, ID_DIR);
-  const idNames = fs.existsSync(idAbs) ? fs.readdirSync(idAbs).filter((n) => n.endsWith('.md')).sort() : [];
-  const enNames = new Set(model.pages.map((p) => p.name));
-  for (const p of model.pages) {
-    const where = `${ID_DIR}/${p.name}`;
-    if (!idNames.includes(p.name)) {
-      findings.push(`${where}: missing ID page`);
-      continue;
-    }
-    const hash = readSourceHash(fs.readFileSync(path.join(idAbs, p.name), 'utf8'));
-    if (hash === null) findings.push(`${where}: ID page has no source_hash in its frontmatter`);
-    else if (hash !== p.hash) findings.push(`${where}: stale ID page (source_hash ${hash}, EN ${p.hash})`);
-  }
-  for (const name of idNames) {
-    const where = `${ID_DIR}/${name}`;
-    if (!enNames.has(name)) findings.push(`${where}: ID page has no EN page`);
-    fs.readFileSync(path.join(idAbs, name), 'utf8').split('\n').forEach((line, i) => {
-      if (line.includes(EM_DASH)) findings.push(`${where}:${i + 1}: em dash (U+2014)`);
-    });
   }
   return findings;
 }

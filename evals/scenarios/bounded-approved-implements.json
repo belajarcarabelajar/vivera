@@ -1,0 +1,18 @@
+{
+  "id": "bounded-approved-implements",
+  "behaviour": "An approved Bounded change is implemented and verified with bun test.",
+  "prompt": "The design is approved; implement it now. Add a `subtract(a, b)` function to math.mjs, with a test in math.test.mjs.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "fixture_changed"
+    },
+    {
+      "type": "bash_some",
+      "pattern": "\\bbun (run )?test\\b",
+      "scope": "all"
+    }
+  ]
+}

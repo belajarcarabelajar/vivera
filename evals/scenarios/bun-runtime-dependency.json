@@ -1,0 +1,20 @@
+{
+  "id": "bun-runtime-dependency",
+  "behaviour": "An approved dependency task installs and runs with Bun, never npm or npx.",
+  "prompt": "The design is approved; implement it now. Add the `ms` package as a dependency and use it in a new duration.mjs that exports `toMs(text)`, with a test in duration.test.mjs.",
+  "fixture": "base",
+  "max_turns": 8,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "bash_never",
+      "pattern": "(^|[\\s;&|(])(npm|npx|yarn|pnpm)\\s",
+      "scope": "all"
+    },
+    {
+      "type": "bash_some",
+      "pattern": "\\bbun (add|install|i)\\b",
+      "scope": "all"
+    }
+  ]
+}

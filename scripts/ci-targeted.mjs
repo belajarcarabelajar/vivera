@@ -14,7 +14,7 @@ import { GitError, gitText } from './lib/git.mjs';
 const USAGE = 'usage: ci-targeted.mjs [--base <ref>] [--root <dir>] [--plan|--rencana] [--full|--penuh]';
 const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
 
-// Same order and commands as the `ci` script; a test keeps the two in sync.
+// Mirrors the `ci` script; a test keeps them in sync.
 export const FULL_CI = [
   { name: 'render-diagrams', cmd: ['bash', 'scripts/render-diagrams.sh'] },
   { name: 'validate-skill', cmd: ['bun', 'scripts/validate-skill.mjs'] },
@@ -57,6 +57,8 @@ const CATEGORIES = [
   {
     suites: ['sync-snippets'],
     scripts: ['scripts/sync-snippets.mjs'],
+    // Its tests read snippets through the manifest, so no path names them.
+    ownTests: true,
     match: (p) => p.startsWith('snippets/') || p === 'snippets.manifest.json',
   },
 ];
@@ -68,7 +70,7 @@ const RECOGNIZED_FILES = [
 ];
 const CODE_EXT = /\.(?:mjs|cjs|js|sh|py)$/;
 const INDEX_EXT = /\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)$/;
-// Path-like tokens: import specifiers, spawn arguments, `path.join` segments, shell paths.
+// Path-like tokens: imports, spawn arguments, path.join segments, shell paths.
 const REF = /[\w$./-]*[\w-]\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)(?![\w-])/g;
 // A test that lists its own directory reaches every file in it without naming any.
 const SELF_SCAN = /readdirSync\(\s*(?:new URL\(\s*['"`]\.\/['"`]|import\.meta\.dirname?\b|__dirname\b)/;
@@ -103,11 +105,11 @@ function resolveRef(from, token, files) {
     const rel = path.posix.normalize(path.posix.join(path.posix.dirname(from), token));
     return files.includes(rel) ? [rel] : [];
   }
-  // A bare name or a partial path, as in path.join(ROOT, 'scripts', 'install', 'prereq.sh').
+  // A bare name or partial path, as in path.join(ROOT, 'scripts', 'x.sh').
   return files.filter((f) => f === token || f.endsWith(`/${token}`));
 }
 
-// Only whole-line comments: a `/*` or `//` inside a string (a glob, a URL) must not eat code.
+// Whole-line comments only: `/*` or `//` inside a string (a glob, a URL) is code.
 function stripComments(file, src) {
   if (/\.(?:sh|py)$/.test(file)) return src.replace(/^[ \t]*#.*$/gm, '');
   return src.replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, '').replace(/(^|[ \t])\/\/.*$/gm, '$1');
@@ -123,10 +125,9 @@ function inCall(src, at) {
   return open >= 0 && !before.slice(open).includes(')') && /[\w$]$/.test(before.slice(0, open));
 }
 
-// A literal that is a path and nothing else: an import specifier, a spawn
-// argument, a `path.join` segment. `'bun scripts/x.mjs --flag'` is a needle a
-// validator searches docs for, not a dependency, and so is a bare `'x.mjs'` in a
-// list of needles, which is why a name without a slash must be a call argument.
+// A path-only literal (import specifier, spawn argument, path.join segment). A doc needle
+// such as 'bun scripts/x.mjs --flag' or a bare 'x.mjs' is no dependency, so a slashless
+// name counts only as a call argument.
 function pathLiterals(src) {
   const out = [];
   for (const m of src.matchAll(LITERAL)) {
@@ -149,12 +150,8 @@ function namesPath(file, src, p) {
   });
 }
 
-/**
- * Edges from each indexed file to every indexed file it names. A module counts
- * only path literals outside comments, because prose and needles that mention
- * another script would chain most of scripts/ into one component. Tests are
- * leaves, so a mention anywhere in them still counts.
- */
+/** Edges from each indexed file to the files it names: a module by path literals outside
+ * comments (prose would chain scripts/ into one component), a test (a leaf) by any mention. */
 export function buildGraph(sources) {
   const files = Object.keys(sources);
   const deps = new Map(files.map((f) => [f, new Set()]));
@@ -223,7 +220,7 @@ function copySuite(base) {
   return { name: 'copy-rules', cmd: ['bun', 'scripts/check-copy-rules.mjs', '--diff', base], reasons: ['always: commits and added lines since the base'] };
 }
 
-// Plans under docs/code-plan/ are session records, not pages the docs app renders.
+// docs/code-plan/ holds session records, not docs pages.
 const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
   || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
 
@@ -231,7 +228,7 @@ const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
 const docsSuites = (reasons) => [['docs-gen', '--check', '--scope', 'en'], ['docs-warn', '--warn']]
   .map(([name, ...flags]) => ({ name, cmd: ['bun', 'scripts/docs-gen.mjs', ...flags], reasons: [...reasons] }));
 
-/** True when two package.json texts differ only inside `scripts`; a side that fails to parse never does. */
+/** Two package.json texts differ only inside `scripts` (an unparsable side never does). */
 export function scriptsOnlyChange(before, after) {
   try {
     const a = JSON.parse(before);
@@ -244,18 +241,17 @@ export function scriptsOnlyChange(before, after) {
   }
 }
 
-/** Planner: `index.sources` maps scripts/ files to text, `index.mermaidChanged` lists changed mermaid blocks. */
+/** Planner: `index.sources` maps scripts/ to text; `index.mermaidChanged` lists edited mermaid blocks. */
 export function planChecks(changed, index, { base = 'origin/main' } = {}) {
   const sources = index.sources ?? {};
   const mermaidChanged = new Set(index.mermaidChanged ?? []);
-  // A new or edited script entry changes no dependency or toolchain, so it does not need the full ci.
+  // A script-entry edit changes no dependency or toolchain: no full ci.
   const scriptsOnly = new Set(index.packageScriptsOnly ?? []);
   const untracked = new Set(index.untracked ?? []);
   const all = [...new Set(changed.map((p) => p.replace(/^\.\//, '')))]
     .filter((p) => p && !p.startsWith('graphify-out/'))
     .sort();
-  // An untracked non-code file outside the recognized paths reaches no import and no tests,
-  // so it is reported instead of forcing the full ci.
+  // An untracked non-code file outside the known paths is reported, not a full-ci reason.
   const ignored = all
     .filter((p) => untracked.has(p) && !recognized(p) && !CODE_EXT.test(p) && !toolchainReason(p))
     .map((p) => ({ path: p, reason: 'untracked local file outside the repository paths' }));
@@ -291,8 +287,12 @@ export function planChecks(changed, index, { base = 'origin/main' } = {}) {
     const readers = [...reach].filter((f) => !isTest(f));
     for (const p of paths) {
       let why = null;
-      if (cat.match(p) || cat.scripts.includes(p)) why = 'matches this check';
-      else if (reach.has(p) && !isTest(p)) why = `used by ${cat.scripts.filter((s) => closure([s], graph.deps, { stopAtTests: true }).has(p)).join(', ')}`;
+      if (cat.match(p) || cat.scripts.includes(p)) {
+        why = 'matches this check';
+        const own = cat.ownTests ? cat.scripts.filter((s) => s in sources).flatMap((s) => [...testsForScript(s, sources, graph)]) : [];
+        for (const t of own) selectedTests.add(t);
+        if (own.length) testReasons.push(`${p} -> ${[...new Set(own)].sort().join(', ')} (tests of its check)`);
+      } else if (reach.has(p) && !isTest(p)) why = `used by ${cat.scripts.filter((s) => closure([s], graph.deps, { stopAtTests: true }).has(p)).join(', ')}`;
       else if (!p.startsWith('scripts/') && readers.some((f) => namesPath(f, sources[f], p))) why = 'read by the check';
       else if (cat.suites.includes('render-diagrams') && mermaidChanged.has(p)) why = 'mermaid block changed';
       if (why) for (const s of cat.suites) addReason(s, `${p}: ${why}`);

@@ -24,6 +24,8 @@ const u = (input, cw, cr, out) => ({
   input_tokens: input, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: out,
 });
 const asst = (ts, id, usage, content, model) => ({ type: 'assistant', timestamp: ts, message: { id, model, usage, content } });
+// Code point order puts <other> (0x3C) before __proto__ (0x5F) at equal counts.
+const UNPRICED = [['toString', 2], ['<other>', 1], ['__proto__', 1]];
 const writeJsonl = (file, lines) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
@@ -221,6 +223,13 @@ describe('summarize', () => {
     expect(s.unpricedModels).toEqual({ 'mystery-model-9': 1 });
     expect(s.pricesAsOf).toBe('2026-10-20');
   });
+
+  test('counts unpriced models named like Object.prototype keys exactly', () => {
+    const c = (id, model) => ({ id, model, usage: u(1, 0, 0, 1), tools: [], skills: [] });
+    const calls = [c('a', 'toString'), c('b', 'toString'), c('c', '__proto__'), c('d', `model ${SECRET}`)];
+    const s = summarize({ mains: [{ calls, firstTs: '2026-10-10T00:00:00Z' }], subs: [], registry: null, fixes: null, window: {} });
+    expect(Object.entries(s.unpricedModels)).toEqual(UNPRICED);
+  });
 });
 
 describe('cross-file dedupe and empty sessions', () => {
@@ -314,6 +323,21 @@ describe('CLI', () => {
     expect(j.costUsd).toBe(0.0087);
     expect(j.unpricedModels).toEqual({ 'claude-future-9': 1 });
     expect(j.notes).toContain('1 call(s) from models without a price (claude-future-9 x1); costUsd leaves them out, it is not zero for them');
+  });
+
+  test('odd and free-text model names are counted, folded, and named in the note', () => {
+    const f = fixture();
+    const models = ['toString', 'toString', '__proto__', `model ${SECRET}`];
+    writeJsonl(path.join(f.proj, 'sess-c.jsonl'), models.map((m, i) => asst(`2026-10-15T09:00:0${i}.000Z`, `c${i}`, u(1, 0, 0, 1), [], m)));
+    const win = ['--since', '2026-10-15', '--until', '2026-10-15'];
+    const r = run(f, ...win, '--json');
+    const text = run(f, ...win);
+    expect(r.code).toBe(0);
+    expect(Object.entries(JSON.parse(r.out).unpricedModels)).toEqual(UNPRICED);
+    const note = '4 call(s) from models without a price (toString x2, <other> x1, __proto__ x1); costUsd leaves them out, it is not zero for them';
+    expect(JSON.parse(r.out).notes).toEqual([note]);
+    expect(text.out).toContain(`note: ${note}`);
+    expect(r.out + r.err + text.out + text.err).not.toContain(SECRET);
   });
 
   test('text output prints the list-price rows and never any transcript content', () => {

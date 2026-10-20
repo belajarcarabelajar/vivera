@@ -165,7 +165,8 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
   const tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
   const skills = {};
   const usdByModel = {};
-  const unpricedModels = {};
+  // No prototype: an unpriced model can be named "toString" or "__proto__".
+  const unpricedModels = Object.create(null);
   let usd = 0;
   let apiCalls = 0;
   let ask = 0;

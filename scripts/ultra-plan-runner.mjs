@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 // about the same file with no way to tell which one is right.
 import { planFreshness } from './plan-publish.mjs';
 import { strictYamlError } from './frontmatter-strict.mjs';
+import { sizeGateWarnings } from './lib/plan-size-warn.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYNCER = path.join(__dirname, 'plan-sync.mjs');
@@ -1399,6 +1400,7 @@ function main(argv) {
   const { frontmatter, body } = extractFrontmatter(md);
   const plan = parseUltraPlanYaml(frontmatter);
   const { errors, warnings } = validatePlan(plan, body, { frontmatter });
+  warnings.push(...sizeGateWarnings(plan));
 
   // The gate sits after validation and before any task step, and only for
   // --execute. A plan that fails validation cannot run at all, so checking it

@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { planFreshness } from './plan-publish.mjs';
 import { strictYamlError } from './frontmatter-strict.mjs';
 import { sizeGateWarnings } from './lib/plan-size-warn.mjs';
+import { missingTestPaths } from './lib/test-paths.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYNCER = path.join(__dirname, 'plan-sync.mjs');
@@ -1167,7 +1168,10 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
 
     if (!execute) { status.set(id, 'READY'); log(`  ${id}: READY (dry-run)`); continue; }
 
-    if (t.skip_if) {
+    // `bun test` exits 0 when a named file is missing, so that probe proves nothing.
+    const skipGone = t.skip_if ? missingTestPaths(t.skip_if, dir) : [];
+    if (skipGone.length) log(`      (${id} skip_if ignored, E_MISSING_TEST_PATH: ${skipGone.join(', ')})`);
+    if (t.skip_if && !skipGone.length) {
       const r = run(t.skip_if, timeoutMs);
       if (r.exit === 0) { status.set(id, 'SKIPPED-IDEMPOTENT'); log(`  ${id}: SKIPPED-IDEMPOTENT (skip_if exit 0)`); continue; }
     }
@@ -1221,6 +1225,14 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
       // convergence has to be decided again.
       let loopConverged = true;
       let attempt = 0, r;
+      // Same reason as skip_if: the step would pass, so it fails unrun ('-' = no process).
+      const gone = missingTestPaths(step.cmd, dir);
+      if (gone.length) {
+        const basis = `E_MISSING_TEST_PATH: ${gone.join(', ')}`;
+        ok = false; failStep = s + 1; lastExit = '-'; failSource = 'cmd';
+        failDetail = { stderr: basis, cls: { klass: 'contract', transient: false, basis } };
+        break;
+      }
       do {
         r = run(step.cmd, stepTimeoutMs, { log });
         attempt++;

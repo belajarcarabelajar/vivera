@@ -46,9 +46,10 @@ export function sizeGateWarnings(plan, dir = process.cwd()) {
       const ceiling = Number.isInteger(ceilings[rel]) ? ceilings[rel] : null;
       const limit = ceiling ?? LIMIT_BYTES;
       if (bytes < limit * SHARE) continue;
-      const pct = Math.floor((bytes * 100) / limit);
+      // A rounded-down percentage reads "100%" for a file the gate already blocks.
+      const share = bytes > limit ? 'over' : `${Math.floor((bytes * 100) / limit)}% of`;
       const what = ceiling === null ? `the default limit ${limit} bytes` : `its ceiling ${limit} bytes in ${BASELINE_REL}`;
-      out.push(`task ${t.id} modifies ${f}: ${bytes} bytes, ${pct}% of ${what}; `
+      out.push(`task ${t.id} modifies ${f}: ${bytes} bytes, ${share} ${what}; `
         + 'plan the split or a size-raise line now, not at commit (MEMORY.md L79)');
     }
   }

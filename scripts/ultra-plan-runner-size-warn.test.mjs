@@ -26,7 +26,7 @@ tasks:
   - id: T2
     depends_on: [T1]
     impacts: ["demo - test -f ./plan.md"]
-    files: { create: [], modify: [src/capped.mjs, src/missing.mjs], test: [] }
+    files: { create: [], modify: [src/capped.mjs, src/missing.mjs, src/grown.mjs, src/big.mjs], test: [] }
     idempotency_key: "T2:capped"
     verify_exit: 0
     run:
@@ -54,7 +54,9 @@ beforeAll(() => {
   writeFileSync(path.join(dir, 'src/near.mjs'), 'x'.repeat(19000));
   writeFileSync(path.join(dir, 'src/half.mjs'), 'x'.repeat(10000));
   writeFileSync(path.join(dir, 'src/capped.mjs'), 'x'.repeat(25000));
-  writeFileSync(path.join(dir, 'scripts/file-size-baseline.json'), '{\n  "src/capped.mjs": 25000\n}\n');
+  writeFileSync(path.join(dir, 'src/grown.mjs'), 'x'.repeat(26000));
+  writeFileSync(path.join(dir, 'src/big.mjs'), 'x'.repeat(21000));
+  writeFileSync(path.join(dir, 'scripts/file-size-baseline.json'), '{\n  "src/capped.mjs": 25000,\n  "src/grown.mjs": 25000\n}\n');
   writeFileSync(path.join(dir, 'plan.md'), PLAN);
   const r = spawnSync(process.execPath, [RUNNER, 'plan.md'], { cwd: dir, encoding: 'utf8' });
   result = { code: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
@@ -90,6 +92,20 @@ test('a modified file at its recorded ceiling is warned as at its ceiling', () =
   expect(lines[0]).toContain('25000');
   expect(lines[0]).toMatch(/ceiling/);
   expect(lines[0]).toContain('MEMORY.md L79');
+});
+
+test('a modified file past its ceiling says over instead of a percentage', () => {
+  const lines = warnFor('src/grown.mjs');
+  expect(lines.length).toBe(1);
+  expect(lines[0]).toContain('26000 bytes, over its ceiling 25000 bytes');
+  expect(lines[0]).not.toContain('%');
+});
+
+test('a modified file past the default limit with no ceiling says over the default limit', () => {
+  const lines = warnFor('src/big.mjs');
+  expect(lines.length).toBe(1);
+  expect(lines[0]).toContain('21000 bytes, over the default limit 20000 bytes');
+  expect(lines[0]).not.toContain('%');
 });
 
 test('a modified path that does not exist yet gets no WARN line', () => {

@@ -32,7 +32,10 @@ function checkMemoryIndex({ memory, topics }) {
   for (const [file, text] of Object.entries(topics)) {
     const bytes = Buffer.byteLength(text);
     if (bytes >= LIMIT_BYTES) problems.push(`${file} is ${bytes} bytes, at or over LIMIT_BYTES (${LIMIT_BYTES})`);
+    let prev = null;
     for (const [, id] of text.matchAll(RULE_ROW)) {
+      if (prev && num(id) <= num(prev)) problems.push(`${file} has ${id} after ${prev}: rows must ascend by ID`);
+      prev = id;
       if (held.has(id)) problems.push(`${id} is held by ${held.get(id)} and ${file}`);
       else held.set(id, file);
     }
@@ -92,6 +95,12 @@ describe('checkMemoryIndex fixtures', () => {
       topics: { 'docs/memory/a.md': topic('L1', 'L2'), 'docs/memory/b.md': topic('L4') },
     };
     expect(checkMemoryIndex(f)).toEqual(['L3 is a gap: IDs run from L1 to L4']);
+  });
+
+  test('two rows out of ID order in a topic file are reported', () => {
+    const f = valid();
+    f.topics['docs/memory/a.md'] = topic('L2', 'L1');
+    expect(checkMemoryIndex(f)).toEqual(['docs/memory/a.md has L1 after L2: rows must ascend by ID']);
   });
 
   test('a rule row left in MEMORY.md is reported', () => {

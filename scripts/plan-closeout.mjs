@@ -358,7 +358,12 @@ function readinessCli(opts) {
     return 2;
   }
   let cwd = opts['--cwd'] ? path.resolve(opts['--cwd']) : defaultCwd(planFile);
-  const reg = opts['--cwd'] ? null : readRegistry(opts);
+  let reg = null;
+  try {
+    reg = opts['--cwd'] ? null : readRegistry(opts);
+  } catch (e) {
+    console.error(`registry not read, default cwd kept: ${e.message}`);
+  }
   const s = reg && sessionWorktree(reg.sessions, path.basename(planFile, '.md'));
   if (s) {
     cwd = path.resolve(s.worktree);
@@ -401,7 +406,11 @@ function readinessCli(opts) {
 
 function readRegistry(opts) {
   const file = opts['--registry'] ? path.resolve(opts['--registry']) : path.join(repoRoot, 'pr.registry.json');
-  return { file, sessions: (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).sessions : null) ?? [] };
+  try {
+    return { file, sessions: (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).sessions : null) ?? [] };
+  } catch (e) {
+    throw new Error(`${file}: ${e.message}`);
+  }
 }
 
 function auditCli(opts) {

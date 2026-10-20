@@ -111,6 +111,19 @@ describe('readiness runs in the session worktree', () => {
     assert.match(r.stdout.toString(), /^T1\tDONE\t/m);
   });
 
+  test('a registry that does not parse keeps the default cwd and names the file on stderr', () => {
+    const { root, plan } = checkout('test -f marker');
+    writeFileSync(path.join(root, 'marker'), '');
+    const reg = path.join(tempDir('plan-closeout-reg-'), 'pr.registry.json');
+    writeFileSync(reg, '{ "sessions": [ not json');
+    const r = cli(['--readiness', plan, '--registry', reg, '--timeout-s', '10']);
+    const err = r.stderr.toString().trim().split('\n');
+    assert.equal(err.length, 1);
+    assert.ok(err[0].includes(reg), err[0]);
+    assert.match(r.stdout.toString(), /^T1\tDONE\t/m);
+    assert.equal(r.exitCode, 0);
+  });
+
   test('when every session of the plan is merged or closed, readiness keeps the default', () => {
     const { root, plan } = checkout('test -f marker');
     writeFileSync(path.join(root, 'marker'), '');

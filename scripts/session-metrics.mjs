@@ -88,7 +88,10 @@ export async function readTranscript(file) {
 }
 
 const num = (v) => (Number.isFinite(v) ? v : 0);
-const ctxOf = (u) => num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens);
+// The TTL split can exceed the reported total (seen once: total 0, 1-hour split 4076), so the larger counts.
+const writesOf = (u) => Math.max(num(u.cache_creation_input_tokens),
+  num(u.cache_creation?.ephemeral_5m_input_tokens) + num(u.cache_creation?.ephemeral_1h_input_tokens));
+const ctxOf = (u) => num(u.input_tokens) + writesOf(u) + num(u.cache_read_input_tokens);
 const round = (v, d = 4) => (v === null ? null : Math.round(v * 10 ** d) / 10 ** d);
 const ratio = (a, b) => (b ? round(a / b) : null);
 
@@ -137,6 +140,8 @@ export function repoMatches(entry, repo) {
 
 // dup-defs: allow the skipif-registry-audit bump is private to that CLI module
 const bump = (obj, k) => { obj[k] = (obj[k] ?? 0) + 1; };
+// No prototype, so a name such as "toString" or "__proto__" counts like any other.
+const counter = () => Object.create(null);
 // Code point order, not localeCompare, so ties sort the same under every locale.
 const byCountThenName = (obj) => Object.fromEntries(
   Object.entries(obj).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0)),
@@ -163,10 +168,9 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
   const M = dedupeAcross(mains.filter((t) => inWindow(t.firstTs, b)));
   const S = dedupeAcross(subs.filter((t) => inWindow(t.firstTs, b)));
   const tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
-  const skills = {};
+  const skills = counter();
   const usdByModel = {};
-  // No prototype: an unpriced model can be named "toString" or "__proto__".
-  const unpricedModels = Object.create(null);
+  const unpricedModels = counter();
   let usd = 0;
   let apiCalls = 0;
   let ask = 0;
@@ -175,7 +179,7 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     for (const c of t.calls) {
       apiCalls++;
       tokens.input += num(c.usage.input_tokens);
-      tokens.cacheWrite += num(c.usage.cache_creation_input_tokens);
+      tokens.cacheWrite += writesOf(c.usage);
       tokens.cacheRead += num(c.usage.cache_read_input_tokens);
       tokens.output += num(c.usage.output_tokens);
       // A call with no tokens costs nothing whatever its model (e.g. <synthetic>).
@@ -211,7 +215,7 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     }
     return den ? num_ / den : null;
   }).filter((v) => v !== null);
-  const subagentsByType = {};
+  const subagentsByType = counter();
   for (const t of S) bump(subagentsByType, safeName(t.agentType ?? 'unknown'));
 
   let mergedPrs = null;

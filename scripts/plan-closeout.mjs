@@ -11,7 +11,8 @@
 // plan-publish.mjs comparing hashes on disk.
 //
 // `--readiness` asks whether a plan may be marked Complete, from evidence: it
-// runs each task's `skip_if` (never `run[]`) with a timeout. `--audit` lists
+// runs each task's `skip_if` (never `run[]`) with a timeout, by default in the
+// worktree of the plan's newest unfinished registry session. `--audit` lists
 // plans whose sessions all landed while the plan file never reached Complete.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
@@ -22,6 +23,7 @@ import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sam
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
+import { missingTestPaths } from './lib/test-paths.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -244,6 +246,9 @@ export function taskReadiness(planText, { run, cwd, timeoutMs, onOutput }) {
     const kind = classifySkipIf(skipIf);
     // No command means no machine proof, so a human has to judge the task.
     if (kind === 'empty' || kind === 'sentinel') return { id: t.id, state: 'UNPROVEN', skipIf };
+    // bun test exits 0 when a named file is missing, which would read an unmerged task as DONE.
+    const missing = missingTestPaths(skipIf, cwd);
+    if (missing.length) return { id: t.id, state: 'OPEN', skipIf, missing, tail: ['not run: a named test file is missing'] };
     const r = run(skipIf, { cwd, timeoutMs });
     const state = r.timedOut ? 'UNREAD' : r.exit === 0 ? 'DONE' : 'OPEN';
     if (onOutput) onOutput(t.id, r);
@@ -283,6 +288,13 @@ export function auditCloseout({ sessions, planStatusOf }) {
   return rows;
 }
 
+// Before the merge a plan's work lives only in its newest unfinished session's worktree; a gone one means the default.
+export function sessionWorktree(sessions, planId) {
+  const open = sessions.filter((s) => s.plan === planId && !TERMINAL.includes(s.state));
+  const newest = open.reduce((a, s) => (!a || (s.claimed_at ?? '') >= (a.claimed_at ?? '') ? s : a), null);
+  return newest?.worktree && existsSync(newest.worktree) ? newest : null;
+}
+
 // Gate runs can be chatty, so the cap is generous; past it the run is stopped
 // and has no exit status, which reads as UNREAD rather than a guessed state.
 const MAX_OUTPUT = 16 * 1024 * 1024;
@@ -306,14 +318,14 @@ function writeTaskLog(dir, id, r) {
 }
 
 const USAGE = [
-  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--timeout-s <n>] [--log <dir>]',
+  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--registry <path>] [--timeout-s <n>] [--log <dir>]',
   '       bun scripts/plan-closeout.mjs --audit [--registry <path>]',
 ].join('\n');
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
   const opts = { mode };
-  const allowed = mode === '--readiness' ? ['--cwd', '--timeout-s', '--log'] :mode === '--audit' ? ['--registry'] : null;
+  const allowed = mode === '--readiness' ? ['--cwd', '--registry', '--timeout-s', '--log'] :mode === '--audit' ? ['--registry'] : null;
   if (!allowed) return null;
   if (mode === '--readiness') {
     opts.plan = rest.shift();
@@ -345,7 +357,13 @@ function readinessCli(opts) {
     console.error(`cannot read plan ${planFile}: ${e.message}`);
     return 2;
   }
-  const cwd = opts['--cwd'] ? path.resolve(opts['--cwd']) : defaultCwd(planFile);
+  let cwd = opts['--cwd'] ? path.resolve(opts['--cwd']) : defaultCwd(planFile);
+  const reg = opts['--cwd'] ? null : readRegistry(opts);
+  const s = reg && sessionWorktree(reg.sessions, path.basename(planFile, '.md'));
+  if (s) {
+    cwd = path.resolve(s.worktree);
+    console.log(`readiness cwd: ${cwd} (worktree of unfinished session ${s.session} in ${reg.file})`);
+  }
   const timeoutMs = Number(opts['--timeout-s'] ?? 300) * 1000;
   const logDir = opts['--log'] ? path.resolve(opts['--log']) : null;
   if (logDir) {
@@ -360,7 +378,7 @@ function readinessCli(opts) {
   const tasks = taskReadiness(text, { run: bashRunner, cwd, timeoutMs, onOutput });
   const openNow = openNowRows(extractFrontmatter(text).body);
   for (const t of tasks) {
-    console.log(`${t.id}\t${t.state}\t${t.skipIf}`);
+    console.log(`${t.id}\t${t.state}\t${t.skipIf}${t.missing ? `\tmissing: ${t.missing.join(', ')}` : ''}`);
     if (t.state !== 'OPEN' && t.state !== 'UNREAD') continue;
     const lines = t.tail?.length ? t.tail : ['(no output)'];
     for (const l of lines) console.log(`    ${t.id}> ${l}`);
@@ -381,14 +399,17 @@ function readinessCli(opts) {
   return v.exit;
 }
 
+function readRegistry(opts) {
+  const file = opts['--registry'] ? path.resolve(opts['--registry']) : path.join(repoRoot, 'pr.registry.json');
+  return { file, sessions: (existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).sessions : null) ?? [] };
+}
+
 function auditCli(opts) {
-  const registryPath = opts['--registry'] ? path.resolve(opts['--registry']) : path.join(repoRoot, 'pr.registry.json');
-  const registry = existsSync(registryPath) ? JSON.parse(readFileSync(registryPath, 'utf8')) : { sessions: [] };
   const planStatusOf = (s) => {
     const file = path.join(s.repo ?? repoRoot, 'docs', 'code-plan', 'plans', `${s.plan}.md`);
     return existsSync(file) ? planStatus(readFileSync(file, 'utf8')) : null;
   };
-  const rows = auditCloseout({ sessions: registry.sessions ?? [], planStatusOf });
+  const rows = auditCloseout({ sessions: readRegistry(opts).sessions, planStatusOf });
   // A plan file that cannot be found is unread, not debt: sessions claimed before `repo` was recorded
   // point at this repository, so counting them would bury the real debt under false rows.
   const debt = rows.filter((r) => r.status !== null);

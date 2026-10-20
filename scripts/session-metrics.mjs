@@ -18,8 +18,25 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-export const COST_WEIGHTS = { input: 1, cacheWrite: 2, cacheRead: 0.1, output: 5 };
-const WEIGHTS_TEXT = '0.1*cache_read + 2*cache_write + 5*output + input';
+// USD per million tokens: Anthropic list prices via the claude-api skill (model table cached 2026-10-06).
+const card = (input, output, cacheRead) => ({ input, output, cacheRead });
+export const PRICES = {
+  'claude-fable-5-1': card(10, 50, 0.25),
+  'claude-mythos-5-1': card(10, 50, 0.25),
+  'claude-fable-5': card(10, 50, 1),
+  'claude-mythos-5': card(10, 50, 1),
+  'claude-opus-5-5': card(4, 20, 0.2),
+  'claude-opus-5': card(5, 25, 0.5),
+  'claude-opus-4-8': card(5, 25, 0.5),
+  'claude-opus-4-7': card(5, 25, 0.5),
+  'claude-opus-4-6': card(5, 25, 0.5),
+  'claude-sonnet-5-5': card(2, 10, 0.2),
+  'claude-sonnet-5': card(2, 10, 0.2),
+  'claude-sonnet-4-6': card(3, 15, 0.3),
+  'claude-haiku-5-5': { ...card(0.1, 0.5, 0.01), long: { above: 100000, ...card(0.5, 2.5, 0.05) } },
+  'claude-haiku-4-5': card(1, 5, 0.1),
+};
+export const PRICES_AS_OF = '2026-10-20';
 const DAY_MS = 86400000;
 // Skill and agent names are printed, so anything that does not look like a name
 // is folded into one bucket rather than risk echoing free text.
@@ -52,9 +69,10 @@ export async function readTranscript(file) {
     const id = msg.id ?? `${file}#anon-${anon++}`;
     let call = byId.get(id);
     if (!call) {
-      call = { id, usage: null, tools: [], skills: [], seen: new Set() };
+      call = { id, model: null, usage: null, tools: [], skills: [], seen: new Set() };
       byId.set(id, call);
     }
+    if (msg.model != null) call.model = msg.model;
     if (msg.usage) call.usage = msg.usage;
     for (const item of Array.isArray(msg.content) ? msg.content : []) {
       if (item?.type !== 'tool_use') continue;
@@ -70,9 +88,27 @@ export async function readTranscript(file) {
 }
 
 const num = (v) => (Number.isFinite(v) ? v : 0);
-const ctxOf = (u) => num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens);
+// The TTL split can exceed the reported total (seen once: total 0, 1-hour split 4076), so the larger counts.
+const writesOf = (u) => Math.max(num(u.cache_creation_input_tokens),
+  num(u.cache_creation?.ephemeral_5m_input_tokens) + num(u.cache_creation?.ephemeral_1h_input_tokens));
+const ctxOf = (u) => num(u.input_tokens) + writesOf(u) + num(u.cache_read_input_tokens);
 const round = (v, d = 4) => (v === null ? null : Math.round(v * 10 ** d) / 10 ** d);
 const ratio = (a, b) => (b ? round(a / b) : null);
+
+// USD for one API call, or null when its model has no price.
+export function callCostUsd(model, usage = {}) {
+  // hasOwn, so a model string such as "toString" never reads Object.prototype.
+  if (!Object.hasOwn(PRICES, model)) return null;
+  const base = PRICES[model];
+  const rate = base.long && ctxOf(usage) > base.long.above ? base.long : base;
+  const writes = num(usage.cache_creation_input_tokens);
+  // Without the TTL split every write is a 5-minute write, the API default TTL.
+  const split = usage.cache_creation;
+  const w5m = split ? num(split.ephemeral_5m_input_tokens) : writes;
+  const w1h = split ? num(split.ephemeral_1h_input_tokens) : 0;
+  return (num(usage.input_tokens) * rate.input + w5m * rate.input * 1.25 + w1h * rate.input * 2
+    + num(usage.cache_read_input_tokens) * rate.cacheRead + num(usage.output_tokens) * rate.output) / 1e6;
+}
 
 function median(xs) {
   if (!xs.length) return null;
@@ -104,6 +140,8 @@ export function repoMatches(entry, repo) {
 
 // dup-defs: allow the skipif-registry-audit bump is private to that CLI module
 const bump = (obj, k) => { obj[k] = (obj[k] ?? 0) + 1; };
+// No prototype, so a name such as "toString" or "__proto__" counts like any other.
+const counter = () => Object.create(null);
 // Code point order, not localeCompare, so ties sort the same under every locale.
 const byCountThenName = (obj) => Object.fromEntries(
   Object.entries(obj).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0)),
@@ -130,7 +168,10 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
   const M = dedupeAcross(mains.filter((t) => inWindow(t.firstTs, b)));
   const S = dedupeAcross(subs.filter((t) => inWindow(t.firstTs, b)));
   const tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
-  const skills = {};
+  const skills = counter();
+  const usdByModel = {};
+  const unpricedModels = counter();
+  let usd = 0;
   let apiCalls = 0;
   let ask = 0;
   let agentCalls = 0;
@@ -138,9 +179,19 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     for (const c of t.calls) {
       apiCalls++;
       tokens.input += num(c.usage.input_tokens);
-      tokens.cacheWrite += num(c.usage.cache_creation_input_tokens);
+      tokens.cacheWrite += writesOf(c.usage);
       tokens.cacheRead += num(c.usage.cache_read_input_tokens);
       tokens.output += num(c.usage.output_tokens);
+      // A call with no tokens costs nothing whatever its model (e.g. <synthetic>).
+      if (ctxOf(c.usage) + num(c.usage.output_tokens) > 0) {
+        const model = safeName(c.model ?? 'unknown');
+        const cost = callCostUsd(c.model, c.usage);
+        if (cost === null) bump(unpricedModels, model);
+        else {
+          usd += cost;
+          usdByModel[model] = (usdByModel[model] ?? 0) + cost;
+        }
+      }
       for (const name of c.tools) {
         if (name === 'AskUserQuestion') ask++;
         if (name === 'Agent') agentCalls++;
@@ -148,10 +199,6 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
       for (const s of c.skills) bump(skills, s);
     }
   }
-  const costUnits = round(
-    COST_WEIGHTS.input * tokens.input + COST_WEIGHTS.cacheWrite * tokens.cacheWrite
-    + COST_WEIGHTS.cacheRead * tokens.cacheRead + COST_WEIGHTS.output * tokens.output, 1,
-  );
   const firstCtx = (t) => {
     const c = t.calls.find((x) => ctxOf(x.usage) > 0);
     return c ? ctxOf(c.usage) : null;
@@ -168,7 +215,7 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     }
     return den ? num_ / den : null;
   }).filter((v) => v !== null);
-  const subagentsByType = {};
+  const subagentsByType = counter();
   for (const t of S) bump(subagentsByType, safeName(t.agentType ?? 'unknown'));
 
   let mergedPrs = null;
@@ -185,8 +232,10 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     subagentsPerMain: ratio(S.length, M.length),
     apiCalls,
     tokens,
-    costWeights: COST_WEIGHTS,
-    costUnits,
+    costUsd: round(usd),
+    costUsdByModel: byCountThenName(Object.fromEntries(Object.entries(usdByModel).map(([k, v]) => [k, round(v)]))),
+    unpricedModels: byCountThenName(unpricedModels),
+    pricesAsOf: PRICES_AS_OF,
     medianFirstCallContext: { main: median(firsts(M)), subagent: median(firsts(S)) },
     startupPrefixShare: round(median(shares)),
     subagentsByType: byCountThenName(subagentsByType),
@@ -198,7 +247,8 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     perMergedPr: {
       contextTokens: per(context),
       outputTokens: per(tokens.output),
-      costUnits: per(costUnits),
+      // Divided before rounding, so a small total does not lose its per-PR share.
+      costUsd: per(usd),
       askUserQuestion: per(ask),
       escapes: per(escapes),
     },
@@ -256,7 +306,8 @@ function renderText(s, notes) {
     ['tokens cache write', s.tokens.cacheWrite],
     ['tokens cache read', s.tokens.cacheRead],
     ['tokens output', s.tokens.output],
-    [`cost-weighted units (${WEIGHTS_TEXT})`, s.costUnits],
+    ['API list-price equivalent, USD', s.costUsd],
+    ['prices as of', s.pricesAsOf],
     ['median first-call context, main', s.medianFirstCallContext.main],
     ['median first-call context, subagent', s.medianFirstCallContext.subagent],
     ['startup-prefix share of subagents', s.startupPrefixShare],
@@ -266,7 +317,7 @@ function renderText(s, notes) {
     ['escapes (Fixes: trailers on origin/main)', s.escapes],
     ['per merged PR: context tokens', s.perMergedPr.contextTokens],
     ['per merged PR: output tokens', s.perMergedPr.outputTokens],
-    ['per merged PR: cost-weighted units', s.perMergedPr.costUnits],
+    ['per merged PR: API list-price USD', s.perMergedPr.costUsd],
     ['per merged PR: AskUserQuestion', s.perMergedPr.askUserQuestion],
     ['per merged PR: escapes', s.perMergedPr.escapes],
   ];
@@ -276,6 +327,7 @@ function renderText(s, notes) {
     const keys = Object.keys(byCountThenName(obj));
     lines.push('', title, ...(keys.length ? keys.map((k) => `  ${k.padEnd(width - 2)}  ${obj[k]}`) : ['  (none)']));
   };
+  block('API list-price USD by model', s.costUsdByModel);
   block('subagent runs by agentType', s.subagentsByType);
   block('Skill loads by name', s.skills);
   if (notes.length) lines.push('', ...notes.map((n) => `note: ${n}`));
@@ -339,6 +391,11 @@ export async function main(argv) {
   const fixes = countFixes(repo, window);
   if (fixes === null) notes.push('git log origin/main failed; escapes are n/a, not zero');
   const s = summarize({ mains, subs, registry, fixes, window, repo });
+  const unpriced = Object.entries(s.unpricedModels);
+  if (unpriced.length) {
+    const calls = unpriced.reduce((n, [, v]) => n + v, 0);
+    notes.push(`${calls} call(s) from models without a price (${unpriced.map(([k, v]) => `${k} x${v}`).join(', ')}); costUsd leaves them out, it is not zero for them`);
+  }
   process.stdout.write(values.json ? `${JSON.stringify({ ...s, notes }, null, 2)}\n` : renderText(s, notes));
   return 0;
 }

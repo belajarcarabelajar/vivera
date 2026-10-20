@@ -1,5 +1,5 @@
 {
-  "MEMORY.md": 29733,
+  "MEMORY.md": 31133,
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
   "apps/docs/content/id/reference-glossary-full.md": 20368,
   "apps/docs/src/routes.rs": 21536,
@@ -35,7 +35,7 @@
   "scripts/pr-registry.test.mjs": 46318,
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,
-  "scripts/ultra-plan-runner.mjs": 69534,
+  "scripts/ultra-plan-runner.mjs": 70406,
   "scripts/ultra-plan-runner.test.mjs": 105935,
   "scripts/validate-agents.test.mjs": 21143,
   "scripts/validate-lib.test.mjs": 27833,

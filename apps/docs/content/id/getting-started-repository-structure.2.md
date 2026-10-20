@@ -1,13 +1,15 @@
 <a id="session-metrics"></a>
 ## Metrik sesi
 
-`bun run metrics` (`scripts/session-metrics.mjs`) melaporkan berapa biaya pipeline dan bagaimana perilakunya, dibaca hanya dari transkrip Claude Code di `~/.claude/projects/<slug>` dan dari `pr.registry.json`. Script ini menghitung sesi utama, run subagent per tipe, panggilan API, token, unit berbobot biaya, konteks panggilan pertama, panggilan `AskUserQuestion`, pemuatan Skill, PR yang di-merge, dan escape (commit di `origin/main` dengan trailer `Fixes:`).
+`bun run metrics` (`scripts/session-metrics.mjs`) melaporkan berapa biaya pipeline dan bagaimana perilakunya, dibaca hanya dari transkrip Claude Code di `~/.claude/projects/<slug>` dan dari `pr.registry.json`. Script ini menghitung sesi utama, run subagent per tipe, panggilan API, token, padanan harga daftar API dalam USD, konteks panggilan pertama, panggilan `AskUserQuestion`, pemuatan Skill, PR yang di-merge, dan escape (commit di `origin/main` dengan trailer `Fixes:`).
 
 ```bash
 bun run metrics -- --since 2026-10-09 --until 2026-10-19 --json
 ```
 
 Sebuah sesi dimasukkan ke jendela `--since`/`--until` (hari UTC penuh) berdasarkan timestamp pertamanya, dan id pesan yang muncul di dua file transkrip dihitung sekali. Script ini hanya mencetak hitungan, tidak pernah teks transkrip, input tool, atau hasil tool. Direktori proyek yang tidak ada keluar dengan exit 1, karena sumber yang tidak terbaca bukan hasil kosong.
+
+Angka dolar dihitung per panggilan API dengan harga model panggilan itu sendiri dan TTL cache-nya (penulisan cache 5 menit 1,25x harga input, penulisan 1 jam 2x), memakai tabel harga bertanggal yang tanggalnya dicetak sebagai `pricesAsOf`, lalu dirinci per model dan per PR yang di-merge. Angka ini adalah padanan harga daftar API untuk token yang sama, bukan jumlah yang ditagihkan: langganan ditagih dengan cara lain. Panggilan dari model yang belum punya harga tidak ikut dihitung dan disebutkan di catatan (notes), jadi angka itu bukan nol bagi model tersebut, hanya belum lengkap.
 
 <a id="scripts-without-a-section-of-their-own"></a>
 ## Script yang tidak punya bagian sendiri

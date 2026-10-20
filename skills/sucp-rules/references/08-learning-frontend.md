@@ -9,7 +9,7 @@
 - Phase 2: Progressive Memory Consolidation:
   - Organize persistent memory into a hierarchical progressive disclosure structure:
     - `memory_summary.md`: Top-level navigational index (begins with `v1`), dense and discriminative to guide retrieval without bloating context.
-    - `MEMORY.md`: Domain knowledge handbook organized under explicit headers: `Task Group: <cwd / project / workflow>`. Contains aggregated insights from rollouts.
+    - `MEMORY.md`: the entry point, an index of topic, file and rule IDs. Each `KEEP` rule is a new row, with the next free ID (one above the highest in `docs/memory/`), in its topic file under `docs/memory/`, and its ID is added to that topic's row in the index.
     - `rollout_summaries/<slug>.md`: Deep dive lessons and verified execution traces.
     - `skills/<skill-name>/`: Reusable procedures synthesized autonomously from recurring workflows (entrypoint `SKILL.md`, plus `scripts/` and templates).
 - Phase 3: Memory Invariants & Epistemic Guardrails:

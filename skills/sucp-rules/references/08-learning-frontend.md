@@ -9,7 +9,7 @@
 - Phase 2: Progressive Memory Consolidation:
   - Organize persistent memory into a hierarchical progressive disclosure structure:
     - `memory_summary.md`: Top-level navigational index (begins with `v1`), dense and discriminative to guide retrieval without bloating context.
-    - `MEMORY.md`: the entry point, an index of topic, file and rule IDs. Each `KEEP` rule is a new row, with the next free ID (one above the highest in `docs/memory/`), in its topic file under `docs/memory/`, and its ID is added to that topic's row in the index.
+    - `MEMORY.md`: the entry point. In a repository that keeps `docs/memory/` (as vivera does) it is an index of topic, file and rule IDs: each `KEEP` rule is a new row with the next free ID in its topic file there, and its ID goes into that topic's row of the index. In any other repository `KEEP` rules are appended under `Task Group:` headers in `MEMORY.md` itself.
     - `rollout_summaries/<slug>.md`: Deep dive lessons and verified execution traces.
     - `skills/<skill-name>/`: Reusable procedures synthesized autonomously from recurring workflows (entrypoint `SKILL.md`, plus `scripts/` and templates).
 - Phase 3: Memory Invariants & Epistemic Guardrails:

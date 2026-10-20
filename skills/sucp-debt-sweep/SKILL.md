@@ -48,7 +48,7 @@ Every candidate must be stated as an outcome with a file path and a checkable fi
 
 The ledger, the two gates, and the rule classification: [references/01-learning-harvest.md](references/01-learning-harvest.md).
 
-- `KEEP` rules are written in-repo automatically: each becomes a new row, with the next free ID (one above the highest in `docs/memory/`), in its topic file under `docs/memory/`, and its ID is added to that topic's row in the `MEMORY.md` index, the entry point. A rule that recurs across projects on this machine may additionally be promoted to `~/AGENTS.md`, but global promotion is **per-item and requires explicit user approval**: each item is asked through the Confirmation Protocol (header `Promote`, first option `Keep in the repository only`). Promotion is never destructive or credential-touching, and always writes a revert note inside the edited file. Decline leaves the rule in the ledger only.
+- `KEEP` rules are written in-repo automatically. In a repository that keeps `docs/memory/` (as vivera does), each becomes a new row, with the next free ID (one above the highest there), in its topic file there, and its ID is added to that topic's row in the `MEMORY.md` index; in any other repository it is appended under a `Task Group:` header in `MEMORY.md`. A rule that recurs across projects on this machine may additionally be promoted to `~/AGENTS.md`, but global promotion is **per-item and requires explicit user approval**: each item is asked through the Confirmation Protocol (header `Promote`, first option `Keep in the repository only`). Promotion is never destructive or credential-touching, and always writes a revert note inside the edited file. Decline leaves the rule in the ledger only.
 
 ### 🧮 6.3 Rank & Cap — default 3 to 5 questions
 

@@ -10,8 +10,9 @@
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
 //                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
-//                            [--repeat <odd n>] [--confirm-flips <even k>]
-// The last two take a majority verdict: scripts/lib/eval-repeat.mjs.
+//                            [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]
+// The last three set the repeated attempts behind each verdict and the flaky rule:
+// scripts/lib/eval-repeat.mjs. Console and file output: scripts/lib/eval-run-report.mjs.
 //
 // A scenario's prompt is sent as `/<invoke> <prompt>`, invoke defaulting to the
 // orchestrator skill, because a plain headless prompt never loads the pipeline
@@ -33,7 +34,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseStream, score } from './eval-score.mjs';
-import { baselineMap, compareBaseline, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
+import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
+import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,7 +45,7 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -60,7 +62,7 @@ class UsageError extends Error {}
 class RefusedError extends Error {}
 
 function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, noEarlyStop: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -72,6 +74,7 @@ function parseArgs(argv) {
     else if (a === '--keep') opts.keep = true;
     else if (a === '--no-invoke') opts.noInvoke = true;
     else if (a === '--no-sandbox') opts.noSandbox = true;
+    else if (a === '--no-early-stop') opts.noEarlyStop = true;
     else if (a === '--only') opts.only = value(i++, a).split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--budget-usd') {
       opts.budget = Number(value(i++, a));
@@ -202,10 +205,6 @@ function ceiling(remaining) {
   return Math.max(0.01, Math.floor(Math.min(RUN_CEILING_USD, remaining) * 100 + 1e-9) / 100);
 }
 
-function money(n) {
-  return String(Math.round(n * 10000) / 10000);
-}
-
 async function runClaude(scenario, dir, budget, invoke, root, bwrap) {
   const bin = process.env.EVAL_CLAUDE_BIN || 'claude';
   const args = [
@@ -247,12 +246,6 @@ function deniedToolNames(events) {
   return denials.map((d) => d?.tool_name).filter((n) => typeof n === 'string');
 }
 
-function contextTokens(usage) {
-  if (!usage) return 0;
-  return ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens']
-    .reduce((sum, k) => sum + (Number(usage[k]) || 0), 0);
-}
-
 async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
@@ -288,20 +281,6 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
     seconds: Math.round((Date.now() - started) / 100) / 10,
     ...(stream ? { stream, fixture: dest } : {}),
   };
-}
-
-function line(r, width) {
-  const id = r.id.padEnd(width);
-  if (r.skipped) return `${id}  SKIP  total budget reached`;
-  const failed = r.results.find((x) => !x.pass);
-  const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  const tally = (r.attempts > 1 ? `  passes=${r.passes}/${r.attempts}` : '') + (r.confirmed === false ? '  unconfirmed' : '');
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
-}
-
-function localDate(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function readBaseline(file) {
@@ -353,13 +332,19 @@ async function main(argv) {
       if (spent >= opts.budget) {
         done.push({ id: s.id, invoke: invokeOf(s), pass: false, skipped: true, attempts: 0, passes: 0, pass_rate: null, results: [], turns: null, cost: 0, usage: null, permission_denials: [], seconds: 0 });
       } else {
+        const before = baseline?.get(s.id);
+        // A flaky scenario's majority flips by chance, so it always gets the full five runs its pass rate rule needs.
+        const repeat = before?.flaky
+          ? { repeat: FLAKY_ATTEMPTS, confirmFlips: 0, fullRun: true }
+          : { repeat: opts.repeat, confirmFlips: opts.confirmFlips, fullRun: opts.noEarlyStop };
         // A full ceiling per attempt, so a confirmation never stops undecided.
-        done.push(await runRepeated(async (attempt) => {
+        const record = await runRepeated(async (attempt) => {
           const cap = ceiling(opts.budget - spent);
           const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt);
           spent += r.cost ?? cap;
           return r;
-        }, { repeat: opts.repeat, confirmFlips: opts.confirmFlips, expected: baseline?.get(s.id)?.pass, canRun: () => opts.budget - spent >= RUN_CEILING_USD }));
+        }, { ...repeat, expected: before?.pass, canRun: () => opts.budget - spent >= RUN_CEILING_USD });
+        done.push(before?.flaky ? { ...record, flaky: true } : record);
       }
       console.log(line(done[done.length - 1], width));
     }
@@ -368,24 +353,11 @@ async function main(argv) {
     else fs.rmSync(runDir, { recursive: true, force: true });
   }
 
-  const passed = done.filter((r) => r.pass).length;
-  const skipped = done.filter((r) => r.skipped).length;
-  const unconfirmed = done.filter((r) => r.confirmed === false).length;
-  const tokens = done.reduce((sum, r) => sum + contextTokens(r.usage), 0);
-  console.log(`${passed}/${done.length} passed${skipped ? `, ${skipped} skipped` : ''}${unconfirmed ? `, ${unconfirmed} unconfirmed` : ''}, total cost $${money(spent)}, context tokens ${tokens}`);
+  const { passed, skipped, unconfirmed } = printSummary(done, spent);
 
   const out = opts.out ?? path.join(ROOT, 'docs', 'code-plan', 'evals', `${date}-${commit.slice(0, 7) || 'nocommit'}.json`);
-  fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, `${JSON.stringify({ runId, commit, date, scenarios: done }, null, 2)}\n`);
-  console.log(`wrote ${out}`);
-
-  let regressed = false;
-  if (baseline) {
-    const { regressions, improvements } = compareBaseline(baseline, done);
-    for (const id of regressions) console.log(`regression: ${id}`);
-    for (const id of improvements) console.log(`improvement: ${id}`);
-    regressed = regressions.length > 0;
-  }
+  writeReport(out, { runId, commit, date, scenarios: done });
+  const regressed = baseline ? printComparison(baseline, done) : false;
   return runExitCode({ passed, total: done.length, regressed, skipped: skipped + unconfirmed, baseline: Boolean(baseline) });
 }
 

@@ -3,6 +3,19 @@
 // Repeated attempts and the baseline rules for scripts/eval-run.mjs. One claude run per
 // scenario flips between runs, so the verdict is the majority over its attempts.
 
+// A scenario that passed at least once but fewer than nine in ten of at least five baseline runs
+// is flaky: its majority flips by chance, so the gate runs it FLAKY_ATTEMPTS times and asks for a
+// pass rate change of FLAKY_RATE_DROP (two of five runs) before it calls a regression or an
+// improvement. One that never passed is a steady fail, not a flaky one.
+export const FLAKY_MIN_ATTEMPTS = 5;
+export const FLAKY_BELOW = 0.9;
+export const FLAKY_ATTEMPTS = 5;
+export const FLAKY_RATE_DROP = 0.4;
+
+export function isFlaky({ attempts, pass_rate }) {
+  return typeof attempts === 'number' && attempts >= FLAKY_MIN_ATTEMPTS && typeof pass_rate === 'number' && pass_rate > 0 && pass_rate < FLAKY_BELOW;
+}
+
 // An integer at least min with the given parity (1 odd, 0 even), else NaN, so the caller
 // can report a usage error. Odd attempt limits leave no tie to decide.
 export function parseCount(raw, min, parity) {
@@ -25,16 +38,18 @@ function sumUsage(tries) {
 }
 
 // runOnce(attempt) returns one scored run; canRun() says whether the total budget allows another.
-export async function runRepeated(runOnce, { repeat, confirmFlips, expected, canRun }) {
+// fullRun skips the early stop, because a pass rate needs every attempt, not just a majority.
+export async function runRepeated(runOnce, { repeat, confirmFlips, expected, canRun, fullRun = false }) {
   const tries = [await runOnce(0)];
   const limit = attemptLimit(tries[0].pass, repeat, confirmFlips, expected);
   const needed = Math.floor(limit / 2) + 1;
   const count = (want) => tries.filter((t) => t.pass === want).length;
-  while (tries.length < limit && count(true) < needed && count(false) < needed && canRun()) {
+  const majority = () => !fullRun && (count(true) >= needed || count(false) >= needed);
+  while (tries.length < limit && !majority() && canRun()) {
     tries.push(await runOnce(tries.length));
   }
   const passes = count(true);
-  const decided = tries.length === limit || count(true) >= needed || count(false) >= needed;
+  const decided = tries.length === limit || majority();
   const last = tries[tries.length - 1];
   return {
     ...last,
@@ -59,6 +74,8 @@ export function baselineMap(data) {
     pass: Boolean(s.pass),
     invoke: s.invoke ?? false,
     pass_rate: typeof s.pass_rate === 'number' ? s.pass_rate : (s.pass ? 1 : 0),
+    attempts: typeof s.attempts === 'number' ? s.attempts : null,
+    flaky: isFlaky(s),
   }]));
 }
 
@@ -79,6 +96,15 @@ export function compareBaseline(baseline, scenarios) {
   for (const s of scenarios) {
     if (s.skipped || s.confirmed === false || !baseline.has(s.id)) continue;
     const before = baseline.get(s.id);
+    if (before.flaky) {
+      // A flaky scenario is judged on its pass rate over a full run, never on a majority flip.
+      if (!(s.attempts >= FLAKY_ATTEMPTS) || typeof s.pass_rate !== 'number') continue;
+      const label = `${s.id} (flaky, pass rate ${rate(before.pass_rate)} -> ${rate(s.pass_rate)})`;
+      // The tolerance keeps 0.6 - 0.2, which is just under 0.4 in floating point, a two-run drop.
+      if (before.pass_rate - s.pass_rate >= FLAKY_RATE_DROP - 1e-9) regressions.push(label);
+      if (s.pass_rate - before.pass_rate >= FLAKY_RATE_DROP - 1e-9) improvements.push(label);
+      continue;
+    }
     const label = typeof s.pass_rate === 'number' ? `${s.id} (pass rate ${rate(before.pass_rate)} -> ${rate(s.pass_rate)})` : s.id;
     if (before.pass && !s.pass) regressions.push(label);
     if (!before.pass && s.pass) improvements.push(label);

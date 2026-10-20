@@ -46,6 +46,7 @@ vivera/
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   ├── graphify-indexed-session-artifacts.md    # One session's review report and ledger, kept visible to graphify query
 │   ├── graphify-indexed-install-methods.md      # The install-methods session: lock, plan, findings, kept visible to graphify query
+│   ├── memory/                                  # Rule handbook topic files, indexed by MEMORY.md
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
 │       ├── plans/

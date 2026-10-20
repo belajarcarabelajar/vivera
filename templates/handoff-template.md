@@ -113,7 +113,7 @@ A  src/api/rate-limit.test.ts
 
 | # | Rule (`WHEN <situation> → DO <action>, NOT <anti-pattern>`) | Written to |
 |---|---|---|
-| L1 | | `MEMORY.md` (in-repo) / `~/AGENTS.md` (global, approved) |
+| L1 | | `MEMORY.md` (in-repo; topic file under `docs/memory/` where it exists) / `~/AGENTS.md` (global, approved) |
 
 - [ ] `KEEP` rules written in-repo; declined global promotions left in the ledger only.
 

@@ -267,6 +267,7 @@
   "exclude": [
     "docs/graphify-indexed-*.md",
     "docs/code-plan/**",
-    "docs/diagrams-src/**"
+    "docs/diagrams-src/**",
+    "docs/memory/**"
   ]
 }

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readTranscript, repoMatches, slugFor, summarize } from './session-metrics.mjs';
+import { PRICES, PRICES_AS_OF, callCostUsd, readTranscript, repoMatches, slugFor, summarize } from './session-metrics.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'session-metrics.mjs');
 const SECRET = 'ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE1234';
@@ -23,37 +23,39 @@ afterEach(() => {
 const u = (input, cw, cr, out) => ({
   input_tokens: input, cache_creation_input_tokens: cw, cache_read_input_tokens: cr, output_tokens: out,
 });
-const asst = (ts, id, usage, content) => ({ type: 'assistant', timestamp: ts, message: { id, usage, content } });
+const asst = (ts, id, usage, content, model) => ({ type: 'assistant', timestamp: ts, message: { id, model, usage, content } });
 const writeJsonl = (file, lines) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
 };
 
-// Main A (in window): m1 streamed over two lines, then m2. One chef subagent run.
-// Main B (2026-10-01) sits outside a window that starts 2026-10-05.
+// Main A (in window): m1 streamed over two lines, then m2, both Opus 5.5; only the
+// first m1 line names the model. One chef subagent run on Haiku 4.5.
+// Main B (2026-10-01) sits outside a window that starts 2026-10-05, on a model
+// that has no price.
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'session-metrics-'));
   dirs.push(root);
   const proj = path.join(root, 'projects');
   writeJsonl(path.join(proj, 'sess-a.jsonl'), [
     { type: 'user', timestamp: '2026-10-10T10:00:00.000Z', message: { role: 'user', content: SECRET } },
-    asst('2026-10-10T10:00:01.000Z', 'm1', u(10, 1000, 0, 5), [{ type: 'text', text: `token ${SECRET}` }]),
+    asst('2026-10-10T10:00:01.000Z', 'm1', u(10, 1000, 0, 5), [{ type: 'text', text: `token ${SECRET}` }], 'claude-opus-5-5'),
     asst('2026-10-10T10:00:02.000Z', 'm1', u(10, 1000, 0, 50), [
       { type: 'tool_use', id: 'tu1', name: 'Agent', input: { prompt: SECRET } },
     ]),
     asst('2026-10-10T10:01:00.000Z', 'm2', u(5, 200, 1000, 20), [
       { type: 'tool_use', id: 'tu2', name: 'AskUserQuestion', input: { questions: [SECRET] } },
       { type: 'tool_use', id: 'tu3', name: 'Skill', input: { skill: 'sucp-rules' } },
-    ]),
+    ], 'claude-opus-5-5'),
   ]);
   const subDir = path.join(proj, 'sess-a', 'subagents');
   writeJsonl(path.join(subDir, 'agent-x1.jsonl'), [
-    asst('2026-10-10T10:00:10.000Z', 's1', u(3, 500, 0, 10), [{ type: 'text', text: SECRET }]),
-    asst('2026-10-10T10:00:20.000Z', 's2', u(2, 100, 500, 30), [{ type: 'tool_use', id: 'tu4', name: 'Bash', input: { command: SECRET } }]),
+    asst('2026-10-10T10:00:10.000Z', 's1', u(3, 500, 0, 10), [{ type: 'text', text: SECRET }], 'claude-haiku-4-5'),
+    asst('2026-10-10T10:00:20.000Z', 's2', u(2, 100, 500, 30), [{ type: 'tool_use', id: 'tu4', name: 'Bash', input: { command: SECRET } }], 'claude-haiku-4-5'),
   ]);
   fs.writeFileSync(path.join(subDir, 'agent-x1.meta.json'), JSON.stringify({ agentType: 'chef' }));
   writeJsonl(path.join(proj, 'sess-b.jsonl'), [
-    asst('2026-10-01T09:00:00.000Z', 'm3', u(1, 1, 1, 1), []),
+    asst('2026-10-01T09:00:00.000Z', 'm3', u(1, 1, 1, 1), [], 'claude-future-9'),
   ]);
 
   const registry = path.join(root, 'pr.registry.json');
@@ -104,6 +106,71 @@ describe('readTranscript', () => {
     expect(t.firstTs).toBe('2026-10-10T10:00:00.000Z');
     expect(t.lastTs).toBe('2026-10-10T10:01:00.000Z');
   });
+
+  test('each call carries the last model named for its id, null when none is', async () => {
+    const f = fixture();
+    const t = await readTranscript(path.join(f.proj, 'sess-a.jsonl'));
+    expect(t.calls.map((c) => c.model)).toEqual(['claude-opus-5-5', 'claude-opus-5-5']);
+    const bare = path.join(f.root, 'bare.jsonl');
+    writeJsonl(bare, [asst('2026-10-10T10:00:00.000Z', 'x1', u(1, 0, 0, 1), [])]);
+    expect((await readTranscript(bare)).calls[0].model).toBeNull();
+  });
+});
+
+// Expected dollars are worked by hand from the 2026-10-20 list prices (USD per
+// million tokens), never recomputed with the script's own formula.
+describe('callCostUsd', () => {
+  const split = (m5, h1) => ({ ephemeral_5m_input_tokens: m5, ephemeral_1h_input_tokens: h1 });
+
+  test('PRICES holds the 2026-10-20 list, dated by PRICES_AS_OF', () => {
+    const card = (input, output, cacheRead) => ({ input, output, cacheRead });
+    expect(PRICES_AS_OF).toBe('2026-10-20');
+    expect(PRICES).toEqual({
+      'claude-fable-5-1': card(10, 50, 0.25),
+      'claude-mythos-5-1': card(10, 50, 0.25),
+      'claude-fable-5': card(10, 50, 1),
+      'claude-mythos-5': card(10, 50, 1),
+      'claude-opus-5-5': card(4, 20, 0.2),
+      'claude-opus-5': card(5, 25, 0.5),
+      'claude-opus-4-8': card(5, 25, 0.5),
+      'claude-opus-4-7': card(5, 25, 0.5),
+      'claude-opus-4-6': card(5, 25, 0.5),
+      'claude-sonnet-5-5': card(2, 10, 0.2),
+      'claude-sonnet-5': card(2, 10, 0.2),
+      'claude-sonnet-4-6': card(3, 15, 0.3),
+      'claude-haiku-5-5': { ...card(0.1, 0.5, 0.01), long: { above: 100000, input: 0.5, output: 2.5, cacheRead: 0.05 } },
+      'claude-haiku-4-5': card(1, 5, 0.1),
+    });
+  });
+
+  test('a 5-minute cache write costs 1.25x input', () => {
+    // Opus 5.5: 10*4 + 1000*5 + 50*20 = 6040 per million.
+    expect(callCostUsd('claude-opus-5-5', { ...u(10, 1000, 0, 50), cache_creation: split(1000, 0) })).toBeCloseTo(0.00604, 12);
+  });
+
+  test('a 1-hour cache write costs 2x input', () => {
+    // Opus 5.5: 10*4 + 1000*8 + 50*20 = 9040; mixed: 10*4 + 600*5 + 400*8 + 50*20 = 7240.
+    expect(callCostUsd('claude-opus-5-5', { ...u(10, 1000, 0, 50), cache_creation: split(0, 1000) })).toBeCloseTo(0.00904, 12);
+    expect(callCostUsd('claude-opus-5-5', { ...u(10, 1000, 0, 50), cache_creation: split(600, 400) })).toBeCloseTo(0.00724, 12);
+  });
+
+  test('a call without the TTL split prices every write as 5-minute', () => {
+    // Sonnet 4.6: 2000*3.75 = 7500 per million.
+    expect(callCostUsd('claude-sonnet-4-6', u(0, 2000, 0, 0))).toBeCloseTo(0.0075, 12);
+  });
+
+  test('Haiku 5.5 switches to the long card just above 100,000 prompt tokens', () => {
+    // At 100,000: 40000*0.1 + 30000*0.125 + 30000*0.01 + 1000*0.5 = 8550.
+    expect(callCostUsd('claude-haiku-5-5', u(40000, 30000, 30000, 1000))).toBeCloseTo(0.00855, 12);
+    // At 100,001: 40000*0.5 + 30000*0.625 + 30001*0.05 + 1000*2.5 = 42750.05.
+    expect(callCostUsd('claude-haiku-5-5', u(40000, 30000, 30001, 1000))).toBeCloseTo(0.04275005, 12);
+  });
+
+  test('a model missing from the table has no price', () => {
+    expect(callCostUsd('claude-future-9', u(1, 1, 1, 1))).toBeNull();
+    expect(callCostUsd('toString', u(1, 1, 1, 1))).toBeNull();
+    expect(callCostUsd(null, u(1, 1, 1, 1))).toBeNull();
+  });
 });
 
 test('slugFor replaces every slash with a dash', () => {
@@ -137,6 +204,22 @@ describe('summarize', () => {
     const s = summarize({ mains: [], subs, registry: null, fixes: null, window: {} });
     expect(Object.entries(s.subagentsByType)).toEqual([['nappy', 2], ['bold', 1], ['chef', 1]]);
     expect(Object.entries(s.skills)).toEqual([['zeta', 2], ['alpha', 1], ['beta', 1]]);
+  });
+
+  test('prices each call by its model, lists unpriced models, and ignores zero-token calls', () => {
+    const c = (id, model, usage) => ({ id, model, usage, tools: [], skills: [] });
+    const calls = [
+      c('a', 'claude-haiku-4-5', u(2000, 0, 0, 2000)), // 2000*1 + 2000*5 = 12000 per million
+      c('b', 'claude-sonnet-5', u(0, 0, 0, 600)), // 600*10 = 6000
+      c('c', 'claude-opus-5-5', u(1500, 0, 0, 0)), // 1500*4 = 6000
+      c('d', 'mystery-model-9', u(100, 0, 0, 100)),
+      c('e', '<synthetic>', u(0, 0, 0, 0)),
+    ];
+    const s = summarize({ mains: [{ calls, firstTs: '2026-10-10T00:00:00Z' }], subs: [], registry: null, fixes: null, window: {} });
+    expect(s.costUsd).toBe(0.024);
+    expect(Object.entries(s.costUsdByModel)).toEqual([['claude-haiku-4-5', 0.012], ['claude-opus-5-5', 0.006], ['claude-sonnet-5', 0.006]]);
+    expect(s.unpricedModels).toEqual({ 'mystery-model-9': 1 });
+    expect(s.pricesAsOf).toBe('2026-10-20');
   });
 });
 
@@ -204,8 +287,14 @@ describe('CLI', () => {
     expect(j.subagentsPerMain).toBe(1);
     expect(j.apiCalls).toBe(4);
     expect(j.tokens).toEqual({ input: 20, cacheWrite: 1800, cacheRead: 1500, output: 110 });
-    expect(j.costWeights).toEqual({ input: 1, cacheWrite: 2, cacheRead: 0.1, output: 5 });
-    expect(j.costUnits).toBe(4320);
+    expect(j.costWeights).toBeUndefined();
+    expect(j.costUnits).toBeUndefined();
+    // Opus 5.5: m1 6040 + m2 1620 = 7660 per million; Haiku 4.5: s1 678 + s2 327 = 1005.
+    expect(j.costUsd).toBe(0.0087);
+    expect(Object.entries(j.costUsdByModel)).toEqual([['claude-opus-5-5', 0.0077], ['claude-haiku-4-5', 0.001]]);
+    expect(j.unpricedModels).toEqual({});
+    expect(j.pricesAsOf).toBe('2026-10-20');
+    expect(j.notes).toEqual([]);
     expect(j.medianFirstCallContext).toEqual({ main: 1010, subagent: 503 });
     expect(j.startupPrefixShare).toBeCloseTo(1006 / 1105, 4);
     expect(j.subagentsByType).toEqual({ chef: 1 });
@@ -213,14 +302,30 @@ describe('CLI', () => {
     expect(j.skills).toEqual({ 'sucp-rules': 1 });
     expect(j.mergedPrs).toBe(2);
     expect(j.escapes).toBe(1);
-    expect(j.perMergedPr).toEqual({ contextTokens: 1660, outputTokens: 55, costUnits: 2160, askUserQuestion: 0.5, escapes: 0.5 });
+    // 8665 per million over 2 merged PRs is 0.0043325.
+    expect(j.perMergedPr).toEqual({ contextTokens: 1660, outputTokens: 55, costUsd: 0.0043, askUserQuestion: 0.5, escapes: 0.5 });
   });
 
-  test('text output prints the weights and never any transcript content', () => {
+  test('a model without a price is left out of costUsd and named in a note', () => {
+    const f = fixture();
+    const r = run(f, '--json');
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.costUsd).toBe(0.0087);
+    expect(j.unpricedModels).toEqual({ 'claude-future-9': 1 });
+    expect(j.notes).toContain('1 call(s) from models without a price (claude-future-9 x1); costUsd leaves them out, it is not zero for them');
+  });
+
+  test('text output prints the list-price rows and never any transcript content', () => {
     const f = fixture();
     const r = run(f);
     expect(r.code).toBe(0);
-    expect(r.out).toContain('0.1*cache_read + 2*cache_write + 5*output + input');
+    expect(r.out).not.toContain('cost-weighted');
+    expect(r.out).toMatch(/API list-price equivalent, USD\s+0\.0087\n/);
+    expect(r.out).toMatch(/prices as of\s+2026-10-20\n/);
+    expect(r.out).toMatch(/per merged PR: API list-price USD\s+0\.0029\n/);
+    expect(r.out).toMatch(/API list-price USD by model\n\s+claude-opus-5-5\s+0\.0077\n\s+claude-haiku-4-5\s+0\.001\n/);
+    expect(r.out).toContain('note: 1 call(s) from models without a price (claude-future-9 x1)');
     expect(r.out).toMatch(/main sessions\s+2/);
     expect(r.out + r.err).not.toContain(SECRET);
     expect(run(f, '--json').out).not.toContain(SECRET);

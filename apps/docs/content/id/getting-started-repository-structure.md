@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "0769c95c9e9b"
+source_hash: "4e65c2b07b9c"
 ---
 
 <a id="repository-structure"></a>
@@ -57,6 +57,7 @@ vivera/
 │   ├── graphify-integration.md                  # graphify setup, memory bounds, and runbook
 │   ├── graphify-indexed-session-artifacts.md    # One session's review report and ledger, kept visible to graphify query
 │   ├── graphify-indexed-install-methods.md      # The install-methods session: lock, plan, findings, kept visible to graphify query
+│   ├── memory/                                  # Rule handbook topic files, indexed by MEMORY.md
 │   └── code-plan/
 │       ├── <date>-<slug>.manifest.md            # Batch manifests written before dispatch
 │       ├── plans/

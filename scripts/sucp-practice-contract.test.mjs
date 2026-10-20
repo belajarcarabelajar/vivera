@@ -213,9 +213,18 @@ const CONTRACT = [
     task: 'F3', gaps: 'follow-up', file: 'templates/subagent-contract-template.md',
     present: ['**Context pointers:**', 'instead of pasted text'],
   },
+  // The F4 rules moved out of MEMORY.md into its topic files under docs/memory/.
   {
-    task: 'F4', gaps: 'follow-up', file: 'MEMORY.md',
-    present: ['refuses `rm` outside `/tmp`', 'cannot verify a variable', '| L57 |', 'UNROUTABLE'],
+    task: 'F4', gaps: 'follow-up', file: 'docs/memory/gates-and-tests.md',
+    present: ['refuses `rm` outside `/tmp`'],
+  },
+  {
+    task: 'F4', gaps: 'follow-up', file: 'docs/memory/subagents.md',
+    present: ['cannot verify a variable'],
+  },
+  {
+    task: 'F4', gaps: 'follow-up', file: 'docs/memory/tools-and-environment.md',
+    present: ['| L57 |', 'UNROUTABLE'],
   },
 ];
 

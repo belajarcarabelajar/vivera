@@ -57,7 +57,7 @@
 | 1 | WHEN calling a tool → DO verify the exact name against the catalog, NOT assume a plausible alias | A future agent acts differently? Y/N | Still true in 30 days? Y/N | KEEP / NO-OP | mechanical / judgement |
 | 2 | | | | | |
 
-**Mechanical or judgement:** a mechanical `KEEP` rule is a fixed pattern a machine can detect (a banned call, a path rule, a missing registration, a wording that must exist). Propose it as an automated check (test, validator needle, lint rule, or hook) in a 6.3 follow-up, and remove its `MEMORY.md` line once the check lands. A judgement rule goes to `MEMORY.md`.
+**Mechanical or judgement:** a mechanical `KEEP` rule is a fixed pattern a machine can detect (a banned call, a path rule, a missing registration, a wording that must exist). Propose it as an automated check (test, validator needle, lint rule, or hook) in a 6.3 follow-up; its `MEMORY.md` entry (its topic-file row and index ID where `docs/memory/` exists) stays only until the check lands. A judgement rule goes to `MEMORY.md` (a topic-file row and index ID where `docs/memory/` exists).
 
 **Minimum-Signal NO-OP gate:** *"Will a future agent plausibly act differently and more effectively because of this rule?"* If NO → NO-OP, make zero file changes. Reject trivial facts, transient errors, and generic knowledge the model already has.
 
@@ -96,10 +96,10 @@
 
 | Rule # | Destination | Why | Approval |
 |---|---|---|---|
-| 1 | in-repo `MEMORY.md` (auto) | Repo-scoped, portable with the skill | not required |
+| 1 | in-repo `MEMORY.md` (auto; topic file under `docs/memory/` where it exists) | Repo-scoped, portable with the skill | not required |
 | 2 | `~/AGENTS.md` (global) | Recurs across projects on this machine | **PENDING user approval** |
 
-- **In-repo (auto):** append `KEEP` rules under a `Task Group:` header in `MEMORY.md`.
+- **In-repo (auto):** in a repository that keeps `docs/memory/`, add each `KEEP` rule as a new row, with the next free ID (one above the highest there), in its topic file there, and add its ID to that topic's row in the `MEMORY.md` index; in any other repository append it under a `Task Group:` header in `MEMORY.md`.
 - **Global (gated):** ask each `~/AGENTS.md` line as its own question through the Confirmation Protocol (header `Promote`, safe option first). State a revert path inside the edited file. Never write a global rule without an item-level yes.
 
 ---
@@ -119,7 +119,7 @@ flowchart TD
     Harvest --> Distill["Distill each into\nWHEN to DO to NOT rule"]
     Distill --> Gate{"Passes Minimum-Signal\nAND 30-Day Horizon?"}
     Gate -->|"No"| Noop(["NO-OP\nzero file changes"])
-    Gate -->|"Yes"| InRepo["Write in-repo MEMORY.md\nautomatically"]
+    Gate -->|"Yes"| InRepo["Write in-repo\nMEMORY.md rule"]
     InRepo --> Global{"Recurs across\nprojects?"}
     Global -->|"No"| Point["Point next session's\nresume checklist here"]
     Global -->|"Yes"| Approve{"Per-item user\napproval?"}

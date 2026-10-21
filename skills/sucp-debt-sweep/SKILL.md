@@ -67,7 +67,7 @@ Ranking, the question cap, and NOW versus LATER: [references/02-rank-and-execute
 - If no structured question tool exists in the runtime, use the Confirmation Protocol fallback: a numbered list in the final message with an explicit instruction to reply with the item numbers to execute, and state plainly that the runtime lacks a prompt widget. The gate stays closed. Never silently skip the ask because the widget was missing. In an unattended run (`sucp-overnight`) the same items also go to the plan backlog.
 - If the user selects nothing, picks `Nothing, close session`, or dismisses the question, accept it in one line, keep the items in the written backlog with their `defer:` markers, and close. Never re-ask the same question in the same session, and never treat a declined follow-up as a reason to re-open the completed plan.
 
-6.5 Execute, how a selected follow-up runs as real work: [references/02-rank-and-execute.md](references/02-rank-and-execute.md).
+6.5 Execute, how a selected follow-up runs as real work, and why the sweep has one round (the re-pass writes new debt to the backlog and ends with a stop line): [references/02-rank-and-execute.md](references/02-rank-and-execute.md).
 
 ### ✅ 6.5.5 Plan Closeout Decision
 > ✅ **Closing stage: the plan status is a decision, not a side effect.** Measured 2026-10-12 in bcb: 14 issues stayed open while nine plans with merged work were still `Approved`, `InProgress` or `Draft`, because nothing asked the owner to close them.

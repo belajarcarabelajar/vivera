@@ -66,7 +66,7 @@ Selected follow-ups run the full pipeline: chunk, subagent fan-out, TDD for beha
 
 ### Second Sweep Pass
 
-Did executing a selected item create new debt in the surface it touched? List new candidates and re-ask only for genuinely new items.
+Did executing a selected item create new debt in the surface it touched? List new candidates and write each one to the Deferred Backlog with a `defer:` line; the user is not asked again. Fix only breakage the follow-up itself caused. End with the stop line: `Sweep closed · <stars> · <N> closed · <M> deferred · re-pass: <K> → backlog`.
 
 ## 6. Deferred Backlog (`LATER`)
 
@@ -92,7 +92,7 @@ Mandatory: readiness runs before the follow-ups call, the question rides in that
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question, execute the selected items through the full pipeline, then re-sweep for any new debt they created. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question, execute the selected items through the full pipeline, then re-sweep once and write any new debt they created to the backlog. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
     Rank --> First["Readiness verdict\nshown in the chat"]
@@ -101,8 +101,9 @@ flowchart TD
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]
     Exec --> Check{"New debt created?"}
-    Check -->|"Yes"| AskNew["Ask only the new items;\nClose plan is not asked again"]
-    AskNew --> Exec
+    Check -->|"Yes"| Backlog
+    Check -->|"Follow-up broke something"| Fix["Fix the breakage now"]
+    Fix --> Ready
     Check -->|"No"| Ready["Re-run readiness\nafter follow-ups land"]
     Backlog --> Ready
     Ready --> Gate2{"Apply the Close plan answer:\nMark Complete and still READY?"}

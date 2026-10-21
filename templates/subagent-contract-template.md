@@ -12,6 +12,7 @@
 - **Working directory:** [the session worktree path. Every relative path in this contract resolves inside it.]
 - **Head branch:** `<plan-id>/<session-slug>`
 - **Context pointers:** [paths or URLs of the notes, specs, issues, and prior commits this chunk reads by pointer instead of pasted text, for example an exploration chunk's notes file outside the repository]
+- **Scratch folder:** `$HOME/.cache/tmp/<project>-scratch/<chunk-id>/`, this chunk's own subfolder. The subagent writes logs and temporary copies only there and deletes only that subfolder at the end, never the shared `<project>-scratch` root, because sibling chunks keep files there at the same time (measured 2026-10-21: one agent's cleanup deleted another agent's wrapper configs).
 
 ## 1a. Git Boundary (read before dispatch)
 You edit files and run tests. You do **not** touch git state.

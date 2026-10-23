@@ -15,6 +15,11 @@ hooks:
 ---
 
 # Super Ultra Code Plan Implementation
+## First Moves
+1. Your first tool call loads `sucp-rules` with the skill tool. Nothing runs before it.
+2. Load `sucp-tdd-debug` before the first command that runs a test, including a run that only shows a failure that already exists.
+3. Load each other phase skill before its phase, as the Phase Router below lists.
+An approved or urgent task still loads these skills: approval removes a gate, never a skill.
 ## Purpose
 Unified pipeline for AI coding agents: idea → design → plan → implementation → verification. Merges brainstorming, writing-plans, TDD, verification-before-completion.
 ## HARD GATE

@@ -29,7 +29,7 @@ color stay, but a sprite gets a fixed role in `agents/crew.json` instead of a fr
 Four things are worth knowing:
 
 - **The game tracks two numbers per sprite.** Affection rises one heart per 25 points and drops by 2
-  for every day the sprite works for you. A hidden skill level per job starts at 0, rises by 1 each
+  for every day the sprite works for you (Prima's official guide says 1; the glossary lists both). A hidden skill level per job starts at 0, rises by 1 each
   time it does that job, and tops out at 255.
 - **Need matters, weather does not.** You cannot hire a sprite for a job that has nothing to do that
   day, but a hired sprite still comes in a hurricane or blizzard, which makes it useful for feeding

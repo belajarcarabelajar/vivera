@@ -20,8 +20,8 @@
   "scripts/lib/chunk-schema.test.mjs": 21762,
   "scripts/lib/redaction-selftest.test.mjs": 20879,
   "scripts/plan-closeout.test.mjs": 44058,
-  "scripts/plan-issue-sync.mjs": 40016,
-  "scripts/plan-issue-sync.test.mjs": 66402,
+  "scripts/plan-issue-sync.mjs": 38285,
+  "scripts/plan-issue-sync.test.mjs": 62023,
   "scripts/plan-lifecycle-audit.mjs": 29658,
   "scripts/plan-lifecycle-audit.test.mjs": 25186,
   "scripts/plan-mark-done.mjs": 24939,
@@ -46,6 +46,6 @@
   "scripts/vault-index-structural.test.mjs": 94265,
   "scripts/vault-index.mjs": 23535,
   "scripts/vault-index.test.mjs": 31712,
-  "snippets/orkestrasi-ngoding-plan.md": 22606,
+  "snippets/orkestrasi-ngoding-plan.md": 22605,
   "snippets/orkestrasi-pr-review.md": 20359
 }

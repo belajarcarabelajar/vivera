@@ -22,6 +22,8 @@ type Entry = {
   waiters: Set<(r: WaitResult) => void>
   result?: Record<string, string>
   otherSeq: number
+  otherAt: number
+  createdAt: number
   edits: Promise<void>
 }
 
@@ -33,12 +35,17 @@ export type BridgeOptions = {
   keepMs?: number
   rand?: () => number
   log?: (line: string) => void
+  askTtlMs?: number
+  otherTtlMs?: number
+  now?: () => number
 }
 
 export type Bridge = { stop(): Promise<void>; handleUpdate(update: Update): Promise<boolean> }
 
 type Dispatch = { consumed: boolean; done: Promise<void> }
 
+// Kept well under any client timeout; the hook simply polls again after a pending reply.
+export const DEFAULT_WAIT_MS = 25_000
 const EXPIRED = 'Pertanyaan ini sudah selesai'
 // Snipset forwards each update with a 2 s timeout, so /update replies before that.
 const UPDATE_REPLY_MS = 1_000
@@ -75,9 +82,12 @@ function isNotModified(e: unknown): boolean {
 
 export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const { socketPath, telegram, chatId } = opts
-  const waitMs = opts.waitMs ?? 50_000
+  const waitMs = opts.waitMs ?? DEFAULT_WAIT_MS
   const keepMs = opts.keepMs ?? 60_000
   const rand = opts.rand ?? Math.random
+  const askTtlMs = opts.askTtlMs ?? 6 * 60 * 60_000
+  const otherTtlMs = opts.otherTtlMs ?? 10 * 60_000
+  const now = opts.now ?? Date.now
   const log = opts.log ?? ((line: string) => console.error(`telegram-ask: ${line}`))
   const asks = new Map<string, Entry>()
   const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -137,7 +147,19 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     !!chat && typeof chat === 'object' && String(chat.id) === String(chatId)
 
   // State changes happen synchronously here; `done` covers the Telegram calls.
+  // A session that died never sends /resolve, so its ask would otherwise live forever.
+  function sweep() {
+    const t = now()
+    for (const [id, entry] of asks) {
+      if (t - entry.createdAt <= askTtlMs) continue
+      asks.delete(id)
+      wake(entry, { status: 'closed' })
+      log(`ask ${id} expired`)
+    }
+  }
+
   function dispatch(update: Update): Dispatch {
+    sweep()
     const cq = update.callback_query
     if (cq && typeof cq === 'object') {
       if (!fromOwner(cq.message?.chat)) return NO
@@ -148,12 +170,19 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       const next = applyTap(entry.state, tap)
       const ack = answerCallback(cq.id)
       if (next === entry.state) return { consumed: true, done: ack }
-      if (tap.kind === 'other') entry.otherSeq = ++otherSeq
+      if (tap.kind === 'other') {
+        entry.otherSeq = ++otherSeq
+        entry.otherAt = now()
+      }
       entry.state = next
       return { consumed: true, done: Promise.all([ack, settle(tap.id, entry)]).then(() => {}) }
     }
     const msg = update.message
     if (!msg || typeof msg !== 'object' || !fromOwner(msg.chat) || typeof msg.text !== 'string') return NO
+    // A forgotten Other tap must not keep taking plain texts meant for Snipset.
+    for (const e of asks.values()) {
+      if (e.state.awaitingOther !== null && now() - e.otherAt > otherTtlMs) e.state = { ...e.state, awaitingOther: null }
+    }
     let target: [string, Entry] | undefined
     for (const pair of asks) {
       const e = pair[1]
@@ -199,6 +228,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   }
 
   async function onAsk(req: Request): Promise<Response> {
+    sweep()
     const body = parseAskBody(await req.json().catch(() => null))
     if (!body) return new Response('bad request', { status: 400 })
     let id = newAskId(rand)
@@ -213,7 +243,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const state = newState({ id, ...body })
     const { text, keyboard } = renderAsk(state)
     // Reserve the id before the await so a parallel ask cannot draw it too.
-    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0, edits: DONE }
+    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0, otherAt: 0, createdAt: now(), edits: DONE }
     asks.set(id, entry)
     try {
       entry.messageId = (await telegram.sendMessage(chatId, text, keyboard)).message_id
@@ -256,8 +286,9 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     asks.delete(id)
     wake(entry, { status: 'closed' })
     log(`ask ${id} resolved: ${by}`)
-    // Already answered from Telegram: the message shows that answer, so it stays.
-    if (!entry.result) await queueEdit(id, entry, () => ({ text: renderAnswered(entry.state.ask, answers, by) }))
+    // A terminal answer that arrives after a Telegram answer is the one Claude used, so it replaces the text.
+    const lateTerminal = by === 'terminal' && Object.keys(answers).length > 0
+    if (!entry.result || lateTerminal) await queueEdit(id, entry, () => ({ text: renderAnswered(entry.state.ask, answers, by) }))
     return Response.json({ ok: true })
   }
 

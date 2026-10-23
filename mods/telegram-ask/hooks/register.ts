@@ -52,7 +52,11 @@ export const register: Register = (on, options) => {
         }),
         socketPath,
       })
-      if (!asked.ok) throw new Error(`ask answered ${asked.status}`)
+      if (!asked.ok) {
+        // The bridge is up but refused this question; "offline" would send the owner to the wrong fix.
+        $.ui.notice(e.tool_use_id, `telegram-ask: not sent to Telegram (${asked.status})`)
+        return dialog
+      }
       id = String(JSON.parse(asked.text).id)
     } catch {
       $.ui.notice(e.tool_use_id, 'telegram-ask: bridge offline')

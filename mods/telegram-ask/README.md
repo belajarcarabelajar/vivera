@@ -7,7 +7,7 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 ## Parts
 
 - `hooks/register.ts`: the mod. A `tool.call` hook on `AskUserQuestion` runs `next(e)` (the dialog) and, beside it, posts the question to the bridge and long-polls for the answer. Returning `{ result }` while `next(e)` is pending aborts the dialog.
-- `bridge/`: the daemon (Bun). One bridge serves every session on this machine; it does not poll Telegram itself (see below). API over a Unix socket: `POST /ask`, `GET /wait/:id` (50 s long-poll), `POST /resolve/:id`, `POST /update`.
+- `bridge/`: the daemon (Bun). One bridge serves every session on this machine; it does not poll Telegram itself (see below). API over a Unix socket: `POST /ask`, `GET /wait/:id` (25 s long-poll), `POST /resolve/:id`, `POST /update`.
 - `deploy/telegram-ask-bridge.service`: the systemd user unit.
 
 ## Updates come from Snipset
@@ -42,6 +42,8 @@ Then `/reload-plugins` in a running session.
 
 - `journalctl --user -u telegram-ask-bridge -f`: ask ids and counts only, never question text, answers, or the token.
 - Bridge stopped or crashed: the dialog shows `telegram-ask: bridge offline` and works as before. A pending ask is lost when the bridge restarts; its buttons then answer "Pertanyaan ini sudah selesai".
+- An ask that nobody resolves (its session died) is dropped after 6 h. A `✏️ Lainnya` tap stops taking text messages after 10 min, so later messages stay with Snipset.
+- `telegram-ask: not sent to Telegram (<status>)` under the dialog: the bridge is up but refused the question; the terminal dialog works as usual.
 - Exit 2 at start: a missing env file, key, or socket path (the unit does not restart on it).
 
 ## Tests

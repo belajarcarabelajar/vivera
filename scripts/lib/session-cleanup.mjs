@@ -4,7 +4,7 @@
 // refuses uncommitted work but deletes gitignored files without a word, and in
 // a session worktree those can be generated voiceovers, data, or plans under
 // docs/code-plan/. So ignored files are sorted first: tool caches go, files
-// identical to the main checkout (or, for text, whose every line it holds) go,
+// identical to the main checkout (or logs it holds in the same order) go,
 // unique files are copied to the same path in the main checkout (never over an
 // existing file), and anything that would need an overwrite keeps the worktree.
 
@@ -87,18 +87,33 @@ function filesUnder(root, rel, dropped) {
   return fs.readdirSync(path.join(root, rel)).sort().flatMap((name) => filesUnder(root, path.posix.join(rel, name), dropped));
 }
 
-// A text file (an append-only log, say) whose every line the main copy already holds
-// carries nothing the main checkout lacks. Binary files, and files over 64 MB, never qualify.
+// An append-only log in the worktree whose lines appear in the main copy in the same
+// order and number (a subsequence) carries nothing the main checkout lacks. Only log
+// extensions qualify, because in a config file a dropped or reordered line changes its
+// meaning. Lines compare as bytes (latin1 maps each byte to one char), never decoded.
+const LOG_EXT = ['.jsonl', '.ndjson', '.log'];
 const TEXT_LIMIT = 64 * 1024 * 1024;
+const linesOf = (buf) => {
+  const lines = buf.toString('latin1').split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+};
 function linesCovered(file, mainFile) {
+  if (!LOG_EXT.some((ext) => file.endsWith(ext))) return false;
   const sa = fs.lstatSync(file);
   const sb = fs.lstatSync(mainFile);
   if (!sa.isFile() || !sb.isFile() || sa.size > TEXT_LIMIT || sb.size > TEXT_LIMIT) return false;
   const a = fs.readFileSync(file);
   const b = fs.readFileSync(mainFile);
   if (a.includes(0) || b.includes(0)) return false;
-  const have = new Set(b.toString('utf8').split('\n'));
-  return a.toString('utf8').split('\n').every((line) => line === '' || have.has(line));
+  const main = linesOf(b);
+  let i = 0;
+  for (const line of linesOf(a)) {
+    while (i < main.length && main[i] !== line) i++;
+    if (i === main.length) return false;
+    i++;
+  }
+  return true;
 }
 
 function sameEntry(a, b) {

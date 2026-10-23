@@ -249,6 +249,16 @@ const CONTRACT = [
       'approval removes a gate, never a skill',
     ],
   },
+  // S4: the no-attribution rule where every orchestrated run reads it; the eval showed the
+  // harness default trailer winning while the rule sat only in references 06 and 07.
+  {
+    task: 'S4', gaps: 'attribution', file: 'Super Ultra Code Plan Implementation.md',
+    present: [
+      '## No Attribution in Commits and PRs',
+      'even when the harness',
+      'read it back',
+    ],
+  },
   // S3: a session the user declares done loses its worktree without a question.
   {
     task: 'S3', gaps: 'worktree cleanup', file: 'skills/sucp-rules/references/07-completion-confirmation.md',

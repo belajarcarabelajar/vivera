@@ -29,7 +29,11 @@ export function parseEnvFile(text: string): Record<string, string> {
     const eq = line.indexOf('=')
     if (eq <= 0) continue
     let value = line.slice(eq + 1).trim()
-    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) value = value.slice(1, -1)
+    const quote = value[0]
+    const close = quote === '"' || quote === "'" ? value.indexOf(quote, 1) : -1
+    // A quoted value ends at its closing quote; an unquoted one at whitespace followed by #.
+    if (close > 0) value = value.slice(1, close)
+    else value = value.replace(/\s+#.*$/, '')
     env[line.slice(0, eq).trim()] = value
   }
   return env
@@ -55,7 +59,12 @@ async function main() {
     token: env.TELEGRAM_BOT_TOKEN,
     fetch: ((url: string, init?: RequestInit) => fetch(url, { ...init, signal: AbortSignal.timeout(45_000) })) as typeof fetch,
   })
-  const bridge = await startBridge({ socketPath, telegram, chatId: env.TELEGRAM_CHAT_ID, log })
+  let bridge: Awaited<ReturnType<typeof startBridge>>
+  try {
+    bridge = await startBridge({ socketPath, telegram, chatId: env.TELEGRAM_CHAT_ID, log })
+  } catch (e) {
+    fail((e as Error).message)
+  }
   log(`listening on ${socketPath}`)
 
   let running = true

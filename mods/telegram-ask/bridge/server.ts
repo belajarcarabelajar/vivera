@@ -70,6 +70,17 @@ function parseAskBody(body: unknown): Omit<Ask, 'id'> | null {
   return { project: b.project, session: b.session, context: b.context, questions: b.questions }
 }
 
+// Any HTTP answer means a bridge is alive there; a refused connect means the file is stale.
+async function answersOn(socketPath: string): Promise<boolean> {
+  try {
+    if (!lstatSync(socketPath).isSocket()) return false
+    await fetch('http://bridge/health', { unix: socketPath, signal: AbortSignal.timeout(500) } as RequestInit)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function errStatus(e: unknown): string {
   return String((e as { status?: number }).status ?? 'error')
 }
@@ -92,6 +103,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const timers = new Set<ReturnType<typeof setTimeout>>()
   let otherSeq = 0
 
+  if (await answersOn(socketPath)) throw new Error(`another bridge is already listening on ${socketPath}`)
   // Only a leftover socket is removed; any other file at the path is left alone.
   try {
     if (lstatSync(socketPath).isSocket()) unlinkSync(socketPath)
@@ -292,6 +304,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     idleTimeout: Math.min(255, Math.ceil(waitMs / 1000) + 10),
     async fetch(req) {
       const parts = new URL(req.url).pathname.split('/').filter(Boolean)
+      if (req.method === 'GET' && parts.length === 1 && parts[0] === 'health') return Response.json({ ok: true })
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'update') return onUpdate(req)
       if (req.method === 'GET' && parts.length === 2 && parts[0] === 'wait') return onWait(parts[1])

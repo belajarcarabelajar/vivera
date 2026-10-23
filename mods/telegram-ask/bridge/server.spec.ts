@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { statSync } from 'node:fs'
-import { defaultEnvPath, pollEnabled } from './main'
+import { defaultEnvPath, parseEnvFile, pollEnabled } from './main'
+import { startBridge } from './server'
 import {
   CHAT,
   OTHER_CHAT,
@@ -67,6 +68,22 @@ describe('bridge socket', () => {
     await start()
     expect(statSync(sock).mode & 0o777).toBe(0o600)
     expect((await call('/wait/zzzzzz')).status).toBe(404)
+  })
+
+  test('answers GET /health', async () => {
+    await start()
+    const res = await call('/health')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
+  })
+
+  test('refuses a second bridge on a live socket and the first keeps answering', async () => {
+    await start()
+    const second = await startBridge({ socketPath: sock, telegram: telegram(), chatId: String(CHAT) }).catch((e: Error) => e)
+    if (!(second instanceof Error)) await second.stop()
+    expect(second).toBeInstanceOf(Error)
+    expect((second as Error).message).toBe(`another bridge is already listening on ${sock}`)
+    expect((await call('/health')).status).toBe(200)
   })
 })
 
@@ -287,6 +304,18 @@ describe('main', () => {
 
   test('stops polling only for TELEGRAM_ASK_POLL=0', () => {
     expect(pollEnabled({ TELEGRAM_ASK_POLL: '0' })).toBe(false)
+  })
+
+  test('drops an inline comment after whitespace on an unquoted value', () => {
+    expect(parseEnvFile('A=123 # note\nB=7\t# tab note\n')).toEqual({ A: '123', B: '7' })
+  })
+
+  test('keeps a # with no whitespace before it', () => {
+    expect(parseEnvFile('A=a#b\n')).toEqual({ A: 'a#b' })
+  })
+
+  test('keeps a # inside quotes and drops a comment after the closing quote', () => {
+    expect(parseEnvFile(`A="x # y"\nB='p #q' # note\n`)).toEqual({ A: 'x # y', B: 'p #q' })
   })
 
   test('reads the env file from XDG_CONFIG_HOME when set', () => {

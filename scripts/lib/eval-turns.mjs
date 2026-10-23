@@ -30,7 +30,7 @@ export function turnsProblem(s) {
     return 'turns must hold at least two turns, each with a prompt';
   }
   if (!Array.isArray(s.assertions) || ![...s.assertions, ...(s.turns ?? []).flatMap((t) => t.assertions ?? [])].length) {
-    return 'assertions must be a non-empty array (a multi-turn scenario may keep them in its turns)';
+    return 'assertions must be an array, non-empty unless the turns hold assertions (then write assertions: [])';
   }
   return null;
 }
@@ -76,10 +76,12 @@ export function mergeParsed(list) {
 // Each turn's own assertions read that turn's stream only, and with one facts record per
 // turn (an array), the files as that turn left them.
 export function scoreTurns(parsed, turns, facts) {
-  return turns.flatMap((t, i) => (t.assertions ?? []).map((a) => {
+  // A stopped attempt (limit, budget, timeout) never passes on the turns it skipped.
+  const short = parsed.length < turns.length ? [{ type: 'turns', pass: false, detail: `ran ${parsed.length} of ${turns.length} turns` }] : [];
+  return [...short, ...turns.flatMap((t, i) => (t.assertions ?? []).map((a) => {
     const name = `turn ${i + 1}: ${a.type}`;
     if (!parsed[i]) return { type: name, pass: false, detail: `turn ${i + 1} did not run` };
     const [r] = score(parsed[i], Array.isArray(facts) ? facts[i] : facts, [a]);
     return { ...r, type: name };
-  }));
+  }))];
 }

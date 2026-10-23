@@ -134,11 +134,13 @@ const CHECKS = {
     if (count >= min) return [true, `${count} numbered item(s)`];
     return [false, `${count} numbered item(s), need ${min}; final: ${excerpt(parsed.final)}`];
   },
-  // A headless gate is a final message with at least two numbered options (final_options);
-  // a multi-turn run counts one per turn that ended on such a list.
+  // A headless gate is a final message with at least two numbered options and a question
+  // or a recommended option, so a numbered summary of finished work is not one. A
+  // multi-turn run counts one per turn that ended on such a message.
   gate_count(parsed, facts, a) {
     const finals = parsed.finals ?? [parsed.final];
-    const n = finals.filter((f) => (String(f ?? '').match(/^\s*\d+[.)]\s+\S/gm) ?? []).length >= 2).length;
+    const gate = (f) => (f.match(/^\s*\d+[.)]\s+\S/gm) ?? []).length >= 2 && /\?|recommended/i.test(f);
+    const n = finals.filter((f) => gate(String(f ?? ''))).length;
     const ok = (a.min == null || n >= a.min) && (a.max == null || n <= a.max);
     return [ok, `${n} gate(s) over ${finals.length} turn(s) (min ${a.min ?? '-'}, max ${a.max ?? '-'})`];
   },

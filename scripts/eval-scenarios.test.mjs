@@ -137,7 +137,7 @@ describe('eval scenarios', () => {
         // when the model could see it, it skipped fan-out to stay inside it.
         expect(s.budget_usd).toBeUndefined();
         expect(Array.isArray(s.assertions)).toBe(true);
-        expect(s.assertions.length).toBeGreaterThan(0);
+        expect(s.assertions.length + (s.turns ?? []).flatMap((u) => u.assertions ?? []).length).toBeGreaterThan(0);
       });
 
       test('invoke, when present, is false or names a directory under skills/', () => {

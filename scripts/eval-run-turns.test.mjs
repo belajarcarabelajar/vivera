@@ -122,6 +122,15 @@ describe('multi-turn scenarios', () => {
     expect(only).not.toContain('--session-id');
   });
 
+  test('a multi-turn scenario may keep all of its assertions in its turns, but needs one somewhere', () => {
+    const ctx = setup([{ ...TWO_TURNS, id: 'turn-only', assertions: [] }]);
+    expect(run(ctx).code).toBe(0);
+    const none = setup([{ ...TWO_TURNS, id: 'none', assertions: [], turns: TWO_TURNS.turns.map((t) => ({ prompt: t.prompt })) }]);
+    const r = run(none);
+    expect(r.code).toBe(2);
+    expect(r.out).toMatch(/assertions/);
+  });
+
   test('a scenario with both prompt and turns, or one turn, is refused', () => {
     for (const bad of [{ ...TWO_TURNS, id: 'both', prompt: 'x' }, { ...TWO_TURNS, id: 'single', turns: [{ prompt: 'build it' }] }]) {
       const ctx = setup([bad]);

@@ -43,6 +43,14 @@ describe('runTurns', () => {
     expect(r.stdout).toBe(`${outs[0]}\n${outs[1]}`);
   });
 
+  test('stops when the budget of the attempt is spent or a turn ended on a max-turns or max-budget limit', async () => {
+    for (const first of [turn('x', { cost: 1.2 }), turn('x', { cost: 0.1, subtype: 'error_max_turns' }), turn('x', { cost: 0.1, subtype: 'error_max_budget_usd' })]) {
+      let n = 0;
+      await runTurns({ turns: [{ prompt: 'a' }, { prompt: 'b' }], budget: 1, newId: () => 'u', runTurn: async () => { n++; return { status: 0, stdout: first }; } });
+      expect(n).toBe(1);
+    }
+  });
+
   test('a one-turn scenario starts no session', async () => {
     const calls = [];
     await runTurns({ turns: [{ prompt: 'p' }], budget: 2, newId: () => 'x', runTurn: async (t) => { calls.push(t); return { stdout: turn('ok'), status: 0 }; } });

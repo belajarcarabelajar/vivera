@@ -18,7 +18,22 @@ export function sessionFlags(session) {
   return session.resume ? ['--resume', session.id] : ['--session-id', session.id];
 }
 
-const failed = (run, parsed) => run.timedOut || run.spawnError || parsed.result.subtype == null;
+// A later turn needs a clean, complete turn before it and budget left to spend.
+const stop = (run, parsed, spent, budget) => run.timedOut || run.spawnError || parsed.result.subtype == null
+  || /^error_max/.test(parsed.result.subtype) || spent >= budget;
+
+// The shape rules for prompt and turns; null when the scenario is fine.
+export function turnsProblem(s) {
+  if ((typeof s.prompt === 'string' && s.prompt !== '') === (s.turns !== undefined)) return 'needs exactly one of prompt or turns';
+  if (s.turns !== undefined && (!Array.isArray(s.turns) || s.turns.length < 2
+    || !s.turns.every((t) => typeof t?.prompt === 'string' && t.prompt && (t.assertions === undefined || Array.isArray(t.assertions))))) {
+    return 'turns must hold at least two turns, each with a prompt';
+  }
+  if (!Array.isArray(s.assertions) || ![...s.assertions, ...(s.turns ?? []).flatMap((t) => t.assertions ?? [])].length) {
+    return 'assertions must be a non-empty array (a multi-turn scenario may keep them in its turns)';
+  }
+  return null;
+}
 
 // runTurn({ prompt, first, session, budget }) runs one claude call and returns its run record.
 // The budget each turn gets is what the earlier turns of this attempt left.
@@ -35,7 +50,7 @@ export async function runTurns({ turns, budget, runTurn, newId = randomUUID }) {
     parsed.push(p);
     outs.push(last.stdout ?? '');
     spent += Number(p.result.total_cost_usd) || 0;
-    if (failed(last, p)) break;
+    if (stop(last, p, spent, budget)) break;
   }
   return { parsed, stdout: outs.join('\n'), last };
 }

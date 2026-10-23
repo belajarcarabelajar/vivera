@@ -20,7 +20,7 @@ for a in "$@"; do
   if [ "$prev" = "-p" ]; then prompt="$a"; fi
   prev="$a"
 done
-{ echo "RUN"; for a in "$@"; do echo "ARG $a"; done; } >> "$log"
+{ echo "RUN"; for a in "$@"; do echo "ARG $a"; done; echo "IDENT $(git config user.name) <$(git config user.email)>"; } >> "$log"
 case "$prompt" in
   /*) prompt="\${prompt#* }" ;;
 esac
@@ -106,6 +106,12 @@ describe('multi-turn scenarios', () => {
     run(ctx);
     const [first, second] = calls(ctx);
     expect(Number(after(first, '--max-budget-usd')) - Number(after(second, '--max-budget-usd'))).toBeCloseTo(0.3, 6);
+  });
+
+  test('the agent commits as the fixture identity, since the sandbox gives it no git config', () => {
+    const ctx = setup([TWO_TURNS]);
+    run(ctx);
+    expect(fs.readFileSync(ctx.log, 'utf8').match(/^IDENT .*$/gm)).toEqual(['IDENT eval <eval@local>', 'IDENT eval <eval@local>']);
   });
 
   test('a single-prompt scenario keeps --no-session-persistence and no session id', () => {

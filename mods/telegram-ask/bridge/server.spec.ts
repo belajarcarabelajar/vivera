@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { statSync } from 'node:fs'
-import { pollEnabled } from './main'
+import { defaultEnvPath, pollEnabled } from './main'
 import {
   CHAT,
   OTHER_CHAT,
@@ -260,10 +260,23 @@ describe('logging', () => {
 })
 
 describe('main', () => {
-  test('polls Telegram only when TELEGRAM_ASK_POLL is 1', () => {
+  test('polls Telegram by default', () => {
+    expect(pollEnabled({})).toBe(true)
     expect(pollEnabled({ TELEGRAM_ASK_POLL: '1' })).toBe(true)
-    expect(pollEnabled({})).toBe(false)
+    expect(pollEnabled({ TELEGRAM_ASK_POLL: '' })).toBe(true)
+    expect(pollEnabled({ TELEGRAM_ASK_POLL: 'false' })).toBe(true)
+  })
+
+  test('stops polling only for TELEGRAM_ASK_POLL=0', () => {
     expect(pollEnabled({ TELEGRAM_ASK_POLL: '0' })).toBe(false)
-    expect(pollEnabled({ TELEGRAM_ASK_POLL: 'true' })).toBe(false)
+  })
+
+  test('reads the env file from XDG_CONFIG_HOME when set', () => {
+    expect(defaultEnvPath({ XDG_CONFIG_HOME: '/x/cfg', HOME: '/home/u' })).toBe('/x/cfg/vivera-telegram-ask/.env')
+  })
+
+  test('falls back to ~/.config for the env file', () => {
+    expect(defaultEnvPath({ HOME: '/home/u' })).toBe('/home/u/.config/vivera-telegram-ask/.env')
+    expect(defaultEnvPath({ XDG_CONFIG_HOME: '', HOME: '/home/u' })).toBe('/home/u/.config/vivera-telegram-ask/.env')
   })
 })

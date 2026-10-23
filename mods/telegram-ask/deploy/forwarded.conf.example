@@ -1,0 +1,8 @@
+# Drop-in for telegram-ask-bridge.service when another program already polls the bot
+# and forwards its updates to the bridge's POST /update (Telegram allows one poller per token).
+# Install as ~/.config/systemd/user/telegram-ask-bridge.service.d/forwarded.conf,
+# then: systemctl --user daemon-reload && systemctl --user restart telegram-ask-bridge.service
+[Service]
+Environment=TELEGRAM_ASK_POLL=0
+# Point the bridge at the env file that already holds that bot's token and your chat id:
+# Environment=TELEGRAM_ASK_ENV=/path/to/.env

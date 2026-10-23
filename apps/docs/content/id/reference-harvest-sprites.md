@@ -5,7 +5,7 @@ category: reference
 slug: harvest-sprites
 order: 7
 source: docs/guide/reference-harvest-sprites.md
-source_hash: "dc6eb2e3bdb5"
+source_hash: "f2757b9bdc81"
 ---
 
 <a id="the-harvest-sprites"></a>
@@ -40,7 +40,7 @@ warnanya tetap, tetapi sprite mendapat peran tetap di `agents/crew.json`, bukan 
 Empat hal yang perlu diketahui:
 
 - **Game mencatat dua angka per sprite.** Kasih sayang naik satu hati setiap 25 poin dan turun 2
-  untuk setiap hari sprite bekerja untuk Anda. Level keterampilan tersembunyi per pekerjaan dimulai dari 0, naik 1 setiap
+  untuk setiap hari sprite bekerja untuk Anda (panduan resmi Prima menyebut 1; glosarium mencatat keduanya). Level keterampilan tersembunyi per pekerjaan dimulai dari 0, naik 1 setiap
   kali ia melakukan pekerjaan itu, dan maksimal 255.
 - **Kebutuhan berpengaruh, cuaca tidak.** Anda tidak dapat menyewa sprite untuk pekerjaan yang tidak ada yang perlu dikerjakan
   hari itu, tetapi sprite yang disewa tetap datang saat badai topan atau badai salju, sehingga berguna untuk memberi makan

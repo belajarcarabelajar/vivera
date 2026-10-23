@@ -25,6 +25,39 @@ test('the systemd unit runs the bridge from the main checkout', () => {
   expect(unit).toMatch(/^ExecStart=%h\/\.bun\/bin\/bun %h\/vivera\/mods\/telegram-ask\/bridge\/main\.ts$/m);
 });
 
+test('the OpenCode plugin loads and exports the plugin shape', async () => {
+  const plugin = (await import(join(MOD, 'opencode/telegram-ask.ts'))).default;
+  expect(plugin.id).toBe('telegram-ask');
+  expect(typeof plugin.setup).toBe('function');
+});
+
+// Comment lines state facts (and the pitfall), so code assertions judge only
+// the code: a name that appears in a comment must not satisfy them.
+function codeOf(rel) {
+  return readFileSync(join(MOD, rel), 'utf8')
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//'))
+    .join('\n');
+}
+
+test('the OpenCode plugin never wraps tool.execute, which hides the TUI dialog', () => {
+  const code = codeOf('opencode/telegram-ask.ts');
+  expect(code).not.toMatch(/tool\.transform/);
+  expect(code).not.toMatch(/ctx\.tool/);
+});
+
+test('the OpenCode plugin and the bridge name the same socket file and override', () => {
+  const pluginLines = codeOf('opencode/telegram-ask.ts').split('\n');
+  const bridge = codeOf('bridge/main.ts');
+  const at = pluginLines.findIndex((line) => line.includes('const SOCKET ='));
+  const pluginSocket = pluginLines.slice(at, at + 2).join('\n');
+  const bridgeSocket = bridge.split('\n').find((line) => line.includes('TELEGRAM_ASK_SOCKET'));
+  expect(pluginSocket).toContain('vivera-telegram-ask.sock');
+  expect(bridgeSocket).toContain('vivera-telegram-ask.sock');
+  expect(pluginSocket).toContain('TELEGRAM_ASK_SOCKET');
+  expect(bridgeSocket).toContain('TELEGRAM_ASK_SOCKET');
+});
+
 test('the bridge tests pass', () => {
   const run = spawnSync(process.execPath, ['test', './mods/telegram-ask/bridge/'], { cwd: ROOT, encoding: 'utf8', timeout: 100_000 });
   expect(run.status, run.stdout + run.stderr).toBe(0);

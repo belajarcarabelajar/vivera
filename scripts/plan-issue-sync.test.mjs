@@ -53,27 +53,15 @@ import {
   syncOne,
   OPEN_STATUSES,
   CLOSED_STATUS,
+  ISSUE_FORMAT,
+  issueTitle,
+  checklistCounts,
 } from './plan-issue-sync.mjs';
 import * as syncModule from './plan-issue-sync.mjs';
+import { PLAN_REL, plan, stub } from './lib/plan-issue-fixtures.mjs';
 
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-issue-sync.mjs');
 
-const PLAN_REL = 'docs/code-plan/plans/2026-10-01-add-pr.md';
-
-function plan(status = 'Draft', extra = '') {
-  return `---
-schema: ultra-plan/v1
-plan_id: 2026-10-01-add-pr
-status: ${status}
-version: 1
----
-
-# Add PR delivery
-
-**Goal:** one thing.
-${extra}
-`;
-}
 
 // The plan must live INSIDE the fake repository root, because the issue key is
 // computed relative to that root. A bare temp dir would exercise the "not inside"
@@ -100,17 +88,6 @@ function cfgFor(repoRoot, overrides = {}) {
   };
 }
 
-// A recording stub, for the paths that never reach the network: refusals that
-// happen before any gh call, and the pure decision layer.
-function stub(result = { ok: true, url: 'https://github.com/u/r/issues/7' }) {
-  const calls = [];
-  const run = (args, input) => {
-    calls.push({ args, input });
-    return typeof result === 'function' ? result(args, input) : result;
-  };
-  run.calls = calls;
-  return run;
-}
 
 // ONE fake binary for the whole suite, on the real GH_BIN seam.
 function withFakeGh(script, fn) {
@@ -224,85 +201,6 @@ test('the hash is stable and content-sensitive', () => {
   assert.notEqual(hashOf('# a'), hashOf('# b'));
 });
 
-// ---------- the body ----------
-
-test('the issue body is the plan text, byte for byte, plus a machine trailer', () => {
-  const text = plan('Draft');
-  const body = issueBody(text, { planId: 'p1', key: 'k', sourcePath: 'src.md', status: 'Draft' });
-  // The premise of the mirror is that the issue IS the plan. A summary would be
-  // a second source of truth that drifts the moment the plan changes.
-  assert.ok(body.startsWith(text.replace(/\s*$/, '')));
-  assert.ok(body.includes('# Add PR delivery'));
-  assert.ok(body.includes('schema: ultra-plan/v1'));
-});
-
-test('the trailer round-trips so drift is detectable from the issue alone', () => {
-  const text = plan('Draft');
-  const body = issueBody(text, { planId: '2026-10-01-add-pr', key: 'k.md', sourcePath: 'k.md', status: 'Draft' });
-  const t = parseTrailer(body);
-  assert.equal(t.plan_id, '2026-10-01-add-pr');
-  assert.equal(t.key, 'k.md');
-  assert.equal(t.status, 'Draft');
-  assert.equal(t.hash, hashOf(text));
-});
-
-test('a body with no trailer parses as null instead of throwing', () => {
-  // An issue created by hand in the UI has no trailer, and the sync must report
-  // that as a fact rather than crash on it.
-  assert.equal(parseTrailer('a hand-written issue body'), null);
-  assert.equal(parseTrailer(undefined), null);
-});
-
-test('the trailer does not disturb a plan that itself contains an HTML comment', () => {
-  const text = plan('Draft', '\n<!-- an existing comment -->');
-  const body = issueBody(text, { planId: 'p', key: 'k', sourcePath: 's', status: 'Draft' });
-  assert.ok(body.includes('<!-- an existing comment -->'));
-  assert.equal(parseTrailer(body).key, 'k');
-});
-
-// GitHub rejects an issue body over 65,536 characters (measured on Snipset,
-// 2026-10-12: "Body is too long (maximum is 65536 characters) (createIssue)").
-// Each LF is counted as CRLF here, the most a stored body can grow to.
-const GITHUB_BODY_LIMIT = 65536;
-const githubLength = (s) => s.length + (s.match(/\n/g) || []).length;
-const longPlan = (lines) => plan('Draft', Array.from({ length: lines }, (_, i) => `- step ${i} ${'x'.repeat(48)}`).join('\n'));
-const TRUNCATION_MARKER = /^\*\*Truncated:\*\* this issue shows the first (\d+) of (\d+) characters of the plan, cut at a line boundary to fit GitHub's 65,536-character body limit\. The full plan is `([^`]+)` in the repository\.$/m;
-
-test('a plan too long for one issue body keeps the longest verbatim line-boundary prefix that fits', () => {
-  const text = longPlan(1400);
-  assert.ok(githubLength(text) > GITHUB_BODY_LIMIT, 'fixture must exceed the GitHub limit');
-  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
-  assert.ok(githubLength(body) <= GITHUB_BODY_LIMIT - 256, `body counts ${githubLength(body)}, leaving no headroom`);
-  const m = body.match(TRUNCATION_MARKER);
-  assert.ok(m, 'a truncated body must say so in one explicit line');
-  const n = Number(m[1]);
-  assert.equal(body.slice(0, n), text.slice(0, n), 'the kept part is the plan verbatim, never a summary');
-  assert.equal(text[n], '\n', 'the cut falls on a line boundary');
-  assert.ok(n > 60000, `the prefix is the longest that fits, got ${n}`);
-});
-
-test('a truncated body names N of M characters and the plan repository path, then the unchanged trailer', () => {
-  const text = longPlan(1400);
-  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
-  const m = body.match(TRUNCATION_MARKER);
-  assert.ok(m);
-  assert.equal(Number(m[2]), text.length);
-  assert.equal(m[3], PLAN_REL);
-  assert.ok(body.indexOf(m[0]) < body.lastIndexOf('<!-- plan-sync:'), 'the marker precedes the trailer');
-  const t = parseTrailer(body);
-  assert.equal(t.key, PLAN_REL);
-  // The hash stays over the FULL plan, so drift detection does not change.
-  assert.equal(t.hash, hashOf(text));
-});
-
-test('a plan under the limit keeps the byte-for-byte body with no truncation marker', () => {
-  const text = longPlan(1000);
-  assert.ok(text.length > 55000 && githubLength(text) < GITHUB_BODY_LIMIT - 1024);
-  const body = issueBody(text, { planId: 'p', key: PLAN_REL, sourcePath: null, status: 'Draft' });
-  assert.ok(body.startsWith(`${text.replace(/\s*$/, '')}\n---\n`));
-  assert.doesNotMatch(body, /Truncated/);
-});
-
 // ---------- readLiveState: the one read that makes `current` falsifiable ----------
 
 test('the live state is read from the issue itself, with an explicit --json state', () => {
@@ -355,14 +253,14 @@ test('an unrecorded plan is created, never updated', () => {
 
 test('an unchanged plan is current, which is the real no-op', () => {
   const text = plan('Draft');
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'open', planText: text, status: 'Draft', ...base });
   assert.equal(a.kind, 'current');
   assert.equal(a.number, 7);
 });
 
 test('an edited plan updates the body and nothing else', () => {
-  const entry = { number: 7, url: 'u', hash: hashOf(plan('Draft')), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(plan('Draft')), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'open', planText: plan('Draft', '\nnew line'), status: 'Draft', ...base });
   assert.equal(a.kind, 'update-body');
   assert.equal(a.close, undefined, 'a body edit must not silently close or reopen the issue');
@@ -370,7 +268,7 @@ test('an edited plan updates the body and nothing else', () => {
 
 test('a plan that reached Complete closes its issue', () => {
   const text = plan(CLOSED_STATUS);
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
   assert.equal(a.kind, 'update-state');
   assert.equal(a.close, true);
@@ -380,7 +278,7 @@ test('an in-progress plan reopens an issue somebody closed by hand', () => {
   // The issue is derived state, so the plan wins. A human closing the issue to
   // tidy the board must not permanently detach the plan from its mirror.
   const text = plan('InProgress');
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' };
   const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'InProgress', ...base });
   assert.equal(a.kind, 'update-state');
   assert.equal(a.close, false);
@@ -388,7 +286,7 @@ test('an in-progress plan reopens an issue somebody closed by hand', () => {
 
 test('a plan edited and completed in one step does both', () => {
   const text = plan(CLOSED_STATUS, '\nedited too');
-  const entry = { number: 7, url: 'u', hash: hashOf(plan(CLOSED_STATUS)), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(plan(CLOSED_STATUS)), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
   assert.equal(a.kind, 'update-and-state');
   assert.equal(a.close, true);
@@ -397,7 +295,7 @@ test('a plan edited and completed in one step does both', () => {
 test('every non-Complete status in the open set leaves the issue open', () => {
   for (const status of OPEN_STATUSES) {
     const text = plan(status);
-    const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
+    const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' };
     const a = deriveAction({ entry, liveState: 'closed', planText: text, status, ...base });
     assert.equal(a.kind, 'update-state', `${status} must resolve to a state change`);
     assert.equal(a.close, false, `${status} must not close its issue`);
@@ -407,7 +305,7 @@ test('every non-Complete status in the open set leaves the issue open', () => {
 test('a Blocked plan keeps its issue open', () => {
   // Blocked means work is unfinished, so closing the issue would report done.
   const text = plan('Blocked');
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' };
   const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'Blocked', ...base });
   assert.equal(a.close, false);
 });
@@ -419,7 +317,7 @@ test('a sidecar that says closed does not outvote an issue GitHub holds open', (
   // while the issue was OPEN produced kind "current", printed CURRENT, and made
   // zero gh calls. The claim could not fail, so it was a false pass.
   const text = plan(CLOSED_STATUS);
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'closed' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' };
   const a = deriveAction({ entry, liveState: 'open', planText: text, status: CLOSED_STATUS, ...base });
   assert.notEqual(a.kind, 'current', 'the sidecar agreeing with itself is not evidence');
   assert.equal(a.kind, 'update-state', 'a state transition is the only honest outcome here');
@@ -430,7 +328,7 @@ test('a sidecar that says closed does not outvote an issue GitHub holds open', (
 
 test('a sidecar that says open does not outvote an issue GitHub holds closed', () => {
   const text = plan('InProgress');
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'closed', planText: text, status: 'InProgress', ...base });
   assert.notEqual(a.kind, 'current');
   assert.equal(a.kind, 'update-state');
@@ -439,7 +337,7 @@ test('a sidecar that says open does not outvote an issue GitHub holds closed', (
 
 test('current requires the sidecar, GitHub and the plan to agree', () => {
   const text = plan('InProgress');
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' };
   const a = deriveAction({ entry, liveState: 'open', planText: text, status: 'InProgress', ...base });
   assert.equal(a.kind, 'current');
 });
@@ -448,7 +346,7 @@ test('deriveAction refuses to decide the state when no live read was supplied', 
   // Without the read there is no third opinion to compare, so the function
   // errors instead of quietly reading entry.state again.
   const text = plan(CLOSED_STATUS);
-  const entry = { number: 7, url: 'u', hash: hashOf(text), state: 'open' };
+  const entry = { number: 7, url: 'u', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' };
   assert.throws(
     () => deriveAction({ entry, planText: text, status: CLOSED_STATUS, ...base }),
     /Refusing to fall back to the recorded state/,
@@ -843,7 +741,7 @@ test('the recorded state follows the plan, not the previous entry', () => {
   try {
     withFakeGh(RECORD_AND_ECHO_URL, (g) => {
       const res = syncOne(cfgFor(f.repoRoot, {
-        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(plan('Draft')), state: 'open' } },
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(plan('Draft')), format: ISSUE_FORMAT, state: 'open' } },
       }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
       assert.equal(res.action, 'update-and-state');
       assert.equal(res.cfg.issues[PLAN_REL].state, 'closed');
@@ -867,7 +765,7 @@ test('a sidecar that says closed cannot make an open issue look current', () => 
   try {
     withFakeGh(GH_HOLDING_OPEN, (g) => {
       const res = syncOne(cfgFor(f.repoRoot, {
-        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' } },
       }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
       assert.notEqual(res.action, 'current', 'the sidecar agreeing with itself is not evidence');
       assert.equal(res.action, 'update-state');
@@ -889,7 +787,7 @@ test('an issue GitHub holds closed is reopened even when the sidecar says open',
   try {
     withFakeGh(GH_HOLDING_CLOSED, (g) => {
       const res = syncOne(cfgFor(f.repoRoot, {
-        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' } },
       }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
       assert.notEqual(res.action, 'current');
       assert.equal(res.action, 'update-state');
@@ -907,7 +805,7 @@ test('current means all three agree: sidecar, GitHub and the plan', () => {
   try {
     withFakeGh(GH_HOLDING_OPEN, (g) => {
       const res = syncOne(cfgFor(f.repoRoot, {
-        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+        issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' } },
       }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() });
       assert.equal(res.action, 'current');
       assert.equal(res.written, false);
@@ -927,7 +825,7 @@ test('an unreadable live state stops the plan at the read, before any write', ()
     withFakeGh(GH_VIEW_UNREADABLE, (g) => {
       assert.throws(
         () => syncOne(cfgFor(f.repoRoot, {
-          issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+          issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' } },
         }), { planPath: f.full, repoRoot: f.repoRoot, run: ghRunner() }),
         (e) => /issue view 9 --repo u\/snippet --json state/.test(e.message)
           && /refuses to fall back/.test(e.message),
@@ -951,7 +849,7 @@ test('a check whose live state cannot be read exits non-zero and never prints th
     writeFileSync(cfgPath, JSON.stringify({
       version: 1,
       projects: { [path.basename(f.repoRoot)]: 'u/snippet' },
-      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'closed' } },
+      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'closed' } },
     }), 'utf8');
     withFakeGh(GH_VIEW_UNREADABLE, () => {
       const r = spawnSync(process.execPath, [
@@ -1032,7 +930,7 @@ test('an unrecorded plan with no same-title issue lists, then creates', () => {
   try {
     const run = ghAnswers({ list: [issueRow(3, `${TITLE}-followup`)] });
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue create']);
+    assert.deepEqual(verbs(run), ['issue list', 'label create', 'issue create']);
     // No --search: the search index lags a fresh create, and that create is the one to find.
     assert.equal(run.calls[0].args.join(' '), LIST_ARGV);
     assert.equal(res.action, 'create');
@@ -1157,7 +1055,7 @@ test('a recorded row makes no issue list call', () => {
   try {
     const run = ghAnswers();
     const res = syncOne(cfgFor(f.repoRoot, {
-      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), state: 'open' } },
+      issues: { [PLAN_REL]: { number: 9, url: 'u9', hash: hashOf(text), format: ISSUE_FORMAT, state: 'open' } },
     }), { planPath: f.full, repoRoot: f.repoRoot, run });
     assert.equal(res.action, 'current');
     assert.deepEqual(verbs(run).filter((v) => v === 'issue list'), [], 'a recorded number is read, not looked up');
@@ -1187,8 +1085,8 @@ test('an adopted issue whose plan changed is edited and marked adopted', () => {
   try {
     const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(plan('Draft')) } });
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'issue edit']);
-    assert.equal(run.calls[2].args[2], '5', 'the edit goes to the adopted issue');
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'label create', 'issue edit']);
+    assert.equal(run.calls[3].args[2], '5', 'the edit goes to the adopted issue');
     assert.equal(res.action, 'update-body');
     assert.equal(res.adopted, true);
     assert.equal(res.cfg.issues[PLAN_REL].number, 5);
@@ -1334,8 +1232,8 @@ test('Complete plan without an issue: one run creates and closes, sidecar says c
   try {
     const run = ghAnswers();
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue create', 'issue close']);
-    assert.deepEqual(run.calls[2].args, ['issue', 'close', '11', '--repo', 'u/snippet']);
+    assert.deepEqual(verbs(run), ['issue list', 'label create', 'issue create', 'issue close']);
+    assert.deepEqual(run.calls[3].args, ['issue', 'close', '11', '--repo', 'u/snippet']);
     assert.equal(res.action, 'create+close');
     assert.equal(res.cfg.issues[PLAN_REL].number, 11);
     assert.equal(res.cfg.issues[PLAN_REL].state, 'closed');
@@ -1399,7 +1297,7 @@ test('Complete plan without an issue: a non-Complete plan still creates open', (
   try {
     const run = ghAnswers();
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue create']);
+    assert.deepEqual(verbs(run), ['issue list', 'label create', 'issue create']);
     assert.equal(res.action, 'create');
     assert.equal(res.cfg.issues[PLAN_REL].state, 'open');
   } finally {

@@ -93,17 +93,20 @@ export const register: Register = (on, options) => {
       }
     }
 
-    // Polls until the bridge has answers; null when it closed, forgot the id, or failed.
+    // Polls until the bridge has answers; null when it closed, forgot the id, or failed three times in a row.
     async function waitForTelegram(askId: string, sock: string): Promise<Answers | null> {
+      let failures = 0
       while (!raceOver) {
         try {
           const res = await $.http.fetch(`http://bridge/wait/${askId}`, { socketPath: sock })
+          failures = 0
           if (!res.ok) return null
           const body = JSON.parse(res.text) as { status?: string; answers?: Answers }
           if (body.status === 'answered' && body.answers) return body.answers
           if (body.status !== 'pending') return null
         } catch {
-          return null
+          // One dropped long-poll must not end listening to Telegram for the rest of the dialog.
+          if (++failures >= 3) return null
         }
       }
       return null

@@ -108,60 +108,60 @@ describe('update endpoint', () => {
 })
 
 describe('review follow-ups', () => {
-  const counting = () => {
-    let n = 0
-    return () => (n++ < 6 ? 0 : 0.05)
+  const HOUR = 60 * 60_000
+  // A live hook re-polls /wait; each poll here returns pending at once because waitMs is 1.
+  const pollEvery = async (id: string, stepMs: number, untilMs: number, setClock: (t: number) => void) => {
+    for (let t = stepMs; t <= untilMs; t += stepMs) {
+      setClock(t)
+      expect((await call(`/wait/${id}`)).status).toBe(200)
+    }
   }
 
-  test('an ask older than askTtlMs is dropped on the next ask and its wait closes', async () => {
+  test('an ask that keeps being polled survives far past 6 hours', async () => {
     let clock = 0
-    await start({ waitMs: 2000, askTtlMs: 1000, now: () => clock, rand: counting() })
-    const old = await ask()
-    const waiting = call(`/wait/${old}`)
-    await Bun.sleep(30)
-    clock = 1001
-    await ask()
-    expect(await (await waiting).json()).toEqual({ status: 'closed' })
-    expect((await call(`/wait/${old}`)).status).toBe(404)
-  })
-
-  test('an ask younger than askTtlMs survives the sweep', async () => {
-    let clock = 0
-    await start({ askTtlMs: 1000, now: () => clock, rand: counting() })
-    const young = await ask()
-    clock = 1000
-    await ask()
-    expect(await (await call(`/wait/${young}`)).json()).toEqual({ status: 'pending' })
-  })
-
-  test('an expired ask is swept on an update, so its tap answers as expired', async () => {
-    let clock = 0
-    const b = await start({ askTtlMs: 1000, now: () => clock })
+    const b = await start({ waitMs: 1, now: () => clock })
     const id = await ask()
-    clock = 5000
+    await pollEvery(id, 100_000, 7 * HOUR, (t) => (clock = t))
+    await b.handleUpdate(tap(`${id}:0:0`))
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Ya' } })
+  })
+
+  test('an ask nobody polls for more than staleMs is dropped and its tap answers as expired', async () => {
+    let clock = 0
+    const b = await start({ now: () => clock })
+    const id = await ask()
+    clock = 120_001
     expect(await b.handleUpdate(tap(`${id}:0:0`))).toBe(true)
     expect(sent('answerCallbackQuery').map((c) => c.body.text)).toEqual(['Pertanyaan ini sudah selesai'])
     expect((await call(`/wait/${id}`)).status).toBe(404)
   })
 
-  test('a stale Other wait no longer swallows plain text', async () => {
+  test('an ask polled exactly staleMs ago is kept', async () => {
     let clock = 0
-    const b = await start({ otherTtlMs: 1000, now: () => clock })
+    const b = await start({ staleMs: 1000, now: () => clock })
     const id = await ask()
-    await b.handleUpdate(tap(`${id}:0:o`))
-    clock = 1001
-    expect(await b.handleUpdate(text('pesan biasa'))).toBe(false)
-    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'pending' })
+    clock = 1000
+    await b.handleUpdate(tap(`${id}:0:0`))
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Ya' } })
   })
 
-  test('a fresh Other wait still takes the text', async () => {
+  test('an Other wait on a live ask still takes text after 11 minutes', async () => {
     let clock = 0
-    const b = await start({ otherTtlMs: 1000, now: () => clock })
+    const b = await start({ waitMs: 1, now: () => clock })
     const id = await ask()
     await b.handleUpdate(tap(`${id}:0:o`))
-    clock = 1000
+    await pollEvery(id, 60_000, 11 * 60_000, (t) => (clock = t))
     expect(await b.handleUpdate(text('jawaban'))).toBe(true)
     expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'jawaban' } })
+  })
+
+  test('an Other wait on a dropped ask does not take text', async () => {
+    let clock = 0
+    const b = await start({ now: () => clock })
+    const id = await ask()
+    await b.handleUpdate(tap(`${id}:0:o`))
+    clock = 120_001
+    expect(await b.handleUpdate(text('pesan biasa'))).toBe(false)
   })
 
   test('a terminal resolve after a Telegram answer shows the terminal answer', async () => {

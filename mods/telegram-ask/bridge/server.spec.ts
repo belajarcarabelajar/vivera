@@ -12,6 +12,7 @@ import {
   logs,
   multi,
   post,
+  rawGet,
   sent,
   single,
   sock,
@@ -199,6 +200,23 @@ describe('answering from Telegram', () => {
 })
 
 describe('GET /wait and POST /resolve', () => {
+  test(
+    'a long-poll longer than 10 s stays open until the answer comes',
+    async () => {
+      // Bun warns at 10 s but drops the idle request at about 12 s, so the tap comes at 14 s.
+      const b = await start({ waitMs: 20_000 })
+      const id = await ask()
+      const waiting = rawGet(`/wait/${id}`)
+      await Bun.sleep(14_000)
+      await b.handleUpdate(tap(`${id}:0:1`))
+      const res = await waiting
+      expect(res.status).toBe(200)
+      expect(JSON.parse(res.body)).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Tidak' } })
+      expect(logs.join('\n')).not.toContain('timed out a request')
+    },
+    30_000,
+  )
+
   test('a wait with no answer returns pending after waitMs', async () => {
     await start({ waitMs: 200 })
     const id = await ask()

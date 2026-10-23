@@ -67,7 +67,7 @@ The drop-in sets `TELEGRAM_ASK_POLL=0`; the bridge then logs `polling off (updat
 
 - `journalctl --user -u telegram-ask-bridge -f`: ask ids and counts only, never question text, answers, or the token.
 - Bridge stopped or crashed: the dialog shows `telegram-ask: bridge offline` and works as before. A pending ask is lost when the bridge restarts; its buttons then answer "Pertanyaan ini sudah selesai".
-- An ask that nobody resolves (its session died) is dropped after 6 h. A `✏️ Lainnya` tap stops taking text messages after 10 min, so later messages stay with the forwarding program, if any.
+- There is no answer deadline while the session waits: a question stays answerable from Telegram for hours, and a `✏️ Lainnya` tap keeps taking your next text as long as its question is open. An ask is dropped about 2 minutes after its session stops polling the bridge (terminal closed or killed); its buttons then answer "Pertanyaan ini sudah selesai".
 - `telegram-ask: not sent to Telegram (<status>)` under the dialog: the bridge is up but refused the question; the terminal dialog works as usual.
 - Exit 2 at start: a missing env file, key, or socket path (the unit does not restart on it). The log line names the missing file or key, never a value.
 - `getUpdates 409` in the log: another program polls the same bot; use the forwarded setup above.

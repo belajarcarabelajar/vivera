@@ -27,11 +27,20 @@ class FakeBridge {
   pendingForever = false
   // When set, every request fails the way a missing socket does.
   down = false
+  // The next this many /wait requests fail like a dropped connection.
+  waitThrows = 0
+  private thrown: Array<() => void> = []
+  private thrownCount = 0
   waitReplies: Reply[] = []
   private hold: ((r: Reply) => void) | undefined
   private askedOnce: () => void = () => {}
   asked = new Promise<void>(res => (this.askedOnce = res))
   private waitServed: Array<() => void> = []
+
+  // Settles once the n-th /wait has failed.
+  waitFailed(n: number): Promise<void> {
+    return new Promise(res => (this.thrown[n - 1] = res))
+  }
 
   // Settles once the n-th /wait reply has been handed back to the hook.
   waits(n: number): Promise<void> {
@@ -43,6 +52,11 @@ class FakeBridge {
       const url = new URL(e.url)
       const body = e.init?.body ? JSON.parse(e.init.body) : undefined
       this.sent.push({ method: e.init?.method ?? 'GET', path: url.pathname, body, socketPath: e.init?.socketPath })
+      if (url.pathname.startsWith('/wait/') && this.waitThrows > 0) {
+        this.waitThrows--
+        this.thrown[this.thrownCount++]?.()
+        throw new Error('socket hang up')
+      }
       if (this.down) {
         if (url.pathname === '/ask') this.askedOnce()
         throw new Error('connect ENOENT')
@@ -229,6 +243,35 @@ describe('fail open', () => {
     expect(out.result).toEqual({ questions: QUESTIONS, answers: TERMINAL })
     expect(notices).toEqual(['telegram-ask: not sent to Telegram (400)'])
     expect(bridge.paths()).toEqual(['POST /ask'])
+  })
+
+  test('a /wait that drops once does not stop listening to Telegram', async ($, on) => {
+    const bridge = new FakeBridge(on)
+    bridge.waitThrows = 1
+    bridge.waitReplies = [{ status: 200, body: { status: 'answered', answers: PHONE } }]
+    session(on)
+    on('tool.call', { tool: 'AskUserQuestion' }, async (_$, _e, next) => {
+      await new Promise<void>(res => next.signal.addEventListener('abort', () => res()))
+      return { deny: 'dialog closed' }
+    })
+    const out = await $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS })
+    expect(out.result).toEqual({ questions: QUESTIONS, answers: PHONE })
+    expect(bridge.paths().filter(p => p.startsWith('GET /wait/'))).toEqual(['GET /wait/abcdef', 'GET /wait/abcdef'])
+  })
+
+  test('three dropped /wait requests in a row end the Telegram side', async ($, on) => {
+    const bridge = new FakeBridge(on)
+    bridge.waitThrows = 10
+    session(on)
+    const third = bridge.waitFailed(3)
+    on('tool.call', { tool: 'AskUserQuestion' }, async () => {
+      await third
+      for (let i = 0; i < 20; i++) await Promise.resolve()
+      return { result: { questions: QUESTIONS, answers: TERMINAL } }
+    })
+    const out = await $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS })
+    expect(out.result).toEqual({ questions: QUESTIONS, answers: TERMINAL })
+    expect(bridge.paths().filter(p => p.startsWith('GET /wait/')).length).toBe(3)
   })
 
   test('a 404 on wait (bridge restarted) falls back to the terminal answer', async ($, on) => {

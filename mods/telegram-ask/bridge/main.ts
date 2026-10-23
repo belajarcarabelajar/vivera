@@ -10,6 +10,12 @@ function fail(message: string): never {
   process.exit(2)
 }
 
+// Snipset desktop polls this bot and forwards updates to POST /update; a second
+// poller on the same token gets 409, so polling here is opt-in for a dedicated bot.
+export function pollEnabled(env: Record<string, string | undefined>): boolean {
+  return env.TELEGRAM_ASK_POLL === '1'
+}
+
 export function parseEnvFile(text: string): Record<string, string> {
   const env: Record<string, string> = {}
   for (const raw of text.split('\n')) {
@@ -57,6 +63,12 @@ async function main() {
   }
   process.on('SIGTERM', () => void stop('SIGTERM'))
   process.on('SIGINT', () => void stop('SIGINT'))
+
+  if (!pollEnabled(process.env)) {
+    log('polling off (Snipset forwards updates)')
+    return
+  }
+  log('polling Telegram (TELEGRAM_ASK_POLL=1)')
 
   let offset = 0
   let backoff = 1_000

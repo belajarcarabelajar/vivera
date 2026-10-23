@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { pollEnabled } from './main'
 import { startBridge } from './server'
 import { createTelegram } from './telegram'
 
@@ -14,6 +15,7 @@ type Fail = { status: number; description: string }
 
 let calls: Call[]
 let fail: Record<string, Fail>
+let delay: Record<string, number>
 let fake: ReturnType<typeof Bun.serve>
 let dir: string
 let sock: string
@@ -24,6 +26,7 @@ const saved = { log: console.log, error: console.error, warn: console.warn }
 beforeEach(() => {
   calls = []
   fail = {}
+  delay = {}
   logs = []
   bridge = null
   for (const k of ['log', 'error', 'warn'] as const) console[k] = (...a: unknown[]) => void logs.push(a.map(String).join(' '))
@@ -33,6 +36,7 @@ beforeEach(() => {
       const path = new URL(req.url).pathname
       const method = path.split('/').pop() ?? ''
       calls.push({ method, path, body: await req.json() })
+      if (delay[method]) await Bun.sleep(delay[method])
       const f = fail[method]
       if (f) return Response.json({ ok: false, error_code: f.status, description: f.description }, { status: f.status })
       if (method === 'sendMessage') return Response.json({ ok: true, result: { message_id: 100 + calls.length } })
@@ -317,5 +321,104 @@ describe('logging', () => {
     const out = logs.join('\n')
     expect(out).toContain(id)
     for (const secret of [TOKEN, 'Lanjut?', 'Rencana siap.', 'Rahasia jawaban']) expect(out).not.toContain(secret)
+  })
+})
+
+describe('update endpoint', () => {
+  const consumed = async (u: unknown) => {
+    const res = await post('/update', u)
+    expect(res.status).toBe(200)
+    return ((await res.json()) as { consumed: boolean }).consumed
+  }
+
+  test('update endpoint consumes a tap on a pending ask and applies it', async () => {
+    await start()
+    const id = await ask()
+    expect(await consumed(tap(`${id}:0:0`))).toBe(true)
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Ya' } })
+  })
+
+  test('update endpoint consumes a tap for an unknown ask and answers it as expired', async () => {
+    await start()
+    expect(await consumed(tap('qqqqqq:0:0'))).toBe(true)
+    await Bun.sleep(50)
+    expect(sent('answerCallbackQuery').map((c) => c.body.text)).toEqual(['Pertanyaan ini sudah selesai'])
+  })
+
+  test('update endpoint consumes a tap on an answered ask and answers it as expired', async () => {
+    await start()
+    const id = await ask()
+    expect(await consumed(tap(`${id}:0:0`))).toBe(true)
+    expect(await consumed(tap(`${id}:0:1`))).toBe(true)
+    await Bun.sleep(50)
+    expect(sent('answerCallbackQuery').map((c) => c.body.text)).toEqual([undefined, 'Pertanyaan ini sudah selesai'])
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Ya' } })
+  })
+
+  test('update endpoint does not consume a callback whose data is not a tap', async () => {
+    await start()
+    await ask()
+    expect(await consumed(tap('snipset:copy:42'))).toBe(false)
+    expect(await consumed({ update_id: 1, callback_query: { id: 'x', message: { message_id: 1, chat: { id: CHAT } } } })).toBe(false)
+    expect(calls.map((c) => c.method)).toEqual(['sendMessage'])
+  })
+
+  test('update endpoint consumes text while an ask awaits Other text', async () => {
+    await start()
+    const id = await ask()
+    await consumed(tap(`${id}:0:o`))
+    expect(await consumed(text('Nanti saja'))).toBe(true)
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Nanti saja' } })
+  })
+
+  test('update endpoint does not consume text when no ask awaits Other text', async () => {
+    await start()
+    await ask()
+    expect(await consumed(text('/start'))).toBe(false)
+  })
+
+  test('update endpoint does not consume updates from another chat', async () => {
+    await start()
+    const id = await ask()
+    expect(await consumed(tap(`${id}:0:0`, OTHER_CHAT))).toBe(false)
+    expect(await consumed(tap(`${id}:0:o`))).toBe(true)
+    expect(await consumed(text('Ya', OTHER_CHAT))).toBe(false)
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'pending' })
+  })
+
+  test('update endpoint does not consume a message without text or an unrelated update', async () => {
+    await start()
+    const id = await ask()
+    await consumed(tap(`${id}:0:o`))
+    expect(await consumed({ update_id: 1, message: { message_id: 2, chat: { id: CHAT }, sticker: {} } })).toBe(false)
+    expect(await consumed({ update_id: 2, edited_message: { message_id: 2, chat: { id: CHAT }, text: 'x' } })).toBe(false)
+  })
+
+  test('update endpoint rejects invalid JSON and non-object bodies with 400', async () => {
+    await start()
+    expect((await call('/update', { method: 'POST', body: '{nope' })).status).toBe(400)
+    expect((await post('/update', [1, 2])).status).toBe(400)
+    expect((await post('/update', 'text')).status).toBe(400)
+    expect((await post('/update', null)).status).toBe(400)
+  })
+
+  test('update endpoint answers within 1.5 s while Telegram is slow', async () => {
+    await start({ waitMs: 2000 })
+    const id = await ask()
+    delay.answerCallbackQuery = 3000
+    delay.editMessageText = 3000
+    const t0 = performance.now()
+    expect(await consumed(tap(`${id}:0:1`))).toBe(true)
+    expect(performance.now() - t0).toBeLessThan(1500)
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Lanjut?': 'Tidak' } })
+  })
+})
+
+describe('main', () => {
+  test('polls Telegram only when TELEGRAM_ASK_POLL is 1', () => {
+    expect(pollEnabled({ TELEGRAM_ASK_POLL: '1' })).toBe(true)
+    expect(pollEnabled({})).toBe(false)
+    expect(pollEnabled({ TELEGRAM_ASK_POLL: '0' })).toBe(false)
+    expect(pollEnabled({ TELEGRAM_ASK_POLL: 'true' })).toBe(false)
   })
 })

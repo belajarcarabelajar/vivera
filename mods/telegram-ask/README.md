@@ -7,8 +7,15 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 ## Parts
 
 - `hooks/register.ts`: the mod. A `tool.call` hook on `AskUserQuestion` runs `next(e)` (the dialog) and, beside it, posts the question to the bridge and long-polls for the answer. Returning `{ result }` while `next(e)` is pending aborts the dialog.
-- `bridge/`: the daemon (Bun). It is the bot's only `getUpdates` poller, because Telegram answers 409 to a second poller on one token, and this machine runs several sessions. API over a Unix socket: `POST /ask`, `GET /wait/:id` (50 s long-poll), `POST /resolve/:id`.
+- `bridge/`: the daemon (Bun). One bridge serves every session on this machine; it does not poll Telegram itself (see below). API over a Unix socket: `POST /ask`, `GET /wait/:id` (50 s long-poll), `POST /resolve/:id`, `POST /update`.
 - `deploy/telegram-ask-bridge.service`: the systemd user unit.
+
+## Updates come from Snipset
+
+Snipset desktop already polls this bot, and Telegram answers 409 to a second `getUpdates` poller on one token. So Snipset stays the bot's only poller and forwards each update to the bridge's `POST /update`, which answers `{ consumed }` within about a second: a tap on a telegram-ask button is always consumed, a text message only while a question waits for its `✏️ Lainnya` answer, and nothing from another chat. Snipset keeps every update that is not consumed.
+
+- Set the Snipset preference `telegram_bridge_socket` to the bridge socket path (`$XDG_RUNTIME_DIR/vivera-telegram-ask.sock` unless overridden).
+- `TELEGRAM_ASK_POLL=1` makes the bridge poll Telegram itself. Use it only with a dedicated bot that nobody else polls; without it the bridge logs `polling off (Snipset forwards updates)` and only serves the socket.
 
 ## Telegram
 

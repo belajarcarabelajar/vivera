@@ -10,6 +10,7 @@ import {
   renderAsk,
   type Ask,
   type AskState,
+  type Button,
 } from './format'
 import type { ChatId, Telegram, Update } from './telegram'
 
@@ -21,6 +22,7 @@ type Entry = {
   waiters: Set<(r: WaitResult) => void>
   result?: Record<string, string>
   otherSeq: number
+  edits: Promise<void>
 }
 
 export type BridgeOptions = {
@@ -33,9 +35,15 @@ export type BridgeOptions = {
   log?: (line: string) => void
 }
 
-export type Bridge = { stop(): Promise<void>; handleUpdate(update: Update): Promise<void> }
+export type Bridge = { stop(): Promise<void>; handleUpdate(update: Update): Promise<boolean> }
+
+type Dispatch = { consumed: boolean; done: Promise<void> }
 
 const EXPIRED = 'Pertanyaan ini sudah selesai'
+// Snipset forwards each update with a 2 s timeout, so /update replies before that.
+const UPDATE_REPLY_MS = 1_000
+const DONE: Promise<void> = Promise.resolve()
+const NO: Dispatch = { consumed: false, done: DONE }
 
 function isString(v: unknown): v is string {
   return typeof v === 'string'
@@ -93,26 +101,28 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     entry.waiters.clear()
   }
 
-  async function edit(id: string, entry: Entry, text: string, keyboard?: Parameters<Telegram['editMessageText']>[3]) {
-    try {
-      await telegram.editMessageText(chatId, entry.messageId, text, keyboard)
-    } catch (e) {
-      if (!isNotModified(e)) log(`edit failed for ${id}: ${errStatus(e)}`)
-    }
+  // Edits for one ask run in order, so a slow edit cannot land after a newer one.
+  function queueEdit(id: string, entry: Entry, render: () => { text: string; keyboard?: Button[][] } | null): Promise<void> {
+    entry.edits = entry.edits.then(async () => {
+      const view = render()
+      if (!view) return
+      try {
+        await telegram.editMessageText(chatId, entry.messageId, view.text, view.keyboard)
+      } catch (e) {
+        if (!isNotModified(e)) log(`edit failed for ${id}: ${errStatus(e)}`)
+      }
+    })
+    return entry.edits
   }
 
-  async function settle(id: string, entry: Entry) {
+  function settle(id: string, entry: Entry): Promise<void> {
     const answers = answersIfComplete(entry.state)
-    if (!answers) {
-      const { text, keyboard } = renderAsk(entry.state)
-      await edit(id, entry, text, keyboard)
-      return
-    }
+    if (!answers) return queueEdit(id, entry, () => (entry.result ? null : renderAsk(entry.state)))
     entry.result = answers
     log(`ask ${id} answered in telegram (${Object.keys(answers).length} answers)`)
     wake(entry, { status: 'answered', answers })
-    await edit(id, entry, renderAnswered(entry.state.ask, answers, 'telegram'))
     later(keepMs, () => asks.delete(id))
+    return queueEdit(id, entry, () => ({ text: renderAnswered(entry.state.ask, answers, 'telegram') }))
   }
 
   async function answerCallback(id: string, text?: string) {
@@ -123,35 +133,69 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     }
   }
 
-  const fromOwner = (chat: { id: ChatId } | undefined) => chat !== undefined && String(chat.id) === String(chatId)
+  const fromOwner = (chat: { id: ChatId } | undefined) =>
+    !!chat && typeof chat === 'object' && String(chat.id) === String(chatId)
 
-  async function handleUpdate(update: Update) {
+  // State changes happen synchronously here; `done` covers the Telegram calls.
+  function dispatch(update: Update): Dispatch {
     const cq = update.callback_query
-    if (cq) {
-      if (!fromOwner(cq.message?.chat)) return
-      const tap = parseCallback(cq.data ?? '')
-      const entry = tap ? asks.get(tap.id) : undefined
-      if (!tap || !entry || entry.result) return answerCallback(cq.id, EXPIRED)
+    if (cq && typeof cq === 'object') {
+      if (!fromOwner(cq.message?.chat)) return NO
+      const tap = typeof cq.data === 'string' ? parseCallback(cq.data) : null
+      if (!tap) return NO
+      const entry = asks.get(tap.id)
+      if (!entry || entry.result) return { consumed: true, done: answerCallback(cq.id, EXPIRED) }
       const next = applyTap(entry.state, tap)
-      await answerCallback(cq.id)
-      if (next === entry.state) return
+      const ack = answerCallback(cq.id)
+      if (next === entry.state) return { consumed: true, done: ack }
       if (tap.kind === 'other') entry.otherSeq = ++otherSeq
       entry.state = next
-      return settle(tap.id, entry)
+      return { consumed: true, done: Promise.all([ack, settle(tap.id, entry)]).then(() => {}) }
     }
     const msg = update.message
-    if (!msg || !fromOwner(msg.chat) || typeof msg.text !== 'string') return
+    if (!msg || typeof msg !== 'object' || !fromOwner(msg.chat) || typeof msg.text !== 'string') return NO
     let target: [string, Entry] | undefined
     for (const pair of asks) {
       const e = pair[1]
       if (e.result || e.state.awaitingOther === null) continue
       if (!target || e.otherSeq > target[1].otherSeq) target = pair
     }
-    if (!target) return
+    if (!target) return NO
     const next = applyText(target[1].state, msg.text)
-    if (next === target[1].state) return
+    if (next === target[1].state) return { consumed: true, done: DONE }
     target[1].state = next
-    return settle(target[0], target[1])
+    return { consumed: true, done: settle(target[0], target[1]) }
+  }
+
+  async function handleUpdate(update: Update): Promise<boolean> {
+    const d = dispatch(update)
+    await d.done
+    return d.consumed
+  }
+
+  async function onUpdate(req: Request): Promise<Response> {
+    const body = await req.json().catch(() => undefined)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return new Response('bad request', { status: 400 })
+    let d: Dispatch
+    try {
+      d = dispatch(body as Update)
+    } catch (e) {
+      log(`update failed: ${(e as Error).name}`)
+      return Response.json({ consumed: false })
+    }
+    await new Promise<void>((resolve) => {
+      const t = setTimeout(() => {
+        timers.delete(t)
+        resolve()
+      }, UPDATE_REPLY_MS)
+      timers.add(t)
+      d.done.then(() => {
+        clearTimeout(t)
+        timers.delete(t)
+        resolve()
+      })
+    })
+    return Response.json({ consumed: d.consumed })
   }
 
   async function onAsk(req: Request): Promise<Response> {
@@ -169,7 +213,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const state = newState({ id, ...body })
     const { text, keyboard } = renderAsk(state)
     // Reserve the id before the await so a parallel ask cannot draw it too.
-    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0 }
+    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0, edits: DONE }
     asks.set(id, entry)
     try {
       entry.messageId = (await telegram.sendMessage(chatId, text, keyboard)).message_id
@@ -213,7 +257,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     wake(entry, { status: 'closed' })
     log(`ask ${id} resolved: ${by}`)
     // Already answered from Telegram: the message shows that answer, so it stays.
-    if (!entry.result) await edit(id, entry, renderAnswered(entry.state.ask, answers, by))
+    if (!entry.result) await queueEdit(id, entry, () => ({ text: renderAnswered(entry.state.ask, answers, by) }))
     return Response.json({ ok: true })
   }
 
@@ -222,6 +266,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     async fetch(req) {
       const parts = new URL(req.url).pathname.split('/').filter(Boolean)
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)
+      if (req.method === 'POST' && parts.length === 1 && parts[0] === 'update') return onUpdate(req)
       if (req.method === 'GET' && parts.length === 2 && parts[0] === 'wait') return onWait(parts[1])
       if (req.method === 'POST' && parts.length === 2 && parts[0] === 'resolve') return onResolve(parts[1], req)
       return new Response('not found', { status: 404 })

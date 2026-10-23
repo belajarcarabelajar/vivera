@@ -1,0 +1,22 @@
+{
+  "id": "router-loads-phase-skills",
+  "behaviour": "The orchestrator loads sucp-rules before its first command and sucp-tdd-debug before it first reproduces the bug.",
+  "prompt": "`bun test` fails in this project. The fix is approved; make the test suite pass.",
+  "fixture": "failing-test",
+  "max_turns": 12,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "skill_loaded",
+      "skill": "sucp-rules",
+      "scope": "main",
+      "before": "."
+    },
+    {
+      "type": "skill_loaded",
+      "skill": "sucp-tdd-debug",
+      "scope": "main",
+      "before": "\\bbun (run )?test\\b"
+    }
+  ]
+}

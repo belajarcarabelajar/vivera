@@ -15,6 +15,7 @@ export const ASSERTION_TYPES = Object.freeze([
   'fixture_changed',
   'final_options',
   'tool_count',
+  'skill_loaded',
   'bash_never',
   'bash_some',
   'file_exists',
@@ -126,6 +127,17 @@ const CHECKS = {
     const n = inScope(parsed.toolUses, a.scope).filter((t) => t.name === a.tool).length;
     const ok = (a.min == null || n >= a.min) && (a.max == null || n <= a.max);
     return [ok, `${a.tool} x${n} in scope ${a.scope ?? 'all'} (min ${a.min ?? '-'}, max ${a.max ?? '-'})`];
+  },
+  // A skill reaches the context through the Skill tool or a Read of its SKILL.md; the stream never shows its text.
+  skill_loaded(parsed, facts, a) {
+    const uses = inScope(parsed.toolUses, a.scope);
+    const at = uses.findIndex((t) => (t.name === 'Skill' && t.input?.skill === a.skill)
+      || (t.name === 'Read' && String(t.input?.file_path ?? '').endsWith(`/skills/${a.skill}/SKILL.md`)));
+    if (at < 0) return [false, `${a.skill} never loaded in scope ${a.scope ?? 'all'}`];
+    if (a.before == null) return [true, `${a.skill} loaded at tool call ${at + 1}`];
+    const re = toRegex(a.before);
+    const first = uses.findIndex((t) => t.name === 'Bash' && typeof t.input?.command === 'string' && re.test(t.input.command));
+    return [first < 0 || at < first, `${a.skill} loaded at tool call ${at + 1}, first /${a.before}/ Bash call at ${first < 0 ? 'none' : first + 1}`];
   },
   bash_never(parsed, facts, a) {
     const n = bashMatches(parsed, a);

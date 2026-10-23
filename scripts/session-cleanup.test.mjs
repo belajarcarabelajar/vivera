@@ -80,6 +80,56 @@ describe('planCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a detached HEAD with a commit on no other ref is a blocker, so the commit is not lost', () => {
+    const f = fixture();
+    try {
+      git(f.worktree, 'checkout', '-q', '--detach');
+      f.put(f.worktree, 'd.txt', 'd\n');
+      git(f.worktree, 'add', 'd.txt');
+      git(f.worktree, 'commit', '-q', '-m', 'detached work');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.branch).toBe(null);
+      expect(p.blockers.join('\n')).toMatch(/detached HEAD.*1 commit/);
+    } finally { f.done(); }
+  });
+
+  test('a build-like name nested inside an ignored data directory is salvaged, not dropped', () => {
+    const f = fixture();
+    try {
+      f.put(f.worktree, 'vo/build/report.json', '{"unique":true}');
+      f.put(f.worktree, 'vo/target/take.wav', 'audio');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.disposable).toEqual([]);
+      expect(p.salvage).toEqual(['vo/build/report.json', 'vo/target/take.wav']);
+    } finally { f.done(); }
+  });
+
+  test('a salvage target whose parent is a file in the main checkout is a conflict, found before anything is copied', () => {
+    const f = fixture();
+    try {
+      writeFileSync(path.join(f.repo, 'vo'), 'a file where the worktree has a directory');
+      f.put(f.worktree, 'vo/z.wav', 'audio');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.salvage).toEqual([]);
+      expect(p.conflicts).toEqual(['vo/z.wav']);
+    } finally { f.done(); }
+  });
+
+  test('the processes that ran this cleanup are not blockers, even with their cwd in the worktree', () => {
+    const f = fixture();
+    try {
+      const p = planCleanup({ worktree: f.worktree, procCwds: [{ pid: process.ppid, cwd: f.worktree }] });
+      expect(p.blockers).toEqual([]);
+    } finally { f.done(); }
+  });
+
+  test('a base that looks like an option is refused', () => {
+    const f = fixture();
+    try {
+      expect(() => runCleanup({ worktree: f.worktree, base: '--upload-pack=x', procCwds: [] })).toThrow(/base/);
+    } finally { f.done(); }
+  });
+
   test('a disposable directory nested inside an ignored directory is dropped, not salvaged', () => {
     const f = fixture();
     try {

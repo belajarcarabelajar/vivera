@@ -49,6 +49,14 @@ sehingga edit di sini berlaku setelah `/reload-plugins`. `readOnlyModel` di `/co
 `sprite-model-router:`. `scripts/sprite-model-router.test.mjs` gagal saat roster-nya menyimpang dari
 `agents/crew.json`, dan menjalankan tes milik mod lewat `claude plugin test`.
 
+Mod opsional kedua, `mods/telegram-ask`, mencerminkan setiap dialog `AskUserQuestion` ke chat Telegram,
+sehingga gate persetujuan bisa dijawab dari ponsel. Dialog terminal tetap terbuka di sampingnya dan jawaban
+pertama yang menang. Daemon bridge kecil (`telegram-ask-bridge.service`, unit systemd user) mengirim pesannya dan
+melakukan polling pada bot Telegram miliknya sendiri untuk mengambil jawaban. Opsional: bila Snipset desktop sudah
+melakukan polling pada bot yang sama, Snipset yang meneruskan update ke bridge.
+Cara pasang, log, dan revert ada di `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs`
+menjalankan tes Bun milik bridge dan `claude plugin test` milik mod.
+
 Hal-hal yang mudah keliru:
 
 - **Sengaja tidak ada `CLAUDE.md`.** Claude Code membaca `AGENTS.md` sendiri hanya jika tidak ada `CLAUDE.md`

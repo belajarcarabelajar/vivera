@@ -1,0 +1,14 @@
+[Unit]
+Description=vivera telegram-ask bridge (mirrors Claude Code questions to Telegram)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=%h/.bun/bin/bun %h/vivera/mods/telegram-ask/bridge/main.ts
+Restart=on-failure
+RestartSec=5
+# Exit 2 is a missing env file, key or socket path: restarting cannot fix it.
+RestartPreventExitStatus=2
+
+[Install]
+WantedBy=default.target

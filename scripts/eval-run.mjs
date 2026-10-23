@@ -203,6 +203,9 @@ function buildFixture(scenario, fixturesDir, dest) {
   gitOk(dest, ['init', '-q', '-b', 'main']);
   gitOk(dest, ['add', '-A']);
   gitOk(dest, ['commit', '-q', '-m', 'eval fixture']);
+  // The sandbox has no git config; without these the agent's commits fail.
+  gitOk(dest, ['config', 'user.name', FIXTURE_GIT_ENV.GIT_AUTHOR_NAME]);
+  gitOk(dest, ['config', 'user.email', FIXTURE_GIT_ENV.GIT_AUTHOR_EMAIL]);
   return gitOk(dest, ['rev-parse', 'HEAD']).trim();
 }
 

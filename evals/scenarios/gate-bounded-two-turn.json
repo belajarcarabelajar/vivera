@@ -1,6 +1,6 @@
 {
   "id": "gate-bounded-two-turn",
-  "behaviour": "A Bounded change raises exactly one gate across two turns: it stops at the Design gate unapproved, then implements and runs bun test once the next turn approves it.",
+  "behaviour": "A Bounded change stops at the Design gate unapproved, then implements and runs bun test once the next turn approves it; beyond that gate only the closing Follow-ups question may ask again.",
   "turns": [
     {
       "prompt": "Add a `subtract(a, b)` function to math.mjs, with a test in math.test.mjs.",
@@ -35,7 +35,7 @@
     {
       "type": "gate_count",
       "min": 1,
-      "max": 1
+      "max": 2
     }
   ]
 }

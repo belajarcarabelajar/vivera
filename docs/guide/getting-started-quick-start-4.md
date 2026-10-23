@@ -47,6 +47,14 @@ Claude Code then reads it from this folder, so an edit here takes effect after `
 logs one `sprite-model-router:` line. `scripts/sprite-model-router.test.mjs` fails when its roster drifts
 from `agents/crew.json`, and runs the mod's own tests through `claude plugin test`.
 
+A second optional mod, `mods/telegram-ask`, mirrors every `AskUserQuestion` dialog to a Telegram chat, so
+an approval gate can be answered from a phone. The terminal dialog stays open beside it and the first answer
+wins. A small bridge daemon (`telegram-ask-bridge.service`, a systemd user unit) sends the messages and polls
+its own Telegram bot for the answers. Optionally, when Snipset desktop already polls the same bot, Snipset
+forwards the updates to the bridge instead.
+Install, logs, and revert are in `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs` runs the
+bridge's Bun tests and the mod's `claude plugin test`.
+
 Things that are easy to get wrong:
 
 - **There is no `CLAUDE.md` on purpose.** Claude Code reads `AGENTS.md` itself only when no `CLAUDE.md`

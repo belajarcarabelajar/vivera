@@ -1,7 +1,8 @@
 // scripts/lib/ci-targeted-index.mjs
 //
 // The repository facts the targeted gate plans from: script sources, markdown
-// files whose mermaid blocks changed, and a package.json edit limited to scripts.
+// files whose mermaid blocks changed, a package.json edit limited to scripts, and
+// the mods the mods/ marketplace lists.
 // Split out of scripts/ci-targeted.mjs, which re-exports the public names.
 
 import { spawnSync } from 'node:child_process';
@@ -72,11 +73,34 @@ function packageScriptsOnlyFiles(root, files, mergeBase) {
   });
 }
 
+const MARKETPLACE = 'mods/.claude-plugin/marketplace.json';
+
+// A local plugin source names its mods/ folder; a remote one (an object) has only its name.
+function readMarketplaceMods(root) {
+  try {
+    const { plugins = [] } = JSON.parse(fs.readFileSync(path.join(root, MARKETPLACE), 'utf8'));
+    return plugins.map((pl) => (typeof pl.source === 'string' ? path.posix.basename(pl.source) : pl.name)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/** The suite tests a mods/ path selects: scripts/<mod>.test.mjs for a file in a mod folder,
+ * that of every listed mod for the marketplace. Null when one is missing, so the path
+ * stays unrecognized and forces the full list instead of going untested. */
+export function modTests(p, sources, marketplaceMods = []) {
+  const mod = p.match(/^mods\/([^./][^/]*)\/./)?.[1];
+  const mods = p === MARKETPLACE ? marketplaceMods : mod ? [mod] : [];
+  const tests = mods.map((m) => `scripts/${m}.test.mjs`);
+  return tests.length && tests.every((t) => t in sources) ? tests : null;
+}
+
 export function buildIndex(root, files, mergeBase, untracked = []) {
   return {
     sources: readSources(root),
     mermaidChanged: mermaidChangedFiles(root, files, mergeBase),
     untracked,
     packageScriptsOnly: packageScriptsOnlyFiles(root, files, mergeBase),
+    marketplaceMods: readMarketplaceMods(root),
   };
 }

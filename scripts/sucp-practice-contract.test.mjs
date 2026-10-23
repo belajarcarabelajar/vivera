@@ -4,6 +4,7 @@
 // 2026-10-15-sucp-practice-gaps) in the one file that owns each rule, so a later
 // edit cannot drop or relocate one silently. Groups are named by plan task, so a
 // task runs only its own group: `bun test ./scripts/sucp-practice-contract.test.mjs -t 'T1 gap'`.
+// Rules adopted from later comparisons join as their own group, named by a new letter.
 // An `absent` needle is superseded wording that must not survive beside the new rule.
 
 import { describe, expect, test } from 'bun:test';
@@ -225,6 +226,48 @@ const CONTRACT = [
   {
     task: 'F4', gaps: 'follow-up', file: 'docs/memory/tools-and-environment.md',
     present: ['| L57 |', 'UNROUTABLE'],
+  },
+  // S1: the stop rule for repeated failed fixes, taken from the ayghri/i-have-adhd comparison.
+  {
+    task: 'S1', gaps: 'debug spiral', file: 'skills/sucp-tdd-debug/SKILL.md',
+    present: [
+      'Spiral stop.',
+      'Three fix attempts in a row',
+      'attempts the user made and reported before the session',
+      'A fourth patch to the same spot is shotgun debugging',
+      'a probe that changes no product code',
+      'the No loop possible case of Phase 0',
+    ],
+  },
+  // S2: the load order at the top of the orchestrator; the eval took phase-skill loading from 0/3 to 3/3 with it.
+  {
+    task: 'S2', gaps: 'skill loading', file: 'Super Ultra Code Plan Implementation.md',
+    present: [
+      '## First Moves',
+      'Your first tool call loads `sucp-rules` with the skill tool. Nothing runs before it.',
+      'Load `sucp-tdd-debug` before the first command that runs a test',
+      'approval removes a gate, never a skill',
+    ],
+  },
+  // S3: a session the user declares done loses its worktree without a question.
+  {
+    task: 'S3', gaps: 'worktree cleanup', file: 'skills/sucp-rules/references/07-completion-confirmation.md',
+    present: [
+      'Done Means the Worktree Goes',
+      'bun scripts/session-cleanup.mjs --session <slug>',
+      'the declaration is the approval',
+      'never answered with `--force`, `rm -rf`, or `git branch -D`',
+      'as **Done Means the Worktree Goes** below says',
+    ],
+    absent: ['remove the temporary worktree or branch after integration'],
+  },
+  {
+    task: 'S3', gaps: 'worktree cleanup', file: 'skills/sucp-rules/SKILL.md',
+    present: ['or the user calling the session done'],
+  },
+  {
+    task: 'S3', gaps: 'worktree cleanup', file: 'snippets/cmd-cleanup.md',
+    present: ['bun scripts/session-cleanup.mjs --session <slug>'],
   },
 ];
 

@@ -19,7 +19,7 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [04-token-reasoning.md](references/04-token-reasoning.md) | Before research, chaining shell commands, or editing large files. |
 | [05-delegation.md](references/05-delegation.md) | Before chunking work or dispatching subagents. |
 | [06-quality-output.md](references/06-quality-output.md) | Before writing code comments, user-visible copy, a report, or a handoff. |
-| [07-completion-confirmation.md](references/07-completion-confirmation.md) | Before asking any gate (the gate catalog), or claiming approved work complete. |
+| [07-completion-confirmation.md](references/07-completion-confirmation.md) | Before any gate (the gate catalog), a completion claim, or the user calling the session done. |
 | [08-learning-frontend.md](references/08-learning-frontend.md) | Before writing memory, or doing frontend work. |
 | [09-anti-patterns.md](references/09-anti-patterns.md) | When reviewing work, or self-checking against anti-patterns. |
 

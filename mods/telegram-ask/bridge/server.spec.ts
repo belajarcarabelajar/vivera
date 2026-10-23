@@ -29,13 +29,14 @@ import { createTelegram } from './telegram'
 useBridgeFixtures()
 
 describe('telegram client', () => {
-  test('posts JSON with an inline keyboard, no parse mode, and link previews off', async () => {
+  test('posts JSON with an inline keyboard, HTML parse mode, and link previews off', async () => {
     const tg = telegram()
-    expect(await tg.sendMessage(CHAT, 'halo *x*', [[{ text: 'A', callback_data: 'abcdef:0:0' }]])).toEqual({ message_id: 101 })
+    expect(await tg.sendMessage(CHAT, 'halo <b>x</b>', [[{ text: 'A', callback_data: 'abcdef:0:0' }]])).toEqual({ message_id: 101 })
     expect(calls[0].path).toBe(`/bot${TOKEN}/sendMessage`)
     expect(calls[0].body).toEqual({
       chat_id: CHAT,
-      text: 'halo *x*',
+      text: 'halo <b>x</b>',
+      parse_mode: 'HTML',
       reply_markup: { inline_keyboard: [[{ text: 'A', callback_data: 'abcdef:0:0' }]] },
       link_preview_options: { is_disabled: true },
     })
@@ -94,7 +95,8 @@ describe('POST /ask', () => {
     expect(sent('sendMessage').length).toBe(1)
     const body = sent('sendMessage')[0].body
     expect(body.chat_id).toBe(String(CHAT))
-    expect(body.text).toContain('[1/1] Gate: Lanjut?')
+    expect(body.text).toContain('<b>[1/1] Gate:</b> Lanjut?')
+    expect(body.parse_mode).toBe('HTML')
     expect(body.reply_markup.inline_keyboard).toEqual([
       [{ text: '1.1 Ya', callback_data: 'aaaaaa:0:0' }],
       [{ text: '1.2 Tidak', callback_data: 'aaaaaa:0:1' }],
@@ -173,10 +175,29 @@ describe('answering from Telegram', () => {
       '1.2 Lint',
       '✅ 1.3 Docs',
       '✏️ Lainnya',
-      'Kirim',
+      '📨 Kirim',
     ])
     await b.handleUpdate(tap(`${id}:0:s`))
     expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'answered', answers: { 'Cek apa?': 'Tes, Docs' } })
+  })
+
+  test('Send with a question still open says which one in the toast', async () => {
+    const b = await start({ waitMs: 200 })
+    const id = await ask(multi)
+    await b.handleUpdate(tap(`${id}:0:s`))
+    expect(sent('answerCallbackQuery').map((c) => c.body.text)).toEqual(['Belum dijawab: pertanyaan 1'])
+    expect(await (await call(`/wait/${id}`)).json()).toEqual({ status: 'pending' })
+  })
+
+  test('a message Telegram cannot parse as HTML is resent as plain text', async () => {
+    await start()
+    fail.sendMessage = { status: 400, description: "Bad Request: can't parse entities: unsupported start tag" }
+    expect((await post('/ask', single)).status).toBe(502)
+    const [first, second] = sent('sendMessage').map((c) => c.body)
+    expect(first.parse_mode).toBe('HTML')
+    expect(second.parse_mode).toBeUndefined()
+    expect(second.text).toContain('[1/1] Gate: Lanjut?')
+    expect(second.text).not.toContain('<b>')
   })
 
   test('Other then a text message answers with the text', async () => {

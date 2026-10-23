@@ -12,10 +12,11 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 
 ## Telegram
 
-- Single choice: tap the option. Multi-select: tap to toggle (✅), then `Kirim`. Free text: tap `✏️ Lainnya`, then send the answer as a normal message.
-- A call with several questions resolves only when every question is answered.
+- Single choice: tap the option. Multi-select: tap to toggle (✅), then `📨 Kirim` at the bottom. Free text: tap `✏️ Lainnya`, then send the answer as a normal message.
+- A call with several questions resolves only when every question is answered. Each question opens with a header row (`━━ 2/3 · Header ━━`, a tap does nothing), and one `📨 Kirim semua jawaban` at the very bottom answers every multi-select question at once; a Send with a question still open names it in a toast.
 - Only updates from `TELEGRAM_CHAT_ID` count; any other chat is ignored.
 - The message names the project and the first 8 characters of the session id, and quotes Claude's latest text (cut so the message stays within 4096 characters).
+- Markdown is rendered (`parse_mode: HTML`, `bridge/markdown.ts`): bold, italic, code, links, headings, lists and quotes; a table becomes an aligned monospace block because Telegram cannot draw tables. Button labels drop the markers. If Telegram still refuses the HTML, the same message is sent again as plain text.
 
 ## Install
 

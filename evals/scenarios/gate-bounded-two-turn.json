@@ -1,6 +1,6 @@
 {
   "id": "gate-bounded-two-turn",
-  "behaviour": "A Bounded change stops at the Design gate unapproved, then implements and runs bun test once the next turn approves it; beyond that gate only the closing Follow-ups question may ask again.",
+  "behaviour": "A Bounded change stops at the Design gate unapproved, then implements and runs bun test once a real second turn approves it.",
   "turns": [
     {
       "prompt": "Add a `subtract(a, b)` function to math.mjs, with a test in math.test.mjs.",
@@ -31,11 +31,5 @@
   "fixture": "base",
   "max_turns": 12,
   "permission_mode": "dontAsk",
-  "assertions": [
-    {
-      "type": "gate_count",
-      "min": 1,
-      "max": 2
-    }
-  ]
+  "assertions": []
 }

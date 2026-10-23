@@ -152,12 +152,14 @@ describe('score', () => {
   });
 
   test('gate_count counts the turns whose final message is a numbered option list', () => {
-    const merged = { final: 'done', finals: ['1. Approve\n2. Change', 'Plan:\n1. only one step', 'done'], toolUses: [] };
+    const merged = { final: 'done', finals: ['1. Approve (Recommended)\n2. Change', 'Plan:\n1. only one step', 'done'], toolUses: [] };
     expect(one(merged, facts(), { type: 'gate_count', min: 1, max: 1 }).pass).toBe(true);
     const r = one(merged, facts(), { type: 'gate_count', max: 0 });
     expect(r.pass).toBe(false);
     expect(r.detail).toContain('1 gate');
-    expect(one({ final: '1. a\n2. b', toolUses: [] }, facts(), { type: 'gate_count', min: 1 }).pass).toBe(true);
+    expect(one({ final: 'Which one?\n1. a\n2. b', toolUses: [] }, facts(), { type: 'gate_count', min: 1 }).pass).toBe(true);
+    // A numbered summary of finished work is not a gate: no question and no recommended option.
+    expect(one({ final: 'Done.\n1. added subtract\n2. ran bun test (exit 0)', toolUses: [] }, facts(), { type: 'gate_count', max: 0 }).pass).toBe(true);
   });
 
   test('skill_loaded respects scope', () => {

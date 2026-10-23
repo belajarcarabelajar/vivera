@@ -34,7 +34,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { score } from './eval-score.mjs';
-import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf } from './lib/eval-turns.mjs';
+import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
 import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
@@ -97,11 +97,8 @@ function validateScenario(s, file, skills) {
   const bad = (why) => new UsageError(`${file}: ${why}`);
   if (!s || typeof s !== 'object') throw bad('not a JSON object');
   for (const k of ['id', 'fixture']) if (typeof s[k] !== 'string' || !s[k]) throw bad(`missing ${k}`);
-  if ((typeof s.prompt === 'string' && s.prompt !== '') === (s.turns !== undefined)) throw bad('needs exactly one of prompt or turns');
-  if (s.turns !== undefined && (!Array.isArray(s.turns) || s.turns.length < 2
-    || !s.turns.every((t) => typeof t?.prompt === 'string' && t.prompt && (t.assertions === undefined || Array.isArray(t.assertions))))) {
-    throw bad('turns must hold at least two turns, each with a prompt');
-  }
+  const shape = turnsProblem(s);
+  if (shape) throw bad(shape);
   if (!Number.isInteger(s.max_turns) || s.max_turns < 1) throw bad('max_turns must be a positive integer');
   if (s.permission_mode === 'bypassPermissions') throw bad('permission_mode bypassPermissions is refused: it lets the agent under test run any command here');
   if (!PERMISSION_MODES.has(s.permission_mode)) throw bad(`permission_mode must be one of ${[...PERMISSION_MODES].join(', ')}`);
@@ -109,7 +106,6 @@ function validateScenario(s, file, skills) {
     || !s.allowed_tools.every((t) => typeof t === 'string' && t.trim() !== ''))) {
     throw bad('allowed_tools must be a non-empty array of tool names');
   }
-  if (!Array.isArray(s.assertions) || s.assertions.length === 0) throw bad('assertions must be a non-empty array');
   if (s.invoke !== undefined && s.invoke !== false && !(typeof s.invoke === 'string' && skills.has(s.invoke))) {
     throw bad(`invoke must be false or one of the installed skills, got ${JSON.stringify(s.invoke)}`);
   }

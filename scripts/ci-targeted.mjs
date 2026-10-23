@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, gitText } from './lib/git.mjs';
-import { buildIndex } from './lib/ci-targeted-index.mjs';
+import { buildIndex, modTests } from './lib/ci-targeted-index.mjs';
 
 export { buildIndex, mermaidBlocks, scriptsOnlyChange } from './lib/ci-targeted-index.mjs';
 
@@ -201,8 +201,9 @@ function testsForScript(p, sources, graph) {
 function testsForOther(p, sources) {
   const top = p.split('/')[0];
   const topLiteral = new RegExp(`['"\`]${escapeRe(top)}(?:['"\`]|/)`);
-  // A doc directly under evals/ (its README) is read by no test that merely names evals/.
-  const broad = p.includes('/') && !/^evals\/[^/]+$/.test(p);
+  // A doc directly under evals/ (its README) is read by no test that merely names evals/;
+  // a mod's own suite test comes from modTests, not from every test naming mods/.
+  const broad = p.includes('/') && !/^evals\/[^/]+$/.test(p) && !p.startsWith('mods/');
   const tests = new Set();
   for (const [f, src] of Object.entries(sources)) {
     if (isTest(f) && (mentionsPath(src, p) || (broad && topLiteral.test(src)))) tests.add(f);
@@ -262,7 +263,7 @@ export function planChecks(changed, index, { base = 'origin/main', full = false 
   if (full) return fullPlan(base, ['--full requested'], ignored, paths);
   const fullReasons = [];
   for (const p of paths) {
-    const why = scriptsOnly.has(p) ? null : toolchainReason(p) ?? (recognized(p) ? null : 'unrecognized path');
+    const why = scriptsOnly.has(p) ? null : toolchainReason(p) ?? (recognized(p) || modTests(p, sources, index.marketplaceMods) ? null : 'unrecognized path');
     if (why) fullReasons.push(`${p}: ${why}`);
   }
   if (fullReasons.length) return fullPlan(base, fullReasons, ignored, paths);
@@ -272,6 +273,7 @@ export function planChecks(changed, index, { base = 'origin/main', full = false 
   const testReasons = [];
   for (const p of paths) {
     const tests = p.startsWith('scripts/') ? testsForScript(p, sources, graph) : testsForOther(p, sources);
+    for (const t of modTests(p, sources, index.marketplaceMods) ?? []) tests.add(t);
     if (p.startsWith('scripts/') && !isTest(p) && CODE_EXT.test(p) && tests.size === 0) {
       fullReasons.push(`${p}: no test reaches it`);
     }

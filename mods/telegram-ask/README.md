@@ -60,6 +60,22 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 - The bridge never copies or logs the token. Never set a webhook on the bot: Telegram stops `getUpdates` while one is set.
 - Socket: `$XDG_RUNTIME_DIR/vivera-telegram-ask.sock`, mode 0600. Override with `TELEGRAM_ASK_SOCKET` for the bridge and the `socketPath` option in `/config` for the mod.
 
+## OpenCode
+
+OpenCode has no `AskUserQuestion` hook, so the mirror there is a plugin: it reads the session form the built-in `question` tool opens and answers that form through the server's own HTTP API. It uses the same bridge, socket, and bot as the Claude Code half.
+
+```bash
+cp ~/vivera/mods/telegram-ask/opencode/telegram-ask.ts ~/.config/opencode/plugins/telegram-ask.ts
+```
+
+Restart OpenCode afterwards.
+
+- Measured 2026-10-23 on OpenCode 2.1.3: in a standalone TUI session and in an `opencode serve --service` session the dialog opens in the TUI and the same question arrives in Telegram; an answer entered in Telegram closes the dialog and reaches the model, a TUI answer marks the Telegram message, and Esc cancels it.
+- One question call posts one Telegram message; answers come back keyed by question text, which is how the plugin maps them onto the form's fields.
+- `TELEGRAM_ASK_DEBUG=<file>` in the environment that starts OpenCode logs wait and reply status lines, never question text, answers, or the password.
+- Do not wrap the tool's `execute` through `ctx.tool.transform`: measured the same day, even a pass-through wrapper hides the TUI dialog. `bun test scripts/telegram-ask.test.mjs` fails when the plugin's code names `ctx.tool`; aliasing it through another variable would slip past that check.
+- Revert: `rm ~/.config/opencode/plugins/telegram-ask.ts`, then restart OpenCode.
+
 ## When another program already polls the bot
 
 Telegram answers 409 to a second `getUpdates` poller on one token. If another program already polls the bot you want to use, that program stays the only poller, the bridge stops polling, and the program forwards each update to the bridge's `POST /update`. The bridge answers `{ consumed }` within about a second: a tap on a telegram-ask button is always consumed, a text message only while a question waits for its `✏️ Lainnya` answer, and nothing from another chat. The forwarding program keeps every update that is not consumed.
@@ -89,10 +105,10 @@ The drop-in sets `TELEGRAM_ASK_POLL=0`; the bridge then logs `polling off (updat
 ```bash
 bun test ./mods/telegram-ask/bridge/          # bridge, Bun tests named *.spec.ts
 claude plugin test mods/telegram-ask          # the hook, *.test.ts
-bun test scripts/telegram-ask.test.mjs        # both, as the repository suite runs them
+bun test scripts/telegram-ask.test.mjs        # all of the above plus the OpenCode plugin, as the repository suite runs them
 ```
 
-The bridge tests end in `.spec.ts` because `claude plugin test` runs every `*.test.ts` under the mod and refuses a `bun:test` import.
+The bridge tests end in `.spec.ts` because `claude plugin test` runs every `*.test.ts` under the mod and refuses a `bun:test` import. `mods/telegram-ask/opencode/` therefore carries no test file: the suite test asserts there that the plugin module loads, exports `id` and `setup`, keeps the bridge socket file name and the shared `TELEGRAM_ASK_SOCKET` override, and never names `ctx.tool` in code.
 
 ## Revert
 

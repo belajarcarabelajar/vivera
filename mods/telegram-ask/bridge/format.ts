@@ -3,14 +3,19 @@ export type Question = { question: string; header: string; options: Option[]; mu
 export type Ask = { id: string; project: string; session: string; context: string; questions: Question[] }
 export type QState = { picked: number[]; other?: string; done: boolean }
 export type AskState = { ask: Ask; q: QState[]; awaitingOther: number | null }
+import { escapeHtml, inlineMarkdown, markdownToHtml, stripMarkdown } from './markdown'
+
 export type Tap =
   | { id: string; q: number; kind: 'option'; option: number }
   | { id: string; q: number; kind: 'send' }
   | { id: string; q: number; kind: 'other' }
+  | { id: string; q: number; kind: 'header' }
 export type Button = { text: string; callback_data: string }
 
 // Telegram limits: message text and button text in characters (JS length is
 // UTF-16 units, never fewer than Telegram's count), callback data in bytes.
+// Message text is Telegram HTML (parse_mode "HTML"); its length is measured
+// with the tags, which is never less than what Telegram counts.
 const MAX_TEXT = 4096
 const MAX_CONTEXT = 1500
 const MAX_BUTTON = 64
@@ -41,23 +46,33 @@ function headerLine(ask: Ask): string {
   return `🌾 ${ask.project} · ${ask.session}`
 }
 
-function buildText(state: AskState, contextMax: number, descMax: number | null): string {
+// rich = false is the last resort when even the shortest rich text is too long:
+// escaped plain text, safe to cut anywhere outside an entity.
+function buildText(state: AskState, contextMax: number, descMax: number | null, rich = true): string {
   const { ask } = state
-  const lines = [headerLine(ask)]
+  const inline = rich ? inlineMarkdown : (s: string) => escapeHtml(stripMarkdown(s))
+  const lines = [escapeHtml(headerLine(ask))]
   const context = ask.context.trim()
-  if (context) lines.push('Claude:', cut(context, contextMax))
+  if (context) lines.push(rich ? '<b>Claude:</b>' : 'Claude:', rich ? markdownToHtml(cut(context, contextMax)) : escapeHtml(cut(context, contextMax)))
   const total = ask.questions.length
   ask.questions.forEach((q, n) => {
-    lines.push('', `[${n + 1}/${total}] ${q.header}: ${q.question}${q.multiSelect ? ' (pilih beberapa)' : ''}`)
+    const head = `[${n + 1}/${total}] ${escapeHtml(stripMarkdown(q.header))}:`
+    lines.push('', `${rich ? `<b>${head}</b>` : head} ${inline(q.question)}${q.multiSelect ? ' (pilih beberapa)' : ''}`)
     q.options.forEach((o, i) => {
-      const desc = o.description && descMax !== null ? ` - ${cut(o.description, descMax)}` : ''
-      lines.push(` ${i + 1}. ${o.label}${desc}`)
+      const desc = o.description && descMax !== null ? ` - ${inline(cut(o.description, descMax))}` : ''
+      lines.push(` ${i + 1}. ${inline(o.label)}${desc}`)
     })
   })
   if (state.awaitingOther !== null) {
     lines.push('', `✏️ Ketik jawaban untuk pertanyaan ${state.awaitingOther + 1} sebagai pesan biasa.`)
   }
   return lines.join('\n')
+}
+
+// Cuts escaped plain text without leaving half an entity such as "&am".
+function cutEscaped(s: string, max: number): string {
+  const out = cut(s, max)
+  return out === s ? s : out.replace(/&[#a-z0-9]*…$/, '…')
 }
 
 function fitText(state: AskState): string {
@@ -81,22 +96,31 @@ function fitText(state: AskState): string {
       lo = mid + 1
     } else hi = mid - 1
   }
-  return cut(buildText(state, contextMax, best), MAX_TEXT)
+  const rich = buildText(state, contextMax, best)
+  return rich.length <= MAX_TEXT ? rich : cutEscaped(buildText(state, contextMax, best, false), MAX_TEXT)
 }
 
+// Several questions: each section opens with a header row (a tap does nothing).
+// Multi-select picks only toggle; one Send at the very bottom answers them all.
 export function renderAsk(state: AskState): { text: string; keyboard: Button[][] } {
   const { ask } = state
+  const total = ask.questions.length
   const keyboard: Button[][] = []
   ask.questions.forEach((q, n) => {
     const qs = state.q[n]
+    if (total > 1) {
+      const title = `━━ ${n + 1}/${total} · ${stripMarkdown(q.header)}${q.multiSelect ? ' (pilih beberapa)' : ''} ━━`
+      keyboard.push([{ text: cut(title, MAX_BUTTON), callback_data: `${ask.id}:${n}:h` }])
+    }
     q.options.forEach((o, i) => {
       const mark = qs?.picked.includes(i) ? '✅ ' : ''
-      keyboard.push([{ text: cut(`${mark}${n + 1}.${i + 1} ${o.label}`, MAX_BUTTON), callback_data: `${ask.id}:${n}:${i}` }])
+      keyboard.push([{ text: cut(`${mark}${n + 1}.${i + 1} ${stripMarkdown(o.label)}`, MAX_BUTTON), callback_data: `${ask.id}:${n}:${i}` }])
     })
-    const row: Button[] = [{ text: qs?.other !== undefined ? '✅ ✏️ Lainnya' : '✏️ Lainnya', callback_data: `${ask.id}:${n}:o` }]
-    if (q.multiSelect) row.push({ text: 'Kirim', callback_data: `${ask.id}:${n}:s` })
-    keyboard.push(row)
+    keyboard.push([{ text: qs?.other !== undefined ? '✅ ✏️ Lainnya' : '✏️ Lainnya', callback_data: `${ask.id}:${n}:o` }])
   })
+  if (ask.questions.some((q) => q.multiSelect)) {
+    keyboard.push([{ text: total > 1 ? '📨 Kirim semua jawaban' : '📨 Kirim', callback_data: `${ask.id}:0:s` }])
+  }
   return { text: fitText(state), keyboard }
 }
 
@@ -107,6 +131,7 @@ export function parseCallback(data: string): Tap | null {
   if (!ID_RE.test(id) || !INDEX_RE.test(qs)) return null
   const q = Number(qs)
   if (os === 's') return { id, q, kind: 'send' }
+  if (os === 'h') return { id, q, kind: 'header' }
   if (os === 'o') return { id, q, kind: 'other' }
   if (!INDEX_RE.test(os)) return null
   return { id, q, kind: 'option', option: Number(os) }
@@ -121,10 +146,14 @@ export function applyTap(state: AskState, tap: Tap): AskState {
   const current = state.q[tap.q]
   if (tap.id !== state.ask.id || !question || !current) return state
   const awaiting = state.awaitingOther === tap.q ? null : state.awaitingOther
+  if (tap.kind === 'header') return state
   if (tap.kind === 'other') return { ...state, awaitingOther: tap.q }
   if (tap.kind === 'send') {
-    if (!question.multiSelect || current.picked.length === 0) return state
-    return withQuestion(state, tap.q, { picked: [...current.picked], done: true }, awaiting)
+    // One Send answers every multi-select question that has picks, whichever
+    // index the button carries (older messages carry one Send per question).
+    const ready = (n: number) => state.ask.questions[n].multiSelect && state.q[n].picked.length > 0 && !state.q[n].done
+    if (!state.q.some((_, n) => ready(n))) return state
+    return { ...state, q: state.q.map((qs, n) => (ready(n) ? { picked: [...qs.picked], done: true } : qs)) }
   }
   if (tap.option < 0 || tap.option >= question.options.length) return state
   if (!question.multiSelect) return withQuestion(state, tap.q, { picked: [tap.option], done: true }, awaiting)
@@ -140,6 +169,11 @@ export function applyText(state: AskState, text: string): AskState {
   return withQuestion(state, state.awaitingOther, { picked: [], other, done: true }, null)
 }
 
+// 1-based numbers of the questions still open, for the Send tap's toast.
+export function unanswered(state: AskState): number[] {
+  return state.q.flatMap((qs, n) => (qs.done ? [] : [n + 1]))
+}
+
 export function answersIfComplete(state: AskState): Record<string, string> | null {
   if (!state.q.every((qs) => qs.done)) return null
   const answers: Record<string, string> = {}
@@ -153,8 +187,8 @@ export function answersIfComplete(state: AskState): Record<string, string> | nul
 
 export function renderAnswered(ask: Ask, answers: Record<string, string>, by: 'telegram' | 'terminal' | 'cancelled'): string {
   const footer = by === 'telegram' ? '✅ Dijawab lewat Telegram' : by === 'terminal' ? '✅ Dijawab di terminal' : '⛔ Dibatalkan'
-  const lines = ask.questions.filter((q) => Object.hasOwn(answers, q.question)).map((q) => `${q.header}: ${answers[q.question]}`)
-  const head = headerLine(ask) + '\n'
+  const lines = ask.questions.filter((q) => Object.hasOwn(answers, q.question)).map((q) => `${stripMarkdown(q.header)}: ${answers[q.question]}`)
+  const head = escapeHtml(headerLine(ask)) + '\n'
   if (lines.length === 0) return head + footer
-  return head + cut(lines.join('\n'), MAX_TEXT - head.length - footer.length - 1) + '\n' + footer
+  return head + cutEscaped(escapeHtml(lines.join('\n')), MAX_TEXT - head.length - footer.length - 1) + '\n' + footer
 }

@@ -7,6 +7,7 @@ import {
   newState,
   parseCallback,
   renderAnswered,
+  unanswered,
   renderAsk,
   type Ask,
   type AskState,
@@ -178,7 +179,9 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       const entry = asks.get(tap.id)
       if (!entry || entry.result) return { consumed: true, done: answerCallback(cq.id, EXPIRED) }
       const next = applyTap(entry.state, tap)
-      const ack = answerCallback(cq.id)
+      // A Send that leaves questions open says which, or the tap looks dead.
+      const open = tap.kind === 'send' ? unanswered(next) : []
+      const ack = answerCallback(cq.id, open.length > 0 ? `Belum dijawab: pertanyaan ${open.join(', ')}` : undefined)
       if (next === entry.state) return { consumed: true, done: ack }
       if (tap.kind === 'other') entry.otherSeq = ++otherSeq
       entry.state = next

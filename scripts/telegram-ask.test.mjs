@@ -17,7 +17,7 @@ const MOD = join(ROOT, 'mods/telegram-ask');
 test('bridge tests are named *.spec.ts so claude plugin test skips them', () => {
   const names = readdirSync(join(MOD, 'bridge'));
   expect(names.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
-  expect(names.filter((n) => n.endsWith('.spec.ts')).sort()).toEqual(['format.spec.ts', 'server-updates.spec.ts', 'server.spec.ts']);
+  expect(names.filter((n) => n.endsWith('.spec.ts')).sort()).toEqual(['format.spec.ts', 'markdown.spec.ts', 'server-updates.spec.ts', 'server.spec.ts']);
 });
 
 test('the systemd unit runs the bridge from the main checkout', () => {

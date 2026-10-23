@@ -1,4 +1,5 @@
 import type { Button } from './format'
+import { htmlToPlain } from './markdown'
 
 export type ChatId = number | string
 
@@ -52,24 +53,32 @@ export function createTelegram(opts: { token: string; base?: string; fetch?: typ
 
   const markup = (keyboard?: Button[][]) => (keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {})
 
+  // Text is Telegram HTML. If Telegram still refuses to parse it, the same
+  // message goes again as plain text, so a question is never lost to markup.
+  async function withHtml<T>(method: string, body: Record<string, unknown>, text: string): Promise<T> {
+    try {
+      return await call<T>(method, { ...body, text, parse_mode: 'HTML' })
+    } catch (e) {
+      if (!(e instanceof TelegramError) || e.status !== 400 || !/can't parse entities/i.test(e.description)) throw e
+      return call<T>(method, { ...body, text: htmlToPlain(text) })
+    }
+  }
+
   return {
     async sendMessage(chatId, text, keyboard) {
-      const r = await call<{ message_id: number }>('sendMessage', {
-        chat_id: chatId,
+      const r = await withHtml<{ message_id: number }>(
+        'sendMessage',
+        { chat_id: chatId, ...markup(keyboard), link_preview_options: { is_disabled: true } },
         text,
-        ...markup(keyboard),
-        link_preview_options: { is_disabled: true },
-      })
+      )
       return { message_id: r.message_id }
     },
     async editMessageText(chatId, messageId, text, keyboard) {
-      await call('editMessageText', {
-        chat_id: chatId,
-        message_id: messageId,
+      await withHtml(
+        'editMessageText',
+        { chat_id: chatId, message_id: messageId, ...markup(keyboard), link_preview_options: { is_disabled: true } },
         text,
-        ...markup(keyboard),
-        link_preview_options: { is_disabled: true },
-      })
+      )
     },
     async answerCallbackQuery(id, text) {
       await call('answerCallbackQuery', text === undefined ? { callback_query_id: id } : { callback_query_id: id, text })

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { request } from 'node:http'
 import { startBridge } from './server'
 import { createTelegram } from './telegram'
 
@@ -60,7 +61,7 @@ export function useBridgeFixtures() {
 
 export const telegram = () => createTelegram({ token: TOKEN, base: fake.url.origin })
 
-export type StartOpts = { waitMs?: number; rand?: () => number; askTtlMs?: number; otherTtlMs?: number; now?: () => number }
+export type StartOpts = { waitMs?: number; rand?: () => number; staleMs?: number; now?: () => number }
 export async function start(opts: StartOpts = {}) {
   bridge = await startBridge({
     socketPath: sock,
@@ -68,8 +69,7 @@ export async function start(opts: StartOpts = {}) {
     chatId: String(CHAT),
     waitMs: opts.waitMs ?? 300,
     rand: opts.rand ?? (() => 0),
-    askTtlMs: opts.askTtlMs,
-    otherTtlMs: opts.otherTtlMs,
+    staleMs: opts.staleMs,
     now: opts.now,
   })
   return bridge
@@ -103,3 +103,18 @@ export async function ask(body: unknown = single): Promise<string> {
   return ((await res.json()) as { id: string }).id
 }
 
+
+// One request on a fresh connection that is never retried, like the hook in another
+// process; Bun's fetch silently retries a GET whose reused connection was reset.
+export function rawGet(path: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const req = request({ socketPath: sock, path, agent: false }, (res) => {
+      let body = ''
+      res.on('data', (c) => (body += c))
+      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
+      res.on('error', reject)
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}

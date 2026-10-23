@@ -22,8 +22,7 @@ type Entry = {
   waiters: Set<(r: WaitResult) => void>
   result?: Record<string, string>
   otherSeq: number
-  otherAt: number
-  createdAt: number
+  lastSeen: number
   edits: Promise<void>
 }
 
@@ -35,8 +34,7 @@ export type BridgeOptions = {
   keepMs?: number
   rand?: () => number
   log?: (line: string) => void
-  askTtlMs?: number
-  otherTtlMs?: number
+  staleMs?: number
   now?: () => number
 }
 
@@ -85,8 +83,9 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   const waitMs = opts.waitMs ?? DEFAULT_WAIT_MS
   const keepMs = opts.keepMs ?? 60_000
   const rand = opts.rand ?? Math.random
-  const askTtlMs = opts.askTtlMs ?? 6 * 60 * 60_000
-  const otherTtlMs = opts.otherTtlMs ?? 10 * 60_000
+  // No answer deadline while a session waits: a live hook re-polls /wait at least every
+  // waitMs, so only an ask nobody has polled for staleMs (its session is gone) is dropped.
+  const staleMs = opts.staleMs ?? 120_000
   const now = opts.now ?? Date.now
   const log = opts.log ?? ((line: string) => console.error(`telegram-ask: ${line}`))
   const asks = new Map<string, Entry>()
@@ -147,14 +146,13 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     !!chat && typeof chat === 'object' && String(chat.id) === String(chatId)
 
   // State changes happen synchronously here; `done` covers the Telegram calls.
-  // A session that died never sends /resolve, so its ask would otherwise live forever.
   function sweep() {
     const t = now()
     for (const [id, entry] of asks) {
-      if (t - entry.createdAt <= askTtlMs) continue
+      if (entry.waiters.size > 0 || t - entry.lastSeen <= staleMs) continue
       asks.delete(id)
       wake(entry, { status: 'closed' })
-      log(`ask ${id} expired`)
+      log(`ask ${id} dropped: not polled for ${Math.round((t - entry.lastSeen) / 1000)} s`)
     }
   }
 
@@ -170,19 +168,12 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       const next = applyTap(entry.state, tap)
       const ack = answerCallback(cq.id)
       if (next === entry.state) return { consumed: true, done: ack }
-      if (tap.kind === 'other') {
-        entry.otherSeq = ++otherSeq
-        entry.otherAt = now()
-      }
+      if (tap.kind === 'other') entry.otherSeq = ++otherSeq
       entry.state = next
       return { consumed: true, done: Promise.all([ack, settle(tap.id, entry)]).then(() => {}) }
     }
     const msg = update.message
     if (!msg || typeof msg !== 'object' || !fromOwner(msg.chat) || typeof msg.text !== 'string') return NO
-    // A forgotten Other tap must not keep taking plain texts meant for Snipset.
-    for (const e of asks.values()) {
-      if (e.state.awaitingOther !== null && now() - e.otherAt > otherTtlMs) e.state = { ...e.state, awaitingOther: null }
-    }
     let target: [string, Entry] | undefined
     for (const pair of asks) {
       const e = pair[1]
@@ -243,7 +234,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     const state = newState({ id, ...body })
     const { text, keyboard } = renderAsk(state)
     // Reserve the id before the await so a parallel ask cannot draw it too.
-    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0, otherAt: 0, createdAt: now(), edits: DONE }
+    const entry: Entry = { state, messageId: 0, waiters: new Set(), otherSeq: 0, lastSeen: now(), edits: DONE }
     asks.set(id, entry)
     try {
       entry.messageId = (await telegram.sendMessage(chatId, text, keyboard)).message_id
@@ -259,16 +250,19 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   function onWait(id: string): Promise<Response> | Response {
     const entry = asks.get(id)
     if (!entry) return new Response('unknown ask', { status: 404 })
+    entry.lastSeen = now()
     if (entry.result) return Response.json({ status: 'answered', answers: entry.result })
     return new Promise((resolve) => {
       const waiter = (r: WaitResult) => {
         clearTimeout(timer)
         timers.delete(timer)
+        entry.lastSeen = now()
         resolve(Response.json(r))
       }
       const timer = setTimeout(() => {
         timers.delete(timer)
         entry.waiters.delete(waiter)
+        entry.lastSeen = now()
         resolve(Response.json({ status: 'pending' }))
       }, waitMs)
       timers.add(timer)
@@ -294,6 +288,8 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
 
   const server = Bun.serve({
     unix: socketPath,
+    // Bun's default idleTimeout (10 s) would cut the /wait long-poll; seconds, capped at 255.
+    idleTimeout: Math.min(255, Math.ceil(waitMs / 1000) + 10),
     async fetch(req) {
       const parts = new URL(req.url).pathname.split('/').filter(Boolean)
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)

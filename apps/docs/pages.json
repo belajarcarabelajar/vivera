@@ -94,7 +94,7 @@
       "slug": "plan-mirroring",
       "order": 6,
       "title": "Plan Mirroring: Obsidian and GitHub Issues",
-      "description": "Plans are copied one way to Obsidian and GitHub issues, and an issue body is the plan text byte for byte plus a trailer with id, status, and hash.",
+      "description": "Plans are copied one way to Obsidian and GitHub issues; an issue is titled with the plan heading, labelled plan, and its body is a derived header, the plan text verbatim, the folded frontmatter, and a trailer with id, status, and hash.",
       "source": {
         "file": "docs/guide/pipeline-plan-mirroring.md"
       }

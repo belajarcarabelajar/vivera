@@ -14,6 +14,7 @@
 |---|---|
 | Session slot | `[session slug from pr-registry claim]` |
 | Plan | `[docs/code-plan/plans/YYYY-MM-DD-<name>.md]` |
+| Plan issue | `Refs #<n>` from `plan.issues.json`, never `Closes #<n>`: the plan's status closes the issue, not the merge |
 | Base branch | `main` |
 | Head branch | `<plan-id>/<session-slug>` |
 | Worktree | `[path printed by pr-registry claim]` |

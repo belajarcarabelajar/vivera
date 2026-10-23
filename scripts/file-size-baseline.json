@@ -4,7 +4,6 @@
   "apps/docs/src/routes.rs": 21536,
   "docs/graphify-integration.md": 43327,
   "scripts/agents-md-current.test.mjs": 22184,
-  "scripts/check-copy-rules.mjs": 21116,
   "scripts/check-design-tells.mjs": 22188,
   "scripts/check-duplicate-defs.test.mjs": 20224,
   "scripts/ci-targeted.test.mjs": 21600,

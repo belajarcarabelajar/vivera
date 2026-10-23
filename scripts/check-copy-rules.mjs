@@ -62,33 +62,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const EM_DASH = '\u2014';
 
-// Each entry names the rule it enforces and prints the phrase that matched, so a
-// hit tells the reader what to remove without them re-deriving the rule.
-// ATTRIBUTION POSITION ONLY.
-//
-// The first draft of this list also matched a bare vendor name (`claude code`,
-// `cursor`, `gemini`, `copilot`, `gpt-N`). That was wrong, and the validator
-// proved it within one run: README.md's harness table lists `Claude Code` and
-// `Copilot` as supported harnesses, and the mermaid lifecycle diagram carries a
-// `🤖 Subagents execute` node. Both are legitimate. A pattern broad enough to
-// catch those is broad enough to be ignored, and a gate people ignore is worse
-// than no gate because it reports success while checking nothing.
-//
-// So the patterns below match the SHAPE of an attribution line, not the names.
-// `Generated with X` is an attribution whatever X is, and a bare tool name is
-// not.
-export const WATERMARK_PATTERNS = [
-  { re: /generated with\b/i, label: 'generated-with footer' },
-  // The `u` flag is load-bearing and was missing on the first attempt, which made
-  // this pattern silently incapable of matching anything: without `u`,
-  // `\u{1F916}` is an identity escape for the literal text `u{1F916}`. The test
-  // suite caught it because it asserts against the real footer string rather than
-  // against a pattern that merely looks right.
-  { re: /^\s*\u{1F916}\s+\S/u, label: 'robot emoji used as a credit badge' },
-  { re: /^\s*co-authored-by\s*:/im, label: 'co-author trailer' },
-  { re: /^\s*signed-off-by\s*:/im, label: 'sign-off trailer' },
-  { re: /^\s*(?:co-authored-by|signed-off-by)\s*\[/im, label: 'trailer in link form' },
-];
+import { WATERMARK_PATTERNS } from './lib/copy-rule-patterns.mjs';
+
+export { WATERMARK_PATTERNS };
 
 /**
  * A line that STATES the rule is not a violation of it.
@@ -157,12 +133,14 @@ export function checkText(text, { where, emDashApplies = true } = {}) {
     ...lines.slice(Math.max(0, i - RULE_LOOKBACK), i),
     ...lines.slice(i + 1, i + RULE_LOOKBACK + 1),
   ].join(' ');
-  if (RULE_STATEMENT.test(neighbours)) return;
+  const strict = WATERMARK_PATTERNS.filter((p) => p.strict && p.re.test(line));
+  for (const p of strict) violations.push({ where: at, rule: p.label, detail: p.re.source, line: line.trim().slice(0, 120) });
+  if (strict.length || RULE_STATEMENT.test(neighbours)) return;
     if (emDashApplies && line.includes(EM_DASH)) {
       violations.push({ where: at, rule: 'em-dash', detail: EM_DASH, line: line.trim().slice(0, 120) });
     }
     for (const p of WATERMARK_PATTERNS) {
-      if (p.re.test(line)) {
+      if (!p.strict && p.re.test(line)) {
         violations.push({ where: at, rule: p.label, detail: p.re.source, line: line.trim().slice(0, 120) });
       }
     }

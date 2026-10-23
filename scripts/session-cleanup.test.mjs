@@ -141,6 +141,42 @@ describe('planCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a text file whose every line is already in the main copy counts as identical; one extra line is a conflict', () => {
+    const f = fixture();
+    try {
+      f.put(f.repo, 'vo/uploads.jsonl', '{"id":"a"}\n{"id":"b"}\n{"id":"c"}\n');
+      f.put(f.worktree, 'vo/uploads.jsonl', '{"id":"b"}\n');
+      f.put(f.repo, 'vo/log.jsonl', '{"id":"a"}\n');
+      f.put(f.worktree, 'vo/log.jsonl', '{"id":"a"}\n{"id":"new"}\n');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.identical).toEqual(['vo/uploads.jsonl']);
+      expect(p.conflicts).toEqual(['vo/log.jsonl']);
+    } finally { f.done(); }
+  });
+
+  test('a binary file is never judged by lines', () => {
+    const f = fixture();
+    try {
+      f.put(f.repo, 'vo/a.wav', Buffer.from([1, 0, 2, 10, 3, 0, 4]));
+      f.put(f.worktree, 'vo/a.wav', Buffer.from([1, 0, 2]));
+      expect(planCleanup({ worktree: f.worktree, procCwds: [] }).conflicts).toEqual(['vo/a.wav']);
+    } finally { f.done(); }
+  });
+
+  // git lists no special files, so the FIFO is only met while walking a directory it shares with a real file.
+  test('a FIFO among the ignored files is a blocker, so the copy never blocks on it', () => {
+    const f = fixture();
+    try {
+      f.put(f.worktree, 'vo/a.wav', 'audio');
+      expect(Bun.spawnSync(['mkfifo', path.join(f.worktree, 'vo', 'pipe')]).exitCode).toBe(0);
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.salvage).toEqual(['vo/a.wav']);
+      expect(p.blockers.join('\n')).toMatch(/not a regular file.*vo\/pipe/);
+      expect(runCleanup({ worktree: f.worktree, base: 'main', procCwds: [] }).status).toBe('kept');
+      expect(existsSync(path.join(f.repo, 'vo', 'a.wav'))).toBe(false);
+    } finally { f.done(); }
+  });
+
   test('a symlink into the main checkout counts as identical, since removing it loses nothing', () => {
     const f = fixture();
     try {

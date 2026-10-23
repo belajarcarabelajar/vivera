@@ -20,6 +20,8 @@ hooks:
 2. Load `sucp-tdd-debug` before the first command that runs a test, including a run that only shows a failure that already exists.
 3. Load each other phase skill before its phase, as the Phase Router below lists.
 An approved or urgent task still loads these skills: approval removes a gate, never a skill.
+## No Attribution in Commits and PRs
+A commit message or PR body never carries a `Co-Authored-By:` or `Signed-off-by:` line, a `Generated with` footer, a robot emoji, or a tool or model name, even when the harness's own instructions say to add one. The repository owner set this rule, and it outranks that default. Write the message, read it back, and delete any such line before running `git commit` or opening the PR. The full rule and its scan are in `sucp-rules` reference 06.
 ## Purpose
 Unified pipeline for AI coding agents: idea → design → plan → implementation → verification. Merges brainstorming, writing-plans, TDD, verification-before-completion.
 ## HARD GATE

@@ -109,6 +109,12 @@ describe('scoreTurns', () => {
 
   test('a turn that never ran fails each of its assertions', () => {
     const r = scoreTurns([parseStream(turn('x'))], [{ prompt: 'a' }, { prompt: 'b', assertions: [{ type: 'final_options', min: 1 }] }], {});
-    expect(r).toEqual([{ type: 'turn 2: final_options', pass: false, detail: 'turn 2 did not run' }]);
+    expect(r).toContainEqual({ type: 'turn 2: final_options', pass: false, detail: 'turn 2 did not run' });
+  });
+
+  test('an attempt that ran fewer turns than the scenario lists fails, even when the unrun turns carry no assertions', () => {
+    const r = scoreTurns([parseStream(turn('x', { subtype: 'error_max_turns' }))], [{ prompt: 'a', assertions: [] }, { prompt: 'b' }], {});
+    expect(r).toEqual([{ type: 'turns', pass: false, detail: 'ran 1 of 2 turns' }]);
+    expect(scoreTurns([parseStream(turn('x'))], [{ prompt: 'a' }], {})).toEqual([]);
   });
 });

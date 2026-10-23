@@ -1,0 +1,13 @@
+{
+  "name": "telegram-ask",
+  "version": "0.1.0",
+  "description": "Mirrors every AskUserQuestion dialog to Telegram through a local bridge; the first answer, terminal or Telegram, wins",
+  "userConfig": {
+    "socketPath": {
+      "type": "string",
+      "title": "Bridge socket path",
+      "description": "Absolute path of the bridge's Unix socket; empty uses $XDG_RUNTIME_DIR/vivera-telegram-ask.sock",
+      "default": ""
+    }
+  }
+}

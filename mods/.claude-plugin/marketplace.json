@@ -1,5 +1,8 @@
 {
   "name": "vivera-mods",
   "owner": { "name": "Iwan Kurniawan" },
-  "plugins": [{ "name": "sprite-model-router", "source": "./sprite-model-router" }]
+  "plugins": [
+    { "name": "sprite-model-router", "source": "./sprite-model-router" },
+    { "name": "telegram-ask", "source": "./telegram-ask" }
+  ]
 }

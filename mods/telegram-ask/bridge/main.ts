@@ -10,10 +10,15 @@ function fail(message: string): never {
   process.exit(2)
 }
 
-// Snipset desktop polls this bot and forwards updates to POST /update; a second
-// poller on the same token gets 409, so polling here is opt-in for a dedicated bot.
+// Telegram allows one getUpdates poller per token (a second gets 409). When another
+// program already polls the bot and forwards updates to POST /update, set it to 0.
 export function pollEnabled(env: Record<string, string | undefined>): boolean {
-  return env.TELEGRAM_ASK_POLL === '1'
+  return env.TELEGRAM_ASK_POLL !== '0'
+}
+
+export function defaultEnvPath(env: Record<string, string | undefined>): string {
+  const config = env.XDG_CONFIG_HOME || join(env.HOME ?? '', '.config')
+  return join(config, 'vivera-telegram-ask', '.env')
 }
 
 export function parseEnvFile(text: string): Record<string, string> {
@@ -31,12 +36,12 @@ export function parseEnvFile(text: string): Record<string, string> {
 }
 
 async function main() {
-  const envPath = process.env.TELEGRAM_ASK_ENV ?? join(process.env.HOME ?? '', 'Proyek/gmail-otp-telegram/.env')
+  const envPath = process.env.TELEGRAM_ASK_ENV || defaultEnvPath(process.env)
   let text: string
   try {
     text = readFileSync(envPath, 'utf8')
   } catch {
-    fail(`cannot read env file ${envPath}`)
+    fail(`cannot read env file ${envPath}: create it (mode 600) with TELEGRAM_BOT_TOKEN=... and TELEGRAM_CHAT_ID=... lines`)
   }
   const env = parseEnvFile(text)
   for (const key of ['TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID']) if (!env[key]) fail(`${key} missing in ${envPath}`)
@@ -65,10 +70,10 @@ async function main() {
   process.on('SIGINT', () => void stop('SIGINT'))
 
   if (!pollEnabled(process.env)) {
-    log('polling off (Snipset forwards updates)')
+    log('polling off (updates are forwarded to POST /update)')
     return
   }
-  log('polling Telegram (TELEGRAM_ASK_POLL=1)')
+  log('polling Telegram (set TELEGRAM_ASK_POLL=0 when another program polls this bot)')
 
   let offset = 0
   let backoff = 1_000

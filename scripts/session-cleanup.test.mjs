@@ -154,6 +154,22 @@ describe('planCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a covered log must keep its order and its repeats; anything else is a conflict', () => {
+    const f = fixture();
+    try {
+      const pair = (name, main, wt) => { f.put(f.repo, `vo/${name}`, main); f.put(f.worktree, `vo/${name}`, wt); };
+      pair('order.jsonl', 'FOO=2\nFOO=1\n', 'FOO=1\nFOO=2\n');
+      pair('dups.jsonl', 'A\nB\n', 'A\nB\nA\nB\nA\n');
+      pair('blank.jsonl', 'a\n', 'a\n\n\n');
+      pair('bytes.jsonl', Buffer.from([0x61, 0x0a, 0xff, 0x0a]), Buffer.from([0x61, 0x0a, 0xfe, 0x0a]));
+      pair('ok.jsonl', 'a\nb\nc\nd\n', 'b\nd\n');
+      pair('settings.toml', 'x=1\ny=2\n', 'x=1\n');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.identical).toEqual(['vo/ok.jsonl']);
+      expect(p.conflicts).toEqual(['vo/blank.jsonl', 'vo/bytes.jsonl', 'vo/dups.jsonl', 'vo/order.jsonl', 'vo/settings.toml']);
+    } finally { f.done(); }
+  });
+
   test('a binary file is never judged by lines', () => {
     const f = fixture();
     try {

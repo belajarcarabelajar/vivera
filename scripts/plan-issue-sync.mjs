@@ -43,6 +43,16 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sessionWorktreeRoot } from './plan-publish-registry.mjs';
+import {
+  splitFrontmatter, hashOf, issueBody, issueTitle, parseTrailer, PLAN_LABEL, ISSUE_FORMAT,
+  PLAN_LABEL_COLOR, PLAN_LABEL_DESCRIPTION,
+} from './lib/plan-issue-render.mjs';
+
+// The rendering lives in scripts/lib/plan-issue-render.mjs; re-exported so every
+// caller keeps importing it from here.
+export {
+  splitFrontmatter, hashOf, issueBody, issueTitle, checklistCounts, parseTrailer, ISSUE_FORMAT, PLAN_LABEL,
+} from './lib/plan-issue-render.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -157,12 +167,6 @@ export function saveConfig(cfg, configPath = DEFAULT_CONFIG) {
 
 // ---------- plan reading ----------
 
-export function splitFrontmatter(text) {
-  if (!text.startsWith('---')) return { frontmatter: '', body: text };
-  const end = text.indexOf('\n---', 3);
-  if (end === -1) return { frontmatter: '', body: text };
-  return { frontmatter: text.slice(3, end), body: text.slice(end + 4) };
-}
 
 export function planStatus(text) {
   const { frontmatter } = splitFrontmatter(text);
@@ -192,85 +196,6 @@ export function issueKey(repoRoot, planPath) {
   return rel.split(path.sep).join('/');
 }
 
-export function hashOf(text) {
-  // FNV-1a. This is a change detector, not a security primitive: it only has to
-  // answer "is this byte-identical to what the issue body was built from".
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, '0');
-}
-
-// ---------- the issue body ----------
-
-// The body IS the plan. A summary would drift from the plan the moment the plan
-// changed, and then the issue would be a second source of truth that is quietly
-// out of date. A machine-readable trailer carries what a reader needs to find
-// the source and to tell whether this copy is current.
-// Field-name prefixes, not bare positional values. A bare `key=<value>` is
-// indistinguishable from a value that happens to contain `key=`, and the
-// prefixes are what make the trailer readable to a human scanning the raw issue.
-export function issueBody(planText, { planId: id, key, sourcePath, status, generatedBy }) {
-  const trailer = [
-    '---',
-    '',
-    `<!-- plan-sync: plan_id=${id} | key=${key} | source=${sourcePath} | status=${status ?? 'unknown'} | hash=${hashOf(planText)} | by=${generatedBy ?? 'plan-issue-sync'} -->`,
-    '',
-  ].join('\n');
-  const text = planText.replace(/\s*$/, '');
-  const full = `${text}\n${trailer}`;
-  if (githubLength(full) <= ISSUE_BODY_BUDGET) return full;
-
-  // Still the plan, never a summary: the longest verbatim prefix that fits, an
-  // explicit marker, and the trailer whose hash covers the FULL plan, so drift
-  // detection is unchanged. The marker is sized with M in place of N because
-  // N <= M, which makes the room an upper bound.
-  const marker = (n) => `**Truncated:** this issue shows the first ${n} of ${planText.length} characters of the plan, `
-    + `cut at a line boundary to fit GitHub's 65,536-character body limit. The full plan is \`${key}\` in the repository.`;
-  const tail = (n) => `\n\n${marker(n)}\n\n${trailer}`;
-  const room = ISSUE_BODY_BUDGET - githubLength(tail(planText.length));
-  // githubLength(text.slice(0, i)) is i plus the newlines before i, tracked as `lines`.
-  let cut = 0;
-  let lines = 0;
-  for (let i = text.indexOf('\n'); i !== -1 && i + lines <= room; i = text.indexOf('\n', i + 1)) {
-    cut = i;
-    lines++;
-  }
-  if (cut === 0) {
-    cut = room;
-    if (/[\uD800-\uDBFF]/.test(text[cut - 1])) cut--;
-  }
-  return `${text.slice(0, cut)}${tail(cut)}`;
-}
-
-// GitHub caps an issue body at 65,536 characters. A stored body may have its
-// line endings normalized to CRLF, so each LF counts twice, and the headroom
-// absorbs any remaining difference in how GitHub counts.
-const ISSUE_BODY_LIMIT = 65536;
-const ISSUE_BODY_BUDGET = ISSUE_BODY_LIMIT - 512;
-
-function githubLength(s) {
-  let n = s.length;
-  for (let i = s.indexOf('\n'); i !== -1; i = s.indexOf('\n', i + 1)) n++;
-  return n;
-}
-
-export function parseTrailer(body) {
-  // The last one: issueBody appends the trailer, so an earlier match is plan text quoting an example.
-  const all = [...(body || '').matchAll(/<!--\s*plan-sync:\s*plan_id=(.*?)\s*\|\s*key=(.*?)\s*\|\s*source=(.*?)\s*\|\s*status=(.*?)\s*\|\s*hash=(.*?)\s*\|\s*by=(.*?)\s*-->/g)];
-  const m = all.at(-1);
-  if (!m) return null;
-  return {
-    plan_id: m[1].trim(),
-    key: m[2].trim(),
-    source: m[3].trim(),
-    status: m[4].trim(),
-    hash: m[5].trim(),
-    by: m[6].trim(),
-  };
-}
 
 // ---------- the live state, read from GitHub ----------
 
@@ -326,7 +251,9 @@ export function readLiveState(run, { number, repo }) {
 // here, so an unrecorded plan looks for its issue before filing another one.
 export const LIST_LIMIT = 1000;
 
-export function findExistingIssue(run, { repo, title, key }) {
+// An issue filed before format 2 carries the plan_id as its title, so both the
+// current title and the plan_id are looked up; the trailer decides ownership.
+export function findExistingIssue(run, { repo, title, key, planId: id = title }) {
   // No --search: that reads the search index, which lags a fresh create. The plain
   // list reads the repository's issues directly.
   const argv = ['issue', 'list', '--repo', repo, '--state', 'all', '--limit', String(LIST_LIMIT), '--json', 'number,title,url,state'];
@@ -346,7 +273,8 @@ export function findExistingIssue(run, { repo, title, key }) {
     throw refuse(`gh returned ${rows.length} rows, the --limit of ${LIST_LIMIT}, so an issue past the limit cannot be ruled out: absence unproven`);
   }
 
-  const same = rows.filter((i) => i && i.title === title);
+  const titles = new Set([title, id]);
+  const same = rows.filter((i) => i && titles.has(i.title));
   if (same.length === 0) return null;
 
   const numbers = same.map((i) => `#${i.number}`).join(', ');
@@ -372,13 +300,13 @@ export function findExistingIssue(run, { repo, title, key }) {
   const [{ row, trailer }] = found;
   // Anyone can type a title; only this script writes a trailer with the plan's key,
   // so the trailer is the proof the issue belongs to this plan.
-  if (!trailer || trailer.key !== key || trailer.plan_id !== title) {
+  if (!trailer || trailer.key !== key || trailer.plan_id !== id) {
     throw refuse(`${describe(found[0])} has this exact title but its trailer does not name this plan, so it may be somebody else's issue. Retitle it or record its number in plan.issues.json by hand, then re-run`);
   }
   if (row.state !== 'OPEN' && row.state !== 'CLOSED') {
     throw refuse(`#${row.number} is in state ${JSON.stringify(row.state)}, which is neither OPEN nor CLOSED`);
   }
-  return { number: row.number, url: row.url, state: row.state.toLowerCase(), hash: trailer.hash };
+  return { number: row.number, url: row.url, state: row.state.toLowerCase(), hash: trailer.hash, format: trailer.format };
 }
 
 // ---------- the action decision ----------
@@ -392,12 +320,13 @@ export function findExistingIssue(run, { repo, title, key }) {
 // matrix is the only place the whole decision surface is checked at once.
 export function deriveAction({ entry, liveState, planText, status, key, id, repo }) {
   const wanted = issueBody(planText, { planId: id, key, sourcePath: entry?.source ?? null, status, generatedBy: repo });
+  const title = issueTitle(planText, id);
 
   if (!entry || !entry.number) {
     // gh can only create an open issue, so a Complete plan needs the close in the
     // same run or the issue stays open until a second run notices the drift.
     const close = status === CLOSED_STATUS ? { close: true } : {};
-    return { kind: 'create', title: id, body: wanted, hash: hashOf(planText), repo, ...close };
+    return { kind: 'create', title, body: wanted, hash: hashOf(planText), format: ISSUE_FORMAT, repo, ...close };
   }
 
   // Without the read there is nothing to compare, and `entry.state` is exactly the
@@ -412,7 +341,9 @@ export function deriveAction({ entry, liveState, planText, status, key, id, repo
   }
 
   const changed = [];
-  if (entry.hash !== hashOf(planText)) changed.push('body');
+  // A row from an older layout is rewritten even when the plan is unchanged, so
+  // every recorded issue moves to the current layout on its next sync.
+  if (entry.hash !== hashOf(planText) || (entry.format ?? 1) !== ISSUE_FORMAT) changed.push('body');
   const shouldClose = status === CLOSED_STATUS;
   const isClosed = liveState === 'closed';
   if (shouldClose !== isClosed) changed.push('state');
@@ -430,15 +361,16 @@ export function deriveAction({ entry, liveState, planText, status, key, id, repo
       kind: 'update-and-state',
       number: entry.number,
       url: entry.url,
-      title: id,
+      title,
       body: wanted,
       hash: hashOf(planText),
+      format: ISSUE_FORMAT,
       close: shouldClose,
       repo,
     };
   }
   if (changed[0] === 'body') {
-    return { kind: 'update-body', number: entry.number, url: entry.url, title: id, body: wanted, hash: hashOf(planText), repo };
+    return { kind: 'update-body', number: entry.number, url: entry.url, title, body: wanted, hash: hashOf(planText), format: ISSUE_FORMAT, repo };
   }
   return { kind: 'update-state', number: entry.number, url: entry.url, close: shouldClose, repo };
 }
@@ -454,12 +386,27 @@ function setIssueState(action, run) {
     : run(['issue', 'reopen', String(action.number), '--repo', action.repo]);
 }
 
-export function applyAction(action, run) {  switch (action.kind) {
+// Makes sure the plan label exists before an issue uses it, because `gh issue
+// create --label` fails outright on a missing label. An existing label is left as
+// it is (no --force, so a colour somebody chose is kept). A label that cannot be
+// created (no permission) does not stop the sync: the issue is the point, the
+// label is a filter, so the write goes ahead without it.
+export function ensurePlanLabel(run, repo) {
+  const r = run(['label', 'create', PLAN_LABEL, '--repo', repo, '--color', PLAN_LABEL_COLOR, '--description', PLAN_LABEL_DESCRIPTION]);
+  return r.ok || /already exists/i.test(`${r.err ?? ''} ${r.out ?? ''}`);
+}
+
+function labelArgs(run, action, flag) {
+  return ensurePlanLabel(run, action.repo) ? [flag, PLAN_LABEL] : [];
+}
+
+export function applyAction(action, run) {
+  switch (action.kind) {
     case 'current':
       return { ok: true, skipped: true, number: action.number, url: action.url };
     case 'create': {
       // `gh issue create` has no --json, so the URL comes from stdout.
-      const r = run(['issue', 'create', '--repo', action.repo, '--title', action.title, '--body-file', '-'], action.body);
+      const r = run(['issue', 'create', '--repo', action.repo, '--title', action.title, ...labelArgs(run, action, '--label'), '--body-file', '-'], action.body);
       if (!r.ok) return { ok: false, error: r.err };
       const number = r.url ? Number(r.url.split('/').pop()) || null : null;
       if (!action.close) return { ok: true, created: true, number, url: r.url };
@@ -473,7 +420,7 @@ export function applyAction(action, run) {  switch (action.kind) {
     case 'update-body': {
       // Title and body in ONE call. Two calls would mean two chances to
       // half-apply, and GitHub records each as a separate timeline event.
-      const r = run(['issue', 'edit', String(action.number), '--repo', action.repo, '--title', action.title, '--body-file', '-'], action.body);
+      const r = run(['issue', 'edit', String(action.number), '--repo', action.repo, '--title', action.title, ...labelArgs(run, action, '--add-label'), '--body-file', '-'], action.body);
       if (!r.ok) return { ok: false, error: r.err };
       return { ok: true, number: action.number, url: r.url ?? action.url };
     }
@@ -488,7 +435,7 @@ export function applyAction(action, run) {  switch (action.kind) {
       // it fails we return without touching the state, so a failed sync leaves the
       // previous body and the previous open/closed state consistent with each other
       // rather than half-applied in the other order.
-      const e = run(['issue', 'edit', String(action.number), '--repo', action.repo, '--title', action.title, '--body-file', '-'], action.body);
+      const e = run(['issue', 'edit', String(action.number), '--repo', action.repo, '--title', action.title, ...labelArgs(run, action, '--add-label'), '--body-file', '-'], action.body);
       if (!e.ok) return { ok: false, error: e.err };
       const r = setIssueState(action, run);
       if (!r.ok) return { ok: false, error: r.err };
@@ -637,9 +584,9 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
   if (entry && entry.number) {
     liveState = readLiveState(run, { number: entry.number, repo });
   } else {
-    adopted = findExistingIssue(run, { repo, title: id, key });
+    adopted = findExistingIssue(run, { repo, title: issueTitle(planText, id), key, planId: id });
     if (adopted) {
-      entry = { ...(entry ?? {}), number: adopted.number, url: adopted.url, hash: adopted.hash };
+      entry = { ...(entry ?? {}), number: adopted.number, url: adopted.url, hash: adopted.hash, format: adopted.format };
       liveState = adopted.state;
     }
   }
@@ -679,6 +626,7 @@ export function syncOne(cfg, { planPath, repoRoot, run, dryRun = false, project:
       number: result.number ?? action.number ?? null,
       url: result.url ?? action.url ?? null,
       hash: action.hash ?? entry?.hash ?? null,
+      format: action.format ?? entry?.format ?? 1,
       state: closedNow ? 'closed' : 'open',
       status,
       repo,

@@ -1,11 +1,11 @@
 ---
 title: "Mirroring Plan: Obsidian dan GitHub Issues"
-description: Plan disalin satu arah ke Obsidian dan GitHub issue, dan body issue adalah teks plan byte demi byte ditambah trailer berisi id, status, dan hash.
+description: Plan disalin satu arah ke Obsidian dan GitHub issue; issue berjudul heading plan, berlabel plan, dan body-nya header turunan, teks plan verbatim, frontmatter terlipat, serta trailer berisi id, status, dan hash.
 category: pipeline
 slug: plan-mirroring
 order: 6
 source: "README.md#Plan Mirroring: Obsidian and GitHub Issues"
-source_hash: "05fdfe35c699"
+source_hash: "23e31b322a70"
 ---
 
 <a id="plan-mirroring-obsidian-and-github-issues"></a>
@@ -20,16 +20,25 @@ tidak pernah diedit.
 | Catatan Obsidian | Bisa dicari, enak dibaca, Mermaid dirender, terhubung ke graph | `source_hash` yang dicatat di frontmatter catatan itu sendiri |
 | GitHub issue | **Riwayat**: siapa yang membukanya, kapan disetujui, apa yang ditutup dan kapan, setiap komentar dalam satu timeline yang sudah diindeks GitHub dan ditautkan dari commit | Nomor issue yang dicatat di `plan.issues.json` |
 
-Body issue **adalah** teks plan, byte demi byte, ditambah trailer yang bisa dibaca
-mesin berisi id plan, key, path sumber, status, dan hash. Body berupa ringkasan
-dilarang: ringkasan adalah sumber kebenaran kedua yang diam-diam menjadi usang begitu
-plan berubah, dan saat itu issue menjadi salah tanpa ada yang melaporkannya.
-Trailer itulah yang membuat pertanyaan "apakah issue ini masih terkini?" bisa dijawab dari issue itu saja.
-Plan yang lebih panjang dari batas body GitHub sebesar 65.536 karakter dijadikan prefiks
-verbatim terpanjangnya, dipotong di batas baris, lalu diikuti satu baris `**Truncated:**`
-eksplisit yang menyebut N dari M karakter dan path plan di repositori, kemudian trailer
-yang tidak berubah, yang hash-nya tetap mencakup plan secara utuh: prefiks dengan penanda,
-tidak pernah ringkasan.
+Issue adalah plan yang disajikan untuk pembaca yang tidak menulisnya. Judulnya
+heading `# ` milik plan itu sendiri, issue membawa label `plan`, dan body-nya terdiri
+dari header turunan (path plan, `plan_id`, status, dan progres checklist, semuanya
+dibaca dari plan), body plan secara verbatim, frontmatter runner yang dilipat dalam
+`<details>`, dan trailer yang bisa dibaca mesin berisi id plan, key, path sumber,
+status, hash, dan `format` tata letak. Ringkasan tulisan tangan dilarang: ringkasan
+adalah sumber kebenaran kedua yang diam-diam menjadi usang begitu plan berubah, dan
+saat itu issue menjadi salah tanpa ada yang melaporkannya. Header bukan ringkasan,
+karena setiap nilainya dibaca dari plan dengan aturan tetap. Trailer itulah yang
+membuat pertanyaan "apakah issue ini masih terkini?" bisa dijawab dari issue itu saja.
+Plan yang lebih panjang dari batas body GitHub sebesar 65.536 karakter lebih dulu
+kehilangan frontmatter terlipatnya (satu baris `**Omitted:**` menyebutnya); hanya prosa
+yang masih terlalu panjang yang dijadikan prefiks verbatim terpanjangnya, dipotong di
+batas baris, lalu diikuti satu baris `**Truncated:**` eksplisit yang menyebut N dari M
+karakter body plan dan path plan di repositori, kemudian trailer yang tidak berubah,
+yang hash-nya tetap mencakup plan secara utuh: prefiks dengan penanda, tidak pernah
+ringkasan. PR sesi menautkan issue dengan `Refs #<n>`, tidak pernah `Closes #<n>`,
+karena status plan yang menutupnya, dan sinkron dijalankan lagi saat PR dibuka dan
+setelah setiap push yang mengubah plan.
 
 <a id="three-things-that-will-bite-you-and-why-they-are-built-this-way"></a>
 ## Tiga hal yang akan menjebak Anda, dan mengapa dibuat seperti ini

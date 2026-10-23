@@ -9,15 +9,24 @@ edited.
 | Obsidian note | Searchable, readable, rendered Mermaid, graph-linked | `source_hash` recorded in the note's own frontmatter |
 | GitHub issue | **History**: who opened it, when it was approved, what closed and when, every comment in one timeline GitHub already indexes and links from the commit | Issue number recorded in `plan.issues.json` |
 
-The issue body **is** the plan text, byte for byte, plus a machine-readable
-trailer carrying the plan id, key, source path, status, and hash. A summary body
-is banned: a summary is a second source of truth that goes quietly stale the
-moment the plan changes, and then the issue is wrong in a way nothing reports.
-The trailer is what makes "is this issue current?" answerable from the issue alone.
-A plan longer than GitHub's 65,536-character body limit becomes its longest verbatim
+The issue is the plan rendered for a reader who did not write it. Its title is
+the plan's own `# ` heading, it carries the `plan` label, and its body is a derived
+header (the plan path, its `plan_id`, status, and checklist progress, all read from
+the plan), the plan body verbatim, the runner frontmatter folded in `<details>`, and
+a machine-readable trailer carrying the plan id, key, source path, status, hash, and
+layout `format`. A hand-written summary is banned: a summary is a second source of
+truth that goes quietly stale the moment the plan changes, and then the issue is
+wrong in a way nothing reports. The header is not one, because every value in it is
+read from the plan by a fixed rule. The trailer is what makes "is this issue
+current?" answerable from the issue alone. A plan longer than GitHub's
+65,536-character body limit loses the folded frontmatter first (one `**Omitted:**`
+line names it); only prose that is still too long becomes its longest verbatim
 prefix, cut at a line boundary, followed by one explicit `**Truncated:**` line naming
-N of M characters and the plan's repository path, then the unchanged trailer, whose
-hash still covers the full plan: a prefix with a marker, never a summary.
+N of M characters of the plan body and the plan's repository path, then the
+unchanged trailer, whose hash still covers the full plan: a prefix with a marker,
+never a summary. The session PR links the issue with `Refs #<n>`, never
+`Closes #<n>`, because the plan's status closes it, and the sync runs again when the
+PR is opened and after every push that changes the plan.
 
 ## Three things that will bite you, and why they are built this way
 

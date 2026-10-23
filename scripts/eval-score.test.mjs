@@ -65,7 +65,8 @@ describe('score', () => {
   test('ASSERTION_TYPES lists exactly the contract names', () => {
     expect([...ASSERTION_TYPES].sort()).toEqual([
       'bash_never', 'bash_some', 'commits_lack', 'file_exists', 'file_lacks', 'file_missing', 'file_unchanged',
-      'final_matches', 'final_mentions', 'final_options', 'fixture_changed', 'fixture_unchanged', 'skill_loaded', 'tool_count',
+      'final_matches', 'final_mentions', 'final_options', 'fixture_changed', 'fixture_unchanged', 'gate_count', 'skill_loaded',
+      'tool_count',
     ]);
   });
 
@@ -148,6 +149,15 @@ describe('score', () => {
     lines[1].message.content[0].is_error = false;
     const ok = parseStream(lines.map((l) => JSON.stringify(l)).join('\n'));
     expect(one(ok, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' }).pass).toBe(true);
+  });
+
+  test('gate_count counts the turns whose final message is a numbered option list', () => {
+    const merged = { final: 'done', finals: ['1. Approve\n2. Change', 'Plan:\n1. only one step', 'done'], toolUses: [] };
+    expect(one(merged, facts(), { type: 'gate_count', min: 1, max: 1 }).pass).toBe(true);
+    const r = one(merged, facts(), { type: 'gate_count', max: 0 });
+    expect(r.pass).toBe(false);
+    expect(r.detail).toContain('1 gate');
+    expect(one({ final: '1. a\n2. b', toolUses: [] }, facts(), { type: 'gate_count', min: 1 }).pass).toBe(true);
   });
 
   test('skill_loaded respects scope', () => {

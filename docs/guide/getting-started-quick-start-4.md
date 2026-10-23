@@ -49,7 +49,8 @@ from `agents/crew.json`, and runs the mod's own tests through `claude plugin tes
 
 A second optional mod, `mods/telegram-ask`, mirrors every `AskUserQuestion` dialog to a Telegram chat, so
 an approval gate can be answered from a phone. The terminal dialog stays open beside it and the first answer
-wins. A small bridge daemon (`telegram-ask-bridge.service`, a systemd user unit) is the bot's only poller.
+wins. A small bridge daemon (`telegram-ask-bridge.service`, a systemd user unit) sends the messages; Snipset desktop,
+which already polls the same bot, forwards the button taps to it.
 Install, logs, and revert are in `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs` runs the
 bridge's Bun tests and the mod's `claude plugin test`.
 

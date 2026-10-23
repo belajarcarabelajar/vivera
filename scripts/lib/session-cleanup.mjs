@@ -61,6 +61,16 @@ function sameEntry(a, b) {
   return sa.isFile() && sb.isFile() && sa.size === sb.size && fs.readFileSync(a).equals(fs.readFileSync(b));
 }
 
+// A link into the main checkout (a shared .env, say) points at data that outlives the worktree.
+function linksInto(file, root) {
+  if (!fs.lstatSync(file).isSymbolicLink()) return false;
+  try {
+    return inside(fs.realpathSync(file), root);
+  } catch {
+    return false;
+  }
+}
+
 export function planCleanup({ worktree, procCwds = listProcCwds() }) {
   const wt = fs.realpathSync(worktree);
   if (fs.realpathSync(gitOk(wt, ['rev-parse', '--show-toplevel'])) !== wt) throw new Error(`${worktree} is not the top of a git worktree`);
@@ -85,7 +95,8 @@ export function planCleanup({ worktree, procCwds = listProcCwds() }) {
     }
     for (const file of filesUnder(wt, rel.replace(/\/$/, ''))) {
       const target = path.join(main, file);
-      if (!exists(target)) plan.salvage.push(file);
+      if (linksInto(path.join(wt, file), main)) plan.identical.push(file);
+      else if (!exists(target)) plan.salvage.push(file);
       else if (sameEntry(path.join(wt, file), target)) plan.identical.push(file);
       else plan.conflicts.push(file);
     }

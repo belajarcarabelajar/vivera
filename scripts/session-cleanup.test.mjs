@@ -80,6 +80,18 @@ describe('planCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a symlink into the main checkout counts as identical, since removing it loses nothing', () => {
+    const f = fixture();
+    try {
+      f.put(f.repo, '.env', 'K=1\n');
+      symlinkSync(path.join(f.repo, '.env'), path.join(f.worktree, '.env'));
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.identical).toEqual(['.env']);
+      expect(p.conflicts).toEqual([]);
+      expect(p.blockers).toEqual([]);
+    } finally { f.done(); }
+  });
+
   test('a process working inside the worktree and uncommitted changes are blockers', () => {
     const f = fixture();
     try {

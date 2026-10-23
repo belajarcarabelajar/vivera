@@ -137,6 +137,19 @@ describe('score', () => {
     expect(one(neverRan, facts(), a).pass).toBe(true);
   });
 
+  test('skill_loaded does not count a Skill call whose result is an error', () => {
+    const lines = [
+      { type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'Skill', input: { skill: 'sucp-tdd-debug' } }] } },
+      { type: 'user', parent_tool_use_id: null, message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', is_error: true, content: 'Unknown skill' }] } },
+      { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: 0.01, usage: { input_tokens: 1 }, result: 'done' },
+    ];
+    const failed = parseStream(lines.map((l) => JSON.stringify(l)).join('\n'));
+    expect(one(failed, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' }).pass).toBe(false);
+    lines[1].message.content[0].is_error = false;
+    const ok = parseStream(lines.map((l) => JSON.stringify(l)).join('\n'));
+    expect(one(ok, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' }).pass).toBe(true);
+  });
+
   test('skill_loaded respects scope', () => {
     const sub = syntheticTools([['Skill', { skill: 'sucp-tdd-debug' }]], 'toolu_parent');
     expect(one(sub, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' }).pass).toBe(false);

@@ -3,10 +3,10 @@
 // Removes the worktree a finished session leaves behind. `git worktree remove`
 // refuses uncommitted work but deletes gitignored files without a word, and in
 // a session worktree those can be generated voiceovers, data, or plans under
-// docs/code-plan/. So ignored files are sorted first: build output and caches go,
-// files identical to the main checkout go, unique files are copied to the same
-// path in the main checkout (never over an existing file), and anything that
-// would need an overwrite keeps the whole worktree.
+// docs/code-plan/. So ignored files are sorted first: tool caches go, files
+// identical to the main checkout (or, for text, whose every line it holds) go,
+// unique files are copied to the same path in the main checkout (never over an
+// existing file), and anything that would need an overwrite keeps the worktree.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -87,6 +87,20 @@ function filesUnder(root, rel, dropped) {
   return fs.readdirSync(path.join(root, rel)).sort().flatMap((name) => filesUnder(root, path.posix.join(rel, name), dropped));
 }
 
+// A text file (an append-only log, say) whose every line the main copy already holds
+// carries nothing the main checkout lacks. Binary files, and files over 64 MB, never qualify.
+const TEXT_LIMIT = 64 * 1024 * 1024;
+function linesCovered(file, mainFile) {
+  const sa = fs.lstatSync(file);
+  const sb = fs.lstatSync(mainFile);
+  if (!sa.isFile() || !sb.isFile() || sa.size > TEXT_LIMIT || sb.size > TEXT_LIMIT) return false;
+  const a = fs.readFileSync(file);
+  const b = fs.readFileSync(mainFile);
+  if (a.includes(0) || b.includes(0)) return false;
+  const have = new Set(b.toString('utf8').split('\n'));
+  return a.toString('utf8').split('\n').every((line) => line === '' || have.has(line));
+}
+
 function sameEntry(a, b) {
   const sa = fs.lstatSync(a);
   const sb = fs.lstatSync(b);
@@ -133,10 +147,12 @@ export function planCleanup({ worktree, procCwds = listProcCwds() }) {
     }
     for (const file of filesUnder(wt, rel.replace(/\/$/, ''), plan.disposable)) {
       const target = path.join(main, file);
-      if (linksInto(path.join(wt, file), main)) plan.identical.push(file);
+      const st = fs.lstatSync(path.join(wt, file));
+      if (!st.isFile() && !st.isSymbolicLink()) plan.blockers.push(`not a regular file, so it is not copied: ${file}`);
+      else if (linksInto(path.join(wt, file), main)) plan.identical.push(file);
       else if (parentBlocked(main, file)) plan.conflicts.push(file);
       else if (!exists(target)) plan.salvage.push(file);
-      else if (sameEntry(path.join(wt, file), target)) plan.identical.push(file);
+      else if (sameEntry(path.join(wt, file), target) || linesCovered(path.join(wt, file), target)) plan.identical.push(file);
       else plan.conflicts.push(file);
     }
   }

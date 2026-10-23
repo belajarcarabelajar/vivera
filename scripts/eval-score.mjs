@@ -43,12 +43,22 @@ export function parseStream(text) {
   const toolUses = [];
   let lastMainText = '';
   let resultEvent = null;
+  const byId = new Map();
   for (const e of events) {
     if (e.type === 'result') resultEvent = e;
+    if (e.type === 'user' && Array.isArray(e.message?.content)) {
+      for (const block of e.message.content) {
+        if (block?.type === 'tool_result' && block.is_error === true && byId.has(block.tool_use_id)) byId.get(block.tool_use_id).error = true;
+      }
+    }
     if (e.type !== 'assistant' || !Array.isArray(e.message?.content)) continue;
     const scope = e.parent_tool_use_id == null ? 'main' : 'sub';
     for (const block of e.message.content) {
-      if (block?.type === 'tool_use') toolUses.push({ name: block.name, input: block.input ?? {}, scope });
+      if (block?.type === 'tool_use') {
+        const use = { name: block.name, input: block.input ?? {}, scope };
+        toolUses.push(use);
+        if (block.id) byId.set(block.id, use);
+      }
       if (block?.type === 'text' && scope === 'main' && typeof block.text === 'string') lastMainText = block.text;
     }
   }
@@ -131,8 +141,8 @@ const CHECKS = {
   // A skill reaches the context through the Skill tool or a Read of its SKILL.md; the stream never shows its text.
   skill_loaded(parsed, facts, a) {
     const uses = inScope(parsed.toolUses, a.scope);
-    const at = uses.findIndex((t) => (t.name === 'Skill' && t.input?.skill === a.skill)
-      || (t.name === 'Read' && String(t.input?.file_path ?? '').endsWith(`/skills/${a.skill}/SKILL.md`)));
+    const at = uses.findIndex((t) => !t.error && ((t.name === 'Skill' && t.input?.skill === a.skill)
+      || (t.name === 'Read' && String(t.input?.file_path ?? '').endsWith(`/skills/${a.skill}/SKILL.md`))));
     if (at < 0) return [false, `${a.skill} never loaded in scope ${a.scope ?? 'all'}`];
     if (a.before == null) return [true, `${a.skill} loaded at tool call ${at + 1}`];
     const re = toRegex(a.before);

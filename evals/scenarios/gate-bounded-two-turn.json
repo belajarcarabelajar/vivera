@@ -1,0 +1,41 @@
+{
+  "id": "gate-bounded-two-turn",
+  "behaviour": "A Bounded change raises exactly one gate across two turns: it stops at the Design gate unapproved, then implements and runs bun test once the next turn approves it.",
+  "turns": [
+    {
+      "prompt": "Add a `subtract(a, b)` function to math.mjs, with a test in math.test.mjs.",
+      "assertions": [
+        {
+          "type": "fixture_unchanged"
+        },
+        {
+          "type": "final_options",
+          "min": 2
+        }
+      ]
+    },
+    {
+      "prompt": "1. Approved, go ahead.",
+      "assertions": [
+        {
+          "type": "fixture_changed"
+        },
+        {
+          "type": "bash_some",
+          "pattern": "\\bbun (run )?test\\b",
+          "scope": "all"
+        }
+      ]
+    }
+  ],
+  "fixture": "base",
+  "max_turns": 12,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "gate_count",
+      "min": 1,
+      "max": 1
+    }
+  ]
+}

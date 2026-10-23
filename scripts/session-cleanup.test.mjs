@@ -173,9 +173,10 @@ describe('planCleanup', () => {
   test('a binary file is never judged by lines', () => {
     const f = fixture();
     try {
-      f.put(f.repo, 'vo/a.wav', Buffer.from([1, 0, 2, 10, 3, 0, 4]));
-      f.put(f.worktree, 'vo/a.wav', Buffer.from([1, 0, 2]));
-      expect(planCleanup({ worktree: f.worktree, procCwds: [] }).conflicts).toEqual(['vo/a.wav']);
+      // A log extension, so only the NUL guard can turn this down.
+      f.put(f.repo, 'vo/a.log', Buffer.from([1, 0, 2, 10, 3, 0, 4]));
+      f.put(f.worktree, 'vo/a.log', Buffer.from([1, 0, 2, 10]));
+      expect(planCleanup({ worktree: f.worktree, procCwds: [] }).conflicts).toEqual(['vo/a.log']);
     } finally { f.done(); }
   });
 

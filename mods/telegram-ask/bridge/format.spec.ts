@@ -8,6 +8,7 @@ import {
   parseCallback,
   renderAnswered,
   renderAsk,
+  unanswered,
   type Ask,
   type AskState,
   type Question,
@@ -77,14 +78,14 @@ describe('renderAsk text', () => {
     expect(renderAsk(newState(ask2)).text).toBe(
       [
         '🌾 vivera · telegram-ask',
-        'Claude:',
+        '<b>Claude:</b>',
         'Rencana siap.',
         '',
-        '[1/2] Gate: Lanjut ke T2?',
+        '<b>[1/2] Gate:</b> Lanjut ke T2?',
         ' 1. Ya - Mulai T2',
         ' 2. Tidak',
         '',
-        '[2/2] Cek: Cek apa saja? (pilih beberapa)',
+        '<b>[2/2] Cek:</b> Cek apa saja? (pilih beberapa)',
         ' 1. Tes',
         ' 2. Lint',
         ' 3. Docs',
@@ -94,7 +95,7 @@ describe('renderAsk text', () => {
 
   test('omits the Claude block when the context is empty', () => {
     const text = renderAsk(newState({ ...ask2, context: '  ' })).text
-    expect(text.startsWith('🌾 vivera · telegram-ask\n\n[1/2] Gate: Lanjut ke T2?\n')).toBe(true)
+    expect(text.startsWith('🌾 vivera · telegram-ask\n\n<b>[1/2] Gate:</b> Lanjut ke T2?\n')).toBe(true)
   })
 
   test('ends with the Other prompt while waiting for typed text', () => {
@@ -102,14 +103,19 @@ describe('renderAsk text', () => {
     expect(text.endsWith(' 3. Docs\n\n✏️ Ketik jawaban untuk pertanyaan 2 sebagai pesan biasa.')).toBe(true)
   })
 
-  test('passes emoji and Markdown characters through verbatim', () => {
+  test('renders Markdown in the text and strips it from buttons', () => {
     const ask: Ask = {
       ...ask2,
-      questions: [{ question: 'Mana?', header: 'Pilih', multiSelect: false, options: [{ label: '🚀 *Rilis* _now_ [x](y)' }, { label: 'B' }] }],
+      questions: [{ question: 'Mana **dulu**?', header: 'Pilih', multiSelect: false, options: [{ label: '🚀 *Rilis* _now_ [x](y)' }, { label: 'B <C>' }] }],
     }
     const { text, keyboard } = renderAsk(newState(ask))
-    expect(text).toContain('\n 1. 🚀 *Rilis* _now_ [x](y)\n')
-    expect(keyboard[0]).toEqual([{ text: '1.1 🚀 *Rilis* _now_ [x](y)', callback_data: 'abcdef:0:0' }])
+    expect(text).toContain('<b>[1/1] Pilih:</b> Mana <b>dulu</b>?\n 1. 🚀 <i>Rilis</i> <i>now</i> [x](y)\n 2. B &lt;C&gt;')
+    expect(keyboard[0]).toEqual([{ text: '1.1 🚀 Rilis now x', callback_data: 'abcdef:0:0' }])
+  })
+
+  test('renders a table in Claude context as an aligned block', () => {
+    const text = renderAsk(newState({ ...ask2, context: 'Hasil:\n\n| A | B |\n|---|---|\n| 1 | 22 |' })).text
+    expect(text).toContain('<b>Claude:</b>\nHasil:\n\n<pre>A │ B\n──┼───\n1 │ 22</pre>\n\n<b>[1/2]')
   })
 
   test('never contains an em dash or en dash', () => {
@@ -123,7 +129,7 @@ describe('renderAsk text', () => {
 describe('renderAsk length limits', () => {
   test('cuts a 3000-character context to 1500 characters ending in an ellipsis', () => {
     const text = renderAsk(newState({ ...ask2, context: 'c'.repeat(3000) })).text
-    expect(text).toContain('Claude:\n' + 'c'.repeat(1499) + '…\n\n[1/2]')
+    expect(text).toContain('<b>Claude:</b>\n' + 'c'.repeat(1499) + '…\n\n<b>[1/2]')
   })
 
   test('cuts the context further before touching descriptions', () => {
@@ -132,7 +138,7 @@ describe('renderAsk length limits', () => {
     expect(text).toContain('\n 1. Opsi 11 - ' + 'd'.repeat(150) + '\n')
     expect(text).toContain('\n 4. Opsi 44 - ' + 'd'.repeat(150))
     expect(text).not.toContain('c'.repeat(1400))
-    expect(text).toContain('c…\n\n[1/4]')
+    expect(text).toContain('c…\n\n<b>[1/4]')
   })
 
   test('cuts option descriptions once the context alone cannot make it fit', () => {
@@ -140,14 +146,14 @@ describe('renderAsk length limits', () => {
     expect(text.length).toBeLessThanOrEqual(4096)
     for (const label of ['Opsi 11', 'Opsi 24', 'Opsi 33', 'Opsi 44']) expect(text).toContain(`${label} - d`)
     expect(text).not.toContain('d'.repeat(400))
-    expect(text).toContain('Claude:\n…\n\n[1/4]')
+    expect(text).toContain('<b>Claude:</b>\n…\n\n<b>[1/4]')
   })
 
   test('keeps every callback within 64 bytes for four questions of four options', () => {
     const { keyboard } = renderAsk(newState(bigAsk(10, 10)))
     const data = keyboard.flat().map((b) => b.callback_data)
-    expect(data.length).toBe(4 * 4 + 4 + 2)
-    expect(data.at(-1)).toBe('abcdef:3:s')
+    expect(data.length).toBe(4 + 4 * 4 + 4 + 1)
+    expect(data.at(-1)).toBe('abcdef:0:s')
     for (const d of data) expect(new TextEncoder().encode(d).length).toBeLessThanOrEqual(64)
   })
 
@@ -160,29 +166,50 @@ describe('renderAsk length limits', () => {
 })
 
 describe('renderAsk keyboard', () => {
-  test('has one row per option, then Other, plus Send for multi-select', () => {
+  test('opens each section with a header row and ends with one Send for every multi-select question', () => {
     expect(renderAsk(newState(ask2)).keyboard).toEqual([
+      [{ text: '━━ 1/2 · Gate ━━', callback_data: 'abcdef:0:h' }],
       [{ text: '1.1 Ya', callback_data: 'abcdef:0:0' }],
       [{ text: '1.2 Tidak', callback_data: 'abcdef:0:1' }],
       [{ text: '✏️ Lainnya', callback_data: 'abcdef:0:o' }],
+      [{ text: '━━ 2/2 · Cek (pilih beberapa) ━━', callback_data: 'abcdef:1:h' }],
       [{ text: '2.1 Tes', callback_data: 'abcdef:1:0' }],
       [{ text: '2.2 Lint', callback_data: 'abcdef:1:1' }],
       [{ text: '2.3 Docs', callback_data: 'abcdef:1:2' }],
-      [
-        { text: '✏️ Lainnya', callback_data: 'abcdef:1:o' },
-        { text: 'Kirim', callback_data: 'abcdef:1:s' },
-      ],
+      [{ text: '✏️ Lainnya', callback_data: 'abcdef:1:o' }],
+      [{ text: '📨 Kirim semua jawaban', callback_data: 'abcdef:0:s' }],
     ])
+  })
+
+  test('a single question gets no header row', () => {
+    const one: Ask = { ...ask2, questions: [ask2.questions[1]] }
+    expect(renderAsk(newState(one)).keyboard.flat().map((b) => b.text)).toEqual(['1.1 Tes', '1.2 Lint', '1.3 Docs', '✏️ Lainnya', '📨 Kirim'])
+  })
+
+  test('single-select questions only get no Send button', () => {
+    const singles: Ask = { ...ask2, questions: [ask2.questions[0], { ...ask2.questions[0], question: 'Lagi?' }] }
+    expect(renderAsk(newState(singles)).keyboard.flat().some((b) => b.callback_data.endsWith(':s'))).toBe(false)
   })
 
   test('marks picked options with a check', () => {
     const kb = renderAsk(withState({ q: [{ picked: [1], done: true }, { picked: [0, 2], done: false }] })).keyboard
-    expect(kb.flat().map((b) => b.text)).toEqual(['1.1 Ya', '✅ 1.2 Tidak', '✏️ Lainnya', '✅ 2.1 Tes', '2.2 Lint', '✅ 2.3 Docs', '✏️ Lainnya', 'Kirim'])
+    expect(kb.flat().map((b) => b.text)).toEqual([
+      '━━ 1/2 · Gate ━━',
+      '1.1 Ya',
+      '✅ 1.2 Tidak',
+      '✏️ Lainnya',
+      '━━ 2/2 · Cek (pilih beberapa) ━━',
+      '✅ 2.1 Tes',
+      '2.2 Lint',
+      '✅ 2.3 Docs',
+      '✏️ Lainnya',
+      '📨 Kirim semua jawaban',
+    ])
   })
 
   test('marks Other with a check once its text is set', () => {
     const kb = renderAsk(withState({ q: [{ picked: [], other: 'Nanti', done: true }, { picked: [], done: false }] })).keyboard
-    expect(kb[2]).toEqual([{ text: '✅ ✏️ Lainnya', callback_data: 'abcdef:0:o' }])
+    expect(kb[3]).toEqual([{ text: '✅ ✏️ Lainnya', callback_data: 'abcdef:0:o' }])
   })
 })
 
@@ -191,9 +218,10 @@ describe('parseCallback', () => {
     expect(parseCallback('abcdef:1:2')).toEqual({ id: 'abcdef', q: 1, kind: 'option', option: 2 })
   })
 
-  test('parses Send and Other taps', () => {
+  test('parses Send, Other and header taps', () => {
     expect(parseCallback('abcdef:3:s')).toEqual({ id: 'abcdef', q: 3, kind: 'send' })
     expect(parseCallback('abcdef:0:o')).toEqual({ id: 'abcdef', q: 0, kind: 'other' })
+    expect(parseCallback('abcdef:2:h')).toEqual({ id: 'abcdef', q: 2, kind: 'header' })
   })
 
   test('returns null for malformed data', () => {
@@ -246,6 +274,18 @@ describe('applyTap', () => {
     expect(applyTap(state, { id: 'abcdef', q: 1, kind: 'send' }).q[1]).toEqual({ picked: [1], done: true })
   })
 
+  test('one Send answers every multi-select question that has picks, whatever its index', () => {
+    const three: Ask = { ...ask2, questions: [ask2.questions[1], ask2.questions[0], { ...ask2.questions[1], question: 'Lagi?' }] }
+    const state = withState({ q: [{ picked: [0], done: false }, { picked: [], done: false }, { picked: [], done: false }] }, three)
+    const next = applyTap(state, { id: 'abcdef', q: 0, kind: 'send' })
+    expect(next.q).toEqual([{ picked: [0], done: true }, { picked: [], done: false }, { picked: [], done: false }])
+  })
+
+  test('a header tap changes nothing', () => {
+    const state = newState(ask2)
+    expect(applyTap(state, { id: 'abcdef', q: 1, kind: 'header' })).toEqual(state)
+  })
+
   test('Send with nothing picked changes nothing', () => {
     const state = newState(ask2)
     expect(applyTap(state, { id: 'abcdef', q: 1, kind: 'send' })).toEqual(state)
@@ -287,6 +327,13 @@ describe('applyText', () => {
   test('changes nothing for blank text', () => {
     const state = withState({ awaitingOther: 0 })
     expect(applyText(state, '  \n ')).toEqual(state)
+  })
+})
+
+describe('unanswered', () => {
+  test('lists the 1-based numbers of questions not yet answered', () => {
+    expect(unanswered(withState({ q: [{ picked: [0], done: true }, { picked: [], done: false }] }))).toEqual([2])
+    expect(unanswered(withState({ q: [{ picked: [0], done: true }, { picked: [1], done: true }] }))).toEqual([])
   })
 })
 

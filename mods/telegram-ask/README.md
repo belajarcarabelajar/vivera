@@ -45,6 +45,18 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 
    Then `/reload-plugins` in a running session.
 
+5. If the repository is not at `~/vivera` or Bun is not at `~/.bun/bin/bun` (check with `command -v bun`), point the unit at both with a drop-in that clears `ExecStart` and sets it again (`command -v bun` fills in the Bun path; replace `/path/to/vivera` with your clone), then restart:
+
+   ```bash
+   mkdir -p ~/.config/systemd/user/telegram-ask-bridge.service.d
+   printf '[Service]\nExecStart=\nExecStart=%s %s\n' "$(command -v bun)" /path/to/vivera/mods/telegram-ask/bridge/main.ts \
+     > ~/.config/systemd/user/telegram-ask-bridge.service.d/paths.conf
+   systemctl --user daemon-reload && systemctl --user restart telegram-ask-bridge.service
+   ```
+
+   The `cp` and `claude plugin marketplace add` lines above take the same repository path.
+
+- In the env file, `KEY=value # note` drops the note; a `#` inside quotes or with no space before it stays part of the value.
 - The bridge never copies or logs the token. Never set a webhook on the bot: Telegram stops `getUpdates` while one is set.
 - Socket: `$XDG_RUNTIME_DIR/vivera-telegram-ask.sock`, mode 0600. Override with `TELEGRAM_ASK_SOCKET` for the bridge and the `socketPath` option in `/config` for the mod.
 
@@ -69,7 +81,7 @@ The drop-in sets `TELEGRAM_ASK_POLL=0`; the bridge then logs `polling off (updat
 - Bridge stopped or crashed: the dialog shows `telegram-ask: bridge offline` and works as before. A pending ask is lost when the bridge restarts; its buttons then answer "Pertanyaan ini sudah selesai".
 - There is no answer deadline while the session waits: a question stays answerable from Telegram for hours, and a `✏️ Lainnya` tap keeps taking your next text as long as its question is open. An ask is dropped about 2 minutes after its session stops polling the bridge (terminal closed or killed); its buttons then answer "Pertanyaan ini sudah selesai".
 - `telegram-ask: not sent to Telegram (<status>)` under the dialog: the bridge is up but refused the question; the terminal dialog works as usual.
-- Exit 2 at start: a missing env file, key, or socket path (the unit does not restart on it). The log line names the missing file or key, never a value.
+- Exit 2 at start: a missing env file, key, or socket path, or `another bridge is already listening on <path>` (the unit does not restart on it). A socket file nobody answers on is replaced. The log line names the missing file or key, never a value.
 - `getUpdates 409` in the log: another program polls the same bot; use the forwarded setup above.
 
 ## Tests

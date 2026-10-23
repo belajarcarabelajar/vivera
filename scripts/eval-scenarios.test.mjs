@@ -59,6 +59,11 @@ function assertionProblems(a) {
     case 'final_options':
       need(isCount(a.min) && a.min >= 1, 'min must be a positive integer');
       break;
+    case 'gate_count':
+      need(a.min !== undefined || a.max !== undefined, 'needs min or max');
+      if (a.min !== undefined) need(isCount(a.min), 'min must be a count');
+      if (a.max !== undefined) need(isCount(a.max), 'max must be a count');
+      break;
     case 'tool_count':
       need(isString(a.tool), 'tool must be a string');
       need(isScope(a.scope), 'scope must be main, sub, or all');
@@ -117,7 +122,12 @@ describe('eval scenarios', () => {
       test('top-level fields have the right types and caps', () => {
         expect(isString(s.behaviour)).toBe(true);
         expect(s.behaviour.includes('\n')).toBe(false);
-        expect(isString(s.prompt)).toBe(true);
+        // Exactly one of a prompt (one turn) or turns (two or more, each with a prompt).
+        expect(isString(s.prompt)).toBe(s.turns === undefined);
+        if (s.turns !== undefined) {
+          expect(Array.isArray(s.turns) && s.turns.length >= 2).toBe(true);
+          expect(s.turns.every((t) => isString(t.prompt) && (t.assertions === undefined || Array.isArray(t.assertions)))).toBe(true);
+        }
         expect(isString(s.fixture)).toBe(true);
         expect(Number.isInteger(s.max_turns)).toBe(true);
         expect(s.max_turns).toBeGreaterThanOrEqual(1);
@@ -127,7 +137,7 @@ describe('eval scenarios', () => {
         // when the model could see it, it skipped fan-out to stay inside it.
         expect(s.budget_usd).toBeUndefined();
         expect(Array.isArray(s.assertions)).toBe(true);
-        expect(s.assertions.length).toBeGreaterThan(0);
+        expect(s.assertions.length + (s.turns ?? []).flatMap((u) => u.assertions ?? []).length).toBeGreaterThan(0);
       });
 
       test('invoke, when present, is false or names a directory under skills/', () => {
@@ -160,8 +170,9 @@ describe('eval scenarios', () => {
       });
 
       test('every assertion type is one the scorer knows, with valid fields', () => {
-        for (const a of s.assertions) expect(ASSERTION_TYPES).toContain(a.type);
-        expect(s.assertions.flatMap(assertionProblems)).toEqual([]);
+        const all = [...s.assertions, ...(s.turns ?? []).flatMap((t) => t.assertions ?? [])];
+        for (const a of all) expect(ASSERTION_TYPES).toContain(a.type);
+        expect(all.flatMap(assertionProblems)).toEqual([]);
       });
     });
   }

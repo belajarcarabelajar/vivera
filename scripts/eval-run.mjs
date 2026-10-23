@@ -33,7 +33,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseStream, score } from './eval-score.mjs';
+import { score } from './eval-score.mjs';
+import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
 import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
@@ -95,7 +96,9 @@ function parseArgs(argv) {
 function validateScenario(s, file, skills) {
   const bad = (why) => new UsageError(`${file}: ${why}`);
   if (!s || typeof s !== 'object') throw bad('not a JSON object');
-  for (const k of ['id', 'prompt', 'fixture']) if (typeof s[k] !== 'string' || !s[k]) throw bad(`missing ${k}`);
+  for (const k of ['id', 'fixture']) if (typeof s[k] !== 'string' || !s[k]) throw bad(`missing ${k}`);
+  const shape = turnsProblem(s);
+  if (shape) throw bad(shape);
   if (!Number.isInteger(s.max_turns) || s.max_turns < 1) throw bad('max_turns must be a positive integer');
   if (s.permission_mode === 'bypassPermissions') throw bad('permission_mode bypassPermissions is refused: it lets the agent under test run any command here');
   if (!PERMISSION_MODES.has(s.permission_mode)) throw bad(`permission_mode must be one of ${[...PERMISSION_MODES].join(', ')}`);
@@ -103,7 +106,6 @@ function validateScenario(s, file, skills) {
     || !s.allowed_tools.every((t) => typeof t === 'string' && t.trim() !== ''))) {
     throw bad('allowed_tools must be a non-empty array of tool names');
   }
-  if (!Array.isArray(s.assertions) || s.assertions.length === 0) throw bad('assertions must be a non-empty array');
   if (s.invoke !== undefined && s.invoke !== false && !(typeof s.invoke === 'string' && skills.has(s.invoke))) {
     throw bad(`invoke must be false or one of the installed skills, got ${JSON.stringify(s.invoke)}`);
   }
@@ -197,6 +199,9 @@ function buildFixture(scenario, fixturesDir, dest) {
   gitOk(dest, ['init', '-q', '-b', 'main']);
   gitOk(dest, ['add', '-A']);
   gitOk(dest, ['commit', '-q', '-m', 'eval fixture']);
+  // The sandbox has no git config; without these the agent's commits fail.
+  gitOk(dest, ['config', 'user.name', FIXTURE_GIT_ENV.GIT_AUTHOR_NAME]);
+  gitOk(dest, ['config', 'user.email', FIXTURE_GIT_ENV.GIT_AUTHOR_EMAIL]);
   return gitOk(dest, ['rev-parse', 'HEAD']).trim();
 }
 
@@ -205,17 +210,17 @@ function ceiling(remaining) {
   return Math.max(0.01, Math.floor(Math.min(RUN_CEILING_USD, remaining) * 100 + 1e-9) / 100);
 }
 
-async function runClaude(scenario, dir, budget, invoke, root, bwrap) {
+async function runClaude(scenario, dir, budget, invoke, root, bwrap, turn) {
   const bin = process.env.EVAL_CLAUDE_BIN || 'claude';
   const args = [
-    '-p', invoke ? `/${invoke} ${scenario.prompt}` : scenario.prompt,
+    '-p', invoke ? `/${invoke} ${turn.prompt}` : turn.prompt,
     '--output-format', 'stream-json', '--verbose',
     '--max-turns', String(scenario.max_turns),
     '--permission-mode', scenario.permission_mode,
     '--allowedTools', allowedTools(scenario, dir).join(','),
     '--disallowedTools', DISALLOWED_TOOLS.join(','),
     '--append-system-prompt', EVAL_NOTE,
-    '--no-session-persistence',
+    ...sessionFlags(turn.session),
     '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',
   ];
@@ -259,12 +264,18 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
     if (!(err instanceof RefusedError)) throw err;
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
   }
-  const run = await runClaude(scenario, dest, budget, invoke, path.dirname(runDir), bwrap && { bin: bwrap, runDir });
+  const turns = turnsOf(scenario);
+  const turnFacts = [];
+  const { parsed: perTurn, stdout, last: run } = await runTurns({ turns, budget, runTurn: async (t) => {
+    const r = await runClaude(scenario, dest, t.budget, t.first && invoke, path.dirname(runDir), bwrap && { bin: bwrap, runDir }, t);
+    turnFacts.push(collectFacts(dest, initialSha, turns[turnFacts.length].assertions ?? []));
+    return r;
+  } });
   // Beside the fixture, not inside it, so the stream never shows up in its git status.
   const stream = keep ? path.join(runDir, `${scenario.id}${nth}.stream.jsonl`) : undefined;
-  if (stream) fs.writeFileSync(stream, run.stdout);
-  const parsed = parseStream(run.stdout);
-  const results = score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions);
+  if (stream) fs.writeFileSync(stream, stdout);
+  const parsed = mergeParsed(perTurn);
+  const results = [...score(parsed, collectFacts(dest, initialSha, scenario.assertions), scenario.assertions), ...scoreTurns(perTurn, turns, turnFacts)];
   if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_S} s` });
   else if (run.spawnError) results.unshift({ type: 'run', pass: false, detail: `could not start claude: ${run.spawnError.code ?? run.spawnError.message}` });
   else if (parsed.result.subtype == null) results.unshift({ type: 'run', pass: false, detail: `no result event (exit ${run.status})` });

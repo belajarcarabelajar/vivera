@@ -80,6 +80,17 @@ describe('planCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a disposable directory nested inside an ignored directory is dropped, not salvaged', () => {
+    const f = fixture();
+    try {
+      f.put(f.worktree, 'vo/run/node_modules/pkg/index.js', 'x');
+      f.put(f.worktree, 'vo/run/take.wav', 'audio');
+      const p = planCleanup({ worktree: f.worktree, procCwds: [] });
+      expect(p.disposable).toEqual(['vo/run/node_modules/']);
+      expect(p.salvage).toEqual(['vo/run/take.wav']);
+    } finally { f.done(); }
+  });
+
   test('a symlink into the main checkout counts as identical, since removing it loses nothing', () => {
     const f = fixture();
     try {

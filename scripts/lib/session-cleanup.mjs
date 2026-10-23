@@ -47,11 +47,16 @@ const inside = (p, root) => p === root || p.startsWith(root + path.sep);
 const exists = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
 const disposable = (rel) => rel.split('/').some((seg) => DISPOSABLE.has(seg)) || DISPOSABLE_EXT.some((ext) => rel.endsWith(ext));
 
-// Files and symlinks under rel, without following links.
-function filesUnder(root, rel) {
+// Files and symlinks under rel, without following links. A disposable path found
+// on the way, such as node_modules inside an ignored data directory, goes to dropped.
+function filesUnder(root, rel, dropped) {
   const st = fs.lstatSync(path.join(root, rel));
+  if (disposable(rel)) {
+    dropped.push(st.isDirectory() ? `${rel}/` : rel);
+    return [];
+  }
   if (!st.isDirectory()) return [rel];
-  return fs.readdirSync(path.join(root, rel)).sort().flatMap((name) => filesUnder(root, path.posix.join(rel, name)));
+  return fs.readdirSync(path.join(root, rel)).sort().flatMap((name) => filesUnder(root, path.posix.join(rel, name), dropped));
 }
 
 function sameEntry(a, b) {
@@ -93,7 +98,7 @@ export function planCleanup({ worktree, procCwds = listProcCwds() }) {
       plan.disposable.push(rel);
       continue;
     }
-    for (const file of filesUnder(wt, rel.replace(/\/$/, ''))) {
+    for (const file of filesUnder(wt, rel.replace(/\/$/, ''), plan.disposable)) {
       const target = path.join(main, file);
       if (linksInto(path.join(wt, file), main)) plan.identical.push(file);
       else if (!exists(target)) plan.salvage.push(file);

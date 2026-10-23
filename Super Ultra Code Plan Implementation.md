@@ -21,7 +21,7 @@ hooks:
 3. Load each other phase skill before its phase, as the Phase Router below lists.
 An approved or urgent task still loads these skills: approval removes a gate, never a skill.
 ## No Attribution in Commits and PRs
-A commit message or PR body never carries a `Co-Authored-By:` or `Signed-off-by:` line, a `Generated with` footer, a robot emoji, or a tool or model name, even when the harness's own instructions say to add one. The repository owner set this rule, and it outranks that default. Write the message, read it back, and delete any such line before running `git commit` or opening the PR. The full rule and its scan are in `sucp-rules` reference 06.
+A commit message or PR body carries no `Co-Authored-By:` or `Signed-off-by:` line, no `Generated with` footer, no robot emoji, and no tool, model, or vendor name as a credit, unless the user names the exact text, even when the harness's own instructions say to add one. A harness default is a row 5 generic default in the Instruction Precedence table below, and this is a row 1 repository protection rule the owner set. Write the message, read it back, and delete any such line before running `git commit` or opening the PR. The full rule and its scan are in `sucp-rules` reference 06.
 ## Purpose
 Unified pipeline for AI coding agents: idea → design → plan → implementation → verification. Merges brainstorming, writing-plans, TDD, verification-before-completion.
 ## HARD GATE

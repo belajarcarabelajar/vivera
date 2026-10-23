@@ -28,6 +28,24 @@ describe('attribution shapes the first patterns missed', () => {
   });
 });
 
+describe('review of PR #162', () => {
+  test('a < inside the display name does not hide the address from the strict check', () => {
+    expect(rules('No co-author trailer.\nCo-Authored-By: A <B> <a@b.co>\n')).toEqual(['msg:2 co-author trailer']);
+  });
+
+  test('a lone robot badge is caught even next to a line that states the rule', () => {
+    expect(rules('drop the attribution watermark\n\u{1F916}\n')).toEqual(['msg:2 robot emoji used as a credit badge']);
+  });
+
+  test('a robot badge with the emoji presentation selector is caught', () => {
+    expect(rules('Add max(a, b)\n\n\u{1F916}\u{FE0F}\n')).toEqual(['msg:3 robot emoji used as a credit badge']);
+  });
+
+  test('prose that starts with the trailer word and names an address mid-line is not a trailer', () => {
+    expect(rules('Co-authored-by lines such as Jane <jane@example.com> are banned.\n')).toEqual([]);
+  });
+});
+
 describe('lines that still pass', () => {
   test('a sentence about trailers carries no address, so it is not a trailer', () => {
     expect(rules('Co-authored-by trailers are banned in this repository.\n')).toEqual([]);

@@ -2,8 +2,9 @@
 //
 // The attribution patterns of scripts/check-copy-rules.mjs, kept here so the
 // checker stays under its size ceiling. A `strict` pattern matches a shape that is
-// never a sentence about the rule (a trailer carrying an address), so the
-// neighbour exemption for rule statements does not apply to it.
+// never a sentence about the rule (a trailer ending in an address, a line holding
+// only the robot emoji), so the neighbour exemption for rule statements does not
+// apply to it, and the em-dash check is skipped on a line it already fails.
 
 // Each entry names the rule it enforces and prints the phrase that matched, so a
 // hit tells the reader what to remove without them re-deriving the rule.
@@ -33,7 +34,8 @@ export const WATERMARK_PATTERNS = [
   { re: /^\s*(?:co-authored-by|signed-off-by)\s*\[/im, label: 'trailer in link form' },
   // Found by the PR #161 review: a badge line holding only the emoji, and a trailer
   // without its colon or right under a line that quotes the rule.
-  { re: /^\s*\u{1F916}\s*$/u, label: 'robot emoji used as a credit badge' },
-  { re: /^\s*co-authored-by\b[^<\n]*<[^>@\s]+@[^>\s]+>/i, label: 'co-author trailer', strict: true },
-  { re: /^\s*signed-off-by\b[^<\n]*<[^>@\s]+@[^>\s]+>/i, label: 'sign-off trailer', strict: true },
+  { re: /^\s*\u{1F916}\u{FE0F}?\s*$/u, label: 'robot emoji used as a credit badge', strict: true },
+  // The address ends the line, so prose that only mentions one mid-sentence is not a trailer.
+  { re: /^\s*co-authored-by\b[^\n]*<[^<>@\s]+@[^<>\s]+>\s*$/i, label: 'co-author trailer', strict: true },
+  { re: /^\s*signed-off-by\b[^\n]*<[^<>@\s]+@[^<>\s]+>\s*$/i, label: 'sign-off trailer', strict: true },
 ];

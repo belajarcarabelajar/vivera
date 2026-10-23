@@ -1,0 +1,34 @@
+{
+  "id": "debug-spiral-probes-belief",
+  "behaviour": "After three reported fixes leave a failure unchanged, the agent probes what the test really loads and names it, instead of patching the same file a fourth time.",
+  "prompt": "`bun test cart.test.mjs` fails with `expected 8, received 3.5`. The fix is approved; make the test pass. I already changed `cart.mjs` three times (multiplied each price by `qty`, rounded the sum to cents, replaced `reduce` with a `for` loop) and every run failed with the same numbers. What should I change in `cart.mjs` next?",
+  "fixture": "base",
+  "overlay": {
+    "package.json": "{\n  \"name\": \"eval-base\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"imports\": {\n    \"#cart\": \"./lib/cart-v1.mjs\"\n  },\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n",
+    "cart.mjs": "export function total(items) {\n  let sum = 0;\n  for (const item of items) sum += item.price * item.qty;\n  return Math.round(sum * 100) / 100;\n}\n",
+    "lib/cart-v1.mjs": "// Superseded by ../cart.mjs; kept until every caller moves over.\nexport function total(items) {\n  return items.reduce((sum, item) => sum + item.price, 0);\n}\n",
+    "cart.test.mjs": "import { expect, test } from 'bun:test';\nimport { total } from '#cart';\n\ntest('total multiplies each price by its quantity', () => {\n  expect(total([{ price: 2.5, qty: 2 }, { price: 1, qty: 3 }])).toBe(8);\n});\n"
+  },
+  "max_turns": 14,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "file_unchanged",
+      "path": "cart.mjs"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "cart.test.mjs"
+    },
+    {
+      "type": "final_mentions",
+      "patterns": ["#cart", "cart-v1", "package\\.json"],
+      "min": 2
+    },
+    {
+      "type": "bash_some",
+      "pattern": "\\bbun (run )?test\\b",
+      "scope": "all"
+    }
+  ]
+}

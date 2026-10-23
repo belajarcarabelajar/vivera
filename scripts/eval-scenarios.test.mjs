@@ -67,6 +67,11 @@ function assertionProblems(a) {
       if (a.max !== undefined) need(isCount(a.max), 'max must be a count');
       if (isCount(a.min) && isCount(a.max)) need(a.min <= a.max, 'min must not exceed max');
       break;
+    case 'skill_loaded':
+      need(isString(a.skill) && SKILLS.includes(a.skill), 'skill must name a directory under skills/');
+      need(isScope(a.scope), 'scope must be main, sub, or all');
+      if (a.before !== undefined) need(isString(a.before) && compiles(a.before), 'before must be a valid RegExp');
+      break;
     case 'bash_never':
     case 'bash_some':
       need(isString(a.pattern) && compiles(a.pattern), 'pattern must be a valid RegExp');

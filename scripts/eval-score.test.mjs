@@ -31,6 +31,13 @@ function syntheticBash(command) {
   return parseStream(lines.map((l) => JSON.stringify(l)).join('\n'));
 }
 
+// One assistant event per [name, input] pair, in order, all under one parent.
+function syntheticTools(calls, parent = null) {
+  const lines = calls.map(([name, input]) => ({ type: 'assistant', parent_tool_use_id: parent, message: { content: [{ type: 'tool_use', name, input }] } }));
+  lines.push({ type: 'result', subtype: 'success', num_turns: calls.length, total_cost_usd: 0.01, usage: { input_tokens: 1 }, result: 'done' });
+  return parseStream(lines.map((l) => JSON.stringify(l)).join('\n'));
+}
+
 describe('parseStream', () => {
   test('reads the result event of a recorded stream', () => {
     expect(skill.result.subtype).toBe('success');
@@ -58,7 +65,7 @@ describe('score', () => {
   test('ASSERTION_TYPES lists exactly the contract names', () => {
     expect([...ASSERTION_TYPES].sort()).toEqual([
       'bash_never', 'bash_some', 'commits_lack', 'file_exists', 'file_lacks', 'file_missing', 'file_unchanged',
-      'final_matches', 'final_mentions', 'final_options', 'fixture_changed', 'fixture_unchanged', 'tool_count',
+      'final_matches', 'final_mentions', 'final_options', 'fixture_changed', 'fixture_unchanged', 'skill_loaded', 'tool_count',
     ]);
   });
 
@@ -106,6 +113,34 @@ describe('score', () => {
   test('tool_count fails below min and on a main-scope count of a sub-only tool', () => {
     expect(one(agent, facts(), { type: 'tool_count', tool: 'Bash', min: 1, scope: 'main' }).pass).toBe(false);
     expect(one(skill, facts(), { type: 'tool_count', tool: 'Agent', min: 1 }).pass).toBe(false);
+  });
+
+  test('skill_loaded passes on a Skill call or a Read of the SKILL.md, and only for that skill', () => {
+    const viaSkill = syntheticTools([['Skill', { skill: 'sucp-tdd-debug' }]]);
+    const viaRead = syntheticTools([['Read', { file_path: '/tmp/p/.claude/skills/sucp-tdd-debug/SKILL.md' }]]);
+    const other = syntheticTools([['Skill', { skill: 'sucp-rules' }], ['Read', { file_path: '/tmp/p/.claude/skills/sucp-tdd-debug/references/a.md' }]]);
+    const a = { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' };
+    expect(one(viaSkill, facts(), a).pass).toBe(true);
+    expect(one(viaRead, facts(), a).pass).toBe(true);
+    const r = one(other, facts(), a);
+    expect(r.pass).toBe(false);
+    expect(r.detail).toContain('sucp-tdd-debug');
+  });
+
+  test('skill_loaded with before needs the load ahead of the first matching Bash call', () => {
+    const late = syntheticTools([['Bash', { command: 'ls' }], ['Bash', { command: 'bun test a.test.mjs' }], ['Skill', { skill: 'sucp-tdd-debug' }]]);
+    const early = syntheticTools([['Bash', { command: 'ls' }], ['Skill', { skill: 'sucp-tdd-debug' }], ['Bash', { command: 'bun test' }]]);
+    const neverRan = syntheticTools([['Skill', { skill: 'sucp-tdd-debug' }]]);
+    const a = { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main', before: '\\bbun test\\b' };
+    expect(one(late, facts(), a).pass).toBe(false);
+    expect(one(early, facts(), a).pass).toBe(true);
+    expect(one(neverRan, facts(), a).pass).toBe(true);
+  });
+
+  test('skill_loaded respects scope', () => {
+    const sub = syntheticTools([['Skill', { skill: 'sucp-tdd-debug' }]], 'toolu_parent');
+    expect(one(sub, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'main' }).pass).toBe(false);
+    expect(one(sub, facts(), { type: 'skill_loaded', skill: 'sucp-tdd-debug', scope: 'sub' }).pass).toBe(true);
   });
 
   test('bash_never passes when no command matches and fails without echoing the command', () => {

@@ -25,6 +25,8 @@ class FakeBridge {
   askStatus = 200
   resolveStatus = 200
   pendingForever = false
+  // When set, every request fails the way a missing socket does.
+  down = false
   waitReplies: Reply[] = []
   private hold: ((r: Reply) => void) | undefined
   private askedOnce: () => void = () => {}
@@ -41,6 +43,10 @@ class FakeBridge {
       const url = new URL(e.url)
       const body = e.init?.body ? JSON.parse(e.init.body) : undefined
       this.sent.push({ method: e.init?.method ?? 'GET', path: url.pathname, body, socketPath: e.init?.socketPath })
+      if (this.down) {
+        if (url.pathname === '/ask') this.askedOnce()
+        throw new Error('connect ENOENT')
+      }
       const reply = await this.route(url.pathname)
       const text = reply.body === undefined ? '' : JSON.stringify(reply.body)
       return { value: { status: reply.status, ok: reply.status < 300, headers: {}, text } }
@@ -203,13 +209,25 @@ describe('the ask itself', () => {
 describe('fail open', () => {
   test('an offline bridge leaves the terminal answer and shows one notice', async ($, on) => {
     const bridge = new FakeBridge(on)
-    bridge.askStatus = 503
+    bridge.down = true
     const notices: string[] = []
     session(on, notices)
     on('tool.call', { tool: 'AskUserQuestion' }, async () => (await bridge.asked, { result: { questions: QUESTIONS, answers: TERMINAL } }))
     const out = await $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS })
     expect(out.result).toEqual({ questions: QUESTIONS, answers: TERMINAL })
     expect(notices).toEqual(['telegram-ask: bridge offline'])
+    expect(bridge.paths()).toEqual(['POST /ask'])
+  })
+
+  test('a bridge that refuses the question names the status in the notice', async ($, on) => {
+    const bridge = new FakeBridge(on)
+    bridge.askStatus = 400
+    const notices: string[] = []
+    session(on, notices)
+    on('tool.call', { tool: 'AskUserQuestion' }, async () => (await bridge.asked, { result: { questions: QUESTIONS, answers: TERMINAL } }))
+    const out = await $.tool.call({ tool: 'AskUserQuestion', questions: QUESTIONS })
+    expect(out.result).toEqual({ questions: QUESTIONS, answers: TERMINAL })
+    expect(notices).toEqual(['telegram-ask: not sent to Telegram (400)'])
     expect(bridge.paths()).toEqual(['POST /ask'])
   })
 

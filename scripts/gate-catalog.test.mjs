@@ -23,7 +23,7 @@ function markdownFiles(dir) {
 function namedHeaders() {
   const named = new Map();
   for (const file of markdownFiles(SKILLS)) {
-    for (const m of fs.readFileSync(file, 'utf8').matchAll(/header `([^`]+)`/g)) {
+    for (const m of fs.readFileSync(file, 'utf8').matchAll(/\bheaders?\s+`([^`]+)`/gi)) {
       if (!named.has(m[1])) named.set(m[1], path.relative(ROOT, file));
     }
   }

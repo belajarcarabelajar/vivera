@@ -119,3 +119,7 @@ Task template:
 - [ ] Step 4: Run: verify pass | cmd: `<single runnable command>` | expect: exit 0, 0 failures | retry: 1 (transient only) | on_fail: mark task FAILED, write Error Ledger, halt only downstream tasks (those with this id in `depends_on`); independent tasks keep running
 - [ ] Step 5: Commit: the PARENT commits, never a subagent. Stage by explicit path, never `git add .`, and never on the base branch: `git add <exact/path> && git commit -m "<conventional message>"`. The branch and worktree come from `bun scripts/pr-registry.mjs claim`, so this task's work lands on the session's single PR rather than a per-task branch.
 ```
+Test-later mode (`sucp-tdd-debug` 4.2, owner's request only) changes the plan in three places:
+- The body carries the line `Mode: test-later` (a body line, not a frontmatter key). The overnight entry gate (`sucp-overnight`, check 6) reads it and refuses the plan.
+- A `## Manual check` section lists the owner's notes as `MC1`, `MC2`, ... in the owner's words.
+- Each task's `run[]` and `skip_if` hold the test command written in 4.2 step 4, with no `expect_exit: 1` RED step, because the tests come after the code. Task Steps 1 and 2 drop out; the red proof is the run against the base (4.2 step 5), recorded with its exit codes under **Review & Evidence**.

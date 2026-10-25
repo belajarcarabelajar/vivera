@@ -112,6 +112,8 @@ Before first question: classify task, state classification aloud.
 | Architectural | New project/subsystem, restructures components, alters shared interfaces. | No existing flow to change |
 Rule: doubt → heavier path. Ratchet is one-way — hidden complexity mid-task upgrades path. Nothing downgrades.
 
+Test-later mode: when the owner asks to see the result before the tests ("kilat", "test belakangan", "test later"), feature work on the Bounded or Architectural path follows `sucp-tdd-debug` 4.2 instead of the RED-first cycle. The design states `Mode: test-later`, and the pull request still waits for green tests. Never chosen by the agent, never for a bug fix or an overnight run.
+
 Bounded `Design` gate: The short design shown at the Bounded `Design` gate includes a Mermaid diagram (a fenced `mermaid` block, even a 3-node `flowchart LR`) with `accTitle:` and `accDescr:` on the lines right after the diagram type. Prose without the diagram is not a design, and the gate is not asked until the diagram is shown.
 
 ## Phase Router — Steps 2 to 6

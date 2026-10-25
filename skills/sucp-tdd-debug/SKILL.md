@@ -13,7 +13,7 @@ description: Phase skill for super-ultra-code-plan Step 4 (test-driven developme
 ```
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
-Code before test → delete, restart. No "reference", no "adapt", no exceptions.
+Code before test → delete, restart. No "reference", no "adapt", no exceptions, except the owner-requested test-later mode in 4.2.
 Cycle: RED (one minimal failing test) → verify fails for right reason → GREEN (minimal code to pass) → verify passes, no regressions → REFACTOR (clean up, stay green) → repeat.
 | Quality | Good | Bad |
 |---|---|---|
@@ -21,7 +21,7 @@ Cycle: RED (one minimal failing test) → verify fails for right reason → GREE
 | Clear | Name describes behavior | test('test1') |
 | Shows intent | Demonstrates desired API | Obscures intended behavior |
 Exceptions require explicit human approval, asked through the Confirmation Protocol (header `TDD waiver`): throwaway prototypes, generated code, documentation/configuration-only work, and visual-only changes. Every exception still needs an appropriate verification method.
-Red flags — stop, restart: code before test, test passes immediately, can't explain failure, "just this once", "keep as reference", sunk-cost argument, "spirit not ritual" argument.
+Red flags — stop, restart: code before test (outside 4.2), test passes immediately, can't explain failure, "just this once", "keep as reference", sunk-cost argument, "spirit not ritual" argument.
 
 - **Seams first.** Before the first RED test, list the seams under test, each with one line on what it catches and what it misses. The seams come from the approved Design or Spec, so this adds no gate; a seam found mid-task is recorded in the plan before its test is written.
 - **Public interfaces.** Tests drive behavior through public interfaces, so a refactor that keeps behavior keeps them green.
@@ -120,3 +120,17 @@ NO HYPOTHESIS WITHOUT A RED-CAPABLE FEEDBACK LOOP
    - Clean up: grep the files the diff touches for the session's own tag (`[DEBUG-a4f2]`, never the bare prefix, which also matches this skill and the log template) and reach zero hits, then move a throwaway harness under `docs/code-plan/spikes/<spike-id>/` or delete it.
    - The confirmed hypothesis goes into the commit message or the PR body, so the reason for the fix outlives the session.
 
+
+## 4.2 ⏩ Test-Later Mode (feature work, owner's request only)
+> ⏩ **Order:** CODE → BUILD AND SHOW → MANUAL CHECK → TESTS FROM THE OWNER'S NOTES → RED BY REVERT → Step 5 unchanged.
+
+The owner sometimes wants to see the result (a render, a preview, a build, a CLI run) and judge it by hand before any test exists. This mode moves the tests to the end of the change. It never removes them: the pull request is not opened, and never merged, before they pass.
+
+- **Trigger.** Only the owner's own words ("kilat", "test belakangan", "test later", "lihat hasilnya dulu"). The agent never picks this mode itself, not even to save time. The design shown at the `Design` gate (or the plan at the `Plan` gate) carries a line `Mode: test-later`, and approving that gate approves the mode; no `TDD waiver` is asked.
+- **Scope.** Feature work on the Bounded or Architectural path. Not a bug fix (4.1 already starts from a reproduction), and not an overnight run (`sucp-overnight`): with nobody to do the manual check, the mode has no gate.
+- **1. Code.** Implement the approved checklist without RED/GREEN cycles. Fan-out, the parent diff audit, and git ownership in `sucp-rules` are unchanged.
+- **2. Build and show.** Run the build, render, preview, or deploy-preview command the repository declares, and show the artifact in chat: a screenshot, a preview URL, the rendered file, or the command output. Never only the command that produced it.
+- **3. Manual check.** Ask through the Confirmation Protocol (header `Manual check`). Each thing the owner reports, right or wrong, goes into the plan under `## Manual check` as a numbered acceptance criterion (`MC1`, `MC2`, ...), in the owner's words. A wrong result loops back to step 1 and is shown again.
+- **4. Tests from the notes.** Write one test per `MC` item through the public interface, with the expected value taken from the owner's observation, never read back from the code (the Tautological anti-pattern in section 4). An `MC` item no test can reach (a pure look-and-feel judgment) stays in the plan as the manual evidence and is named in the PR body.
+- **5. RED by revert.** With the tests in place, set the implementation aside: `git stash push -u -- <implementation paths>`, leaving the test files. Every new test must fail for the right reason. `git stash pop`, and every test passes. A test that passes with the change set aside is too weak: rewrite it. This is the P1 proof that the gate can go red.
+- **Delivery.** Step 5 is unchanged. The PR body lists the `MC` items, the test for each, and the RED-by-revert run with its exit codes. "Tests in a follow-up" is not this mode: the tests are part of this pull request.

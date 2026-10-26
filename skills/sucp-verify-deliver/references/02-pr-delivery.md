@@ -90,3 +90,10 @@ Use `templates/pr-review-template.md` for the report. Two things make it determi
 **Line anchoring is part of the finding, not formatting.** A comment anchored to a line the PR did not touch either fails to post or degrades into a general remark that looks specific. Every finding names a changed line and the correct side.
 
 **The verdict is binary and derived.** `not correct` if and only if there is at least one blocking (`P0`/`P1`) finding. No third state, no "looks good overall". A verdict names the specific checkable condition that would change it, because "after the author addresses comments" is not a condition.
+
+**The fix-and-re-review loop is bounded.** A `not correct` verdict starts a loop of author fix and re-review: 3 rounds by default, up to 5 only while an open `P0`/`P1` concerns security, auth, data loss, or concurrency, or when the owner asks.
+
+- **Round 2 onward reviews the delta.** The reviewer gets the ledger of prior ids (`fixed`, `disputed: <evidence>`, `declined`) and the diff since the last round, marks each prior id `resolved` or `still open: <reason>`, and raises new findings only on lines changed since the last round.
+- **The author answers each finding with evidence, not agreement.** Fix with the smallest change, preferring to delete or narrow, or dispute with `file:line`, a test, or output. `P2` and `P3` may be declined in one line and listed under deferred debt. Agreeing just to end the loop is the defect this rule exists for.
+- **If the review grew the diff, cut first.** Compare `git diff --shortstat <base>` at round 1 and now; growth beyond the fixed findings is scope creep, removed before the next round.
+- **A stuck loop goes to the owner.** A finding still disputed after two exchanges, or a budget spent with a `P0`/`P1` open, stops the loop: both positions in two or three lines each, asked through the Confirmation Protocol (header `Review`). Budget end is not approval.

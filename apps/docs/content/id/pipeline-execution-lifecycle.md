@@ -5,7 +5,7 @@ category: pipeline
 slug: execution-lifecycle
 order: 1
 source: docs/guide/pipeline-execution-lifecycle.md
-source_hash: "adcb79c259ba"
+source_hash: "f718216ee351"
 ---
 
 <a id="execution-lifecycle"></a>
@@ -19,6 +19,22 @@ source_hash: "adcb79c259ba"
 <p align="center">
   <em>Siklus hidup eksekusi, dari sebuah permintaan sampai pengiriman yang terverifikasi dan debt sweep.</em>
 </p>
+
+<a id="step-by-step"></a>
+## Langkah demi Langkah
+
+Diagram ini dibagi menjadi delapan tahap, berurutan; di situs docs setiap langkah menyorot bagiannya pada diagram di atas.
+
+<ol data-stepper="lifecycle">
+<li data-nodes="Start Classify PathSpike PathBounded PathArch"><strong>Klasifikasi.</strong> Sebuah permintaan diklasifikasikan sebagai Spike, perbaikan Bounded (kurang dari 2 file), atau pekerjaan Architectural, dan setiap kelas menempuh jalurnya sendiri.</li>
+<li data-nodes="DesignReport Brainstorm Gate1"><strong>Desain.</strong> Spike berakhir dengan laporan berisi rekomendasi, dan pekerjaan architectural melakukan brainstorming alternatif dan trade-off sampai spec dikunci. Di Gate 1 manusia menyetujui desain atau mengembalikannya untuk direvisi.</li>
+<li data-nodes="ResearchDecision GraphPreflight DeepResearch"><strong>Riset.</strong> Deep research hanya berjalan bila informasi eksternal dibutuhkan: preflight graphify opsional atas codebase, lalu search, fetch, dan sintesis. Bila codebase sudah cukup, tahap ini dilewati.</li>
+<li data-nodes="WritePlan HardGate"><strong>Plan.</strong> Visual implementation plan memuat diagram Mermaid, checklist to-do, dan kondisi <code>skip_if</code>; perbaikan Bounded langsung masuk ke sini. Gate 2 adalah gerbang persetujuan manusia yang keras: tidak ada yang dieksekusi sebelum plan disetujui.</li>
+<li data-nodes="ExecRoute TDD Debug ChunkPlan FanOut SubWork Gather AuditChunk ReChunk"><strong>Eksekusi.</strong> Fitur atau refactor masuk ke test-driven development, bug ke systematic debugging, dan pekerjaan paralel dipotong menjadi chunk terkecil yang bisa diverifikasi secara mandiri. Chunk dibagikan ke 2 sampai 4 subagent (paling banyak 15) di workspace terisolasi, laporan mereka dikumpulkan dan diverifikasi ulang, dan chunk yang merah dipotong ulang lalu dikirim ulang sendirian.</li>
+<li data-nodes="VerifyGate Gate3"><strong>Verifikasi.</strong> Penyelesaian butuh bukti segar: log baru, exit 0, test yang lulus, dan diff VCS. Bila bukti belum cukup, Gate 3 mengembalikan pekerjaan ke TDD.</li>
+<li data-nodes="GitHygiene DebtSweep AskGate SweepFix Done"><strong>Kirim dan sapu.</strong> Pekerjaan di-commit dan dikirim sebagai pull request tanpa trailer co-author. Debt sweep (penyisiran utang) di akhir sesi memanen 3 sampai 5 follow-up berperingkat dan menanyakan mana yang dikerjakan; item yang dipilih dijalankan sebagai pekerjaan nyata, dan sesi berakhir dengan nol utang atau penundaan yang terdokumentasi.</li>
+<li data-nodes="Compact"><strong>Kontinuitas.</strong> Compaction atau reset konteks bisa terjadi kapan saja: state, keputusan, dan bukti disimpan, dan pekerjaan dilanjutkan dari checkpoint terverifikasi terakhir.</li>
+</ol>
 
 <a id="test-later-mode"></a>
 ## Mode Test-Later

@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "4e65c2b07b9c"
+source_hash: "c71a65cb11da"
 ---
 
 <a id="repository-structure"></a>
@@ -43,6 +43,7 @@ vivera/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml                               # CI: bun install, render, drift gate, validate, test
+│       ├── platforms.yml                        # Platforms: dispatch only, Windows (pwsh + PowerShell 5.1), macOS bash 3.2, Docker build
 │       └── release.yml                          # Release: dispatch only, dry_run defaults to true, publishes only on request
 ├── diagrams/                                    # Generated SVGs (only the hero pair is committed)
 │   ├── lifecycle.svg                            # README hero, light

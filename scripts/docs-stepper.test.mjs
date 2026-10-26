@@ -84,11 +84,9 @@ describe('lifecycle stepper source contract', () => {
     });
   }
 
-  // Parity with the Indonesian twin. The parent removes this skipIf in T4,
-  // when the twin gets its translated stepper block.
-  const idSteps = steps(read(ID));
-  test.skipIf(idSteps === null)('the ID twin lists the same ids in the same order', () => {
-    expect(idSteps).toEqual(enSteps);
+  // Parity with the Indonesian twin: same ids, same order.
+  test('the ID twin lists the same ids in the same order', () => {
+    expect(steps(read(ID))).toEqual(enSteps);
   });
 });
 

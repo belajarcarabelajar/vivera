@@ -5,7 +5,7 @@ category: tooling
 slug: validation
 order: 8
 source: README.md#Validation & Quality Checks
-source_hash: "8f1c40a3cd4f"
+source_hash: "01b9796b9dbe"
 ---
 
 <a id="validation--quality-checks"></a>
@@ -19,21 +19,28 @@ bun install
 
 # Fast runner frontmatter contract check (~1s, pure AST comparison)
 bun run contract:check
-
-# Render all diagrams to diagrams/
-bun run render-diagrams
-
-# Validate frontmatter, symlinks, templates, scripts, mermaid syntax & a11y
-bun run validate
-
-# Unit tests for every script under scripts/
-bun test scripts/
-
-# Trigger prompts vs the Snipset database (skips cleanly where no database exists)
-bun run snippets:check
 ```
 
-Atau jalankan seluruh gate secara berurutan dengan `bun run ci`. Untuk commit atau PR, jalankan `bun run ci:targeted` sebagai gantinya dan kutip plan `--rencana`-nya; perintah itu sendiri yang memilih CI penuh bila perubahan memerlukannya.
+`bun run ci` menjalankan langkah-langkah ini secara berurutan, sebagaimana didefinisikan `scripts/ci-targeted.mjs`:
+
+<!-- include: scripts/ci-targeted.mjs#full-ci -->
+```js
+const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
+
+// Mirrors the `ci` script; a test keeps them in sync.
+export const FULL_CI = [
+  { name: 'render-diagrams', cmd: ['bash', 'scripts/render-diagrams.sh'] },
+  { name: 'validate-skill', cmd: ['bun', 'scripts/validate-skill.mjs'] },
+  { name: 'validate-agents', cmd: ['bun', 'scripts/validate-agents.mjs'] },
+  { name: 'gen-sprite-agents', cmd: ['bun', 'scripts/gen-sprite-agents.mjs', '--check'] },
+  { name: 'file-size', cmd: ['bun', 'scripts/check-file-size.mjs', '--all'] },
+  { name: 'tests', cmd: [...TEST_CMD, 'scripts/'] },
+  { name: 'sync-snippets', cmd: ['bun', 'scripts/sync-snippets.mjs', '--check'] },
+];
+```
+<!-- /include -->
+
+Untuk commit atau PR, jalankan `bun run ci:targeted` sebagai gantinya dan kutip plan `--rencana`-nya; perintah itu sendiri yang memilih CI penuh bila perubahan memerlukannya.
 
 Yang diverifikasi:
 - Sintaks frontmatter YAML (`name`, `description`, `triggers`).
@@ -52,3 +59,34 @@ Yang diverifikasi:
 
 Sengaja tidak dicakup oleh `bun run ci`: `mirror:check`, yang memerlukan vault yang tidak dapat
 dilihat runner ini. Jalankan secara lokal bila Anda memiliki vault tersebut.
+
+<a id="code-blocks-copied-from-source"></a>
+## Blok Kode yang Disalin dari Sumber
+
+Sebuah blok kode di halaman docs bisa merupakan salinan file sumber. Salinannya tetap ada di halaman, jadi GitHub menampilkannya, dan sebuah pemeriksaan gagal ketika salinan itu tidak lagi sama dengan sumbernya:
+
+````markdown
+<!-- include: scripts/ci-targeted.mjs#full-ci -->
+```js
+...the lines between the region markers...
+```
+<!-- /include -->
+````
+
+- Tanpa `#<region>`, isi blok adalah seluruh file. Region adalah baris-baris di antara `docs-include:start <region>` dan `docs-include:end <region>`, ditulis dengan sintaks komentar file sumber itu sendiri; baris penanda dan indentasi bersama tidak ikut.
+- `bun run docs:include` dan `bun scripts/docs-gen.mjs --check` melaporkan blok yang berbeda dari sumbernya, file atau region yang tidak ada, dan blok yang salah bentuk, masing-masing sebagai `file:line`. `bun scripts/docs-include.mjs --write` memperbarui blok yang usang.
+- `bun run ci:targeted` menjadwalkan pemeriksaan docs ketika file yang disebut sebuah include berubah, jadi perubahan pada sumbernya saja juga tertangkap.
+- Contoh di dalam blok berpagar, seperti contoh di atas, tidak diperiksa. Twin bahasa Indonesia menyalin setiap blok include byte demi byte dan hanya menerjemahkan teks di sekitarnya.
+
+<a id="platform-matrix"></a>
+## Matriks Platform
+
+`.github/workflows/platforms.yml` menjalankan suite installer di platform yang tidak dimiliki mesin ini. Seperti workflow lain, workflow ini tidak punya pemicu otomatis; jalankan secara manual dengan `gh workflow run platforms.yml` dan pantau dengan `gh run watch`. GitHub baru menawarkannya setelah file itu ada di branch default.
+
+| Job | Runner | Yang dibuktikan |
+|---|---|---|
+| `windows` | `windows-latest`, sekali dengan `pwsh` dan sekali dengan Windows PowerShell 5.1 | suite `install-ps1*` di Windows sungguhan; job gagal bila shell tidak ada atau edisinya salah, jadi suite tidak bisa melewati semua test lalu lulus |
+| `macos` | `macos-latest` dengan `/bin/bash` 3.2 paling depan di `PATH` | suite `install-*` dan `prereq`, serta `install.sh --dry-run`, di bawah bash bawaan macOS |
+| `docker` | `ubuntu-latest` | `Dockerfile` berhasil di-build dan `install.sh --check` lulus di dalam image |
+
+`bun test scripts/workflows.test.mjs` memastikan setiap workflow tetap hanya bisa dijalankan manual (dispatch-only).

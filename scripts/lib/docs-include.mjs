@@ -123,11 +123,14 @@ function neededFence(lines, ch, len) {
 
 /**
  * Checks the includes of one Markdown file. `read(rel)` returns a repository
- * file's text or null. `output` is the text with stale blocks refreshed; when
- * `blocked`, a finding no rewrite can fix exists and `output` is the input.
+ * file's text or null; an optional `read.outside(rel)` flags a symlink escape.
+ * `output` is the text with stale blocks refreshed; when `blocked`, a finding
+ * no rewrite can fix exists and `output` is the input.
  */
 export function checkIncludes(file, text, read) {
   const src = unixText(text);
+  // Rewritten text keeps the file's own line endings.
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const { lines, includes, errors } = parseIncludes(file, src);
   const findings = [...errors];
   const fixes = [];
@@ -138,6 +141,7 @@ export function checkIncludes(file, text, read) {
     const source = spec.error ? null : read(spec.target);
     let want = null;
     if (spec.error) findings.push(`${where}: ${spec.error}`);
+    else if (read.outside?.(spec.target)) findings.push(`${where}: include path ${spec.target} escapes the repository through a symlink`);
     else if (source === null) findings.push(`${where}: source ${spec.target} does not exist`);
     else if (spec.region === null) want = trimEnd(unixText(source).split('\n'));
     else {
@@ -166,18 +170,33 @@ export function checkIncludes(file, text, read) {
   if (blocked || !fixes.length) return { findings, blocked, output: text, changes: [] };
   const out = [...lines];
   for (const { block, replace } of [...fixes].reverse()) out.splice(block.start, block.end - block.start + 1, ...replace);
-  return { findings, blocked, output: out.join('\n'), changes: fixes.map((f) => f.change) };
+  return { findings, blocked, output: out.join(eol), changes: fixes.map((f) => f.change) };
 }
 
-/** Reads repository files under `root`; null for a missing file or a directory. */
+/**
+ * Reads repository files under `root`; null for a missing file, a directory, or
+ * a path whose real location is outside the root, which `read.outside(rel)` tells.
+ */
 export function rootReader(root) {
-  return (rel) => {
+  const realRoot = fs.realpathSync(root);
+  const outside = (rel) => {
+    try {
+      const r = path.relative(realRoot, fs.realpathSync(path.join(root, rel)));
+      return r === '..' || r.startsWith(`..${path.sep}`) || path.isAbsolute(r);
+    } catch {
+      return false;
+    }
+  };
+  const read = (rel) => {
+    if (outside(rel)) return null;
     try {
       return fs.readFileSync(path.join(root, rel), 'utf8');
     } catch {
       return null;
     }
   };
+  read.outside = outside;
+  return read;
 }
 
 /** The files checked by default: `en` is README.md and the page map sources, `id` the ID twins. */

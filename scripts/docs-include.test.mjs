@@ -216,6 +216,32 @@ describe('CLI', () => {
   test('named files limit the check to them', () => {
     expect(run(CLI, ['--root', repo(), '--check', 'README.md']).code).toBe(0);
   });
+
+  test('--write keeps CRLF line endings everywhere and changes only the block', () => {
+    const crlf = (...lines) => `${lines.join('\r\n')}\r\n`;
+    const root = repo({ 'docs/page.md': crlf('# Page', '<!-- include: src/b.sh#run -->', `${F}sh`, 'echo stale', F, '<!-- /include -->', 'after') });
+    expect(run(CLI, ['--root', root, '--write']).code).toBe(0);
+    expect(fs.readFileSync(path.join(root, 'docs/page.md'), 'utf8'))
+      .toBe(crlf('# Page', '<!-- include: src/b.sh#run -->', `${F}sh`, 'echo hi', F, '<!-- /include -->', 'after'));
+  });
+
+  test('a symlink to a file outside the root is a finding and nothing is written', () => {
+    const outside = makeRoot({ 'secret.sh': '# docs-include:start run\nSECRET\n# docs-include:end run\n' });
+    const root = repo();
+    fs.symlinkSync(path.join(outside, 'secret.sh'), path.join(root, 'src/link.sh'));
+    const page = md('<!-- include: src/link.sh#run -->', `${F}sh`, 'stale', F, '<!-- /include -->');
+    fs.writeFileSync(path.join(root, 'docs/page.md'), page);
+    const w = run(CLI, ['--root', root, '--write', 'docs/page.md']);
+    expect([w.code, w.out]).toEqual([1, 'docs/page.md:1: include path src/link.sh escapes the repository through a symlink\ndocs-include: updated 0 block(s), 1 finding(s) left in 1 file(s)\n']);
+    expect(fs.readFileSync(path.join(root, 'docs/page.md'), 'utf8')).toBe(page);
+  });
+
+  test('a symlink that stays inside the root keeps working', () => {
+    const root = repo();
+    fs.symlinkSync('b.sh', path.join(root, 'src/inside.sh'));
+    fs.writeFileSync(path.join(root, 'docs/page.md'), md('<!-- include: src/inside.sh#run -->', `${F}sh`, 'echo hi', F, '<!-- /include -->'));
+    expect(run(CLI, ['--root', root, '--check', 'docs/page.md']).code).toBe(0);
+  });
 });
 
 describe('docs-gen --check', () => {

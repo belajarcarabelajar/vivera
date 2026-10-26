@@ -119,25 +119,25 @@ Why a PR, 5.1 isolation, 5.2 the session state machine, 5.3 opening the PR, 5.4 
 ### 5.5 Merging a batch of twenty PRs
 ```bash
 bun scripts/pr-registry.mjs order        # the merge order, computed from depends_on
-bun scripts/pr-registry.mjs surface <s>  # what must rebase first, and what blocks it
+bun scripts/pr-registry.mjs surface <s>  # what must land in the branch first, and what blocks it
 ```
 
 - **Order is topological, from the recorded `depends_on` graph, never chronological.** Ties break on session name, never a timestamp, so one registry always yields one order.
 - **Already-merged sessions drop out and stop blocking their dependents.** That is the plan's own blast-radius rule applied to merges: a session waiting on nothing should still be able to land.
 - **A dependency cycle is refused with the cycle named.** There is no valid order for a cycle; the remedy is to split a session, not to pick an arbitrary one.
-- **Rebase before each merge, not once at the start.** The base branch moves with every merge, so a branch rebased at position 3 is already behind by position 7. `surface <s>` reports which sessions landed since the branch was cut.
+- **Bring the base into the branch before each merge, not once at the start.** The base branch moves with every merge, so a branch updated at position 3 is already behind by position 7. `surface <s>` reports which sessions landed since the branch was cut. A session in this batch already has a PR, so the update is `git merge origin/<base>` in the session branch and a plain push, never a rebase (that needs the force push forbidden below).
 - **Verify locally after every single merge.** Twenty merges followed by one test run at the end means nineteen merges ship unverified. The check after merge N is the evidence for merge N, and it is cheap because the session was already verified once.
 - **One merge at a time.** A batch merge is an unverified batch.
 - **Record each merge right after it:** `bun scripts/pr-registry.mjs reconcile` (or `state <s> merged`).
 - **The `Close plan` gate is asked before the session's final merge, not after.** A status change after the merge needs its own PR, and that PR's plan needs another, so `status: Complete` and the readiness output ship in the session's final PR (`sucp-debt-sweep`, 6.5.5).
 - **The merge itself is a question, once per merge.** Ask it through the Confirmation Protocol (header `Merge`): the first option is `Do not merge`, the second is `Merge the PR` with a description naming the PR number and the head commit. The standing gate on merging into the base branch is unchanged; the question only removes the typing.
-- **A conflict is resolved in the session's branch, never on the base branch.** Rebase the session branch onto `origin/<base>`, resolve there, re-run that session's verification, push, then merge. Editing the base branch directly to "fix" a conflict is how a conflict becomes an unreviewable change nobody can attribute to a session.
+- **A conflict is resolved in the session's branch, never on the base branch.** Merge `origin/<base>` into the session branch, resolve there, re-run that session's verification, push, then merge. Editing the base branch directly to "fix" a conflict is how a conflict becomes an unreviewable change nobody can attribute to a session.
 - **If a session cannot be made mergeable, it does not merge.** Mark it and move to the next one in the order. A blocked session is a status, not a reason to freeze nineteen others.
 
 ### What is never allowed on this stage
 - Committing or pushing directly to the base branch. There is no exception for a one-line fix; the exception is a separate session with its own branch.
 - A hand-written branch or worktree name. Derived or nothing.
-- `--force` or `--force-with-lease` on a session branch. A force push on a branch that already has a PR rewrites review history; rebase-and-push only onto a branch with no PR yet.
+- `--force` or `--force-with-lease` on a session branch. A force push on a branch that already has a PR rewrites review history. Rebase only a branch with no PR yet; a branch with a PR takes the base by merge.
 - Force-merging a conflicted PR to clear a queue. A conflict is information.
 - A review verdict written into a plan mirror or a vault note. It belongs in the PR and in the source plan, both of which survive the next publish.
 - Merging on the strength of a green remote CI run, or on a subagent's self-report of success.
@@ -145,7 +145,7 @@ bun scripts/pr-registry.mjs surface <s>  # what must rebase first, and what bloc
 ```mermaid
 flowchart TD
     accTitle: Session isolation, pull request delivery, and ordered batch merge
-    accDescr: Each session claims a derived branch and worktree, subagents write only inside it, local verification and the parent diff audit gate the pull request, a reviewer fetches the remote state and returns a binary verdict, and the batch merges in topological order with a rebase and a local check before every individual merge.
+    accDescr: Each session claims a derived branch and worktree, subagents write only inside it, local verification and the parent diff audit gate the pull request, a reviewer fetches the remote state and returns a binary verdict, and the batch merges in topological order with the base merged into the branch and a local check before every individual merge.
     subgraph Per["Per session, N sessions run concurrently"]
         Claim["pr-registry claim<br/>derived branch + worktree"] --> Wt["claim --worktree<br/>worktree add from origin/main"]
         Wt --> Fan["Subagents write in the worktree<br/>never touch git state"]
@@ -162,9 +162,9 @@ flowchart TD
     Rev -->|"correct"| Open["Session: open<br/>queued for merge"]
     subgraph Batch["Batch merge, strictly sequential"]
         Open --> Order["pr-registry order<br/>topological from depends_on"]
-        Order --> Surf["pr-registry surface<br/>what must rebase first"]
-        Surf --> Rebase["Rebase session branch<br/>onto origin/main"]
-        Rebase --> Conflict{"Conflict?"}
+        Order --> Surf["pr-registry surface<br/>what must land first"]
+        Surf --> Update["Merge origin/main<br/>into the session branch"]
+        Update --> Conflict{"Conflict?"}
         Conflict -->|"Yes"| Resolve["Resolve in the session branch<br/>never on the base branch"]
         Resolve --> Recheck["Re-run that session's<br/>local verification"]
         Conflict -->|"No"| Recheck

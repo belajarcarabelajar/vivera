@@ -33,10 +33,10 @@
 | "I'll name the branch something obvious" | Branch and worktree names are derived by `pr-registry claim`. Two panes picking their own names is how one PR ends up carrying another session's commits |
 | "This task is one PR, so let me open one per subagent" | One PR per session. Twenty subagents inside one session are one PR; twenty sessions are twenty PRs |
 | "Pushing so CI can tell me if it builds" | Checks run locally on the machine holding the tree. A PR triggers a remote run, but its result is the author's evidence about a commit, not this session's verification |
-| "All twenty look green, let me merge them in one batch and test at the end" | One merge at a time, each with its own rebase and its own local check. Twenty merges then one test means nineteen unverified merges |
+| "All twenty look green, let me merge them in one batch and test at the end" | One merge at a time, each with the base merged into its branch and its own local check. Twenty merges then one test means nineteen unverified merges |
 | "This PR conflicts, let me fix it on main so it goes through" | Conflicts are resolved in the session's branch, then re-verified. Editing the base branch produces a change no session can attribute or review |
 | "It's only a one-line fix, let me just commit to main" | There is no direct-to-base exception. A small change is a small session with its own branch and PR |
-| "The reviewer approved it, so I can merge without re-checking" | An approval is not a rebase and not a local check. The base moved since the review; verify again after the merge |
+| "The reviewer approved it, so I can merge without re-checking" | An approval does not bring in the new base and is not a local check. The base moved since the review; verify again after the merge |
 | "I'll post my own review draft since I wrote it" | Generating a review and posting it are two acts. A human reads the exact text before it becomes externally visible |
 | "Finishing a stalled chunk inline because the task is small" | Task size is not the test. The test is whether the parent already holds the whole contract and the remainder is precisely specified. State the reason at handoff either way |
 | "Should work now" | Run verification, then claim |

@@ -55,7 +55,7 @@ isolated → active → verified → open → merged
 | Nomor PR tidak bisa dicatat sebelum `verified` | Mencatat nomor PR menyiratkan pekerjaan sudah selesai dan diperiksa, jadi `isolated → open` akan melewati gate yang membuat merge aman |
 | Hanya sesi `open` yang punya PR yang bisa di-merge | Run lokal yang hijau saja belum menjadikan sebuah sesi siap di-merge |
 | `merged` dan `closed` bersifat terminal | Me-revert atau mengulang sebuah sesi berarti sesi baru dengan branch baru. File yang bisa "membatalkan merge" menyembunyikan revert dari urutan merge |
-| Sesi yang ditutup tidak menggeser base | `merged` adalah alasan untuk rebase karena ia memajukan `origin/main`; `closed` tidak, sehingga `surface` tidak pernah mencantumkannya sebagai sudah masuk, sementara `order` tetap memperlakukannya sebagai dependensi yang terpenuhi |
+| Sesi yang ditutup tidak menggeser base | `merged` adalah alasan untuk memperbarui branch karena ia memajukan `origin/main`; `closed` tidak, sehingga `surface` tidak pernah mencantumkannya sebagai sudah masuk, sementara `order` tetap memperlakukannya sebagai dependensi yang terpenuhi |
 | Branch atau worktree duplikat ditolak | Registry yang melaporkan sukses untuk tata letak yang akan menghilangkan pekerjaan lebih buruk daripada tidak punya registry sama sekali |
 
 ```bash
@@ -66,7 +66,7 @@ bun scripts/pr-registry.mjs open <session> --title "<t>" --body-file <f> [--draf
 bun scripts/pr-registry.mjs pr <session> --number 42   # a PR opened by hand
 bun scripts/pr-registry.mjs reconcile [--dry-run] [--stale-days N] [--close-stale]
 bun scripts/pr-registry.mjs order       # topological merge order
-bun scripts/pr-registry.mjs surface w3  # what must rebase first, what blocks it
+bun scripts/pr-registry.mjs surface w3  # what must land in the branch first, what blocks it
 bun scripts/pr-registry.mjs status
 ```
 
@@ -95,8 +95,9 @@ menjamin konflik pada claim berikutnya.
 
 Satu per satu, sesuai urutan yang dicetak `order`, dan setiap merge membawa buktinya sendiri:
 
-1. Rebase branch sesi tersebut ke `origin/main` **tepat sebelum merge-nya sendiri**.
-   Base bergeser di setiap merge, jadi branch yang di-rebase pada posisi 3 sudah tertinggal
+1. Merge `origin/main` ke branch sesi tersebut **tepat sebelum merge-nya sendiri**.
+   Caranya merge, bukan rebase: branch itu sudah punya PR, dan rebase butuh force push yang
+   dilarang di tahap ini. Base bergeser di setiap merge, jadi branch yang diperbarui pada posisi 3 sudah tertinggal
    saat tiba di posisi 7. `surface <s>` melaporkan sesi mana saja yang sudah masuk sejak
    branch itu dibuat.
 2. Selesaikan konflik apa pun **di branch sesi tersebut**, tidak pernah di base branch, lalu

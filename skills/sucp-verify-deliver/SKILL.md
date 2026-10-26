@@ -116,6 +116,8 @@ Why a PR, 5.1 isolation, 5.2 the session state machine, 5.3 opening the PR, 5.4 
 ### 5.4 Reviewing a PR
 **Generating a review and posting it are two acts.** The posted comment is a shorter artifact than the internal report: verdict, blocking findings, and nothing else. Internal reasoning and praise stay in the report. Posting is externally visible publication: the exact text is shown in chat first, then asked through the Confirmation Protocol (header `Publish`, safe option first). A reviewer that posts its own draft has skipped the only gate that exists on this stage.
 
+A `not correct` verdict starts a bounded fix-and-re-review loop (3 rounds by default, a ledger of finding ids, the owner decides a stuck dispute): [references/02-pr-delivery.md](references/02-pr-delivery.md) 5.4.
+
 ### 5.5 Merging a batch of twenty PRs
 ```bash
 bun scripts/pr-registry.mjs order        # the merge order, computed from depends_on
@@ -157,7 +159,7 @@ flowchart TD
         State --> Pr["pr-registry open --body-file<br/>creates and records the PR"]
     end
     Pr --> Rev{"Review verdict"}
-    Rev -->|"not correct"| Fix["Author fixes in the<br/>session branch"]
+    Rev -->|"not correct, round ≤ 3"| Fix["Author fixes in the<br/>session branch"]
     Fix --> Pr
     Rev -->|"correct"| Open["Session: open<br/>queued for merge"]
     subgraph Batch["Batch merge, strictly sequential"]

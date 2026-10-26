@@ -636,7 +636,7 @@ function main(argv) {
         console.log('No unmerged sessions. Nothing to do.');
         return 0;
       }
-      console.log('Merge in this order. Rebase each branch onto origin/<base> immediately before its own merge,');
+      console.log('Merge in this order. Merge origin/<base> into each branch immediately before its own merge,');
       console.log('run the local checks, then merge. One at a time; a batch merge is an unverified batch.\n');
       order.forEach((s, i) => console.log(`${String(i + 1).padStart(2)}. ${s.session.padEnd(24)} ${s.state.padEnd(10)} pr=${s.pr ?? '-'}  deps=[${(s.depends_on ?? []).join(', ') || '-'}]`));
       return 0;
@@ -647,7 +647,7 @@ function main(argv) {
       const surface = conflictSurface(loadRegistry(registryPath), positional[0]);
       console.log(JSON.stringify(surface, null, 2));
       if (surface.rebase_required) {
-        console.error(`\n⚠️  ${surface.landed_before_rebase.length} session(s) already landed; rebase ${surface.session.branch} onto origin/${surface.session.base} before merging it.`);
+        console.error(`\n⚠️  ${surface.landed_before_rebase.length} session(s) already landed; merge origin/${surface.session.base} into ${surface.session.branch} before merging it.`);
       }
       return 0;
     }

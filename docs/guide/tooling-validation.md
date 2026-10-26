@@ -8,19 +8,26 @@ bun install
 
 # Fast runner frontmatter contract check (~1s, pure AST comparison)
 bun run contract:check
-
-# Render all diagrams to diagrams/
-bun run render-diagrams
-
-# Validate frontmatter, symlinks, templates, scripts, mermaid syntax & a11y
-bun run validate
-
-# Unit tests for every script under scripts/
-bun test scripts/
-
-# Trigger prompts vs the Snipset database (skips cleanly where no database exists)
-bun run snippets:check
 ```
+
+`bun run ci` runs these steps in order, as `scripts/ci-targeted.mjs` defines them:
+
+<!-- include: scripts/ci-targeted.mjs#full-ci -->
+```js
+const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
+
+// Mirrors the `ci` script; a test keeps them in sync.
+export const FULL_CI = [
+  { name: 'render-diagrams', cmd: ['bash', 'scripts/render-diagrams.sh'] },
+  { name: 'validate-skill', cmd: ['bun', 'scripts/validate-skill.mjs'] },
+  { name: 'validate-agents', cmd: ['bun', 'scripts/validate-agents.mjs'] },
+  { name: 'gen-sprite-agents', cmd: ['bun', 'scripts/gen-sprite-agents.mjs', '--check'] },
+  { name: 'file-size', cmd: ['bun', 'scripts/check-file-size.mjs', '--all'] },
+  { name: 'tests', cmd: [...TEST_CMD, 'scripts/'] },
+  { name: 'sync-snippets', cmd: ['bun', 'scripts/sync-snippets.mjs', '--check'] },
+];
+```
+<!-- /include -->
 
 Or run the whole gate in order with `bun run ci`. For a commit or PR, run `bun run ci:targeted` instead and quote its `--rencana` plan; it chooses the full CI itself when the change needs it.
 

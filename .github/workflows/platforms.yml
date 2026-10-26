@@ -1,0 +1,139 @@
+name: Platforms
+
+# ---------------------------------------------------------------------------
+# DO NOT ADD AN AUTOMATIC TRIGGER TO THIS FILE.
+#
+# The same user policy as ci.yml applies (2026-09-28): GitHub Actions minutes
+# are the scarce resource, and a Windows or macOS runner spends them faster
+# than a Linux one. This workflow runs only when someone presses Run workflow.
+#
+# Why it exists: the local gate runs on Linux, so it proves the installers'
+# flow and guards but not the platforms they are written for. Each job here
+# proves one platform that this machine cannot:
+#
+#   windows  install.ps1 and scripts/install/windows-*.ps1 under PowerShell 7
+#            (pwsh) and under Windows PowerShell 5.1 (powershell), once each,
+#            through the install-ps1*.test.mjs suites with PWSH set to that
+#            shell. NTFS junctions and 5.1 semantics are only real here.
+#   macos    install.sh and scripts/prereq.sh under macOS /bin/bash 3.2. The
+#            runner also has a newer Homebrew bash, so a shim puts /bin/bash
+#            first on PATH and a step fails unless `bash` really is 3.2. No
+#            bash 3.2 was available to run the scripts before this (see
+#            scripts/install-portability.test.mjs).
+#   docker   the Dockerfile builds, and `install.sh --check` passes in the
+#            image it built.
+#
+# To run it: `gh workflow run platforms.yml`, then `gh run watch`. GitHub only
+# dispatches a workflow that exists on the default branch, so the first run is
+# after this file is merged; to test a branch, dispatch with `--ref <branch>`
+# once the file is on main.
+#
+# To delete the workflow outright: `git rm .github/workflows/platforms.yml`.
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # The suites skip every behaviour test when they find no PowerShell, so a
+      # wrong or missing shell would pass with nothing run. PWSH is the full
+      # path of the matrix shell, and the step fails unless that shell reports
+      # the edition it is meant to be.
+      - name: Resolve the ${{ matrix.shell }} shell and print its version
+        shell: pwsh
+        run: |
+          $exe = (Get-Command '${{ matrix.shell }}' -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+          $edition = & $exe -NoProfile -NonInteractive -Command '$PSVersionTable.PSEdition'
+          $version = & $exe -NoProfile -NonInteractive -Command '$PSVersionTable.PSVersion.ToString()'
+          Write-Output "${{ matrix.shell }}: $exe, $edition $version"
+          $want = if ('${{ matrix.shell }}' -eq 'powershell') { 'Desktop' } else { 'Core' }
+          if ($edition -ne $want) { Write-Output "::error::${{ matrix.shell }} is $edition, expected $want"; exit 1 }
+          "PWSH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run the install.ps1 suites under ${{ matrix.shell }}
+        shell: pwsh
+        run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Put /bin/bash first on PATH
+        run: |
+          shim="$RUNNER_TEMP/bash-shim"
+          mkdir -p "$shim"
+          ln -sf /bin/bash "$shim/bash"
+          echo "$shim" >> "$GITHUB_PATH"
+
+      - name: Fail unless bash on PATH is /bin/bash 3.2
+        run: |
+          echo "bash on PATH: $(command -v bash)"
+          bash --version | head -n 1
+          major="$(bash -c 'echo ${BASH_VERSINFO[0]}')"
+          if [ "$major" != 3 ]; then
+            echo "::error::bash on PATH is major version $major, expected 3 (/bin/bash)"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Run the install.sh and prereq.sh suites under bash 3.2
+        run: bun test --timeout 120000 scripts/install-*.test.mjs scripts/prereq.test.mjs
+
+      - name: Installer dry run in a fresh HOME
+        run: |
+          home="$RUNNER_TEMP/home"
+          mkdir -p "$home"
+          HOME="$home" /bin/bash ./install.sh --dry-run
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build the image
+        run: docker build -t vivera .
+
+      # The build already runs this check in a RUN step; running it again in a
+      # container proves the image that was shipped, not only the build layer.
+      - name: Check the install inside the image
+        run: docker run --rm vivera ./install.sh --check --tier standard --only agents

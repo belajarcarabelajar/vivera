@@ -21,8 +21,10 @@ import YAML from 'yaml';
 import { rewriteLine } from './lib/docs-gen-links.mjs';
 import { sourceFiles, joinParts } from './lib/docs-gen-files.mjs';
 import { idFindings } from './lib/docs-gen-id.mjs';
+import { fenceMask } from './lib/docs-gen-fence.mjs';
+import { includeFindings } from './lib/docs-include.mjs';
 
-export { rewriteLine };
+export { rewriteLine, fenceMask };
 
 export const GITHUB = 'https://github.com/belajarcarabelajar/vivera';
 export const RAW = 'https://raw.githubusercontent.com/belajarcarabelajar/vivera/main';
@@ -65,27 +67,6 @@ export function parseArgs(argv) {
 }
 
 // Markdown structure
-
-export function fenceMask(lines) {
-  const mask = new Array(lines.length).fill(false);
-  let open = null;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (open) {
-      mask[i] = true;
-      const close = line.match(/^\s*(`{3,}|~{3,})\s*$/);
-      if (close && close[1][0] === open[0] && close[1].length >= open.length) open = null;
-      continue;
-    }
-    const m = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
-    // A backtick info string cannot contain a backtick, so such a line is inline code.
-    if (m && !(m[1][0] === '`' && m[2].includes('`'))) {
-      open = m[1];
-      mask[i] = true;
-    }
-  }
-  return mask;
-}
 
 function plainHeading(text) {
   return text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/<[^>]+>/g, '');
@@ -521,8 +502,8 @@ function enFindings(model) {
 
 function findingsFor(model, root, scope) {
   return [
-    ...(scope === 'en' || scope === 'all' ? enFindings(model) : []),
-    ...(scope === 'id' || scope === 'all' ? idFindings(model, root) : []),
+    ...(scope === 'en' || scope === 'all' ? [...enFindings(model), ...includeFindings(root, 'en')] : []),
+    ...(scope === 'id' || scope === 'all' ? [...idFindings(model, root), ...includeFindings(root, 'id')] : []),
   ];
 }
 

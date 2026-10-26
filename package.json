@@ -15,6 +15,7 @@
     "plan:check": "bun scripts/ultra-plan-runner.mjs",
     "contract:check": "bun scripts/check-runner-contract.mjs",
     "copy:check": "bun scripts/check-copy-rules.mjs",
+    "docs:include": "bun scripts/docs-include.mjs --check",
     "design:check": "bun scripts/check-design-tells.mjs",
     "dups:check": "bun scripts/check-duplicate-defs.mjs",
     "size:check": "bun scripts/check-file-size.mjs",

@@ -1,13 +1,14 @@
 // scripts/lib/ci-targeted-index.mjs
 //
 // The repository facts the targeted gate plans from: script sources, markdown
-// files whose mermaid blocks changed, a package.json edit limited to scripts, and
-// the mods the mods/ marketplace lists.
+// files whose mermaid blocks changed, a package.json edit limited to scripts, the
+// mods the mods/ marketplace lists, and the files docs pages include.
 // Split out of scripts/ci-targeted.mjs, which re-exports the public names.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { includedPaths } from './docs-include.mjs';
 
 const INDEX_EXT = /\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)$/;
 
@@ -102,5 +103,6 @@ export function buildIndex(root, files, mergeBase, untracked = []) {
     untracked,
     packageScriptsOnly: packageScriptsOnlyFiles(root, files, mergeBase),
     marketplaceMods: readMarketplaceMods(root),
+    includedSources: includedPaths(root),
   };
 }

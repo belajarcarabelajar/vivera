@@ -109,6 +109,7 @@ here instead of the table, and carry that into the verdict.
 | Local evidence quoted, not summarised | pass / fail | |
 | Parent diff audit performed by a non-author | pass / fail / self-review | |
 | Branch contains current base | yes / no / not required | |
+| Review round | N of 3 (5 with a recorded reason) | ledger ids: fixed / disputed / declined |
 | Registry records this PR number | yes / no | |
 | Pre-existing debt listed with `defer:` markers | yes / no / nothing found | |
 

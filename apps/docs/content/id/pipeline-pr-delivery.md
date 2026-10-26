@@ -5,7 +5,7 @@ category: pipeline
 slug: pr-delivery
 order: 8
 source: README.md#Pull Request Delivery & Batch Merge
-source_hash: "29378c3e9c67"
+source_hash: "16165dde7aa8"
 ---
 
 <a id="pull-request-delivery--batch-merge"></a>

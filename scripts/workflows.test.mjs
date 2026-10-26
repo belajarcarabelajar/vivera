@@ -36,8 +36,6 @@ const workflowFiles = () =>
     .filter((f) => /\.ya?ml$/.test(f))
     .sort();
 
-const stepsText = (job) => JSON.stringify(job?.steps ?? []);
-
 describe('every workflow is dispatch-only', () => {
   test('the directory holds the known workflows, platforms.yml among them', () => {
     expect(workflowFiles()).toEqual(expect.arrayContaining(['ci.yml', 'release.yml', 'platforms.yml']));
@@ -76,10 +74,12 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     expect(job['runs-on']).toBe('windows-latest');
     expect(job.strategy['fail-fast']).toBe(false);
     expect(job.strategy.matrix.shell).toEqual(expect.arrayContaining(['pwsh', 'powershell']));
-    const steps = stepsText(job);
-    expect(steps).toContain('PWSH');
-    expect(steps).toContain('scripts/install-ps1-run.test.mjs');
-    expect(steps).toContain('scripts/install-ps1-hooks.test.mjs');
+    const runs = job.steps.map((s) => s.run ?? '');
+    // The suites read process.env.PWSH; an earlier step must export it, or they fall back to whatever is on PATH.
+    const exported = runs.findIndex((r) => /"PWSH=\$exe"[^\n]*\$env:GITHUB_ENV/.test(r) && r.includes('PSEdition'));
+    const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs') && r.includes('scripts/install-ps1-hooks.test.mjs'));
+    expect(exported).toBeGreaterThanOrEqual(0);
+    expect(suites).toBeGreaterThan(exported);
   });
 
   test('macos puts /bin/bash first on PATH and asserts it is bash 3.2 before the bash suites run', () => {

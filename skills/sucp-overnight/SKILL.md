@@ -32,7 +32,7 @@ When every line holds, the first file the run writes is the handoff (path in sec
 |---|---|
 | Claim the slot (`pr-registry claim`), create the worktree, fan out subagents inside it | Merging into the base branch, including auto-merge |
 | TDD, local verification, parent diff audit | Force push or force-with-lease, on any branch |
-| Parent-only commits on the session branch, push of that branch (rebase-and-push only) | Deploy, publish, release, or any change to a live system |
+| Parent-only commits on the session branch, plain push of that branch (once it has a PR, the base comes in by merge, never by rebase) | Deploy, publish, release, or any change to a live system |
 | `gh pr create --body-file`, then `pr-registry pr` | Anything outside the repo and its session worktree, including promoting a rule to a global file |
 | Plan checklist, debt sweep, learning harvest, graph sync | Widening scope, or deleting state the session did not create |
 | | Paid or metered services the plan does not name |

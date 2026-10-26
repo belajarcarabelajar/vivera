@@ -22,7 +22,7 @@
       "uuid": "e9b1be28-b4b0-4de4-98a3-3296ec0489c1",
       "keyword": ";;'",
       "name": "PR Delivery and Batch Merge",
-      "description": "Isolated worktree + branch, one PR per session, derived naming via pr-registry, topological batch merge with per-merge rebase and local verification, debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-pr.md"
+      "description": "Isolated worktree + branch, one PR per session, derived naming via pr-registry, topological batch merge with per-merge base update and local verification, debt sweep with learning harvest, graphify sync. Source: vivera/snippets/orkestrasi-pr.md"
     },
     {
       "source": "snippets/orkestrasi-pr-review.md",

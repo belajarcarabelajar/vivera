@@ -41,7 +41,7 @@ isolated → active → verified → open → merged
 | A PR number cannot be recorded before `verified` | Recording one implies the work is finished and checked, so `isolated → open` would skip the gate that makes a merge safe |
 | Only an `open` session with a PR can merge | A green local run alone is not a mergeable session |
 | `merged` and `closed` are terminal | Reverting or redoing a session is a new session with a new branch. A file that can "un-merge" hides the revert from the merge order |
-| A closed session did not move the base | `merged` is a rebase reason because it advanced `origin/main`; `closed` is not, so `surface` never lists it as landed, while `order` still treats it as a satisfied dependency |
+| A closed session did not move the base | `merged` is a reason to update the branch because it advanced `origin/main`; `closed` is not, so `surface` never lists it as landed, while `order` still treats it as a satisfied dependency |
 | A duplicate branch or worktree is refused | A registry that reports success for a layout that will lose work is worse than no registry |
 
 ```bash
@@ -52,7 +52,7 @@ bun scripts/pr-registry.mjs open <session> --title "<t>" --body-file <f> [--draf
 bun scripts/pr-registry.mjs pr <session> --number 42   # a PR opened by hand
 bun scripts/pr-registry.mjs reconcile [--dry-run] [--stale-days N] [--close-stale]
 bun scripts/pr-registry.mjs order       # topological merge order
-bun scripts/pr-registry.mjs surface w3  # what must rebase first, what blocks it
+bun scripts/pr-registry.mjs surface w3  # what must land in the branch first, what blocks it
 bun scripts/pr-registry.mjs status
 ```
 
@@ -78,9 +78,10 @@ machines' in-flight sessions into one file and guarantee a conflict on the next 
 
 One at a time, in the order `order` prints, and each merge carries its own evidence:
 
-1. Rebase that session's branch onto `origin/main` **immediately before its own merge**.
-   The base moves with every merge, so a branch rebased at position 3 is already behind
-   by position 7. `surface <s>` reports which sessions landed since the branch was cut.
+1. Merge `origin/main` into that session's branch **immediately before its own merge**.
+   It is a merge, not a rebase: the branch already has a PR, and a rebase would need the
+   force push this stage forbids. The base moves with every merge, so a branch updated at
+   position 3 is already behind by position 7. `surface <s>` reports which sessions landed since the branch was cut.
 2. Resolve any conflict **in the session's branch**, never on the base branch, then
    re-run that session's verification. Editing the base to "fix" a conflict produces a
    change no session can attribute or review.

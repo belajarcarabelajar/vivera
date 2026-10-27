@@ -94,7 +94,15 @@ function Get-RelFiles([string]$Root) {
     }
 }
 
-function Get-Sha256Hex([string]$Path) { return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }
+# Not Get-FileHash: in Windows PowerShell 5.1 it is a function of the Utility script module, and it was not
+# found when Bun started powershell.exe in the platforms.yml suites (runs 40440396551 to 40450528002).
+function Get-Sha256Hex([string]$Path) {
+    $file = (Get-Item -LiteralPath $Path -Force).FullName
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead($file)
+    try { $bytes = $sha.ComputeHash($stream) } finally { $stream.Dispose(); $sha.Dispose() }
+    return ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+}
 
 function Test-SameFile([string]$A, [string]$B) {
     if (-not (Test-Path -LiteralPath $A -PathType Leaf)) { return $false }

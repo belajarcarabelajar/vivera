@@ -147,8 +147,8 @@ describe('install.ps1: what it must not contain', () => {
     expect(linesWith(/Remove-Item/).filter((l) => /-Recurse/i.test(l))).toEqual([]);
   });
 
-  test('every Copy-Item, Remove-Item, Test-Path, Get-Item, Get-ChildItem and Get-FileHash call uses -LiteralPath', () => {
-    for (const cmd of ['Copy-Item', 'Remove-Item', 'Test-Path', 'Get-Item', 'Get-ChildItem', 'Get-FileHash']) {
+  test('every Copy-Item, Remove-Item, Test-Path, Get-Item and Get-ChildItem call uses -LiteralPath', () => {
+    for (const cmd of ['Copy-Item', 'Remove-Item', 'Test-Path', 'Get-Item', 'Get-ChildItem']) {
       const calls = linesWith(new RegExp(`\\b${cmd}\\b`));
       expect(calls.length).toBeGreaterThan(0);
       for (const l of calls) expect({ cmd, line: l.trim(), literal: /-LiteralPath/.test(l) }).toEqual({ cmd, line: l.trim(), literal: true });

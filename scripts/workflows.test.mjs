@@ -86,8 +86,9 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
   test('windows runs install.ps1 from a pwsh prompt, inherited PSModulePath and removed, before the suites', () => {
     const steps = load().jobs?.windows.steps;
     const runs = steps.map((s) => s.run ?? '');
-    const prompt = runs.findIndex((r) => r.includes('./install.ps1 -Only claude') && r.includes('-Check')
-      && r.includes('Remove-Item Env:PSModulePath') && r.includes('Get-Command Get-FileHash'));
+    const prompt = runs.findIndex((r) => r.includes("'./install.ps1', '-Only', 'claude'") && r.includes("'-Check'")
+      && r.includes('Remove-Item Env:PSModulePath') && r.includes('Get-Command Get-FileHash')
+      && r.includes('Bun.spawnSync') && r.includes('-Relayed'));
     const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs'));
     expect(prompt).toBeGreaterThanOrEqual(0);
     expect(steps[prompt].shell).toBe('pwsh');

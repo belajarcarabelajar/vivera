@@ -3,6 +3,7 @@
 // Path helpers for the install.ps1 suites, so their expectations hold on Windows as well as on Linux and
 // macOS (platforms.yml run 40454770833 failed 9 tests on both Windows shells while the installer was right).
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,4 +27,36 @@ export function envWithPath(env, dir) {
 // a symlink elsewhere, so the link cases of the run suite run on every OS.
 export function linkDir(target, link) {
   fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : undefined);
+}
+
+// Makes `paths` unreadable, in order, and returns the undo (reverse order). chmod 0 where POSIX modes apply;
+// Windows ignores them, so there an Everyone deny ACE (icacls), which binds administrators too. Lock a file
+// before its directory: Windows lets a child be opened under a denied directory (bypass traverse checking).
+export function lockPath(...paths) {
+  if (process.platform !== 'win32') {
+    const modes = paths.map((p) => fs.statSync(p).mode & 0o7777);
+    for (const p of paths) fs.chmodSync(p, 0);
+    return () => paths.map((p, i) => [p, modes[i]]).reverse().forEach(([p, m]) => fs.chmodSync(p, m));
+  }
+  const icacls = (args) => {
+    const r = Bun.spawnSync(['icacls', ...args]);
+    if (r.exitCode !== 0) throw new Error(`icacls ${args.join(' ')} exited ${r.exitCode}: ${r.stdout}${r.stderr}`);
+  };
+  for (const p of paths) icacls([p, '/deny', '*S-1-1-0:(R)']);
+  return () => [...paths].reverse().forEach((p) => icacls([p, '/remove:d', '*S-1-1-0']));
+}
+
+const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
+
+// The digest install.ps1 records for a placed directory: SHA-256 over sorted "<file sha256>  <rel path>" lines.
+export function dirDigest(dir) {
+  const lines = [];
+  const walk = (d, rel) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(path.join(d, e.name), `${rel}${e.name}/`);
+      else lines.push(`${sha(fs.readFileSync(path.join(d, e.name)))}  ${rel}${e.name}`);
+    }
+  };
+  walk(dir, '');
+  return `ps-sha256:${sha(lines.sort().map((l) => `${l}\n`).join(''))}`;
 }

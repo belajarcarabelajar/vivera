@@ -12,7 +12,7 @@
   "scripts/gen-sprite-agents.test.mjs": 21350,
   "scripts/graphify-plugin-drift.test.mjs": 26388,
   "scripts/install-portability.test.mjs": 22689,
-  "scripts/install-ps1-run.test.mjs": 32179,
+  "scripts/install-ps1-run.test.mjs": 31820,
   "scripts/install-ps1.test.mjs": 24950,
   "scripts/install-sprites.test.mjs": 21515,
   "scripts/lib/chunk-schema.test.mjs": 21762,

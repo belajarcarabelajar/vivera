@@ -72,7 +72,7 @@ A code block in a docs page can be a copy of a source file. The copy stays in th
 
 | Job | Runner | What it proves |
 |---|---|---|
-| `windows` | `windows-latest`, once with `pwsh` and once with Windows PowerShell 5.1 | the `install-ps1*` suites on real Windows; the job fails when the shell is missing or of the wrong edition, so the suites cannot skip every test and pass |
+| `windows` | `windows-latest`, once with `pwsh` and once with Windows PowerShell 5.1 | install.ps1 started from a pwsh prompt, directly and through a Bun relay (a 5.1 child inherits PowerShell 7's `PSModulePath` only through a process in between), with `PSModulePath` removed as a control; then the `install-ps1*` suites on real Windows with nothing skipped: links run as NTFS junctions and unreadable paths as an Everyone deny ACE. The job fails when the shell is missing or of the wrong edition, so the suites cannot skip every test and pass. OneDrive reparse points stay unproven |
 | `macos` | `macos-latest` with `/bin/bash` 3.2 first on `PATH` | the `install-*` and `prereq` suites, and `install.sh --dry-run`, under the bash macOS ships |
 | `docker` | `ubuntu-latest` | the `Dockerfile` builds and `install.sh --check` passes inside the image |
 

@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { linkDir, longTmp } from './lib/ps1-test-paths.mjs';
+import { dirDigest, linkDir, lockPath, longTmp } from './lib/ps1-test-paths.mjs';
 
 const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shell = process.env.PWSH ?? Bun.which('pwsh') ?? Bun.which('powershell');
@@ -67,17 +67,6 @@ const clean = (r, code = 0) => expect({ code: r.code, err: r.err }).toEqual({ co
 const read = (p) => fs.readFileSync(p, 'utf8');
 const ONLY = ['-Only', 'claude'];
 const baks = (dir) => fs.readdirSync(dir).filter((n) => n.includes('.vivera-bak-'));
-function dirDigest(dir) {
-  const lines = [];
-  const walk = (d, rel) => {
-    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-      if (e.isDirectory()) walk(path.join(d, e.name), `${rel}${e.name}/`);
-      else lines.push(`${sha(fs.readFileSync(path.join(d, e.name)))}  ${rel}${e.name}`);
-    }
-  };
-  walk(dir, '');
-  return `ps-sha256:${sha(lines.sort().map((l) => `${l}\n`).join(''))}`;
-}
 
 describe.skipIf(!shell)('install.ps1 run: parse, help, usage', () => {
   test('every script file parses with no syntax error', () => {
@@ -188,11 +177,12 @@ describe.skipIf(!shell)('install.ps1 run: install, backups, markers', () => {
     expect(read(path.join(fx.pkg, 'templates', 'sub', 'n.md'))).toBe('nested\n');
   });
 
-  test.skipIf(win || root)('M3: when the copy fails the user file is put back and nothing is left half done', () => {
+  test.skipIf(root)('M3: when the copy fails the user file is put back and nothing is left half done', () => {
     const fx = makeFixture();
     put(path.join(fx.pkg, 'templates', 'mine.txt'), 'mine\n');
-    fs.chmodSync(path.join(fx.chk, 'templates', 't.md'), 0);
+    const unlock = lockPath(path.join(fx.chk, 'templates', 't.md'));
     const r = run(fx, ONLY);
+    unlock();
     expect(r.code).toBe(1);
     expect(r.err).toContain('your file was put back');
     expect(read(path.join(fx.pkg, 'templates', 'mine.txt'))).toBe('mine\n');
@@ -591,13 +581,13 @@ describe.skipIf(!shell)('install.ps1 run: W3, nothing is created, moved or retar
   });
 });
 
-describe.skipIf(!shell || win)('install.ps1 run: W4, a path that exists but cannot be inspected is a failure, not "absent"', () => {
+describe.skipIf(!shell)('install.ps1 run: W4, a path that exists but cannot be inspected is a failure, not "absent"', () => {
   test.skipIf(root)('an unreadable package directory fails install, update, check and uninstall with [FAIL] cannot inspect, and writes nothing', () => {
     const fx = makeFixture();
     clean(run(fx, ONLY));
     const snap = () => fs.readdirSync(fx.skills, { recursive: true }).sort();
     const before = snap();
-    fs.chmodSync(fx.pkg, 0);
+    const unlock = lockPath(path.join(fx.pkg, 'SKILL.md'), fx.pkg);
     try {
       for (const args of [ONLY, [...ONLY, '-Update'], [...ONLY, '-Check'], [...ONLY, '-Uninstall']]) {
         const r = run(fx, args);
@@ -606,7 +596,7 @@ describe.skipIf(!shell || win)('install.ps1 run: W4, a path that exists but cann
         expect({ args, missing: r.out.includes('[missing]') }).toEqual({ args, missing: false });
       }
     } finally {
-      fs.chmodSync(fx.pkg, 0o755);
+      unlock();
     }
     expect(snap()).toEqual(before);
     expect(baks(fx.pkg)).toEqual([]);

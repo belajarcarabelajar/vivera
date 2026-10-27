@@ -21,3 +21,9 @@ export function envWithPath(env, dir) {
   out.PATH = dir;
   return out;
 }
+
+// A directory link: a junction on Windows (made without an admin right, the kind install.ps1 meets there) and
+// a symlink elsewhere, so the link cases of the run suite run on every OS.
+export function linkDir(target, link) {
+  fs.symlinkSync(target, link, process.platform === 'win32' ? 'junction' : undefined);
+}

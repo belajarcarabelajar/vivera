@@ -269,6 +269,27 @@
     return null;
   }
 
+  // Inlined SVG runs in the page, unlike an <img>. Drop what could execute:
+  // script elements, on* handlers, and javascript: links. foreignObject and
+  // style stay, since Mermaid labels and colours need them.
+  function sanitizeSvg(root) {
+    [root].concat(Array.prototype.slice.call(root.querySelectorAll('*'))).forEach(function (el) {
+      if ((el.localName || '').toLowerCase() === 'script') {
+        el.remove();
+        return;
+      }
+      Array.prototype.slice.call(el.attributes).forEach(function (attr) {
+        var name = attr.name.toLowerCase();
+        var local = name.slice(name.indexOf(':') + 1);
+        if (local.indexOf('on') === 0 ||
+            (local === 'href' && /^javascript:/i.test(String(attr.value).trim()))) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    return root;
+  }
+
   function fetchSvg(url) {
     return fetch(url).then(function (res) {
       if (!res.ok) throw new Error('stepper: ' + res.status + ' for ' + url);
@@ -279,7 +300,7 @@
       if (root.nodeName !== 'svg' || parsed.querySelector('parsererror')) {
         throw new Error('stepper: not an SVG: ' + url);
       }
-      return document.importNode(root, true);
+      return sanitizeSvg(document.importNode(root, true));
     });
   }
 
@@ -449,8 +470,8 @@
   }
 
   // The one test seam: scripts/docs-stepper.test.mjs evaluates this file with
-  // a stub window and reads the pure helper from here.
-  window.viveraDocs = { stepTargets: stepTargets };
+  // a stub window and reads the helpers from here.
+  window.viveraDocs = { stepTargets: stepTargets, sanitizeSvg: sanitizeSvg };
 
   function init() {
     wrapTables();

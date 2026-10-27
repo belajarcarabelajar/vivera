@@ -138,3 +138,56 @@ describe('stepTargets in docs.js', () => {
     });
   });
 });
+
+// A hand-made element tree with only the members the sanitizer touches, the
+// same ones a parsed SVG element has in the browser. Bun has no DOM.
+function el(localName, attrs = {}, children = []) {
+  const node = {
+    localName,
+    parent: null,
+    children,
+    attributes: Object.entries(attrs).map(([name, value]) => ({ name, value })),
+    removeAttribute(name) { node.attributes = node.attributes.filter((a) => a.name !== name); },
+    remove() { node.parent.children = node.parent.children.filter((c) => c !== node); },
+    querySelectorAll(sel) {
+      if (sel !== '*') throw new Error(`fake supports only '*', got ${sel}`);
+      const out = [];
+      const walk = (n) => n.children.forEach((c) => { out.push(c); walk(c); });
+      walk(node);
+      return out;
+    },
+  };
+  children.forEach((c) => { c.parent = node; });
+  return node;
+}
+
+function names(node) {
+  return [node.localName, ...node.children.flatMap(names)];
+}
+
+describe('sanitizeSvg in docs.js', () => {
+  const sanitizeSvg = loadDocsJs().viveraDocs?.sanitizeSvg;
+
+  test('sanitize drops scripts, on* handlers and javascript: links, keeps labels and safe links', () => {
+    const label = el('foreignObject', { width: '40' }, [el('div', { class: 'labelBkg' })]);
+    const inner = el('rect', { OnClick: 'alert(1)', class: 'basic' });
+    const bad = el('a', { 'xlink:href': '  JavaScript:alert(1)' });
+    const good = el('a', { href: 'https://example.com/' });
+    const root = el('svg', { onload: 'alert(1)', id: 'my-svg' }, [
+      el('style'),
+      el('script', {}, []),
+      el('g', { class: 'node' }, [inner, bad, good, label]),
+    ]);
+
+    sanitizeSvg(root);
+
+    expect(names(root)).not.toContain('script');
+    expect(root.attributes.map((a) => a.name)).toEqual(['id']);
+    expect(inner.attributes.map((a) => a.name)).toEqual(['class']);
+    expect(bad.attributes).toEqual([]);
+    expect(good.attributes).toEqual([{ name: 'href', value: 'https://example.com/' }]);
+    expect(names(root)).toContain('foreignObject');
+    expect(names(root)).toContain('div');
+    expect(names(root)).toContain('style');
+  });
+});

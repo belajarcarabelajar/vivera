@@ -263,7 +263,17 @@ test('sandbox: PATH holds only the base tools plus the named ones, and env holds
   expect(fs.existsSync(path.join(none.bin, 'bun'))).toBe(false);
   expect(fs.existsSync(path.join(none.bin, 'git'))).toBe(false);
   const both = sandbox({ tools: ['git', 'bun'] });
-  expect(fs.realpathSync(path.join(both.bin, 'git'))).toBe(fs.realpathSync(Bun.which('git')));
+  // macOS runners put Homebrew git ahead of /usr/bin on PATH; a fake git first on PATH stands in for it.
+  const shadow = path.join(none.root, 'shadow');
+  fs.mkdirSync(shadow);
+  fs.writeFileSync(path.join(shadow, 'git'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  const userGit = Bun.which('git', { PATH: `${shadow}${path.delimiter}${process.env.PATH}` });
+  // The sandbox links /usr/bin, then /bin, then PATH (resolveTool in lib/install-sandbox.mjs), so a
+  // PATH shim never leaks in. On macOS that is the Xcode git shim, which works where the developer
+  // tools are installed; install.sh itself refuses the bare stub (scripts/install/lib.sh).
+  const systemGit = ['/usr/bin/git', '/bin/git'].find((p) => fs.existsSync(p)) ?? Bun.which('git');
+  expect(fs.realpathSync(path.join(both.bin, 'git'))).toBe(fs.realpathSync(systemGit));
+  expect(fs.realpathSync(path.join(both.bin, 'git'))).not.toBe(fs.realpathSync(userGit));
   expect(fs.realpathSync(path.join(both.bin, 'bun'))).toBe(fs.realpathSync(Bun.which('bun')));
   expect(both.env).toEqual({
     HOME: both.home,

@@ -119,7 +119,7 @@ jobs:
       - name: Run the install.ps1 suites under ${{ matrix.shell }}
         if: ${{ !cancelled() }}
         shell: pwsh
-        run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs scripts/install-ps1-relfiles.test.mjs
+        run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs scripts/install-ps1-relfiles.test.mjs scripts/install-ps1-sha256.test.mjs
 
   macos:
     runs-on: macos-latest

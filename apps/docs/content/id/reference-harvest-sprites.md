@@ -5,16 +5,16 @@ category: reference
 slug: harvest-sprites
 order: 7
 source: docs/guide/reference-harvest-sprites.md
-source_hash: "f2757b9bdc81"
+source_hash: "a059932aa5ee"
 ---
 
 <a id="the-harvest-sprites"></a>
 # Harvest Sprites
 
 <p align="center">
-  <img alt="Karya seni resmi Back to Nature tentang Harvest Sprites: peri-peri kecil bertopi rajut yang menyiram tunas dengan kaleng penyiram hijau, membawa telur, serta menunggangi sapi dan ayam." src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/btn-harvest-sprites.jpg" width="100%">
+  <img alt="Tujuh Harvest Sprites Vivera yang digambar sebagai robot kecil berantena tunas, satu untuk tiap warna pelangi, berdiri di deretan bibit sambil memegang kunci pas, kaca pembesar, papan klip, atau jaring serangga." src="https://raw.githubusercontent.com/belajarcarabelajar/vivera/main/docs/images/harvest-sprites-crew.png" width="100%">
   <br>
-  <em>Tujuh Harvest Sprites sedang bekerja. Karya seni resmi Back to Nature © pemiliknya.</em>
+  <em>Tujuh Harvest Sprites sedang bekerja, digambar khusus untuk Vivera.</em>
 </p>
 
 Halaman ini mengikuti game PlayStation *Harvest Moon: Back to Nature* (Victor Interactive Software,
@@ -53,4 +53,4 @@ Empat hal yang perlu diketahui:
 - **Warna agent berbeda untuk dua sprite.** `agents/crew.json` memberi Aqua `blue` dan Staid `cyan`, sedangkan
   di dalam game Aqua berwarna biru muda dan Staid biru tua.
 
-*Potret sprite di tabel adalah karya seni Harvest Moon dari Harvest Moon Wiki, © pemiliknya masing-masing. Fakta game dan sumbernya tercantum di [glosarium](/id/docs/reference/glossary-full/). Vivera adalah proyek independen dan tidak berafiliasi dengan franchise Harvest Moon.*
+*Potret sprite di halaman ini adalah karya orisinal yang digambar untuk Vivera (sumber SVG ada di samping PNG di `docs/images/`), bukan gambar dari game. Fakta game dan sumbernya tercantum di [glosarium](/id/docs/reference/glossary-full/). Vivera adalah proyek independen dan tidak berafiliasi dengan franchise Harvest Moon.*

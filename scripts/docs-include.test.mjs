@@ -236,6 +236,16 @@ describe('CLI', () => {
     expect(fs.readFileSync(path.join(root, 'docs/page.md'), 'utf8')).toBe(page);
   });
 
+  test('a symlinked page outside the root is a finding and is never written through', () => {
+    const stale = md('<!-- include: src/b.sh#run -->', `${F}sh`, 'echo stale', F, '<!-- /include -->');
+    const outside = makeRoot({ 'page.md': stale });
+    const root = repo();
+    fs.symlinkSync(path.join(outside, 'page.md'), path.join(root, 'docs/linked.md'));
+    const w = run(CLI, ['--root', root, '--write', 'docs/linked.md']);
+    expect([w.code, w.out.split('\n')[0].startsWith('docs/linked.md: ')]).toEqual([1, true]);
+    expect(fs.readFileSync(path.join(outside, 'page.md'), 'utf8')).toBe(stale);
+  });
+
   test('a symlink that stays inside the root keeps working', () => {
     const root = repo();
     fs.symlinkSync('b.sh', path.join(root, 'src/inside.sh'));

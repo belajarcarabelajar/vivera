@@ -50,3 +50,4 @@ https://registry.npmjs.org/pagefind/1.5.2 (`"license": "MIT"`).
   (sources beside each PNG) and are covered by its MIT license. They replace, since 2026-10-27,
   game artwork from the Harvest Moon Wiki that earlier commits carried. Only the sprite names and
   their rainbow colors come from *Harvest Moon: Back to Nature*.
+- The game facts on the sprites page and their sources are listed in `docs/vivera-glossary.md`.

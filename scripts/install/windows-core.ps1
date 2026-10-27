@@ -80,9 +80,18 @@ function Test-BehindLinkedAncestor([string]$Dest) {
     return (Test-BehindLinkedDir (Join-Path $p 'x'))
 }
 
+# Cut by the provider's own form of the root, never by the string as given: an 8.3 short name (TEMP on the
+# GitHub Windows runner), ./, a doubled or a trailing separator has another length than the FullName prefix
+# Get-ChildItem reports, and the names came out shifted (templates\es\t.md for templates\t.md).
 function Get-RelFiles([string]$Root) {
-    $base = $Root.TrimEnd('\')
-    foreach ($f in @(Get-ChildItem -LiteralPath $base -Recurse -File -Force)) { $f.FullName.Substring($base.Length + 1) }
+    $base = (Get-Item -LiteralPath $Root -Force).FullName.TrimEnd('\', '/')
+    $prefix = $base + [System.IO.Path]::DirectorySeparatorChar
+    foreach ($f in @(Get-ChildItem -LiteralPath $base -Recurse -File -Force)) {
+        if (-not $f.FullName.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw "Get-RelFiles: $($f.FullName) is not under $base (root given as $Root)"
+        }
+        $f.FullName.Substring($prefix.Length)
+    }
 }
 
 function Get-Sha256Hex([string]$Path) { return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }

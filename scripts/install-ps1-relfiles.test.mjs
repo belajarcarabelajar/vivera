@@ -39,11 +39,12 @@ function ps(body, prelude = '') {
 const relFiles = (root) => ps(`(@(Get-RelFiles ${quote(root)}) | Sort-Object) -join '|'`);
 const WANT = { code: 0, out: [`sub${sep}n.md`, 't.md'].join('|'), err: '' };
 
-// The 8.3 short form of a path, or null when the volume does not keep short names.
-function shortForm(p) {
-  const r = Bun.spawnSync(['cmd', '/d', '/c', `for %I in ("${p}") do @echo %~sI`]);
-  const s = r.stdout.toString().trim();
-  return r.exitCode === 0 && s && s.toLowerCase() !== p.toLowerCase() ? s : null;
+// Windows only: the long form of a path (realpath expands 8.3 names) and its 8.3 short form, read through
+// Scripting.FileSystemObject rather than cmd, whose quoting leaked into the path on the runner.
+function windowsForms(p) {
+  const long = fs.realpathSync.native(p);
+  const short = ps(`(New-Object -ComObject Scripting.FileSystemObject).GetFolder(${quote(long)}).ShortPath`).out;
+  return [...new Set([long, short].filter(Boolean))];
 }
 
 describe.skipIf(!shell)('Get-RelFiles names files relative to the root, whatever form the root string has', () => {
@@ -64,11 +65,13 @@ describe.skipIf(!shell)('Get-RelFiles names files relative to the root, whatever
     expect(relFiles(`${tpl}${sep}`)).toEqual(WANT);
   });
 
-  // The runner's own case. Skipped where it cannot exist (no 8.3 names off Windows, or a volume without them).
-  const short = win ? shortForm(tpl) : null;
-  test.skipIf(!short)('a root in its 8.3 short form (Windows)', () => {
-    expect(relFiles(short)).toEqual(WANT);
-  });
+  // The runner's own case: TEMP there is 8.3 (C:\Users\RUNNER~1) and FullName is long, or the other way round.
+  // Both forms of the same root must give the same names. Skipped off Windows, where 8.3 names do not exist.
+  for (const form of win && shell ? windowsForms(tpl) : []) {
+    test(`a root in its ${form.includes('~') ? '8.3 short' : 'long'} form (Windows): ${form}`, () => {
+      expect(relFiles(form)).toEqual(WANT);
+    });
+  }
 
   test('a file whose FullName is outside the root prefix is an error naming both paths, not a wrong name', () => {
     // Get-ChildItem is shadowed by a function, the one boundary this test replaces: it returns a file the

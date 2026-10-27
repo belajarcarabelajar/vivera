@@ -44,8 +44,40 @@ const WANT = { code: 0, out: [`sub${sep}n.md`, 't.md'].join('|'), err: '' };
 function windowsForms(p) {
   const long = fs.realpathSync.native(p);
   const short = ps(`(New-Object -ComObject Scripting.FileSystemObject).GetFolder(${quote(long)}).ShortPath`).out;
-  return [...new Set([long, short].filter(Boolean))];
+  return [long, short];
 }
+
+// The Windows cases to register for a root's long and short form, each `{ title, root }` or `{ title, skip }`.
+// A volume without 8.3 names gives no distinct short form; the case is then a visible skip, not a silent gap.
+function windowsCases(long, short) {
+  const shortCase = short && short !== long
+    ? { title: `a root in its 8.3 short form (Windows): ${short}`, root: short }
+    : { title: `a root in its 8.3 short form (Windows): skipped, ${long} has no distinct 8.3 form on this volume`, skip: true };
+  return [{ title: `a root in its long form (Windows): ${long}`, root: long }, shortCase];
+}
+
+describe('windowsCases', () => {
+  const LONG = 'C:\\Users\\runneradmin\\t';
+  const SHORT = 'C:\\Users\\RUNNER~1\\t';
+  const runLong = { title: 'a root in its long form (Windows): C:\\Users\\runneradmin\\t', root: LONG };
+  const skipShort = { title: 'a root in its 8.3 short form (Windows): skipped, C:\\Users\\runneradmin\\t has no distinct 8.3 form on this volume', skip: true };
+
+  test('a long and a different short form both run, with the titles the runner reports', () => {
+    expect(windowsCases(LONG, SHORT)).toEqual([runLong, { title: 'a root in its 8.3 short form (Windows): C:\\Users\\RUNNER~1\\t', root: SHORT }]);
+  });
+
+  test('a long form alone runs and the 8.3 case is registered as skipped', () => {
+    expect(windowsCases(LONG, undefined)).toEqual([runLong, skipShort]);
+  });
+
+  test('an empty short form registers the 8.3 case as skipped', () => {
+    expect(windowsCases(LONG, '')).toEqual([runLong, skipShort]);
+  });
+
+  test('a short form equal to the long form registers the 8.3 case as skipped', () => {
+    expect(windowsCases(LONG, LONG)).toEqual([runLong, skipShort]);
+  });
+});
 
 describe.skipIf(!shell)('Get-RelFiles names files relative to the root, whatever form the root string has', () => {
   test('a canonical root', () => {
@@ -67,10 +99,9 @@ describe.skipIf(!shell)('Get-RelFiles names files relative to the root, whatever
 
   // The runner's own case: TEMP there is 8.3 (C:\Users\RUNNER~1) and FullName is long, or the other way round.
   // Both forms of the same root must give the same names. Skipped off Windows, where 8.3 names do not exist.
-  for (const form of win && shell ? windowsForms(tpl) : []) {
-    test(`a root in its ${form.includes('~') ? '8.3 short' : 'long'} form (Windows): ${form}`, () => {
-      expect(relFiles(form)).toEqual(WANT);
-    });
+  for (const c of win && shell ? windowsCases(...windowsForms(tpl)) : []) {
+    if (c.skip) test.skip(c.title, () => {});
+    else test(c.title, () => expect(relFiles(c.root)).toEqual(WANT));
   }
 
   test('a file whose FullName is outside the root prefix is an error naming both paths, not a wrong name', () => {

@@ -74,7 +74,35 @@ jobs:
           if ($edition -ne $want) { Write-Output "::error::${{ matrix.shell }} is $edition, expected $want"; exit 1 }
           "PWSH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      # A user who starts the installer from a pwsh prompt: the child inherits pwsh's PSModulePath. The
+      # same install runs again with PSModulePath removed as a control, and only the inherited run gates.
+      - name: Run install.ps1 from a pwsh prompt under ${{ matrix.shell }}
+        shell: pwsh
+        run: |
+          Write-Output 'Inherited PSModulePath:'
+          $env:PSModulePath -split ';' | ForEach-Object { "  $_" }
+          & $env:PWSH -NoProfile -NonInteractive -Command 'Get-Command Get-FileHash -ErrorAction SilentlyContinue | Format-List Name, CommandType, Source, Version; "PSModulePath seen by the child:"; $env:PSModulePath -split [IO.Path]::PathSeparator'
+          function Invoke-PromptInstall([string]$Label) {
+              $profileDir = Join-Path $env:RUNNER_TEMP "prompt-$Label"
+              New-Item -ItemType Directory -Force -Path (Join-Path $profileDir '.claude') | Out-Null
+              $env:USERPROFILE = $profileDir
+              & $env:PWSH -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./install.ps1 -Only claude | Out-Host
+              $install = $LASTEXITCODE
+              & $env:PWSH -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./install.ps1 -Only claude -Check | Out-Host
+              $check = $LASTEXITCODE
+              Write-Host "${Label}: install exit=$install, check exit=$check"
+              return (($install -eq 0) -and ($check -eq 0))
+          }
+          $inherited = Invoke-PromptInstall 'inherited'
+          $saved = $env:PSModulePath
+          Remove-Item Env:PSModulePath
+          $removed = Invoke-PromptInstall 'removed'
+          $env:PSModulePath = $saved
+          Write-Output "inherited PSModulePath: $(if ($inherited) { 'ok' } else { 'FAILED' }); PSModulePath removed (control): $(if ($removed) { 'ok' } else { 'FAILED' })"
+          if (-not $inherited) { Write-Output '::error::install.ps1 started from a pwsh prompt failed under ${{ matrix.shell }}'; exit 1 }
+
       - name: Run the install.ps1 suites under ${{ matrix.shell }}
+        if: ${{ !cancelled() }}
         shell: pwsh
         run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs scripts/install-ps1-relfiles.test.mjs
 

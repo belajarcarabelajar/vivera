@@ -83,6 +83,19 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     expect(suites).toBeGreaterThan(exported);
   });
 
+  test('windows runs install.ps1 from a pwsh prompt, inherited PSModulePath and removed, before the suites', () => {
+    const steps = load().jobs?.windows.steps;
+    const runs = steps.map((s) => s.run ?? '');
+    const prompt = runs.findIndex((r) => r.includes('./install.ps1 -Only claude') && r.includes('-Check')
+      && r.includes('Remove-Item Env:PSModulePath') && r.includes('Get-Command Get-FileHash'));
+    const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs'));
+    expect(prompt).toBeGreaterThanOrEqual(0);
+    expect(steps[prompt].shell).toBe('pwsh');
+    expect(suites).toBeGreaterThan(prompt);
+    // A red prompt step must not hide the suites' own results.
+    expect(steps[suites].if).toBe('${{ !cancelled() }}');
+  });
+
   test('macos puts /bin/bash first on PATH and asserts it is bash 3.2 before the bash suites run', () => {
     const job = load().jobs?.macos;
     expect(job['runs-on']).toBe('macos-latest');

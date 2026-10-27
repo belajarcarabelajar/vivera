@@ -28,7 +28,7 @@
   "scripts/plan-publish-registry.test.mjs": 20245,
   "scripts/plan-publish.mjs": 32207,
   "scripts/plan-publish.test.mjs": 59784,
-  "scripts/pr-registry.mjs": 32333,
+  "scripts/pr-registry.mjs": 32331,
   "scripts/pr-registry.test.mjs": 46318,
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,

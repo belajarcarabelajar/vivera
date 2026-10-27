@@ -5,7 +5,7 @@ category: tooling
 slug: validation
 order: 8
 source: README.md#Validation & Quality Checks
-source_hash: "01b9796b9dbe"
+source_hash: "83ec951775d8"
 ---
 
 <a id="validation--quality-checks"></a>
@@ -85,7 +85,7 @@ Sebuah blok kode di halaman docs bisa merupakan salinan file sumber. Salinannya 
 
 | Job | Runner | Yang dibuktikan |
 |---|---|---|
-| `windows` | `windows-latest`, sekali dengan `pwsh` dan sekali dengan Windows PowerShell 5.1 | suite `install-ps1*` di Windows sungguhan; job gagal bila shell tidak ada atau edisinya salah, jadi suite tidak bisa melewati semua test lalu lulus |
+| `windows` | `windows-latest`, sekali dengan `pwsh` dan sekali dengan Windows PowerShell 5.1 | install.ps1 yang dijalankan dari prompt pwsh, langsung dan lewat relay Bun (child 5.1 hanya mewarisi `PSModulePath` PowerShell 7 lewat proses perantara), dengan `PSModulePath` dihapus sebagai kontrol; lalu suite `install-ps1*` di Windows sungguhan tanpa ada yang dilewati: link berjalan sebagai junction NTFS dan path yang tak terbaca sebagai ACE deny untuk Everyone. Job gagal bila shell tidak ada atau edisinya salah, jadi suite tidak bisa melewati semua test lalu lulus. Reparse point OneDrive tetap belum terbukti |
 | `macos` | `macos-latest` dengan `/bin/bash` 3.2 paling depan di `PATH` | suite `install-*` dan `prereq`, serta `install.sh --dry-run`, di bawah bash bawaan macOS |
 | `docker` | `ubuntu-latest` | `Dockerfile` berhasil di-build dan `install.sh --check` lulus di dalam image |
 

@@ -5,7 +5,7 @@ category: reference
 slug: glossary-full
 order: 6
 source: docs/vivera-glossary.md
-source_hash: "2558a3abf6d2"
+source_hash: "6eba99e56464"
 ---
 
 <a id="the-vivera-glossary"></a>

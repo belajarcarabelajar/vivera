@@ -34,7 +34,8 @@ describe('install.ps1 calls no Windows PowerShell 5.1 script-module function', (
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-sha256-'));
 afterAll(() => fs.rmSync(base, { recursive: true, force: true }));
-const samples = { 'plain.txt': 'hello\n', 'empty.txt': '', '[brackets] and *.txt': 'wildcards stay literal\r\n', 'binary.bin': Buffer.from([0, 255, 13, 10, 128]) };
+// Names legal on Windows too (no * or ?); [ ] are PowerShell wildcards, so they must stay literal.
+const samples = { 'plain.txt': 'hello\n', 'empty.txt': '', '[brackets] and (parens).txt': 'wildcards stay literal\r\n', 'binary.bin': Buffer.from([0, 255, 13, 10, 128]) };
 for (const [name, data] of Object.entries(samples)) fs.writeFileSync(path.join(base, name), data);
 
 describe.skipIf(!shell)('Get-Sha256Hex is the lowercase SHA-256 of the file bytes', () => {

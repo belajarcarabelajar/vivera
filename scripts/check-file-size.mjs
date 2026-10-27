@@ -4,8 +4,8 @@
 // Blocks a commit that stages a text file over 5000 tokens (tokens = bytes / 4,
 // limit 20000 bytes), so no file grows past what an agent reads comfortably in
 // one pass. Files already over the limit carry a ceiling in
-// scripts/file-size-baseline.json: they may shrink but never grow, and
-// `--write-baseline` only ever lowers or drops a ceiling (a ratchet).
+// scripts/file-size-baseline.json: they never grow, a shrink lowers the ceiling
+// in the same commit, and `--write-baseline` only lowers or drops one (a ratchet).
 //
 // WHAT IS JUDGED. The index blob of each path, never the working tree, so the
 // pre-commit hook and `--all` judge the same bytes and partial staging is exact.

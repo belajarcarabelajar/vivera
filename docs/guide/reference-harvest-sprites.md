@@ -1,9 +1,9 @@
 # The Harvest Sprites
 
 <p align="center">
-  <img alt="Official Back to Nature artwork of the Harvest Sprites: little elves in knit caps watering sprouts with a green can, carrying an egg, and riding a cow and a chicken." src="../../docs/images/btn-harvest-sprites.jpg" width="100%">
+  <img alt="Vivera's seven Harvest Sprites drawn as small robots with a sprout for an antenna, one per rainbow color, standing in a row of seedlings and holding a wrench, a magnifier, a clipboard, or a bug net." src="../../docs/images/harvest-sprites-crew.png" width="100%">
   <br>
-  <em>The seven Harvest Sprites at work. Official Back to Nature artwork © its owners.</em>
+  <em>The seven Harvest Sprites at work, drawn for Vivera.</em>
 </p>
 
 This page follows the PlayStation game *Harvest Moon: Back to Nature* (Victor Interactive Software,
@@ -42,4 +42,4 @@ Four things are worth knowing:
 - **Agent colors differ for two sprites.** `agents/crew.json` gives Aqua `blue` and Staid `cyan`, while
   the game has Aqua light blue and Staid dark blue.
 
-*The sprite portraits in the table are Harvest Moon artwork from the Harvest Moon Wiki, © their respective owners. Game facts and their sources are listed in [the glossary](../../docs/vivera-glossary.md). Vivera is an independent project and is not affiliated with the Harvest Moon franchise.*
+*The sprite portraits on this page are original artwork drawn for Vivera (SVG sources next to the PNGs in `docs/images/`), not art from the game. Game facts and their sources are listed in [the glossary](../../docs/vivera-glossary.md). Vivera is an independent project and is not affiliated with the Harvest Moon franchise.*

@@ -78,9 +78,25 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     // The suites read process.env.PWSH; an earlier step must export it, or they fall back to whatever is on PATH.
     const exported = runs.findIndex((r) => /"PWSH=\$exe"[^\n]*\$env:GITHUB_ENV/.test(r) && r.includes('PSEdition'));
     const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs') && r.includes('scripts/install-ps1-hooks.test.mjs')
-      && r.includes('scripts/install-ps1-relfiles.test.mjs'));
+      && r.includes('scripts/install-ps1-relfiles.test.mjs') && r.includes('scripts/install-ps1-sha256.test.mjs'));
     expect(exported).toBeGreaterThanOrEqual(0);
     expect(suites).toBeGreaterThan(exported);
+  });
+
+  test('windows runs install.ps1 from a pwsh prompt, inherited PSModulePath and removed, before the suites', () => {
+    const steps = load().jobs?.windows.steps;
+    const runs = steps.map((s) => s.run ?? '');
+    const prompt = runs.findIndex((r) => r.includes("'./install.ps1', '-Only', 'claude'") && r.includes("'-Check'")
+      && r.includes('Remove-Item Env:PSModulePath') && r.includes('Get-Command Get-FileHash')
+      && r.includes('Bun.spawnSync') && r.includes('-Relayed'));
+    const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs'));
+    expect(prompt).toBeGreaterThanOrEqual(0);
+    expect(steps[prompt].shell).toBe('pwsh');
+    // Only direct and relayed gate: the control run's exit code must not leak out as the step's.
+    expect(steps[prompt].run.trimEnd().endsWith('exit 0')).toBe(true);
+    expect(suites).toBeGreaterThan(prompt);
+    // A red prompt step must not hide the suites' own results.
+    expect(steps[suites].if).toBe('${{ !cancelled() }}');
   });
 
   test('macos puts /bin/bash first on PATH and asserts it is bash 3.2 before the bash suites run', () => {

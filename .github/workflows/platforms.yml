@@ -74,9 +74,54 @@ jobs:
           if ($edition -ne $want) { Write-Output "::error::${{ matrix.shell }} is $edition, expected $want"; exit 1 }
           "PWSH=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Run the install.ps1 suites under ${{ matrix.shell }}
+      # A user who starts the installer from a pwsh prompt gets a child with pwsh's PSModulePath, which pwsh
+      # cleans of its own module paths for powershell.exe (run 40450528002). A process in between, Bun here as
+      # in the suites, passes it on unchanged. The install runs direct, through a Bun relay, and with
+      # PSModulePath removed as a control; the first two gate.
+      - name: Run install.ps1 from a pwsh prompt under ${{ matrix.shell }}
         shell: pwsh
-        run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs scripts/install-ps1-relfiles.test.mjs
+        run: |
+          $relay = Join-Path $env:RUNNER_TEMP 'relay.mjs'
+          Set-Content -LiteralPath $relay -Value @'
+          const [exe, ...args] = process.argv.slice(2);
+          const r = Bun.spawnSync([exe, ...args], { stdout: 'inherit', stderr: 'inherit' });
+          process.exit(r.exitCode ?? 1);
+          '@
+          Write-Output 'Inherited PSModulePath:'
+          $env:PSModulePath -split ';' | ForEach-Object { "  $_" }
+          $probe = 'Get-Command Get-FileHash -ErrorAction SilentlyContinue | Format-List Name, CommandType, Source, Version; "PSModulePath seen by the child:"; $env:PSModulePath -split [IO.Path]::PathSeparator'
+          Write-Output '--- direct from pwsh:'
+          & $env:PWSH -NoProfile -NonInteractive -Command $probe
+          Write-Output '--- through the Bun relay:'
+          bun $relay $env:PWSH -NoProfile -NonInteractive -Command $probe
+          function Invoke-PromptInstall([string]$Label, [switch]$Relayed) {
+              $profileDir = Join-Path $env:RUNNER_TEMP "prompt-$Label"
+              New-Item -ItemType Directory -Force -Path (Join-Path $profileDir '.claude') | Out-Null
+              $env:USERPROFILE = $profileDir
+              $codes = foreach ($extra in @(@(), @('-Check'))) {
+                  $argv = @('-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', './install.ps1', '-Only', 'claude') + $extra
+                  if ($Relayed) { bun $relay $env:PWSH @argv | Out-Host } else { & $env:PWSH @argv | Out-Host }
+                  $LASTEXITCODE
+              }
+              Write-Host "${Label}: install exit=$($codes[0]), check exit=$($codes[1])"
+              return (($codes[0] -eq 0) -and ($codes[1] -eq 0))
+          }
+          $direct = Invoke-PromptInstall 'inherited'
+          $relayed = Invoke-PromptInstall 'relayed' -Relayed
+          $saved = $env:PSModulePath
+          Remove-Item Env:PSModulePath
+          $removed = Invoke-PromptInstall 'removed'
+          $env:PSModulePath = $saved
+          $word = { param($ok) if ($ok) { 'ok' } else { 'FAILED' } }
+          Write-Output "direct: $(& $word $direct); through Bun: $(& $word $relayed); PSModulePath removed (control): $(& $word $removed)"
+          if (-not ($direct -and $relayed)) { Write-Output '::error::install.ps1 failed under ${{ matrix.shell }} when started from pwsh, directly or through Bun'; exit 1 }
+          # The control run must not gate through the last native exit code the pwsh step wrapper reads.
+          exit 0
+
+      - name: Run the install.ps1 suites under ${{ matrix.shell }}
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: bun test --timeout 120000 scripts/install-ps1.test.mjs scripts/install-ps1-run.test.mjs scripts/install-ps1-hooks.test.mjs scripts/install-ps1-relfiles.test.mjs scripts/install-ps1-sha256.test.mjs
 
   macos:
     runs-on: macos-latest

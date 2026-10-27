@@ -19,8 +19,9 @@ const FILES = ['install.ps1', ...fs.readdirSync(path.join(ROOT, 'scripts', 'inst
 const shell = process.env.PWSH ?? Bun.which('pwsh') ?? Bun.which('powershell');
 const quote = (s) => `'${s.replace(/'/g, "''")}'`;
 
-// Functions, not cmdlets, of Microsoft.PowerShell.Utility in Windows PowerShell 5.1 (its .psm1).
-const SCRIPT_MODULE_FUNCTIONS = ['Get-FileHash', 'New-TemporaryFile', 'New-Guid', 'Format-Hex', 'Import-PowerShellDataFile', 'ConvertFrom-SddlString'];
+// Functions, not cmdlets, of Windows PowerShell 5.1 script modules: Microsoft.PowerShell.Utility (its .psm1)
+// and Microsoft.PowerShell.Archive.
+const SCRIPT_MODULE_FUNCTIONS = ['Get-FileHash', 'New-TemporaryFile', 'New-Guid', 'Format-Hex', 'Import-PowerShellDataFile', 'ConvertFrom-SddlString', 'Expand-Archive', 'Compress-Archive'];
 
 describe('install.ps1 calls no Windows PowerShell 5.1 script-module function', () => {
   for (const rel of FILES) {

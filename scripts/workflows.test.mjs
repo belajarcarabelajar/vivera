@@ -92,6 +92,8 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs'));
     expect(prompt).toBeGreaterThanOrEqual(0);
     expect(steps[prompt].shell).toBe('pwsh');
+    // Only direct and relayed gate: the control run's exit code must not leak out as the step's.
+    expect(steps[prompt].run.trimEnd().endsWith('exit 0')).toBe(true);
     expect(suites).toBeGreaterThan(prompt);
     // A red prompt step must not hide the suites' own results.
     expect(steps[suites].if).toBe('${{ !cancelled() }}');

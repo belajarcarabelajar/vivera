@@ -15,6 +15,7 @@ import { buildIndex, modTests } from './lib/ci-targeted-index.mjs';
 export { buildIndex, mermaidBlocks, scriptsOnlyChange } from './lib/ci-targeted-index.mjs';
 
 const USAGE = 'usage: ci-targeted.mjs [--base <ref>] [--root <dir>] [--plan|--rencana] [--full|--penuh]';
+// docs-include:start full-ci
 const TEST_CMD = ['bun', 'test', '--timeout', '30000'];
 
 // Mirrors the `ci` script; a test keeps them in sync.
@@ -27,6 +28,7 @@ export const FULL_CI = [
   { name: 'tests', cmd: [...TEST_CMD, 'scripts/'] },
   { name: 'sync-snippets', cmd: ['bun', 'scripts/sync-snippets.mjs', '--check'] },
 ];
+// docs-include:end full-ci
 
 const AGENTS_SKIP = 'nothing under agents/, .claude/agents/, or the agent scripts changed';
 const SKIP_REASON = {
@@ -321,7 +323,9 @@ export function planChecks(changed, index, { base = 'origin/main', full = false 
       skipped.push({ name: s.name, reason: SKIP_REASON[s.name] });
     }
   }
-  const docsReasons = paths.filter(isDocsSource).map((p) => `${p}: docs page source changed`);
+  const inc = new Set(index.includedSources ?? []);
+  const docsReasons = paths.filter((p) => isDocsSource(p) || inc.has(p))
+    .map((p) => `${p}: ${isDocsSource(p) ? 'docs page source' : 'source included by a docs page'} changed`);
   if (docsReasons.length) suites.push(...docsSuites(docsReasons));
   suites.push(copySuite(base), ...evalSuites(paths));
   return { full: false, suites, skipped, ignored };

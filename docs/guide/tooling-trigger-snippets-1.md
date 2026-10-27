@@ -195,7 +195,7 @@ A file an agent cannot read in one go gets read in parts and edited blind. `bun 
 blocks a text file over 5,000 tokens (bytes / 4, limit 20,000 bytes). Three modes:
 
 ```bash
-bun run size:check                                   # --staged (default, the hook): staged files, size from the index
+bun run size:check                                   # --staged (default, the hook): staged files, size from the index, their stale ceilings
 bun scripts/check-file-size.mjs --all                # every tracked file plus stale ceilings (end of bun run ci)
 bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, then only lower or drop them
 ```
@@ -203,7 +203,7 @@ bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, t
 Exit 0 is a pass, 1 is a violation or a stale ceiling, and 2 is a usage error, a missing
 git repository, an invalid baseline, or a failed git call. Files that
 were over the limit when the gate landed keep their size as a ceiling in
-`scripts/file-size-baseline.json`, a ratchet: shrinking is free, growing is blocked. Ceilings are read from the staged copy of that file. When a
+`scripts/file-size-baseline.json`, a ratchet: growing is blocked, and a file that shrinks lowers its ceiling in the same commit (`--write-baseline`, then stage the baseline), because the hook refuses a staged file left below its ceiling. Ceilings are read from the staged copy of that file. When a
 split is out of scope, raise the ceiling in the same commit with a message line
 `size-raise: <plan-id> <reason>` (`.githooks/commit-msg`, `--all --base <ref>`). A renamed file counts as new, so move its ceiling. After a split, `git grep` the
 old path and update references (`validate-skill` pins skill paths).

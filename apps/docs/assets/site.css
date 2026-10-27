@@ -440,6 +440,89 @@ pre {
   display: block;
 }
 
+/* docs.js replaces a stepped hero picture with .stepper. The bar sticks to the
+   bottom of the viewport while the tall diagram scrolls past it. The SVG's own
+   styles use #id selectors, so the highlight needs !important to win. */
+.stepper {
+  margin: 0 0 1.1em;
+}
+
+.stepper-figure svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.stepper-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.stepper-bar button {
+  min-height: var(--tap);
+  padding: 0 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.stepper-bar button:hover,
+.stepper-bar button:active {
+  background: var(--current);
+}
+
+.stepper-bar button[aria-disabled="true"] {
+  color: var(--muted);
+  background: transparent;
+  cursor: default;
+}
+
+.stepper-all {
+  margin-inline-start: auto;
+}
+
+.stepper-count {
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper-caption {
+  flex: 1 1 100%;
+}
+
+.stepper-caption:empty {
+  display: none;
+}
+
+.stepper .is-step-off {
+  opacity: 0.2;
+}
+
+.stepper .node.is-step-on > .label-container,
+.stepper .node.is-step-on > .label-container path,
+.stepper path.is-step-on {
+  stroke: var(--focus) !important;
+  stroke-width: 3px !important;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .stepper .node,
+  .stepper path[id],
+  .stepper .edgeLabel .label {
+    transition: opacity 0.2s ease;
+  }
+}
+
 /* A table scrolls inside its own wrapper; docs.js adds .table-scroll and the
    rule below covers a table that is still unwrapped. */
 .table-scroll {

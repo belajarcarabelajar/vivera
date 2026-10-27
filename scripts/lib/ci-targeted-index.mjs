@@ -1,13 +1,14 @@
 // scripts/lib/ci-targeted-index.mjs
 //
 // The repository facts the targeted gate plans from: script sources, markdown
-// files whose mermaid blocks changed, a package.json edit limited to scripts, and
-// the mods the mods/ marketplace lists.
+// files whose mermaid blocks changed, a package.json edit limited to scripts, the
+// mods the mods/ marketplace lists, and the files docs pages include.
 // Split out of scripts/ci-targeted.mjs, which re-exports the public names.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { includedPaths } from './docs-include.mjs';
 
 const INDEX_EXT = /\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)$/;
 
@@ -85,12 +86,15 @@ function readMarketplaceMods(root) {
   }
 }
 
-/** The suite tests a mods/ path selects: scripts/<mod>.test.mjs for a file in a mod folder,
- * that of every listed mod for the marketplace. Null when one is missing, so the path
- * stays unrecognized and forces the full list instead of going untested. */
+/** The suite tests a mods/ or workflow path selects: scripts/<mod>.test.mjs for a file in a
+ * mod folder, that of every listed mod for the marketplace, scripts/workflows.test.mjs for
+ * a .github/workflows file (GitHub runs the workflow, so its structure test is all a local
+ * gate can check). Null when one is missing, so the path stays unrecognized and forces
+ * the full list instead of going untested. */
 export function modTests(p, sources, marketplaceMods = []) {
   const mod = p.match(/^mods\/([^./][^/]*)\/./)?.[1];
   const mods = p === MARKETPLACE ? marketplaceMods : mod ? [mod] : [];
+  if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) mods.push('workflows');
   const tests = mods.map((m) => `scripts/${m}.test.mjs`);
   return tests.length && tests.every((t) => t in sources) ? tests : null;
 }
@@ -102,5 +106,6 @@ export function buildIndex(root, files, mergeBase, untracked = []) {
     untracked,
     packageScriptsOnly: packageScriptsOnlyFiles(root, files, mergeBase),
     marketplaceMods: readMarketplaceMods(root),
+    includedSources: includedPaths(root),
   };
 }

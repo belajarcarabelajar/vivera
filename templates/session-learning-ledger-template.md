@@ -59,6 +59,10 @@
 
 **Mechanical or judgement:** a mechanical `KEEP` rule is a fixed pattern a machine can detect (a banned call, a path rule, a missing registration, a wording that must exist). Propose it as an automated check (test, validator needle, lint rule, or hook) in a 6.3 follow-up; its `MEMORY.md` entry (its topic-file row and index ID where `docs/memory/` exists) stays only until the check lands. A judgement rule goes to `MEMORY.md` (a topic-file row and index ID where `docs/memory/` exists).
 
+**Measured by (judgement rules):** where the repository has `evals/scenarios/`, list each judgement `KEEP` rule with the draft scenario proposed for it in 6.3, or `not measurable: <reason>` when no assertion type can observe the behaviour.
+
+- Rule [#]: `evals/scenarios/<id>.json` / not measurable: [reason]
+
 **Minimum-Signal NO-OP gate:** *"Will a future agent plausibly act differently and more effectively because of this rule?"* If NO → NO-OP, make zero file changes. Reject trivial facts, transient errors, and generic knowledge the model already has.
 
 **30-Day Horizon gate:** *"Would this rule still be true and worth reading a month from now?"* Stable residue passes; moving task state (today's bug, this environment's transient hiccup) fails and expires with the session.
@@ -108,6 +112,7 @@
 
 - [ ] `KEEP` rules written in-repo.
 - [ ] Each mechanical `KEEP` rule has its check proposed as a 6.3 follow-up.
+- [ ] Each judgement `KEEP` rule has its eval scenario proposed as a 6.3 follow-up, or a `not measurable` reason (only where `evals/scenarios/` exists).
 - [ ] Approved global rules written with a revert note; declined ones left in this ledger only.
 - [ ] Handoff "Resume Checklist" points the next session at these rules **before** it starts work.
 

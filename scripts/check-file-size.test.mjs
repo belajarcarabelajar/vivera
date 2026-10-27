@@ -268,13 +268,6 @@ describe('CLI --staged', () => {
     expect(r.err).toContain('big.txt  6100 tokens (24400 bytes), ceiling 6000 tokens, grew by 100 tokens');
   });
 
-  test('passes a file that shrank under its ceiling', () => {
-    const dir = repo();
-    baseline(dir, { 'big.txt': 24000 });
-    stage(dir, { 'big.txt': 23000 });
-    zero(run(dir), 2);
-  });
-
   test('handles a path containing a space', () => {
     const dir = repo();
     stage(dir, { 'docs/my notes.md': 30000 });
@@ -401,7 +394,7 @@ describe('exitCodeFor', () => {
 describe('CLI --root and --baseline', () => {
   test('judges the repository named by --root against the named baseline', () => {
     const dir = repo();
-    put(dir, { 'ceilings.json': JSON.stringify({ 'big.txt': 26000 }) });
+    put(dir, { 'ceilings.json': JSON.stringify({ 'big.txt': 25000 }) });
     stage(dir, { 'big.txt': 25000 });
     zero(run(tmpDir(), '--root', dir, '--baseline', path.join(dir, 'ceilings.json')), 1);
   });
@@ -438,7 +431,7 @@ describe('ceilings come from the index', () => {
 
   test('a staged ceiling raise lets the grown file through', () => {
     const dir = repo();
-    baseline(dir, { 'a.txt': 30000 });
+    baseline(dir, { 'a.txt': 26000 });
     stage(dir, { 'a.txt': 26000 });
     const r = run(dir);
     expect([r.code, r.err]).toEqual([0, '']);

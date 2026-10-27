@@ -108,7 +108,9 @@ test('a file with a baseline ceiling that grows past it blocks the commit', () =
   assert.equal(repo.head(), before, 'a blocked commit must not move HEAD');
 });
 
-test('a file with a baseline ceiling that shrinks commits', () => {
+// A shrink must lower its ceiling in the same commit (rule L90), so the hook and a
+// later --all run agree.
+test('a file that shrinks below its ceiling commits only with the lowered ceiling staged', () => {
   const repo = sizeGateRepo();
   repo.write('scripts/file-size-baseline.json', '{\n  "seeded.txt": 25000\n}\n');
   repo.write('seeded.txt', 'y'.repeat(25000));
@@ -118,6 +120,12 @@ test('a file with a baseline ceiling that shrinks commits', () => {
   const before = repo.head();
   repo.write('seeded.txt', 'y'.repeat(24000));
   repo.git(['add', 'seeded.txt']);
+  const stale = repo.commit('shrink');
+  assert.equal(stale.status, 1, outputOf(stale));
+  assert.ok(outputOf(stale).includes('stale ceilings'), outputOf(stale));
+  assert.equal(repo.head(), before, 'a blocked commit must not move HEAD');
+  repo.write('scripts/file-size-baseline.json', '{\n  "seeded.txt": 24000\n}\n');
+  repo.git(['add', 'scripts/file-size-baseline.json']);
   const r = repo.commit('shrink');
   assert.equal(r.status, 0, outputOf(r));
   assert.notEqual(repo.head(), before);

@@ -2,6 +2,9 @@
 # `set -euo pipefail` followed by a carriage return is not a valid bash command.
 *.sh text eol=lf
 scripts/install/tiers.tsv text eol=lf
+# The same for the PowerShell installer: text tests read the committed bytes, and a Windows checkout made
+# them CRLF (platforms.yml run 40440396551). PowerShell 5.1 and 7 run LF scripts.
+*.ps1 text eol=lf
 # .githooks/pre-commit is a bash script without a .sh suffix, so *.sh does not cover it.
 .githooks/* text eol=lf
 # The website is not part of the release archive.

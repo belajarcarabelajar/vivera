@@ -1,7 +1,13 @@
 # Vivera in a container: Bun, git, and the skills linked for the image's non-root user.
 #
-# NOT VERIFIED: docker, podman and hadolint were absent where this file was written, so no image
-# has been built or run. scripts/container.test.mjs checks the file's structure only.
+# VERIFIED: the docker job of .github/workflows/platforms.yml (ubuntu-latest, Docker) builds the
+# default target and runs `./install.sh --check --tier standard --only agents` in the image. It
+# passed in runs 40440396551 (main, 07b584b), 40444890219 and 40446225707 (a branch; the last
+# printed `check: CURRENT`). That workflow is dispatch-only, so after a change re-check it by hand:
+# `gh workflow run platforms.yml`.
+# NOT VERIFIED: hadolint was never run on this file, podman was not tried, and the devcontainer
+# path (target "base" plus its postCreateCommand) was never built. scripts/container.test.mjs
+# checks the file's structure only.
 #
 # Build and run:  docker build -t vivera . && docker run --rm -it vivera
 #

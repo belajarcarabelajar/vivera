@@ -2,17 +2,16 @@
 //
 // Behaviour tests for install.ps1 and scripts/install/windows-*.ps1: the script is RUN in a temp profile
 // (USERPROFILE) against a small fake checkout, and the files it leaves are checked. They need PowerShell
-// (the PWSH env var, else pwsh or powershell on PATH) and skip cleanly without it. On Linux they prove the
-// flow, StrictMode and every guard that does not depend on Windows, NOT Windows semantics (NTFS junctions,
-// Windows PowerShell 5.1, OneDrive reparse points). INSTALL_PS1_ROOT points the suite at another copy of the
-// tree, which is how a mutant is tried without editing the real files.
+// (the PWSH env var, else pwsh or powershell on PATH) and skip cleanly without it. platforms.yml runs them on
+// Windows under pwsh and 5.1; NTFS junctions and OneDrive reparse points stay unproven. INSTALL_PS1_ROOT
+// points the suite at another copy of the tree, which is how a mutant is tried without editing the real files.
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { longTmp } from './lib/ps1-test-paths.mjs';
 
 const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shell = process.env.PWSH ?? Bun.which('pwsh') ?? Bun.which('powershell');
@@ -35,7 +34,7 @@ const put = (file, text) => {
 const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 
 function makeFixture({ homeName = 'h', extraSkill = false } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-ps1-'));
+  const base = longTmp('vivera-ps1-');
   bases.push(base);
   const chk = path.join(base, 'chk');
   const home = path.join(base, homeName);
@@ -87,7 +86,7 @@ describe.skipIf(!shell)('install.ps1 run: parse, help, usage', () => {
     if (fs.existsSync(libDir)) for (const f of fs.readdirSync(libDir).filter((x) => /^windows-.*\.ps1$/.test(x))) files.push(path.join(libDir, f));
     const script = '$e = $null; $t = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($env:PS1_FILE, [ref]$t, [ref]$e); $e | ForEach-Object { $_.Message }; exit $e.Count';
     // A temp HOME, so PowerShell leaves no cache or telemetry id in the real one.
-    const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-ps1-'));
+    const tmpHome = longTmp('vivera-ps1-');
     bases.push(tmpHome);
     for (const f of files) {
       const env = { ...process.env, PS1_FILE: f, HOME: tmpHome, POWERSHELL_TELEMETRY_OPTOUT: '1', POWERSHELL_UPDATECHECK: 'Off', DOTNET_CLI_TELEMETRY_OPTOUT: '1' };
@@ -122,15 +121,15 @@ describe.skipIf(!shell)('install.ps1 run: F3, -Only and -Skip take a list in any
     });
     expect({ code: r.exitCode, err: r.stderr.toString() }).toEqual({ code: 0, err: '' });
     expect(r.stdout.toString()).toContain('Would copy');
-    expect(r.stdout.toString()).toContain('.config/opencode/skills');
+    expect(r.stdout.toString()).toContain(path.join('.config', 'opencode', 'skills'));
   });
 
   test('-File ... -Only "claude,opencode" (one string) selects both, and -Skip wins over -Only', () => {
     const fx = makeFixture();
     const r = run(fx, ['-Only', 'claude,opencode', '-Skip', 'claude', '-DryRun']);
     clean(r);
-    expect(r.out).toContain('.config/opencode/skills');
-    expect(r.out).not.toContain('.claude/skills');
+    expect(r.out).toContain(path.join('.config', 'opencode', 'skills'));
+    expect(r.out).not.toContain(path.join('.claude', 'skills'));
   });
 });
 

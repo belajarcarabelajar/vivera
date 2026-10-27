@@ -7,9 +7,9 @@
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { envWithPath, longTmp } from './lib/ps1-test-paths.mjs';
 
 const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shell = process.env.PWSH ?? Bun.which('pwsh') ?? Bun.which('powershell');
@@ -45,7 +45,7 @@ const hooksPath = (dir) => gitRun(['-C', dir, 'config', '--get', 'core.hooksPath
 
 // The checkout goes at <base>/<sub>; with outerRepo the base itself is a git repo and the checkout has no .git.
 function makeFixture({ ownRepo = true, outerRepo = false } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-ps1-hooks-'));
+  const base = longTmp('vivera-ps1-hooks-');
   bases.push(base);
   if (outerRepo) gitInit(base);
   const chk = path.join(base, 'chk');
@@ -70,9 +70,10 @@ function makeFixture({ ownRepo = true, outerRepo = false } = {}) {
 }
 
 function run(fx, args, env = {}) {
+  const all = { ...process.env, ...GIT_ENV, USERPROFILE: fx.home, HOME: path.join(fx.base, 'pshome'), POWERSHELL_TELEMETRY_OPTOUT: '1', POWERSHELL_UPDATECHECK: 'Off', DOTNET_CLI_TELEMETRY_OPTOUT: '1', ...env };
   const r = Bun.spawnSync([shell, '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', fx.ps1, '-Only', 'claude', ...args], {
     cwd: fx.base,
-    env: { ...process.env, ...GIT_ENV, USERPROFILE: fx.home, HOME: path.join(fx.base, 'pshome'), POWERSHELL_TELEMETRY_OPTOUT: '1', POWERSHELL_UPDATECHECK: 'Off', DOTNET_CLI_TELEMETRY_OPTOUT: '1', ...env },
+    env: env.PATH === undefined ? all : envWithPath(all, env.PATH),
   });
   return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
 }

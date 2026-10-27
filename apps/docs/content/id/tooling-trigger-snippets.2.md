@@ -6,7 +6,7 @@ keseluruhannya. `bun run size:check` memblokir file teks yang lebih dari 5.000 t
 batas 20.000 byte). Ada tiga mode:
 
 ```bash
-bun run size:check                                   # --staged (default, the hook): staged files, size from the index
+bun run size:check                                   # --staged (default, the hook): staged files, size from the index, their stale ceilings
 bun scripts/check-file-size.mjs --all                # every tracked file plus stale ceilings (end of bun run ci)
 bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, then only lower or drop them
 ```
@@ -14,7 +14,7 @@ bun scripts/check-file-size.mjs --write-baseline     # seed the ceilings once, t
 Exit 0 berarti lulus, 1 berarti pelanggaran atau plafon basi, dan 2 berarti kesalahan pemakaian,
 bukan repositori git, baseline tidak valid, atau panggilan git yang gagal.
 File yang sudah melewati batas saat gate ini masuk mempertahankan ukurannya sebagai plafon di
-`scripts/file-size-baseline.json`, sebuah ratchet: menyusut itu bebas, membesar diblokir. Plafon
+`scripts/file-size-baseline.json`, sebuah ratchet: membesar diblokir, dan file yang menyusut menurunkan plafonnya di commit yang sama (`--write-baseline`, lalu stage baseline-nya), karena hook menolak file staged yang tertinggal di bawah plafonnya. Plafon
 dibaca dari salinan file itu yang sudah di-stage. Bila pemecahan file berada di luar cakupan,
 naikkan plafonnya di commit yang sama dengan baris pesan
 `size-raise: <plan-id> <reason>` (`.githooks/commit-msg`, `--all --base <ref>`). File yang di-rename dihitung sebagai file baru, jadi

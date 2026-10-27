@@ -9,7 +9,8 @@
 //
 // WHAT IS JUDGED. The index blob of each path, never the working tree, so the
 // pre-commit hook and `--all` judge the same bytes and partial staging is exact.
-//   --staged          paths from `git diff --cached` (added, copied, modified, renamed)
+//   --staged          paths from `git diff --cached` (added, copied, modified, renamed),
+//                     plus stale ceilings on those paths
 //   --all             every index path, plus stale ceilings in the baseline
 //   --write-baseline  rewrite the baseline from the index (seed or tighten)
 //   --all --base <ref>  also compare the baseline at HEAD with the one at the
@@ -41,11 +42,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
 import { GitError, gitText } from './lib/git.mjs';
+import { BASELINE_REL, renderStale, staleToReport } from './lib/file-size-stale.mjs';
 
 export const LIMIT_BYTES = 20000;
 const LIMIT_TOKENS = LIMIT_BYTES / 4;
-const BASELINE_REL = 'scripts/file-size-baseline.json';
-const REWRITE_CMD = 'bun scripts/check-file-size.mjs --write-baseline';
 const PLANS_REL = 'docs/code-plan/plans';
 const PLAN_ID = /^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MODES = ['--staged', '--all', '--write-baseline', '--commit-msg'];
@@ -242,18 +242,6 @@ export function renderReport(violations, scope = 'staged') {
   return lines.join('\n');
 }
 
-function renderStale(stale, baselineName) {
-  const lines = [`[size-gate] stale ceilings in ${baselineName}:`];
-  for (const s of stale) {
-    const now = s.reason === 'gone'
-      ? 'no longer judged (removed, binary, symlink, or -size-gate)'
-      : s.reason === 'within-limit' ? `now ${s.bytes} bytes, within the limit` : `now ${s.bytes} bytes`;
-    lines.push(`  ${s.path}: ceiling ${s.ceiling} bytes, ${now}`);
-  }
-  lines.push(`Lower them with: ${REWRITE_CMD}, then stage ${BASELINE_REL}`);
-  return lines.join('\n');
-}
-
 function nulFields(text) {
   const fields = text.split('\0');
   if (fields.at(-1) === '') fields.pop();
@@ -390,7 +378,7 @@ export function main(argv, cwd = process.cwd()) {
 
   const { violations, checked } = judge(entries, baseline);
   if (violations.length) err(renderReport(violations, opts.mode === '--staged' ? 'staged' : ''));
-  const stale = opts.mode === '--all' ? staleCeilings(entries, baseline) : [];
+  const stale = staleToReport(staleCeilings(entries, baseline), opts.mode);
   if (stale.length) err(renderStale(stale, path.relative(root, file) || file));
   const raised = opts.base ? judgeBranch(root, opts.base) : 0;
   out(`checked ${checked} files, ${violations.length} over the limit`);

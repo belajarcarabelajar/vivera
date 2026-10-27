@@ -77,7 +77,8 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     const runs = job.steps.map((s) => s.run ?? '');
     // The suites read process.env.PWSH; an earlier step must export it, or they fall back to whatever is on PATH.
     const exported = runs.findIndex((r) => /"PWSH=\$exe"[^\n]*\$env:GITHUB_ENV/.test(r) && r.includes('PSEdition'));
-    const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs') && r.includes('scripts/install-ps1-hooks.test.mjs'));
+    const suites = runs.findIndex((r) => r.includes('scripts/install-ps1-run.test.mjs') && r.includes('scripts/install-ps1-hooks.test.mjs')
+      && r.includes('scripts/install-ps1-relfiles.test.mjs'));
     expect(exported).toBeGreaterThanOrEqual(0);
     expect(suites).toBeGreaterThan(exported);
   });

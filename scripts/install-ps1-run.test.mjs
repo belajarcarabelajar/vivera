@@ -3,7 +3,7 @@
 // Behaviour tests for install.ps1 and scripts/install/windows-*.ps1: the script is RUN in a temp profile
 // (USERPROFILE) against a small fake checkout, and the files it leaves are checked. They need PowerShell
 // (the PWSH env var, else pwsh or powershell on PATH) and skip cleanly without it. platforms.yml runs them on
-// Windows under pwsh and 5.1; NTFS junctions and OneDrive reparse points stay unproven. INSTALL_PS1_ROOT
+// Windows under pwsh and 5.1, links as junctions there; OneDrive reparse points stay unproven. INSTALL_PS1_ROOT
 // points the suite at another copy of the tree, which is how a mutant is tried without editing the real files.
 
 import { afterAll, describe, expect, test } from 'bun:test';
@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { longTmp } from './lib/ps1-test-paths.mjs';
+import { linkDir, longTmp } from './lib/ps1-test-paths.mjs';
 
 const ROOT = process.env.INSTALL_PS1_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const shell = process.env.PWSH ?? Bun.which('pwsh') ?? Bun.which('powershell');
@@ -331,10 +331,10 @@ describe.skipIf(!shell)('install.ps1 run: -Uninstall', () => {
   });
 });
 
-describe.skipIf(!shell || win)('install.ps1 run: links (Linux symlinks stand for junctions)', () => {
+describe.skipIf(!shell)('install.ps1 run: links (junctions on Windows, symlinks elsewhere)', () => {
   test('M6: a skills directory that links into this checkout is the source: nothing is moved, written, or removed there', () => {
     const fx = makeFixture();
-    fs.symlinkSync(path.join(fx.chk, 'skills'), fx.skills);
+    linkDir(path.join(fx.chk, 'skills'), fx.skills);
     for (const args of [ONLY, [...ONLY, '-Update'], [...ONLY, '-Uninstall']]) {
       const r = run(fx, args);
       clean(r);
@@ -349,7 +349,7 @@ describe.skipIf(!shell || win)('install.ps1 run: links (Linux symlinks stand for
     const dots = path.join(fx.base, 'dotfiles', 'skills');
     put(path.join(dots, 'sucp-a', 'SKILL.md'), 'dotfiles copy\n');
     put(path.join(dots, 'super-ultra-code-plan', 'SKILL.md'), 'dotfiles orchestrator\n');
-    fs.symlinkSync(dots, fx.skills);
+    linkDir(dots, fx.skills);
     const inst = run(fx, ONLY);
     clean(inst);
     expect(inst.out).toContain('reached through a symlinked directory; left alone');
@@ -527,12 +527,12 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
   });
 });
 
-describe.skipIf(!shell || win)('install.ps1 run: W3, nothing is created, moved or retargeted through a linked directory', () => {
+describe.skipIf(!shell)('install.ps1 run: W3, nothing is created, moved or retargeted through a linked directory', () => {
   const linked = () => {
     const fx = makeFixture();
     const dots = path.join(fx.base, 'dotfiles', 'skills');
     fs.mkdirSync(dots, { recursive: true });
-    fs.symlinkSync(dots, fx.skills);
+    linkDir(dots, fx.skills);
     return { fx, dots };
   };
 
@@ -556,7 +556,7 @@ describe.skipIf(!shell || win)('install.ps1 run: W3, nothing is created, moved o
     const other = path.join(fx.base, 'dotfiles', 'claude');
     fs.mkdirSync(other, { recursive: true });
     fs.rmSync(path.join(fx.home, '.claude'), { recursive: true });
-    fs.symlinkSync(other, path.join(fx.home, '.claude'));
+    linkDir(other, path.join(fx.home, '.claude'));
     const r = run(fx, ONLY);
     clean(r);
     expect(r.out).toContain('reached through a symlinked directory; left alone');

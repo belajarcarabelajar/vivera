@@ -5,7 +5,6 @@
 // No MCP, no external packages — runs under Bun only.
 
 import { readFileSync, existsSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The publisher's own freshness verdict, IMPORTED rather than re-derived. Two
@@ -16,6 +15,9 @@ import { planFreshness } from './plan-publish.mjs';
 import { strictYamlError } from './frontmatter-strict.mjs';
 import { sizeGateWarnings } from './lib/plan-size-warn.mjs';
 import { missingTestPaths } from './lib/test-paths.mjs';
+import { run, STEP_MAX_BUFFER } from './lib/runner-process.mjs';
+
+export { reapGroup } from './lib/runner-process.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SYNCER = path.join(__dirname, 'plan-sync.mjs');
@@ -945,60 +947,7 @@ function idempotencyMismatch(t) {
 
 // ---------- Execution ----------
 
-// A step that overruns `step_timeout_s` must take its CHILDREN with it.
-//
-// Measured, not assumed. `spawnSync(..., { shell: true, timeout })` signals only
-// the shell it spawned: on `sh -c "sleep 47 & wait"` with a 2s timeout it
-// returned ETIMEDOUT/SIGTERM and the backgrounded `sleep 47` was still running
-// afterwards. A plan step is written as a command chain (`&&`), and commands in
-// this repository spawn builds, test runners, and browsers, so a timed-out step
-// used to leave exactly the dangling worker the master skill's own Stalled
-// Subagent & Stale-Writer Guardrail warns about — aimed at the agent, and never
-// at the runner executing on its behalf.
-//
-// `detached: true` puts the child in its OWN process group, so one signal to the
-// negated pid reaches every descendant. SIGTERM first (the polite signal, so a
-// build gets to clean up its own temp files), then SIGKILL for whatever is left
-// after a short grace period.
-const GROUP_KILL_GRACE_MS = 500;
-
-export function reapGroup(pid, { log } = {}) {
-  if (!pid) return false;
-  let killed = false;
-  for (const signal of ['SIGTERM', 'SIGKILL']) {
-    try {
-      process.kill(-pid, signal);
-      killed = true;
-    } catch (e) {
-      // ESRCH means the group is already gone, which is the success case here.
-      // EPERM means it exists and is not ours, and retrying SIGKILL would not
-      // change that, so both stop the sweep rather than throwing: a cleanup path
-      // that throws would mask the timeout the caller is trying to report.
-      break;
-    }
-    if (signal === 'SIGTERM') {
-      // Synchronous by design. There is no event loop to come back to inside
-      // spawnSync's caller, so the grace period is a blocking wait, and it is
-      // bounded and short by design.
-      spawnSync('sleep', [`${GROUP_KILL_GRACE_MS / 1000}`]);
-    }
-  }
-  if (killed) log?.(`      (reaped the timed-out step's process group ${pid})`);
-  return killed;
-}
-
-function run(cmd, timeoutMs, { log } = {}) {
-  const r = spawnSync(cmd, { shell: true, encoding: 'utf8', timeout: timeoutMs, detached: true });
-  const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT');
-  const reaped = timedOut ? reapGroup(r.pid, { log }) : false;
-  return {
-    exit: timedOut ? 124 : (r.status ?? 1),
-    timedOut,
-    reaped,
-    stderr: r.stderr || '',
-    stdout: r.stdout || '',
-  };
-}
+// Step execution and process-group reaping live in lib/runner-process.mjs.
 
 // ---------- Failure classification ----------
 //
@@ -1066,8 +1015,12 @@ export function validateRetryIf(value) {
   return value;
 }
 
-export function classifyFailure({ exit, timedOut = false }) {
+export function classifyFailure({ exit, timedOut = false, spawnError = null }) {
   if (timedOut) return { klass: 'timeout', transient: true, basis: 'ETIMEDOUT from spawnSync' };
+  if (spawnError?.code === 'ENOBUFS') {
+    return { klass: 'output-limit', transient: false, basis: `ENOBUFS: output exceeded maxBuffer ${spawnError.maxBuffer} bytes` };
+  }
+  if (spawnError) return { klass: 'spawn-error', transient: 'unknown', basis: `spawn error ${spawnError.code}` };
   const known = EXIT_CLASSES[exit];
   if (known) return { ...known };
   return {
@@ -1130,7 +1083,7 @@ function expectedExitOf(t, stepIndex) {
 // disagreement the loop actually had.
 const LOOP_EXPECTED_EXIT = 0;
 
-export function executePlan(plan, { execute = false, log = () => {}, dir = process.cwd() } = {}) {
+export function executePlan(plan, { execute = false, log = () => {}, dir = process.cwd(), maxBuffer = STEP_MAX_BUFFER } = {}) {
   const order = topoSort(plan.tasks);
   const byId = new Map(plan.tasks.map((t) => [t.id, t]));
   const retryMax = plan.defaults?.retry_transient_max ?? 1;
@@ -1172,7 +1125,7 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
     const skipGone = t.skip_if ? missingTestPaths(t.skip_if, dir) : [];
     if (skipGone.length) log(`      (${id} skip_if ignored, E_MISSING_TEST_PATH: ${skipGone.join(', ')})`);
     if (t.skip_if && !skipGone.length) {
-      const r = run(t.skip_if, timeoutMs);
+      const r = run(t.skip_if, timeoutMs, { maxBuffer });
       if (r.exit === 0) { status.set(id, 'SKIPPED-IDEMPOTENT'); log(`  ${id}: SKIPPED-IDEMPOTENT (skip_if exit 0)`); continue; }
     }
 
@@ -1234,14 +1187,14 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
         break;
       }
       do {
-        r = run(step.cmd, stepTimeoutMs, { log });
+        r = run(step.cmd, stepTimeoutMs, { log, maxBuffer });
         attempt++;
         loopConverged = true;
         if (r.exit === want && loopCmd !== null) {
           // Through the same run() helper and the same timeout as any step, so a
           // probe that overruns its step's budget is killed with its process group
           // and cannot leak the children a step command can spawn.
-          const probe = run(loopCmd, stepTimeoutMs, { log });
+          const probe = run(loopCmd, stepTimeoutMs, { log, maxBuffer });
           if (probe.exit === 0) break; // converged: the step passes
           // Not converged. The step runs again inside the retry budget it already
           // declared, and the probe's own result is what the failure is reported
@@ -1331,10 +1284,13 @@ export function executePlan(plan, { execute = false, log = () => {}, dir = proce
     // actually failed would not appear in the ledger at all.
     const loopFailed = failSource === 'loop_until';
     const expected = loopFailed ? LOOP_EXPECTED_EXIT : expectedExitOf(t, failStep - 1);
-    const cause = loopFailed
-      ? `step ${failStep} loop_until did not converge: exited ${lastExit}, expected ${LOOP_EXPECTED_EXIT}`
-      : `step ${failStep} exited ${lastExit}, expected ${expected}`;
     const cls = failDetail?.cls ?? { klass: 'code', transient: 'unknown', basis: 'no step detail recorded' };
+    const stopped = failDetail?.spawnError
+      ? `stopped by the runner (${cls.basis}), real exit unknown, expected ${loopFailed ? LOOP_EXPECTED_EXIT : expected}`
+      : null;
+    const cause = loopFailed
+      ? `step ${failStep} loop_until did not converge: ${stopped ?? `exited ${lastExit}, expected ${LOOP_EXPECTED_EXIT}`}`
+      : `step ${failStep} ${stopped ?? `exited ${lastExit}, expected ${expected}`}`;
     ledger.push({
       task: id,
       step: failStep,

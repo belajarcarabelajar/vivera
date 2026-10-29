@@ -8,7 +8,7 @@
 | API/data/migration | Contract/schema validation, migration or rollback check, affected consumer check |
 | Security/permissions | Allowed and denied paths, boundary validation, secret-handling review |
 | Code review/diff | Intended-file review, no accidental changes, no secrets, reviewer or documented self-review |
-| CI/repository gates | Required checks for the affected surface, including integration/contract/e2e checks when applicable |
+| CI/repository gates | Required checks for the affected surface, including integration/contract checks when applicable (browser e2e only on explicit user request) |
 | Compatibility | Consumer impact, versioning or migration decision, rollback and data-preservation check |
 | Reproducibility | Documented environment, versions, setup, fixtures, commands, and expected outputs reproduce the result |
 | Test reliability | Deterministic/isolation check, flaky-test classification, cleanup, and bounded retry evidence |

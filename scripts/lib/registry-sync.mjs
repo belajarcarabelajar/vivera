@@ -170,12 +170,17 @@ export function setupWorktree(session, repoRoot) {
   // After a crash the folder can be gone while the branch survives; prune drops
   // the stale entry and the add then reuses the branch instead of `-b`.
   const branchExists = run('git', ['-C', repo, 'rev-parse', '--verify', '--quiet', `refs/heads/${session.branch}`]).ok;
-  const add = branchExists
-    ? ['worktree', 'add', session.worktree, session.branch]
-    : ['worktree', 'add', session.worktree, '-b', session.branch, `origin/${session.base}`];
-  for (const step of [['worktree', 'prune'], ['fetch', 'origin', session.base], add]) {
-    const r = run('git', ['-C', repo, ...step]);
-    console.log(`${r.ok ? 'ok' : 'FAILED'}: git ${step.join(' ')} (in ${repo})`);
+  // Under VIVERA_WORKTREE_ROOT (the external disk) the worktree comes from
+  // `wt-new`, which refuses an unmounted disk, links node_modules from the main
+  // checkout, and locks the worktree so a prune while the disk is away keeps it.
+  const root = process.env.VIVERA_WORKTREE_ROOT;
+  const external = Boolean(root) && session.worktree.startsWith(`${path.resolve(root)}${path.sep}`);
+  const add = external
+    ? ['wt-new', session.branch, path.basename(session.worktree), ...(branchExists ? [] : ['--from', `origin/${session.base}`])]
+    : ['git', 'worktree', 'add', session.worktree, ...(branchExists ? [session.branch] : ['-b', session.branch, `origin/${session.base}`])];
+  for (const [cmd, ...args] of [['git', 'worktree', 'prune'], ['git', 'fetch', 'origin', session.base], add]) {
+    const r = cmd === 'git' ? run(cmd, ['-C', repo, ...args]) : run(cmd, args, { cwd: repo });
+    console.log(`${r.ok ? 'ok' : 'FAILED'}: ${cmd} ${args.join(' ')} (in ${repo})`);
     if (!r.ok) {
       console.error(r.err);
       return 1;

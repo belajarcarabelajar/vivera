@@ -16,6 +16,8 @@ const GIT_ENV = {
   GIT_CONFIG_GLOBAL: '/dev/null',
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com',
+  // The laptop's ~/.bashrc sets this; inherited, every claim below would run the real wt-new.
+  VIVERA_WORKTREE_ROOT: '',
 };
 
 function git(cwd, ...args) {
@@ -89,6 +91,24 @@ test('claim --worktree does not take a worktree on a branch that only shares the
     const r = f.claim();
     assert.ok(!r.out.includes('skipping'), r.out);
     assert.equal(r.code, 1, r.out + r.err);
+  } finally { f.cleanup(); }
+});
+
+test('claim --worktree under VIVERA_WORKTREE_ROOT creates the worktree with wt-new from the repository', () => {
+  const f = gitFixture();
+  try {
+    const bin = path.join(f.dir, 'bin');
+    const ext = path.join(f.dir, 'ext');
+    const log = path.join(f.dir, 'wt-new.log');
+    mkdirSync(bin);
+    writeFileSync(path.join(bin, 'wt-new'), `#!/bin/sh\necho "$PWD $*" >> '${log}'\n`);
+    chmodSync(path.join(bin, 'wt-new'), 0o755);
+    const r = cli({ PATH: `${bin}:${process.env.PATH}`, VIVERA_WORKTREE_ROOT: ext },
+      'claim', '--plan', 'p', '--session', 'w1', '--repo', f.repo, '--registry', f.registry, '--worktree');
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.equal(readFileSync(log, 'utf8').trim(), `${f.repo} p/w1 w1 --from origin/main`);
+    assert.equal(loadRegistry(f.registry).sessions[0].worktree, path.join(ext, 'repo-wt', 'w1'));
+    assert.ok(!existsSync(f.worktree), 'nothing is created beside the repository');
   } finally { f.cleanup(); }
 });
 

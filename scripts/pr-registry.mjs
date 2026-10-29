@@ -41,6 +41,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkCloseout } from './plan-closeout.mjs';
 import { reconcile, setupWorktree, openPr } from './lib/registry-sync.mjs';
+import { slugify, branchFor, worktreeFor } from './lib/registry-names.mjs';
+
+export { branchFor, worktreeFor };
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -74,53 +77,6 @@ const CLOSED_STATE = 'closed';
 // the base branch. `closed` leaves origin/<base> untouched, so it must not feed
 // the rebase calculation the way a merge does.
 const TERMINAL_STATES = [TERMINAL_STATE, CLOSED_STATE];
-
-// Branch and worktree names have to survive a POSIX filesystem, a git ref, and
-// a shell. Everything outside this set collapses to a single dash so two
-// different inputs can never produce the same slot by differing only in
-// punctuation.
-function slugify(input, label) {
-  if (typeof input !== 'string' || input.trim() === '') {
-    throw new Error(`${label} must be a non-empty string`);
-  }
-  const collapsed = input.trim().replace(/[^A-Za-z0-9._-]+/g, '-');
-  // Checked before trimming, so a leading dot or dash is refused rather than
-  // quietly trimmed into a legal-looking name. `git check-ref-format` rejects
-  // both, and a branch the push cannot create is a slot the session cannot use.
-  if (collapsed.startsWith('.') || collapsed.startsWith('-') || collapsed.includes('..')) {
-    throw new Error(`${label} "${input}" normalises to "${collapsed}", which is not a legal branch segment`);
-  }
-  const slug = collapsed.replace(/-+$/g, '');
-  if (slug === '') throw new Error(`${label} "${input}" contains no usable characters`);
-  return slug;
-}
-
-// No tool prefix. A branch name is part of the repository's permanent history, so
-// it is written to look like a branch a person would have written. A leading
-// `ai/` (or any vendor, agent, or workflow marker) asserts an authorship nobody
-// asked to assert, and it is the same defect as the `Generated with <tool>`
-// footer this repository already forbids: an unrequested claim about who made
-// the change, in an artifact nobody can redact afterwards. The plan id already
-// dates and describes the work, so the prefix carried no information either.
-//
-// Revert: put `ai/` back in the template literal and update the two assertions in
-// pr-registry.test.mjs that name the shape. Slots already recorded in
-// pr.registry.json keep whatever branch they claimed, so the change is
-// forward-only and needs no migration.
-export function branchFor(planId, sessionId) {
-  return `${slugify(planId, 'plan id')}/${slugify(sessionId, 'session id')}`;
-}
-
-// The worktree lives beside the repository, never inside it. A worktree nested
-// in the repository it checks out is picked up by the parent's file watchers,
-// formatters, and test globs, which then operate on two copies of the same file.
-export function worktreeFor(repoRoot, sessionId) {
-  if (typeof repoRoot !== 'string' || repoRoot.trim() === '') {
-    throw new Error('repo root must be a non-empty string');
-  }
-  const base = path.basename(path.resolve(repoRoot));
-  return path.join(path.dirname(path.resolve(repoRoot)), `${base}-wt`, slugify(sessionId, 'session id'));
-}
 
 export function loadRegistry(registryPath = DEFAULT_REGISTRY) {
   if (!existsSync(registryPath)) {
@@ -271,11 +227,11 @@ function assertNoCollisions(sessions, where) {
 
 // ---------- Claim ----------
 
-export function claimSlot(registry, { plan, session, repoRoot, dependsOn = [] }) {
+export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn = [] }) {
   const planSlug = slugify(plan, 'plan id');
   const sessionSlug = slugify(session, 'session id');
   const branch = branchFor(planSlug, sessionSlug);
-  const worktree = worktreeFor(repoRoot, sessionSlug);
+  const worktree = worktreeFor(repoRoot, sessionSlug, root);
   const repo = path.resolve(repoRoot);
 
   const existing = registry.sessions.find((s) => s.session === sessionSlug);
@@ -573,6 +529,7 @@ function main(argv) {
         plan: flags.plan,
         session: flags.session,
         repoRoot,
+        root: process.env.VIVERA_WORKTREE_ROOT,
         dependsOn: flags['depends-on'] ? flags['depends-on'].split(',').map((d) => d.trim()).filter(Boolean) : [],
       }), { registryPath });
       const { session, created, repoMismatch } = result;
@@ -587,7 +544,9 @@ function main(argv) {
         console.log('Next, in the repository, before any subagent writes:');
         console.log(`  git worktree prune`);
         console.log(`  git fetch origin ${session.base}`);
-        console.log(`  git worktree add ${session.worktree} -b ${session.branch} origin/${session.base}`);
+        console.log(process.env.VIVERA_WORKTREE_ROOT
+          ? `  wt-new ${session.branch} ${path.basename(session.worktree)} --from origin/${session.base}`
+          : `  git worktree add ${session.worktree} -b ${session.branch} origin/${session.base}`);
         console.log('Gates that need gitignored local state (plans, configs, node_modules): symlink it into a detached /tmp worktree at the session head, never into this worktree (MEMORY.md L56).');
       }
       return 0;

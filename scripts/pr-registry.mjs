@@ -546,7 +546,7 @@ function main(argv) {
         console.log(`  git fetch origin ${session.base}`);
         console.log(process.env.VIVERA_WORKTREE_ROOT
           ? `  wt-new ${session.branch} ${path.basename(session.worktree)} --from origin/${session.base}`
-          : `  git worktree add ${session.worktree} -b ${session.branch} origin/${session.base}`);
+          : '  no VIVERA_WORKTREE_ROOT: set it, then claim again with --worktree (wt-new)');
         console.log('Gates that need gitignored local state (plans, configs, node_modules): symlink it into a detached /tmp worktree at the session head, never into this worktree (MEMORY.md L56).');
       }
       return 0;

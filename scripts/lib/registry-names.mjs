@@ -52,10 +52,16 @@ export function branchFor(planId, sessionId) {
 // node_modules back to the main checkout on the internal disk. Without it the
 // worktree stays beside the repository.
 export function worktreeFor(repoRoot, sessionId, root) {
+  return path.join(worktreesDirFor(repoRoot, root), slugify(sessionId, 'session id'));
+}
+
+// The `<repo>-wt` container that holds every slot of `repoRoot`. Exported so
+// the plan publisher derives the same directory instead of a copy that drifts.
+export function worktreesDirFor(repoRoot, root) {
   if (typeof repoRoot !== 'string' || repoRoot.trim() === '') {
     throw new Error('repo root must be a non-empty string');
   }
   const base = path.basename(path.resolve(repoRoot));
   const parent = root ? path.resolve(root) : path.dirname(path.resolve(repoRoot));
-  return path.join(parent, `${base}-wt`, slugify(sessionId, 'session id'));
+  return path.join(parent, `${base}-wt`);
 }

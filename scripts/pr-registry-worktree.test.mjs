@@ -112,6 +112,28 @@ test('claim --worktree under VIVERA_WORKTREE_ROOT creates the worktree with wt-n
   } finally { f.cleanup(); }
 });
 
+test('claim without VIVERA_WORKTREE_ROOT points at wt-new instead of suggesting git worktree add', () => {
+  const f = gitFixture();
+  try {
+    const r = cli({}, 'claim', '--plan', 'p', '--session', 'w1', '--repo', f.repo, '--registry', f.registry);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.ok(!r.out.includes('git worktree add'), r.out);
+    assert.match(r.out, /VIVERA_WORKTREE_ROOT/);
+    assert.match(r.out, /wt-new/);
+    assert.match(r.out, /claim .*--worktree/);
+  } finally { f.cleanup(); }
+});
+
+test('claim under VIVERA_WORKTREE_ROOT still suggests the wt-new command', () => {
+  const f = gitFixture();
+  try {
+    const r = cli({ VIVERA_WORKTREE_ROOT: path.join(f.dir, 'ext') },
+      'claim', '--plan', 'p', '--session', 'w1', '--repo', f.repo, '--registry', f.registry);
+    assert.equal(r.code, 0, r.out + r.err);
+    assert.match(r.out, /^ {2}wt-new p\/w1 w1 --from origin\/main$/m);
+  } finally { f.cleanup(); }
+});
+
 test('claim --worktree exits 1 with git stderr when a git step fails', () => {
   const f = gitFixture();
   try {

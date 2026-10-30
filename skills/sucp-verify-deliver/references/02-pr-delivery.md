@@ -4,7 +4,7 @@ Three failure modes appear the moment more than one session touches one reposito
 | Failure | What actually happens | Where it is prevented |
 |---|---|---|
 | Two sessions on one branch | The second push fast-forwards or is rejected; the agent reaches for `--force` and the first session's PR now carries the second session's commits | Derived branch names, refused at claim time |
-| Two sessions in one worktree | `git worktree add` fails, or the second session works inside the first session's checkout and both diffs become garbage | Derived worktree paths, refused at claim time and at load time |
+| Two sessions in one worktree | Creating the worktree fails, or the second session works inside the first session's checkout and both diffs become garbage | Derived worktree paths, refused at claim time and at load time |
 | Merging in finish order | A session that depends on another lands first, then conflicts with the rest of the batch | Topological merge order from a recorded `depends_on` graph |
 
 So the naming is computed rather than chosen, and the order is computed rather than remembered.
@@ -24,10 +24,13 @@ So the naming is computed rather than chosen, and the order is computed rather t
 ### 5.1 Isolation, before any subagent is dispatched
 ```bash
 # One claim per session. It derives the branch and worktree path, then runs
-# git worktree prune, git fetch origin <base>, git worktree add.
+# git worktree prune, git fetch origin <base>, and wt-new, which creates the
+# worktree under VIVERA_WORKTREE_ROOT on the external disk.
 bun scripts/pr-registry.mjs claim --plan <plan-id> --session <session-slug> --worktree \
   [--repo <repo-root>] [--depends-on <slug>,<slug>]
 ```
+
+- The claim creates the worktree through `wt-new` on the external disk (`<VIVERA_WORKTREE_ROOT>/<repo>-wt/<session>`); `wt-new` refuses an unmounted disk, links `node_modules` from the main checkout, and locks the worktree. Agents never hand-type `git worktree add`: a hand-typed path lands beside the repository on the internal disk. With `VIVERA_WORKTREE_ROOT` unset the claim prints no command to copy; mount the disk, set the variable, and claim with `--worktree`.
 
 - The branch is exactly `<plan-id>/<session-slug>`, and carries **no tool, vendor, or workflow prefix**. A branch name is permanent, public history, so a prefix is an authorship claim nobody can redact (the attribution-footer defect, see the copy rule); the plan id already dates and describes the work. Slots claimed with the old `ai/` prefix keep it.
 - The claim is **idempotent**. A retried claim after a crashed session returns the same slot instead of allocating a second one, because the names are a pure function of the two inputs; `--worktree` skips a worktree already on the branch, and a failed git step exits 1 with git's stderr.

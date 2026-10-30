@@ -27,10 +27,17 @@
 // worktree checkout contains the whole tracked history: enumerating one
 // republishes every historical plan a second time, which is exactly the
 // duplication that registering a worktree as its own project caused.
+//
+// Session slots need no entry: `pr-registry claim --worktree` puts them at
+// <repo-parent>/<repo>-wt/<slot>, or at $VIVERA_WORKTREE_ROOT/<repo>-wt/<slot>
+// when that is set (another disk), and routing derives both containers from
+// the project root. The second one is matched by basename alone, so two
+// projects with one basename make it ambiguous, and that is refused.
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { worktreesDirFor } from './lib/registry-names.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -122,11 +129,12 @@ function candidateRoots(p) {
 // `scripts/pr-registry.mjs claim` creates every session worktree at
 // <repo-parent>/<repo-basename>-wt/<slot>. Deriving that container from a
 // project's root is what routes a slot without a per-slot config entry. Both
-// directions live here so the publisher and the issue mirror cannot disagree.
+// directions live here so the publisher and the issue mirror cannot disagree,
+// and the container comes from the same helper claim uses.
 const SESSION_WORKTREE_SUFFIX = '-wt';
 
 export function sessionWorktreesDir(root) {
-  return `${path.resolve(root)}${SESSION_WORKTREE_SUFFIX}`;
+  return worktreesDirFor(root);
 }
 
 // The root checkout that owns `dir` when `dir` is a <root>-wt/<slot> directory,
@@ -143,24 +151,35 @@ function inSessionWorktree(container, planPath) {
   return owns(container, planPath) && path.relative(container, path.resolve(planPath)).includes(path.sep);
 }
 
-export function resolveProject(registry, planPath) {
+// The session containers derived from a project root: the sibling <root>-wt,
+// plus <worktreeRoot>/<basename>-wt when a worktree root is set.
+function sessionContainers(p, worktreeRoot) {
+  const out = [sessionWorktreesDir(p.root)];
+  if (typeof worktreeRoot === 'string' && worktreeRoot !== '') out.push(worktreesDirFor(p.root, worktreeRoot));
+  return out;
+}
+
+export function resolveProject(registry, planPath, { worktreeRoot = process.env.VIVERA_WORKTREE_ROOT } = {}) {
   // Longest root wins, so a project nested inside another project resolves to
   // the inner one instead of the outer. Worktrees compete on the same scale,
   // otherwise a worktree path nested in a registered project would lose to the
-  // outer project it is supposed to belong to. The derived <root>-wt container
+  // outer project it is supposed to belong to. A derived <root>-wt container
   // is shorter than any explicit <root>-wt/<slot> entry, so an explicit
   // `worktrees` entry always wins over it.
   let best = null;
   let bestRoot = null;
+  let bestDerived = false;
   for (const p of registry.projects) {
-    const roots = candidateRoots(p);
-    const container = sessionWorktreesDir(p.root);
-    if (inSessionWorktree(container, planPath)) roots.push(container);
-    for (const root of roots) {
+    const roots = candidateRoots(p).map((root) => [root, false]);
+    for (const c of sessionContainers(p, worktreeRoot)) {
+      if (inSessionWorktree(c, planPath)) roots.push([c, true]);
+    }
+    for (const [root, derived] of roots) {
       if (!owns(root, planPath)) continue;
       if (!best || root.length > bestRoot.length) {
         best = p;
         bestRoot = root;
+        bestDerived = derived;
       }
     }
   }
@@ -169,6 +188,17 @@ export function resolveProject(registry, planPath) {
       `no project in plans.publish.json owns "${planPath}". `
       + 'Add its root to plans.publish.json, or pass a path under a registered project.',
     );
+  }
+  // An external container is named by the root's basename only, so two
+  // projects can derive the same one. Picking either would misfile the plan.
+  if (bestDerived) {
+    const sharing = registry.projects.filter((p) => sessionContainers(p, worktreeRoot).includes(bestRoot));
+    if (sharing.length > 1) {
+      throw new Error(
+        `"${planPath}" is in ${bestRoot}, which projects ${sharing.map((p) => `"${p.name}"`).join(', ')} `
+        + 'all derive. Add the slot to one project\'s "worktrees" in plans.publish.json.',
+      );
+    }
   }
   return best;
 }

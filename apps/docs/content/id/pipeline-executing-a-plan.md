@@ -5,7 +5,7 @@ category: pipeline
 slug: executing-a-plan
 order: 5
 source: README.md#Executing an `ultra-plan/v1` Plan
-source_hash: "ea17546b08c1"
+source_hash: "65da4dd635e9"
 ---
 
 <a id="executing-an-ultra-planv1-plan"></a>
@@ -19,7 +19,7 @@ dependensi, hanya Bun.
 ```bash
 bun run plan:check docs/code-plan/plans/<plan>.md   # validate the DAG and the visual map
 bun run plan:run   docs/code-plan/plans/<plan>.md   # same, then execute the tasks
-bun run contract:check                              # fast structural check for all 23 runner keys (~1s)
+bun run contract:check                              # fast structural check for all 25 runner keys (~1s)
 bun run audit:skipif                                # tally & audit skip_if predicates across registry
 ```
 
@@ -69,7 +69,7 @@ file secara bersamaan. Assertion yang bertahan adalah yang **komparatif dan dise
 kedua implementasi diukur berurutan pada input yang sama dengan urutan bergantian, sehingga jeda
 GC mengenai keduanya dan saling meniadakan dalam hasil bagi.
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) memverifikasi bahwa `templates/implementation-plan-template.md` dan header plan pada master skill mendeklarasikan ke-24 key yang dibaca runner (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, dan seterusnya) memakai perbandingan AST/frontmatter dalam ~1 detik, tanpa perlu menjalankan rendering Mermaid lewat headless browser.
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) memverifikasi bahwa `templates/implementation-plan-template.md` dan header plan pada master skill mendeklarasikan ke-25 key yang dibaca runner (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, dan seterusnya) memakai perbandingan AST/frontmatter dalam ~1 detik, tanpa perlu menjalankan rendering Mermaid lewat headless browser.
 
 Pemeriksaan visual map adalah bagian yang menangkap plan yang berbohong. Setiap heading task
 harus punya node yang cocok di blok Mermaid, dan setiap edge `depends_on` harus cocok dengan
@@ -205,6 +205,8 @@ query yang menunjukkan dampaknya, sehingga klaim tersebut membawa buktinya sendi
 | Entri tanpa ` - ` ASCII yang diikuti bukti minimal 8 karakter, atau yang memuat em dash | **Error validasi** di bawah `require_impacts: true`, menyebut task dan mengutip entrinya; selain itu satu **peringatan** gabungan. Bentuknya sama dengan yang ditegakkan `backfill-plan-impacts.test.mjs`. |
 | `require_impacts` tidak ada | Satu **peringatan** gabungan yang menyebut setiap task yang belum mendeklarasikan, tidak pernah error. |
 | `allow_no_impacts: [T3]` | Membebaskan satu task. Menyebut task yang *justru* mendeklarasikan impacts adalah error tersendiri, sehingga daftar ini tidak bisa menjadi selimut permanen. |
+| `require_traceability: true` + item daftar `AC-n` tanpa baris Traceability | **Error validasi**, dengan menyebut AC-nya. Hal yang sama berlaku untuk baris yang sel Task-nya menyebut task yang tidak dikenal (GHOST reference) atau tidak menyebut id task sama sekali, baris dengan sel Check kosong, rentang terbalik seperti `AC5-AC1`, serta tabel atau kolom AC, Task, atau Check yang tidak ada. |
+| `require_traceability` tidak ada | Satu **peringatan** gabungan yang menyebut AC yang belum terlacak atau tabel yang tidak ada, tidak pernah error. Plan tanpa item daftar `AC-n` tidak diperiksa. |
 | `loop_until: "<command>"` pada langkah iteratif | Runner mengeksekusinya setelah `cmd` milik langkah itu sendiri berhasil. Exit 0 berarti konvergen dan langkah lolos; non-zero menjalankan ulang langkah di dalam anggaran `retry` yang sudah dideklarasikannya, dan menghabiskan anggaran itu adalah kegagalan yang menyebut `loop_until`. Ini selalu sebuah perintah, tidak pernah pencocokan string: `grep -q 'Done' src/x.ts` tetap lolos walaupun perilakunya di-revert, sehingga ia melaporkan konvergensi untuk pekerjaan yang belum konvergen. |
 | `loop_until` tidak ada | Sah, dan merupakan default. Langkah yang tidak beriterasi tidak pernah menjalankan pemeriksaan konvergensi, sehingga setiap plan yang lebih tua dari key ini berperilaku persis seperti sebelumnya. |
 | `loop_until` ada tetapi kosong atau bukan string | **Error validasi**, dengan menyebut task dan langkahnya. Kondisi yang tidak bisa dieksekusi runner lebih buruk daripada tanpa kondisi, karena terbaca sebagai klaim padahal tidak menegakkan apa pun. |

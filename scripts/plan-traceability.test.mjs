@@ -155,6 +155,34 @@ test('the table is also found under a list-item marker, as the plan template wri
   assert.deepEqual(check(md).errors, []);
 });
 
+test('a Task cell token that is not shaped like this plan\'s task ids is not a GHOST', () => {
+  const { errors } = check(planMd({ requireKey: true, table: '| AC-1, AC-2 | T1 (uses UTF-8, SHA256, P1) | `bun test a` | exit |' }));
+  assert.deepEqual(errors, []);
+});
+
+test('a task id outside the T<n> shape is recognised in the Task cell', () => {
+  const md = planMd({ requireKey: true, table: '| AC-1, AC-2 | task-1 | `bun test a` | exit |' })
+    .replace('  - id: T1\n', '  - id: task-1\n').replace('depends_on: [T1]', 'depends_on: [task-1]')
+    .replace('"T1:src/a.ts"', '"task-1:src/a.ts"').replace('### Task T1: A', '### Task task-1: A')
+    .replace('T1["T1: A"] --> T2', 'task-1["task-1: A"] --> T2');
+  const { errors } = check(md);
+  assert.ok(!errors.some((e) => /Traceability/.test(e)), errors.join('\n'));
+});
+
+test('a range spanning more than 200 ids is reported as too large, not expanded', () => {
+  const started = Date.now();
+  assert.deepEqual(normaliseAcIds('AC1-AC999999999'), []);
+  const { errors } = check(planMd({ requireKey: true, table: '| AC1-AC999999999, AC-2 | T1 | `bun test a` | exit |' }));
+  assert.ok(Date.now() - started < 2000);
+  assert.ok(errors.some((e) => /range too large/.test(e) && e.includes('AC1-AC999999999')), errors.join('\n'));
+});
+
+test('a range may end in a bare number, and AC-1-AC-3 still reads as a range', () => {
+  assert.deepEqual(normaliseAcIds('AC1-3'), ['AC-1', 'AC-2', 'AC-3']);
+  assert.deepEqual(normaliseAcIds('AC-1-AC-3'), ['AC-1', 'AC-2', 'AC-3']);
+  assert.deepEqual(normaliseAcIds('AC-2 covers the 3-way merge'), ['AC-2']);
+});
+
 test('AC lines and tables inside code fences are ignored', () => {
   const md = planMd({ requireKey: true, acs: [], table: null })
     .replace('# Demo', '# Demo\n\n```markdown\n- [ ] AC-1: example\n```');

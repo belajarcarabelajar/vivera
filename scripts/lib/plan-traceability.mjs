@@ -11,8 +11,9 @@
 
 const ENABLE_HINT = 'Set `defaults.require_traceability: true` in this plan to make it an error instead of a warning';
 const AC_DEF = /^\s*[-*+]\s+(?:\[[ xX]\]\s+)?AC-?(\d+)\s*:/;
-const AC_TOKEN = /\bAC-?(\d+)(?:\s*(?:\.\.|-|\u2013|\bto\b)\s*AC-?(\d+))?\b/g;
-const TASK_TOKEN = /\b[A-Z]{1,3}-?\d+[a-z]?\b/g;
+const AC_TOKEN = /\bAC-?(\d+)(?:\s*(?:\.\.|-|\u2013|\bto\b)\s*(?:AC-?)?(\d+))?\b/g;
+// A range is expanded id by id, so a typo such as AC1-AC999999999 must not be.
+const MAX_RANGE = 200;
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_MARKER = /^\s*(?:(?:[-*+]\s+)?\*\*Traceability:?\*\*|#{1,6}\s.*Traceability)/i;
 
@@ -22,13 +23,34 @@ const byAcNumber = (a, b) => Number(a.slice(3)) - Number(b.slice(3));
 function parseAcCell(text) {
   const ids = new Set();
   const backwards = [];
+  const tooLarge = [];
   for (const m of String(text).matchAll(AC_TOKEN)) {
     const lo = Number(m[1]);
     const hi = m[2] === undefined ? lo : Number(m[2]);
     if (hi < lo) { backwards.push(m[0]); continue; }
+    if (hi - lo + 1 > MAX_RANGE) { tooLarge.push(m[0]); continue; }
     for (let n = lo; n <= hi; n++) ids.add(acId(n));
   }
-  return { ids: [...ids].sort(byAcNumber), backwards };
+  return { ids: [...ids].sort(byAcNumber), backwards, tooLarge };
+}
+
+// dup-defs: allow the ci-targeted.mjs copy is private to that CLI and not exported
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const idRe = (body) => new RegExp(`(?<![\\w-])${body}(?!\\w)`, 'g');
+
+// Known ids are matched literally, so any id shape works. A GHOST is a token with
+// the letter prefix of an existing id (T9 beside T1..T6) that is not in tasks[]:
+// UTF-8, SHA256 or P1 in a note are not task references.
+function taskRefs(cell, knownIds) {
+  const named = knownIds.filter((id) => idRe(escapeRe(id)).test(cell));
+  const prefixes = new Set(knownIds.map((id) => id.match(/^([A-Za-z]+-?)\d+[a-z]?$/)?.[1]).filter(Boolean));
+  const ghosts = new Set();
+  for (const p of prefixes) {
+    for (const m of cell.matchAll(idRe(`${escapeRe(p)}\\d+[a-z]?`))) {
+      if (!knownIds.includes(m[0])) ghosts.add(m[0]);
+    }
+  }
+  return { named, ghosts: [...ghosts] };
 }
 
 export function normaliseAcIds(text) {
@@ -110,22 +132,21 @@ export function validateTraceability(plan, body, errors, warnings) {
     const missing = [['AC', ac], ['Task', task], ['Check', chk]].filter(([, i]) => i === -1).map(([n]) => n);
     problems.push(`the Traceability table has no ${missing.join(', ')} column header; it needs AC, Task and Check columns`);
   } else {
-    const known = new Set((plan.tasks || []).map((t) => t.id).filter(Boolean));
+    const knownIds = (plan.tasks || []).map((t) => t.id).filter((id) => typeof id === 'string' && id);
     const listed = new Set();
     for (const row of table.rows) {
       const acCell = row[ac] || '';
-      const { ids, backwards } = parseAcCell(acCell);
+      const { ids, backwards, tooLarge } = parseAcCell(acCell);
       for (const b of backwards) problems.push(`Traceability row "${acCell}" has a backwards range ${b}; write the lower id first`);
+      for (const r of tooLarge) problems.push(`Traceability row "${acCell}" has a range too large to expand: ${r} spans more than ${MAX_RANGE} ids`);
       if (ids.length === 0) continue;
       for (const id of ids) {
         listed.add(id);
         if (!defined.has(id)) extra.add(id);
       }
-      const names = [...(row[task] || '').matchAll(TASK_TOKEN)].map((m) => m[0]).filter((t) => !/^AC-?\d/.test(t));
-      for (const n of names) {
-        if (!known.has(n)) problems.push(`Traceability row "${acCell}" names unknown task ${n} (GHOST reference: ${n})`);
-      }
-      if (!names.some((n) => known.has(n))) {
+      const { named, ghosts } = taskRefs(row[task] || '', knownIds);
+      for (const n of ghosts) problems.push(`Traceability row "${acCell}" names unknown task ${n} (GHOST reference: ${n})`);
+      if (named.length === 0) {
         problems.push(`Traceability row "${acCell}" names no task from tasks[] in its Task cell: "${row[task] || ''}"`);
       }
       if ((row[chk] || '').replace(/`/g, '').trim() === '') {

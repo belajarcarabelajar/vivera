@@ -23,6 +23,12 @@ test('a docs/guide change selects what a README.md change selects', () => {
   expect(picked('docs/guide/tooling-validation.md')).toEqual(['copy-rules', 'docs-gen', 'validate-skill']);
 });
 
+test('the root GLOSSARY.md is a recognized doc file, not a reason to run everything', () => {
+  const plan = planChecks(['GLOSSARY.md'], { sources: {} });
+  expect(plan.full).toBe(false);
+  expect(plan.suites.map((s) => s.name)).toContain('copy-rules');
+});
+
 const MOD_SOURCES = {
   'scripts/telegram-ask.test.mjs': 'test\n',
   'scripts/sprite-model-router.test.mjs': 'test\n',

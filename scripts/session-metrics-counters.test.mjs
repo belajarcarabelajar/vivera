@@ -82,3 +82,81 @@ describe('cache writes from the TTL split', () => {
     expect(callCostUsd('claude-haiku-5-5', usage(40000, 0, 30000, 1000, split(0, 30001)))).toBeCloseTo(0.054001, 12);
   });
 });
+
+describe('session signals', () => {
+  test('repeated tool-call runs and cache rebuild turns come from in-window mains only, as counts', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'session-metrics-signals-'));
+    dirs.push(root);
+    const proj = path.join(root, 'projects');
+    const SECRET_CMD = 'echo SIGNAL_INPUT_MUST_NOT_LEAK';
+    const use = (id) => ({ type: 'tool_use', id, name: 'Bash', input: { command: SECRET_CMD } });
+    const asst = (ts, id, u, content) => ({ type: 'assistant', timestamp: ts, message: { id, usage: u, content } });
+    const rebuild = usage(0, 80000, 20000, 1);
+    const session = (ts, p) => [
+      asst(ts, `${p}0`, rebuild, []),
+      asst(ts, `${p}1`, rebuild, [use(`${p}t1`)]),
+      asst(ts, `${p}2`, usage(0, 10, 100000, 1), [use(`${p}t2`)]),
+      asst(ts, `${p}3`, usage(0, 10, 100000, 1), [use(`${p}t3`)]),
+    ];
+    writeJsonl(path.join(proj, 'in.jsonl'), session(TS, 'a'));
+    writeJsonl(path.join(proj, 'old.jsonl'), session('2026-10-01T00:00:00Z', 'b'));
+    writeJsonl(path.join(proj, 'in', 'subagents', 'agent-x.jsonl'), session(TS, 'c'));
+    const run = (...extra) => spawnSync(process.execPath, [SCRIPT, '--repo', root, '--projects-dir', proj, '--registry', path.join(root, 'none.json'), '--since', '2026-10-05', ...extra], { cwd: root, env: ENV, encoding: 'utf8' });
+    const j = run('--json');
+    expect(j.status).toBe(0);
+    const parsed = JSON.parse(j.stdout);
+    expect(parsed.repeatedToolCallRuns).toEqual({ runs: 1, calls: 3 });
+    expect(parsed.cacheRebuildTurns).toBe(1);
+    const t = run();
+    expect(t.status).toBe(0);
+    expect(t.stdout).toMatch(/repeated identical tool-call runs \(3\+\)\s+1 runs, 3 calls\n/);
+    expect(t.stdout).toMatch(/cache rebuild turns\s+1\n/);
+    for (const out of [j.stdout, j.stderr, t.stdout, t.stderr]) expect(out).not.toContain('SIGNAL_INPUT_MUST_NOT_LEAK');
+  });
+});
+
+describe('linked worktree', () => {
+  // Claude Code keys transcripts by the dir a session started in, usually the main checkout.
+  function setup() {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'session-metrics-wt-')));
+    dirs.push(root);
+    const main = path.join(root, 'main');
+    const wt = path.join(root, 'wt');
+    const git = (cwd, ...args) => {
+      const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, env: ENV, encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(r.stderr);
+    };
+    fs.mkdirSync(main);
+    git(main, 'init', '-q');
+    git(main, 'commit', '-q', '--allow-empty', '-m', 'init');
+    git(main, 'worktree', 'add', '-q', '--detach', wt);
+    const home = path.join(root, 'home');
+    const proj = path.join(home, '.claude', 'projects', main.replace(/\//g, '-'));
+    writeJsonl(path.join(proj, 'sess.jsonl'), [{ type: 'assistant', timestamp: TS, message: { id: 'm1', usage: usage(1, 0, 0, 1), content: [] } }]);
+    const run = (...extra) => spawnSync(process.execPath, [SCRIPT, '--registry', path.join(root, 'none.json'), ...extra], { cwd: wt, env: { ...ENV, HOME: home }, encoding: 'utf8' });
+    return { main, wt, proj, run };
+  }
+
+  test('without --repo or --projects-dir it falls back to the main checkout and says so in one note', () => {
+    const { main, run } = setup();
+    const r = run('--json');
+    expect(r.status).toBe(0);
+    const j = JSON.parse(r.stdout);
+    expect(j.mainSessions).toBe(1);
+    expect(j.notes.filter((n) => n.includes('linked worktree') && n.includes(main))).toHaveLength(1);
+  });
+
+  test('an explicit --repo or --projects-dir is never overridden', () => {
+    const { wt, run } = setup();
+    expect(run('--repo', wt).status).toBe(1);
+    expect(run('--projects-dir', path.join(wt, 'nope')).status).toBe(1);
+  });
+
+  test('a main checkout without transcripts still exits 1', () => {
+    const { proj, run } = setup();
+    fs.rmSync(proj, { recursive: true, force: true });
+    const r = run();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('project dir not found');
+  });
+});

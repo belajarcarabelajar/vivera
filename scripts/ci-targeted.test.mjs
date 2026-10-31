@@ -31,7 +31,7 @@ const SOURCES = {
 const INDEX = { sources: SOURCES };
 const check = (paths) => planChecks(paths, INDEX);
 const EVAL_BASE = 'docs/code-plan/evals/baseline.json';
-const EVAL = `bun scripts/eval-run.mjs --baseline ${EVAL_BASE} --repeat 1 --confirm-flips 2`;
+const EVAL = `bun scripts/eval-run.mjs --baseline ${EVAL_BASE} --repeat 1 --confirm-flips 2 --budget-usd 20`;
 
 const names = (plan) => plan.suites.map((s) => s.name);
 const suite = (plan, n) => plan.suites.find((s) => s.name === n);
@@ -139,7 +139,7 @@ describe('planChecks', () => {
     expect(gen.cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
   });
 
-  test('a claude-agents file selects validate-agents and gen-sprite-agents, not the full list', () => {
+  test('a claude-agents file selects validate-agents and gen-sprite-agents, not full ci', () => {
     const plan = check(['.claude/agents/staid.md']);
     targeted(plan);
     expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'eval']);
@@ -238,7 +238,7 @@ describe('planChecks', () => {
     expect(n.slice(n.indexOf('gen-sprite-agents'), -3)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
-  test('evals scenarios and fixtures select their tests and the eval; evals/README.md is a doc', () => {
+  test('eval scenarios and fixtures select their tests and the eval; evals/README.md is a doc', () => {
     const sources = { 'scripts/eval-scenarios.test.mjs': "join(ROOT, 'evals', 'scenarios')" };
     const plan = planChecks(['evals/scenarios/x.json', 'evals/fixtures/base/package.json'], { sources });
     expect([plan.full, testFiles(plan), names(plan).at(-1)]).toEqual([false, ['./scripts/eval-scenarios.test.mjs'], 'eval']);
@@ -406,7 +406,7 @@ describe('package.json limited to scripts', () => {
 describe('untracked local file', () => {
   const BAK = 'plan.issues.json.bak-20261012-other-session';
 
-  test('an untracked non-code file outside the recognized paths is ignored, not a full ci reason', () => {
+  test('an untracked non-code file outside known paths is ignored, not a full ci reason', () => {
     const plan = planChecks([BAK, 'docs/note.md'], { sources: {}, untracked: [BAK] });
     targeted(plan);
     expect(plan.ignored.map((i) => i.path)).toEqual([BAK]);

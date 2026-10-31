@@ -160,7 +160,7 @@ describe('eval-run flaky scenarios and --no-early-stop', () => {
     const ctx = setup({ wobbly: 'PPPPP' });
     const r = run(ctx, '--baseline', flakyBaseline(ctx, 0.8), '--repeat', '1', '--confirm-flips', '2');
     expect(runs(ctx)).toHaveLength(5);
-    expect(r.out).toMatch(/wobbly\s+PASS\s+passes=5\/5\s+flaky\s+turns=/);
+    expect(r.out).toMatch(/wobbly\s+PASS\s+passes=5\/5 \(95% CI 0\.57-1\.00\)\s+flaky\s+turns=/);
     expect(report(ctx, 'wobbly')).toMatchObject({ attempts: 5, passes: 5, confirmed: true, flaky: true });
     expect(r.code).toBe(0);
   });
@@ -193,7 +193,7 @@ describe('eval-run flaky scenarios and --no-early-stop', () => {
     expect(runs(ctx)).toHaveLength(10);
     expect(report(ctx, 'steady')).toMatchObject({ attempts: 5, confirmed: true });
     // The last attempt failed, so its failing assertion sits before the tally; no flaky tally without a baseline.
-    expect(r.out).toMatch(/shaky\s+PASS.*passes=4\/5\s+turns=/);
+    expect(r.out).toMatch(/shaky\s+PASS.*passes=4\/5 \(95% CI 0\.38-0\.96\)\s+turns=/);
     expect(r.out).toContain('flaky: shaky (pass rate 0.8)');
     expect(r.out.includes('flaky: steady')).toBe(false);
     expect(r.code).toBe(0);

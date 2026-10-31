@@ -52,6 +52,15 @@ flowchart LR
     Redo --> Fan
 ```
 
+## 1c. Budget and Report
+Rule L49 in `docs/memory/subagents.md` measured about 20 of 45 agents stopping at their turn limit with no report; a fixed budget and one status vocabulary follow "AI Agents in Depth" (ch10).
+
+- **Maximum tool calls:** [N]
+- **Partial report by call:** [about 80% of N]. At that call, write the report with whatever is done, even when the work is not finished.
+- **Status:** exactly one of `done`, `needs-input`, `blocked`, `failed`, as the first word of the report.
+- **Attempt:** [n] of [max], filled in only when this chunk is a retry.
+- **Accepted facts and prior decisions:** [the facts and decisions this chunk must not reopen, each with its source]
+
 ## 2. Delegation & Audit Lifecycle
 
 ```mermaid

@@ -23,6 +23,12 @@ test('a docs/guide change selects what a README.md change selects', () => {
   expect(picked('docs/guide/tooling-validation.md')).toEqual(['copy-rules', 'docs-gen', 'validate-skill']);
 });
 
+test('the root GLOSSARY.md is a recognized doc file, not a reason to run everything', () => {
+  const plan = planChecks(['GLOSSARY.md'], { sources: {} });
+  expect(plan.full).toBe(false);
+  expect(plan.suites.map((s) => s.name)).toContain('copy-rules');
+});
+
 const MOD_SOURCES = {
   'scripts/telegram-ask.test.mjs': 'test\n',
   'scripts/sprite-model-router.test.mjs': 'test\n',
@@ -81,4 +87,10 @@ test('a mod change leaves the tests of another mod out unless they name the chan
   };
   const plan = planChecks(['mods/telegram-ask/README.md'], { ...MOD_INDEX, sources });
   expect(modTestFiles(plan)).toEqual(['./scripts/readme-reader.test.mjs', './scripts/telegram-ask.test.mjs']);
+});
+
+test('the eval suite passes --budget-usd 20, so every flaky scenario gets its five runs', () => {
+  const cmd = planChecks(['skills/x/SKILL.md'], { sources: {} }).suites.find((s) => s.name === 'eval')?.cmd ?? [];
+  expect(cmd).toContain('--budget-usd');
+  expect(cmd[cmd.indexOf('--budget-usd') + 1]).toBe('20');
 });

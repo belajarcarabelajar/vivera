@@ -47,6 +47,24 @@ function compiles(pattern) {
   }
 }
 
+// Rule IDs a scenario may link: rows in docs/memory/*.md plus the Retired line in MEMORY.md.
+const MEMORY_DIR = join(ROOT, 'docs', 'memory');
+const KNOWN_RULES = new Set([
+  ...readdirSync(MEMORY_DIR).filter((name) => name.endsWith('.md'))
+    .flatMap((name) => [...readFileSync(join(MEMORY_DIR, name), 'utf8').matchAll(/^\| (L\d+) \|/gm)].map((m) => m[1])),
+  ...(readFileSync(join(ROOT, 'MEMORY.md'), 'utf8').match(/^Retired: (.*)$/m)?.[1].match(/L\d+/g) ?? []),
+]);
+
+// Returns the problems with a scenario's optional rules field, so a failure names them.
+function rulesProblems(rules, known) {
+  if (rules === undefined) return [];
+  if (!Array.isArray(rules)) return ['rules must be an array'];
+  return rules.flatMap((id) => {
+    if (typeof id !== 'string' || !/^L[1-9]\d*$/.test(id)) return [`${id} is not a rule ID like L12`];
+    return known.has(id) ? [] : [`${id} is in neither docs/memory nor the Retired line`];
+  });
+}
+
 const isScope = (value) => SCOPES.includes(value);
 const isString = (value) => typeof value === 'string' && value.length > 0;
 const isCount = (value) => Number.isInteger(value) && value >= 0;
@@ -169,6 +187,10 @@ describe('eval scenarios', () => {
         expect(files.filter((f) => basename(f) === '.mcp.json')).toEqual([]);
       });
 
+      test('rules, when present, lists rule IDs that exist in docs/memory or on the Retired line', () => {
+        expect(rulesProblems(s.rules, KNOWN_RULES)).toEqual([]);
+      });
+
       test('every assertion type is one the scorer knows, with valid fields', () => {
         const all = [...s.assertions, ...(s.turns ?? []).flatMap((t) => t.assertions ?? [])];
         for (const a of all) expect(ASSERTION_TYPES).toContain(a.type);
@@ -182,6 +204,24 @@ describe('eval fixtures', () => {
   test('the invoke check accepts false or a skill directory and rejects anything else', () => {
     expect([undefined, false, 'super-ultra-code-plan', 'sucp-rules'].every(invokeOk)).toBe(true);
     expect(['no-such-skill', '', 3, true, null].some(invokeOk)).toBe(false);
+  });
+
+  test('the rules check rejects a malformed or unknown ID and accepts a known one', () => {
+    const known = new Set(['L1', 'L3']);
+    expect(rulesProblems(['L1', 'L3'], known)).toEqual([]);
+    expect(rulesProblems(undefined, known)).toEqual([]);
+    expect(rulesProblems('L1', known)).toEqual(['rules must be an array']);
+    expect(rulesProblems(['l1', 'L01', 'L2'], known)).toEqual([
+      'l1 is not a rule ID like L12',
+      'L01 is not a rule ID like L12',
+      'L2 is in neither docs/memory nor the Retired line',
+    ]);
+  });
+
+  test('the known rule set includes the real Retired line', () => {
+    const line = readFileSync(join(ROOT, 'MEMORY.md'), 'utf8').match(/^Retired: (.*)$/m);
+    expect(line).not.toBeNull();
+    for (const id of line[1].match(/L\d+/g) ?? []) expect(KNOWN_RULES.has(id)).toBe(true);
   });
 
   test('every fixture file stays under 2 KB', () => {

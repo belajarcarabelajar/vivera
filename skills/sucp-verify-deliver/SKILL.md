@@ -50,7 +50,7 @@ Gate detail (traceability, security, reproducibility, test reliability, rollout,
 The 8-point filter and the rest of the rubric: [references/01-engineering-gates.md](references/01-engineering-gates.md).
 
   - Repository Rule Attribution Invariant: Every rule-supported finding MUST cite the exact supporting line range of `AGENTS.md`, `AGENTS.override.md`, or repository conventions. Subjective reviewer nitpicks or uncodified model preferences are strictly banned.
-- Non-trivial or shared-interface changes should receive independent review when a reviewer is available. If no independent reviewer exists, perform and report a documented self-review; do not imply peer approval.
+- Non-trivial or shared-interface changes should receive independent review when a reviewer is available. If no independent reviewer exists, perform and report a documented self-review; do not imply peer approval. A self-review names at least one evidence class it adds beyond re-reading (a fresh test run, a render, a tool or graph query); otherwise it is labelled "no independent evidence" ("AI Agents in Depth", ch10: review that adds no information).
 - Local commits follow repository conventions and the approved workflow. Pushes, releases, deployments, PR comments, and other externally visible publication require explicit authorization, asked through the Confirmation Protocol (header `Publish`, safe option first) unless the approved scope already names it.
 - Never include secrets, credentials, private data, temporary artifacts, or unrelated cleanup in a commit or publication.
 
@@ -70,7 +70,7 @@ Gate before any completion/success claim:
 5. Confirm output directly proves the claim
 6. Only then state claim, citing the verified log evidence
 - Execution Over Synthesis: numeric/rendered results come from executed code, not mental math on copied text. Re-run the proving command for the claim at hand; do not reuse a stale log from an earlier step as proof for a new claim.
-- Independent Check for High-Stakes Work: for production, security, migration, or irreversible changes, the final check is done by a reviewer that did not produce the work (separate subagent or documented self-review with fresh reads). The work never grades itself silently.
+- Independent Check for High-Stakes Work: for production, security, migration, or irreversible changes, the final check is done by a reviewer that did not produce the work (separate subagent or documented self-review with fresh reads that names its added evidence class, or else is labelled "no independent evidence"). The work never grades itself silently.
 | Claim | Requires | Not sufficient |
 |---|---|---|
 | Tests pass | Fresh test output, 0 failures | Previous run, "should pass" |

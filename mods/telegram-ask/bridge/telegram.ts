@@ -21,7 +21,7 @@ export class TelegramError extends Error {
 }
 
 export type Telegram = {
-  sendMessage(chatId: ChatId, text: string, keyboard: Button[][]): Promise<{ message_id: number }>
+  sendMessage(chatId: ChatId, text: string, keyboard?: Button[][]): Promise<{ message_id: number }>
   editMessageText(chatId: ChatId, messageId: number, text: string, keyboard?: Button[][]): Promise<void>
   answerCallbackQuery(id: string, text?: string): Promise<void>
   getUpdates(offset: number, timeoutS: number): Promise<Update[]>

@@ -2,8 +2,7 @@
 // scripts/ci-targeted.mjs
 //
 // Runs only the ci checks a change can affect, so a session gate takes seconds
-// instead of the whole `bun run ci`. When the planner cannot tell what a change
-// reaches, it falls back to the full list instead of guessing.
+// instead of the whole `bun run ci`. A change it cannot place gets the full list.
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -71,7 +70,7 @@ const CATEGORIES = [
 
 const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', '.claude/agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/', 'apps/', 'evals/'];
 const RECOGNIZED_FILES = [
-  'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'Super Ultra Code Plan Implementation.md',
+  'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'GLOSSARY.md', 'Super Ultra Code Plan Implementation.md',
   'LICENSE', 'THIRD-PARTY-NOTICES.md', '.gitignore', '.graphifyignore', 'puppeteer-config.json',
 ];
 const CODE_EXT = /\.(?:mjs|cjs|js|sh|py)$/;
@@ -232,10 +231,11 @@ function copySuite(base) {
 const EVAL_BASELINE = 'docs/code-plan/evals/baseline.json';
 const EVAL_INPUT = /^(?:skills|agents|\.claude\/agents|evals\/scenarios|evals\/fixtures)\//;
 // Every eval run costs money, so only a change to the rules it measures selects it, even under --full.
+// $20, not the default $15: a flaky scenario always runs five times.
 function evalSuites(paths) {
   const reasons = paths.filter((p) => EVAL_INPUT.test(p))
     .map((p) => `${p}: ${p.startsWith('evals/') ? 'eval scenario or fixture' : 'skill or agent rules'} changed`);
-  return reasons.length ? [{ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASELINE, '--repeat', '1', '--confirm-flips', '2'], requires: EVAL_BASELINE, reasons }] : [];
+  return reasons.length ? [{ name: 'eval', cmd: ['bun', 'scripts/eval-run.mjs', '--baseline', EVAL_BASELINE, '--repeat', '1', '--confirm-flips', '2', '--budget-usd', '20'], requires: EVAL_BASELINE, reasons }] : [];
 }
 
 // docs/code-plan/ holds session records, not docs pages.

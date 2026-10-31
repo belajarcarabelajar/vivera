@@ -20,9 +20,11 @@
 
 Find rule L<n>: find it in the Rules column and open that file.
 
+Retired: (none)
+
 Add a rule:
 
-1. The next ID is one above the highest ID in `docs/memory/`; IDs are never reused.
+1. The next ID is one above the highest ID in `docs/memory/` or on the Retired line; IDs are never reused, retired IDs included.
 2. Append the row to its topic file, in ID order.
 3. Add the ID to that topic's row in the table above.
 4. Run `bun test scripts/memory-index.test.mjs`.

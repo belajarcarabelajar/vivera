@@ -7,7 +7,7 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 ## Parts
 
 - `hooks/register.ts`: the mod. A `tool.call` hook on `AskUserQuestion` runs `next(e)` (the dialog) and, beside it, posts the question to the bridge and long-polls for the answer. Returning `{ result }` while `next(e)` is pending aborts the dialog.
-- `bridge/`: the daemon (Bun). One bridge serves every session on the machine and polls its bot with `getUpdates`. API over a Unix socket: `POST /ask`, `GET /wait/:id` (25 s long-poll), `POST /resolve/:id`, `POST /update` (updates forwarded by another poller, see below).
+- `bridge/`: the daemon (Bun). One bridge serves every session on the machine and polls its bot with `getUpdates`. API over a Unix socket: `POST /ask`, `GET /wait/:id` (25 s long-poll), `POST /resolve/:id`, `POST /update` (updates forwarded by another poller, see below), `POST /notify` (see Notify).
 - `deploy/telegram-ask-bridge.service`: the systemd user unit. `deploy/forwarded.conf.example`: a drop-in for the forwarded setup.
 
 ## Telegram
@@ -17,6 +17,12 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 - Only updates from `TELEGRAM_CHAT_ID` count; any other chat is ignored.
 - The message names the project and the first 8 characters of the session id, and quotes Claude's latest text (cut so the message stays within 4096 characters).
 - Markdown is rendered (`parse_mode: HTML`, `bridge/markdown.ts`): bold, italic, code, links, headings, lists and quotes; a table becomes an aligned monospace block because Telegram cannot draw tables. Button labels drop the markers. If Telegram still refuses the HTML, the same message is sent again as plain text.
+
+## Notify
+
+- `POST /notify` with JSON `{"text": "..."}` sends one message to `TELEGRAM_CHAT_ID` with no buttons and answers `{"ok": true, "message_id": N}`. A body without non-empty text answers 400. The text is rendered like a question and cut to 4096 characters.
+- CLI: `bun ~/vivera/mods/telegram-ask/bridge/notify.ts "<text>"` posts to the same socket as the bridge (`TELEGRAM_ASK_SOCKET`, else `$XDG_RUNTIME_DIR/vivera-telegram-ask.sock`). With no bridge it prints `notify: bridge not running (<socket>)` and exits 0, so a caller never fails because of it; no text exits 2.
+- A running bridge serves `/notify` only after a restart on the new code: `systemctl --user restart telegram-ask-bridge.service`.
 
 ## Install
 

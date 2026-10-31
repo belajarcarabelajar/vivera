@@ -24,7 +24,7 @@
 
 | Mode | Activate when | Required output |
 |---|---|---|
-| 💡 Creative & Convergent | Several viable designs or new behavior are possible | 2–3 alternatives, trade-offs, and one recommendation |
+| 💡 Creative & Convergent | Several viable designs or new behavior are possible | 2–3 alternatives, trade-offs, and one recommendation; criteria and a weight for each, written before the alternatives are scored, then an alternative-by-criterion score table with the weighted total; the recommendation names the criterion that decided it |
 | 🔐 Security & Privacy | Auth, permissions, secrets, network, PII, or sensitive data are involved | Threats, trust boundaries, allowed/denied paths, data controls |
 | 🔄 Compatibility & Migration | API, IPC, schema, database, event, or file format changes | Consumer impact, versioning, migration order, rollback, data preservation |
 | 🚀 Operational & Recovery | Runtime, production, deployment, or infrastructure is affected | Observability, rollout, health signal, rollback, recovery, post-deploy check |
@@ -43,4 +43,4 @@ Use this for the 💡 Creative & Convergent row and Architectural step 4 when th
 1. Frame the problem for the user: the constraints any interface must meet, and each dependency with its category (in-process, local-substitutable, remote but owned, true external). Show the framing, then dispatch without waiting.
 2. Dispatch three or more research sprites in parallel (`timid`, `aqua`, then wrap around to `timid`), each asked for a radically different design. Each gets its own brief (paths, coupling, dependency categories, glossary terms) and one constraint: a minimal interface of one to three entry points; maximal flexibility; the most common caller made trivial; ports and adapters for dependencies that cross the seam.
 3. Each sprite returns the interface (types, methods, invariants, error modes), a usage example, what the interface hides, its dependency strategy, and its trade-offs.
-4. Compare the designs in prose on depth, locality, and seam placement (how much each interface hides, where a later change lands, where the boundary sits), then recommend one. A hybrid is allowed when parts combine well.
+4. Compare the designs on depth, locality, and seam placement (how much each interface hides, where a later change lands, where the boundary sits) as an alternative matrix with the criteria and weights fixed first, then recommend one. A hybrid is allowed when parts combine well.

@@ -56,6 +56,14 @@ Exception: when a prototype produced an excerpt that pins a decision more exactl
 
 - [Item left out, with a one-line reason or the follow-up that owns it]
 
+## Outcome Check (optional)
+
+When filled, this becomes a post-merge follow-up outside `tasks[]` (memory rule L35), not a plan task. When the effect cannot be measured, write N/A with the reason.
+
+- **Metric:** [the number that shows the Problem Statement went away]
+- **Baseline:** [value] on [YYYY-MM-DD], from [the command that measured it]
+- **Check after merge:** [when to measure again, such as 7 days after the merge]
+
 ## Further Notes
 
 - [Anything the planner needs that fits no section above: rollout, risks, open follow-ups]

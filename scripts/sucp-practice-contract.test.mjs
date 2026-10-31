@@ -279,6 +279,30 @@ const CONTRACT = [
     task: 'S3', gaps: 'worktree cleanup', file: 'snippets/cmd-cleanup.md',
     present: ['bun scripts/session-cleanup.mjs --session <slug>'],
   },
+  // S5: alternative matrix from Dennis, Wixom, Tegarden, Systems Analysis and Design 5th ed., ch. 7.
+  {
+    task: 'S5', gaps: 'alternative matrix', file: 'skills/sucp-brainstorm/references/01-reasoning-lenses.md',
+    present: [
+      'criteria and a weight for each, written before the alternatives are scored',
+      'weighted total',
+      'names the criterion that decided it',
+      'as an alternative matrix with the criteria and weights fixed first',
+    ],
+  },
+  {
+    task: 'S5', gaps: 'alternative matrix', file: 'skills/sucp-brainstorm/SKILL.md',
+    present: ['Score them in the alternative matrix'],
+  },
+  // S6: outcome check from Dennis, Wixom, Tegarden, Systems Analysis and Design 5th ed.
+  {
+    task: 'S6', gaps: 'outcome check', file: 'templates/spec-template.md',
+    present: [
+      '## Outcome Check (optional)',
+      'post-merge follow-up outside `tasks[]`',
+      'N/A with the reason',
+      'command that measured it',
+    ],
+  },
 ];
 
 describe('T0 contract: target files exist', () => {

@@ -70,7 +70,7 @@ function buildText(state: AskState, contextMax: number, descMax: number | null, 
 }
 
 // Cuts escaped plain text without leaving half an entity such as "&am".
-function cutEscaped(s: string, max: number): string {
+export function cutEscaped(s: string, max: number): string {
   const out = cut(s, max)
   return out === s ? s : out.replace(/&[#a-z0-9]*…$/, '…')
 }

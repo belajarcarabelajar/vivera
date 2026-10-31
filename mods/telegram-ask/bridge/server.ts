@@ -2,6 +2,7 @@ import { chmodSync, lstatSync, unlinkSync } from 'node:fs'
 import {
   answersIfComplete,
   applyTap,
+  cutEscaped,
   applyText,
   newAskId,
   newState,
@@ -13,6 +14,7 @@ import {
   type AskState,
   type Button,
 } from './format'
+import { escapeHtml, markdownToHtml } from './markdown'
 import type { ChatId, Telegram, Update } from './telegram'
 
 type WaitResult = { status: 'answered'; answers: Record<string, string> } | { status: 'closed' } | { status: 'pending' }
@@ -50,6 +52,15 @@ const EXPIRED = 'Pertanyaan ini sudah selesai'
 const UPDATE_REPLY_MS = 1_000
 const DONE: Promise<void> = Promise.resolve()
 const NO: Dispatch = { consumed: false, done: DONE }
+const MAX_TEXT = 4096
+
+// Like the ask path: rendered markdown when it fits, else escaped plain text cut
+// without leaving half an entity.
+function renderNotice(text: string): string {
+  const html = markdownToHtml(text)
+  if (html.length <= MAX_TEXT) return html
+  return cutEscaped(escapeHtml(text), MAX_TEXT)
+}
 
 function isString(v: unknown): v is string {
   return typeof v === 'string'
@@ -262,6 +273,21 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     return Response.json({ id })
   }
 
+  async function onNotify(req: Request): Promise<Response> {
+    const body = (await req.json().catch(() => null)) as { text?: unknown } | null
+    const text = body && typeof body === 'object' ? body.text : undefined
+    if (typeof text !== 'string' || !text.trim()) return new Response('bad request', { status: 400 })
+    try {
+      // No keyboard leaves out reply_markup, so the notice has no buttons.
+      const { message_id } = await telegram.sendMessage(chatId, renderNotice(text))
+      log(`notice sent (${text.length} chars)`)
+      return Response.json({ ok: true, message_id })
+    } catch (e) {
+      log(`notice send failed: ${errStatus(e)}`)
+      return new Response('telegram error', { status: 502 })
+    }
+  }
+
   function onWait(id: string): Promise<Response> | Response {
     const entry = asks.get(id)
     if (!entry) return new Response('unknown ask', { status: 404 })
@@ -310,6 +336,7 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       if (req.method === 'GET' && parts.length === 1 && parts[0] === 'health') return Response.json({ ok: true })
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)
       if (req.method === 'POST' && parts.length === 1 && parts[0] === 'update') return onUpdate(req)
+      if (req.method === 'POST' && parts.length === 1 && parts[0] === 'notify') return onNotify(req)
       if (req.method === 'GET' && parts.length === 2 && parts[0] === 'wait') return onWait(parts[1])
       if (req.method === 'POST' && parts.length === 2 && parts[0] === 'resolve') return onResolve(parts[1], req)
       return new Response('not found', { status: 404 })

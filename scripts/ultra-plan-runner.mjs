@@ -17,6 +17,7 @@ import { sizeGateWarnings } from './lib/plan-size-warn.mjs';
 import { missingTestPaths } from './lib/test-paths.mjs';
 import { run, STEP_MAX_BUFFER } from './lib/runner-process.mjs';
 import { validateImpacts } from './lib/plan-impacts.mjs';
+import { validateTraceability } from './lib/plan-traceability.mjs';
 
 export { reapGroup } from './lib/runner-process.mjs';
 
@@ -59,6 +60,7 @@ export const RUNNER_CONTRACT_KEYS = [
   'schema', 'plan_id', 'status', 'runner_contract',
   'defaults.retry_transient_max', 'defaults.step_timeout_s', 'defaults.on_precondition_fail',
   'defaults.allow_loose_skip_if', 'defaults.require_impacts', 'defaults.allow_no_impacts',
+  'defaults.require_traceability',
   'defaults.retry_if',
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
@@ -683,6 +685,7 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
   }
 
   validateImpacts(plan, errors, warnings);
+  if (body) validateTraceability(plan, body, errors, warnings);
 
   if (body) {
     const { nodes, edges, blockCount, flowBlockCount } = parseMermaidMaps(body);

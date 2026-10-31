@@ -15,6 +15,7 @@ defaults:
   allow_loose_skip_if: []            # task ids grandfathered from the skip_if probe ban
   require_impacts: true              # every task must declare the surfaces it can break
   allow_no_impacts: []               # task ids exempted from impacts; a stale name is an error
+  require_traceability: true         # every AC-n needs a Traceability row naming its task and check
   retry_if: any                      # any | transient; an unrecognised value throws
 tasks:
   - id: T1
@@ -61,7 +62,13 @@ tasks:
 **Visual Map:** [MANDATORY Mermaid diagram(s): at least one flowchart mapping every task id, dependency edge, gate, and Verify step. Every diagram MUST also declare `accTitle:` and `accDescr:` right after its diagram-type line.]
 **Reasoning Lenses:** [selected core and conditional lenses with their required outputs]
 **Acceptance Criteria:** [observable conditions that define success]
-**Traceability:** [acceptance criterion → task → test/check → evidence]
+**Traceability:** one row per AC; the Task cell names ids from `tasks[]`, the Check cell the command that proves it.
+
+| AC | Task | Check | Evidence |
+|---|---|---|---|
+| AC-1 | T1 | `[command that proves AC-1]` | [what the run shows] |
+| AC-2, AC-3 | T2 | `[command]` | [evidence] |
+
 **Assumptions & Open Questions:** [resolved assumptions and questions that remain]
 **Dependencies & Impact:** [dependencies, interfaces, migrations, and affected consumers]
 **Risks & Rollback:** [known risks and recovery/rollback approach]

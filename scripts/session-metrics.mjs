@@ -17,6 +17,7 @@ import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { readTranscriptSignals } from './lib/session-signals.mjs';
 
 // USD per million tokens: Anthropic list prices via the claude-api skill (model table cached 2026-10-06).
 const card = (input, output, cacheRead) => ({ input, output, cacheRead });
@@ -223,6 +224,8 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     mergedPrs = (registry.sessions ?? []).filter((e) => e.merged_at && inWindow(e.merged_at, b) && repoMatches(e, repo)).length;
   }
   const escapes = Number.isFinite(fixes) ? fixes : null;
+  // Main sessions only: a subagent's own repeats and rebuilds belong to its run, not the session.
+  const sig = (f) => M.reduce((n, t) => n + (t.signals ? f(t.signals) : 0), 0);
   const context = tokens.input + tokens.cacheWrite + tokens.cacheRead;
   const per = (v) => (mergedPrs && v !== null ? round(v / mergedPrs) : null);
   return {
@@ -241,6 +244,8 @@ export function summarize({ mains, subs, registry, fixes, window = {}, repo = ''
     subagentsByType: byCountThenName(subagentsByType),
     agentToolCalls: agentCalls,
     askUserQuestion: ask,
+    repeatedToolCallRuns: { runs: sig((g) => g.repeatedToolCallRuns.runs), calls: sig((g) => g.repeatedToolCallRuns.calls) },
+    cacheRebuildTurns: sig((g) => g.cacheRebuildTurns),
     skills: byCountThenName(skills),
     mergedPrs,
     escapes,
@@ -313,6 +318,8 @@ function renderText(s, notes) {
     ['startup-prefix share of subagents', s.startupPrefixShare],
     ['Agent tool calls', s.agentToolCalls],
     ['AskUserQuestion calls', s.askUserQuestion],
+    ['repeated identical tool-call runs (3+)', `${s.repeatedToolCallRuns.runs} runs, ${s.repeatedToolCallRuns.calls} calls`],
+    ['cache rebuild turns', s.cacheRebuildTurns],
     ['merged PRs in window', s.mergedPrs],
     ['escapes (Fixes: trailers on origin/main)', s.escapes],
     ['per merged PR: context tokens', s.perMergedPr.contextTokens],
@@ -379,7 +386,7 @@ export async function main(argv) {
   const notes = [];
   const files = listTranscripts(projectsDir, windowBounds(window).from);
   const mains = [];
-  for (const f of files.mains) mains.push({ file: f, ...(await readTranscript(f)) });
+  for (const f of files.mains) mains.push({ file: f, ...(await readTranscript(f)), signals: await readTranscriptSignals(f) });
   const subs = [];
   for (const f of files.subs) subs.push({ file: f, agentType: agentTypeOf(f), ...(await readTranscript(f)) });
   let registry = null;

@@ -82,3 +82,35 @@ describe('cache writes from the TTL split', () => {
     expect(callCostUsd('claude-haiku-5-5', usage(40000, 0, 30000, 1000, split(0, 30001)))).toBeCloseTo(0.054001, 12);
   });
 });
+
+describe('session signals', () => {
+  test('repeated tool-call runs and cache rebuild turns come from in-window mains only, as counts', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'session-metrics-signals-'));
+    dirs.push(root);
+    const proj = path.join(root, 'projects');
+    const SECRET_CMD = 'echo SIGNAL_INPUT_MUST_NOT_LEAK';
+    const use = (id) => ({ type: 'tool_use', id, name: 'Bash', input: { command: SECRET_CMD } });
+    const asst = (ts, id, u, content) => ({ type: 'assistant', timestamp: ts, message: { id, usage: u, content } });
+    const rebuild = usage(0, 80000, 20000, 1);
+    const session = (ts, p) => [
+      asst(ts, `${p}0`, rebuild, []),
+      asst(ts, `${p}1`, rebuild, [use(`${p}t1`)]),
+      asst(ts, `${p}2`, usage(0, 10, 100000, 1), [use(`${p}t2`)]),
+      asst(ts, `${p}3`, usage(0, 10, 100000, 1), [use(`${p}t3`)]),
+    ];
+    writeJsonl(path.join(proj, 'in.jsonl'), session(TS, 'a'));
+    writeJsonl(path.join(proj, 'old.jsonl'), session('2026-10-01T00:00:00Z', 'b'));
+    writeJsonl(path.join(proj, 'in', 'subagents', 'agent-x.jsonl'), session(TS, 'c'));
+    const run = (...extra) => spawnSync(process.execPath, [SCRIPT, '--repo', root, '--projects-dir', proj, '--registry', path.join(root, 'none.json'), '--since', '2026-10-05', ...extra], { cwd: root, env: ENV, encoding: 'utf8' });
+    const j = run('--json');
+    expect(j.status).toBe(0);
+    const parsed = JSON.parse(j.stdout);
+    expect(parsed.repeatedToolCallRuns).toEqual({ runs: 1, calls: 3 });
+    expect(parsed.cacheRebuildTurns).toBe(1);
+    const t = run();
+    expect(t.status).toBe(0);
+    expect(t.stdout).toMatch(/repeated identical tool-call runs \(3\+\)\s+1 runs, 3 calls\n/);
+    expect(t.stdout).toMatch(/cache rebuild turns\s+1\n/);
+    for (const out of [j.stdout, j.stderr, t.stdout, t.stderr]) expect(out).not.toContain('SIGNAL_INPUT_MUST_NOT_LEAK');
+  });
+});

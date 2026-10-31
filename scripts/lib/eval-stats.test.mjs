@@ -120,6 +120,14 @@ describe('failed streams', () => {
     expect(fs.readdirSync(dir).sort()).toEqual(names.slice(1));
   });
 
+  test('pruneStreamRuns never touches or counts a dir that is not a run id', () => {
+    const dir = tmp();
+    const names = ['01', '02', '03', '04', '05', '06'].map((d) => `2026-10-${d}T12-34-56-789Z-4242`);
+    for (const n of [...names, 'keepme', '2026-10-00-notes']) fs.mkdirSync(path.join(dir, n));
+    pruneStreamRuns(dir);
+    expect(fs.readdirSync(dir).sort()).toEqual(['2026-10-00-notes', ...names.slice(1), 'keepme'].sort());
+  });
+
   test('pruneStreamRuns is silent when the dir does not exist and warns once on an error', () => {
     const warn = spyOn(console, 'error').mockImplementation(() => {});
     try {

@@ -40,11 +40,14 @@ export function keepFailedStream(evalsDir, runId, id, nth, stdout) {
   }
 }
 
+// The runId shape from eval-run.mjs; any other dir may belong to someone else, since --out picks the parent.
+const RUN_ID = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z-\d+$/;
+
 // Run ids start with an ISO timestamp, so the newest dirs sort last by name.
 export function pruneStreamRuns(dir, keep = 5) {
   try {
     if (!fs.existsSync(dir)) return;
-    const runs = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+    const runs = fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && RUN_ID.test(d.name)).map((d) => d.name).sort();
     for (const name of runs.slice(0, Math.max(0, runs.length - keep))) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
   } catch (err) {
     console.error(`warning: could not prune ${dir}: ${err.message}`);

@@ -17,7 +17,7 @@ import readline from 'node:readline';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { readTranscriptSignals } from './lib/session-signals.mjs';
+import { num, readTranscriptSignals } from './lib/session-signals.mjs';
 
 // USD per million tokens: Anthropic list prices via the claude-api skill (model table cached 2026-10-06).
 const card = (input, output, cacheRead) => ({ input, output, cacheRead });
@@ -88,7 +88,6 @@ export async function readTranscript(file) {
   return { calls, firstTs, lastTs };
 }
 
-const num = (v) => (Number.isFinite(v) ? v : 0);
 // The TTL split can exceed the reported total (seen once: total 0, 1-hour split 4076), so the larger counts.
 const writesOf = (u) => Math.max(num(u.cache_creation_input_tokens),
   num(u.cache_creation?.ephemeral_5m_input_tokens) + num(u.cache_creation?.ephemeral_1h_input_tokens));

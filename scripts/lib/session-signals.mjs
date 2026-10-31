@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import readline from 'node:readline';
 
-const num = (v) => (Number.isFinite(v) ? v : 0);
+export const num = (v) => (Number.isFinite(v) ? v : 0);
 
 // Consecutive identity only: the same `git status` spread over a session is normal.
 export function repeatedCallRuns(toolUses, min = 3) {

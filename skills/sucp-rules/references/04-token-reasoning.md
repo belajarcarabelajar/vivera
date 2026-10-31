@@ -22,6 +22,7 @@
 - Memory-First Architecture Discovery: Query persistent knowledge graphs (`memory` MCP) or indexed symbols before initiating multi-file deep searches.
 - Batch independent operations through the available batch/tool interface when supported; use concurrency only for operations that do not share mutable state, locks, or outputs.
 - Cache expensive command results within the task and do not repeat an unchanged inspection, test, or lookup without a reason.
+- Prompt-Cache Stability: a model switch, a change to the MCP server or plugin list, or an edit to always-loaded text (`CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, a loaded `SKILL.md`) in the middle of a phase rebuilds the cached prefix, so the next turns pay full input price again. Make such changes at a phase boundary, together with `/clear` or `/compact`, the same boundary as the compaction habit at about 150k tokens (L85 in `docs/memory/tools-and-environment.md`) ("AI Agents in Depth", ch2: KV-cache friendly context).
 - Token savings never override safety, required verification, output completeness, or the distinction between independent parallel work and dependent sequential work.
 
 ### 🧠 Reasoning, Research & Scope

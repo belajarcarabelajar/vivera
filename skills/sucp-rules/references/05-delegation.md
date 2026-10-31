@@ -21,6 +21,7 @@
   - Non-Overlapping Workspaces: Ensure parallel subagents work on strictly disjoint sets of files or in isolated worktrees (`share` or `branch` modes) to prevent write-write conflicts.
   - Chunk Boundary Check: every chunk has exactly one owner and every planned unit of work is covered. Overlapping write scopes or an uncovered unit is an orchestration defect to fix before dispatch, not to discover in the diff audit.
   - Parent Diff Audit Gate: Never accept a subagent's self-reported success blindly. Inspect `git diff` and run targeted regression tests directly in the parent agent before integrating the result.
+  - Reviewer Integrity: before and after each reviewer run, the parent records `git status --porcelain` and `git rev-parse HEAD` in the worktree, and any difference voids the review, because the reviewer has Bash and the git-write guard does not catch a write by redirection. The reviewer brief carries the plan's acceptance criteria, the diff range, and the verification commands, never the implementer's report or success narrative, so the reviewer does not converge on the proposer's view ("AI Agents in Depth", ch10: proposer and reviewer, homogeneous convergence).
 
 ```mermaid
 flowchart TD

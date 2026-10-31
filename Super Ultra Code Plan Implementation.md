@@ -1,6 +1,6 @@
 ---
 name: super-ultra-code-plan
-description: Ultimate all-in-one AI coding pipeline for complex development tasks. Covers idea, design, spike, planning, strict TDD, proportional subagent fan-out and chunk gathering, systematic debugging, verification gates, and finishing.
+description: Ultimate all-in-one AI coding pipeline for complex development tasks. Covers idea, design, spike, planning, strict TDD, proportional subagent fan-out and chunk gathering, systematic debugging, verification gates, and finishing. Not for a one-line edit the user dictates, a pure question, or non-coding work.
 triggers:
   - coding task
   - feature implementation

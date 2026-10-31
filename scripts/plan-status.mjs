@@ -2,7 +2,7 @@
 // scripts/plan-status.mjs
 //
 // Prints a resumed session's state computed from the plan file and its overnight
-// handoff on disk: plan id and status, checklist done/total, current and next
+// handoff on disk: plan id and status, task steps done/total, current and next
 // task, open approval gates, and the handoff's Result and Last update with a
 // stale flag. The block comes from the files, never from model text, so a
 // poisoned summary cannot steer the resumed session.
@@ -16,7 +16,11 @@ import { basename, dirname, join } from 'node:path';
 import { extractFrontmatter, parseUltraPlanYaml } from './ultra-plan-runner.mjs';
 
 const USAGE = 'usage: plan-status.mjs <plan.md> [--stale-hours N] [--now <ISO>] [--json]';
-const STEP = /^\s*[-*] \[([ xX])\]/;
+const STEP = /^\s*[-*] \[([ xX])\]\s*(.*)$/;
+const HEADING = /^(#{1,6})\s+(.*?)\s*$/;
+// The gate section itself, not a heading that mentions approval in passing
+// ("Affected Surfaces - approval gate blocker if empty").
+const GATE_HEADING = /^(?:[\d.]+[a-z]?\.?\s+)?(?:(?:human|partner)\s+)?approvals?(?:\s+gates?)?$/i;
 const TASK = /^###\s+(Task\b.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 
@@ -49,12 +53,22 @@ function cells(row) {
 }
 
 function openGates(lines) {
-  const start = lines.findIndex((l) => /^##\s+Approval\s*$/.test(l));
-  if (start === -1) return [];
   const gates = [];
+  let inGate = false;
   let header = true;
-  for (const line of lines.slice(start + 1)) {
-    if (/^##\s/.test(line)) break;
+  for (const line of lines) {
+    const h = HEADING.exec(line);
+    if (h) {
+      inGate = GATE_HEADING.test(h[2]);
+      header = true;
+      continue;
+    }
+    if (!inGate) continue;
+    const box = STEP.exec(line);
+    if (box) {
+      if (box[1] === ' ') gates.push(box[2].replace(/\*\*/g, '').trim());
+      continue;
+    }
     if (!line.trim().startsWith('|')) continue;
     const [gate, answer = ''] = cells(line);
     if (header) {
@@ -90,26 +104,28 @@ export function planStatus(md, { handoff = null, now = new Date(), staleHours = 
   let done = 0;
   let total = 0;
   const tasks = [];
+  // Only boxes inside a Task section are steps; a Task section ends at the next
+  // heading of level 2 or 3, as plan-closeout reads it.
+  let task = null;
   for (const line of lines) {
     const t = TASK.exec(line);
     if (t) {
-      tasks.push({ title: t[1].trim(), open: false });
+      task = { title: t[1].trim(), open: false };
+      tasks.push(task);
       continue;
     }
-    if (/^##\s/.test(line) && tasks.length) tasks.push({ title: null, open: false });
+    if (/^#{2,3}\s/.test(line)) task = null;
     const s = STEP.exec(line);
-    if (!s) continue;
+    if (!s || !task) continue;
     total++;
-    if (s[1] === ' ') {
-      const task = tasks[tasks.length - 1];
-      if (task?.title) task.open = true;
-    } else done++;
+    if (s[1] === ' ') task.open = true;
+    else done++;
   }
-  const open = tasks.filter((t) => t.title && t.open);
+  const open = tasks.filter((t) => t.open);
   return {
     plan_id,
     status,
-    checklist: { done, total },
+    task_steps: { done, total },
     current: open[0]?.title ?? null,
     next: open[1]?.title ?? null,
     open_gates: openGates(lines),
@@ -121,7 +137,7 @@ function render(s, handoffPath) {
   const out = [
     `plan: ${s.plan_id ?? 'unknown'}`,
     `status: ${s.status ?? 'unknown'}`,
-    `checklist: ${s.checklist.done}/${s.checklist.total}`,
+    `task steps: ${s.task_steps.done}/${s.task_steps.total}`,
     `current: ${s.current ?? 'none'}`,
     `next: ${s.next ?? 'none'}`,
     `open gates: ${s.open_gates.length ? s.open_gates.join(', ') : 'none'}`,

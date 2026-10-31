@@ -74,6 +74,54 @@ Last update: ${lastUpdate}
 
 const NOW = '2026-01-02T06:00:00+07:00';
 
+// Shape of templates/implementation-plan-template.md: boxes outside task
+// sections (acceptance criteria, affected surfaces, the gate, the backlog), a
+// heading that only mentions approval in passing, and the gate as a checkbox.
+const TEMPLATE_SHAPE = `---
+schema: ultra-plan/v1
+plan_id: 2026-01-03-template
+status: Draft
+---
+
+## 1. Intent & Scope
+  - [ ] AC-1: first criterion
+  - [x] AC-2: second criterion
+
+## 2b. Affected Surfaces - approval gate blocker if empty
+- [ ] Every task appears above.
+
+## 4. Work Breakdown & Task Checklist
+
+### Task T1: Component
+  - [x] Dependency: tool exits 0
+- [x] **Step 1 - Failing Test (RED):** cmd: \`bun test a\`
+- [ ] **Step 2 - Implementation (GREEN):** minimal code
+
+### Notes on T1
+- [ ] not a task step either
+
+## 7. Human Approval Gate
+- [ ] Partner / Human approval received for this plan before implementation begins.
+
+## 8. Session-Close Debt Sweep & Follow-Up Backlog
+- [ ] 3-5 ranked follow-ups injected.
+`;
+
+// Shape used in scripts/plan-closeout.test.mjs: the gate as a list item.
+const LIST_GATE = `---
+schema: ultra-plan/v1
+plan_id: 2026-01-04-list
+status: Approved
+---
+
+### Task T1: todo
+- [ ] Step 1 todo
+
+## Approval
+- [ ] Approved
+- [x] Spec approved
+`;
+
 function run(args) {
   const p = Bun.spawnSync(['bun', SCRIPT, ...args], { stdout: 'pipe', stderr: 'pipe' });
   return { code: p.exitCode, out: p.stdout.toString(), err: p.stderr.toString() };
@@ -96,7 +144,7 @@ describe('planStatus computed from the plan file', () => {
 
   test('counts checklist steps outside code fences', () => {
     const s = planStatus(PLAN, { handoff: null, now: new Date(NOW), staleHours: 2 });
-    expect(s.checklist).toEqual({ done: 3, total: 5 });
+    expect(s.task_steps).toEqual({ done: 3, total: 5 });
   });
 
   test('current task is the first with an unchecked step, next is the one after', () => {
@@ -112,10 +160,30 @@ describe('planStatus computed from the plan file', () => {
 
   test('a plan with no checklist reports 0/0 and no current task', () => {
     const s = planStatus(NO_CHECKLIST, { handoff: null, now: new Date(NOW), staleHours: 2 });
-    expect(s.checklist).toEqual({ done: 0, total: 0 });
+    expect(s.task_steps).toEqual({ done: 0, total: 0 });
     expect(s.current).toBeNull();
     expect(s.next).toBeNull();
     expect(s.open_gates).toEqual([]);
+  });
+});
+
+describe('task steps and gates in other plan shapes', () => {
+  const opts = { handoff: null, now: new Date(NOW), staleHours: 2 };
+
+  test('only boxes inside Task sections count as task steps', () => {
+    expect(planStatus(TEMPLATE_SHAPE, opts).task_steps).toEqual({ done: 2, total: 3 });
+  });
+
+  test('an unchecked box under a Human Approval Gate heading is an open gate, named by its text', () => {
+    expect(planStatus(TEMPLATE_SHAPE, opts).open_gates).toEqual([
+      'Partner / Human approval received for this plan before implementation begins.',
+    ]);
+  });
+
+  test('an unchecked list item under ## Approval is an open gate, a ticked one is not', () => {
+    const s = planStatus(LIST_GATE, opts);
+    expect(s.open_gates).toEqual(['Approved']);
+    expect(s.task_steps).toEqual({ done: 0, total: 1 });
   });
 });
 
@@ -159,13 +227,21 @@ describe('CLI', () => {
     expect(r.code).toBe(0);
     expect(r.out).toContain('plan: 2026-01-01-demo');
     expect(r.out).toContain('status: Approved');
-    expect(r.out).toContain('checklist: 3/5');
+    expect(r.out).toContain('task steps: 3/5');
     expect(r.out).toContain('current: Task T2: Second thing');
     expect(r.out).toContain('next: Task T3: Third thing');
     expect(r.out).toContain('open gates: Plan, Close plan');
     expect(r.out).toContain('result: running');
     expect(r.out).toContain('last update: 2026-01-02T01:00:00+07:00 T2 Step 1');
     expect(r.out).toContain('stale: yes');
+  });
+
+  test('the template shape prints its open gate', () => {
+    const path = writePlan('2026-01-03-template', TEMPLATE_SHAPE);
+    const r = run([path, '--now', NOW]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('task steps: 2/3');
+    expect(r.out).toContain('open gates: Partner / Human approval received');
   });
 
   test('without a handoff prints overnight: none', () => {
@@ -187,7 +263,7 @@ describe('CLI', () => {
     const r = run([path, '--now', NOW, '--json']);
     expect(r.code).toBe(0);
     const j = JSON.parse(r.out);
-    expect(j.checklist).toEqual({ done: 3, total: 5 });
+    expect(j.task_steps).toEqual({ done: 3, total: 5 });
     expect(j.overnight.stale).toBe(false);
   });
 

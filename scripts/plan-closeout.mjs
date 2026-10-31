@@ -284,7 +284,7 @@ export function auditCloseout({ sessions, planStatusOf }) {
     const landed = group.find((s) => s.state === 'merged');
     const status = bare(planStatusOf(landed));
     if (status === 'Complete') continue;
-    rows.push({ plan, status: status ?? null, sessions: group.map((s) => s.session), repo: landed.repo ?? null });
+    rows.push({ plan, status: status ?? null, sessions: group.map((s) => s.session), repo: landed.plan_repo ?? landed.repo ?? null });
   }
   return rows;
 }

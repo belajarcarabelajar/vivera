@@ -22,7 +22,7 @@
   "scripts/plan-issue-sync.test.mjs": 62023,
   "scripts/plan-lifecycle-audit.mjs": 29658,
   "scripts/plan-lifecycle-audit.test.mjs": 25186,
-  "scripts/plan-mark-done.mjs": 24939,
+  "scripts/plan-mark-done.mjs": 24684,
   "scripts/plan-mark-done.test.mjs": 21768,
   "scripts/plan-publish-frontmatter.test.mjs": 29270,
   "scripts/plan-publish-registry.test.mjs": 20245,

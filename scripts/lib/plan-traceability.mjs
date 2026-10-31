@@ -9,6 +9,8 @@
 // those plans belong to repositories this one does not own. Without the key the
 // gaps are one aggregated warning, never an error.
 
+import { escapeRe } from './escape-re.mjs';
+
 const ENABLE_HINT = 'Set `defaults.require_traceability: true` in this plan to make it an error instead of a warning';
 const AC_DEF = /^\s*[-*+]\s+(?:\[[ xX]\]\s+)?AC-?(\d+)\s*:/;
 const AC_TOKEN = /\bAC-?(\d+)(?:\s*(?:\.\.|-|\u2013|\bto\b)\s*(?:AC-?)?(\d+))?\b/g;
@@ -34,8 +36,6 @@ function parseAcCell(text) {
   return { ids: [...ids].sort(byAcNumber), backwards, tooLarge };
 }
 
-// dup-defs: allow the ci-targeted.mjs copy is private to that CLI and not exported
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const idRe = (body) => new RegExp(`(?<![\\w-])${body}(?!\\w)`, 'g');
 
 // Known ids are matched literally, so any id shape works. A GHOST is a token with
@@ -108,6 +108,32 @@ function columnOf(header, word, taken) {
   return exact !== -1 ? exact : header.findIndex((h, i) => !taken.includes(i) && h.includes(word));
 }
 
+// Checks one table's rows: problems are pushed in row order, AC ids not defined in
+// the body go to `extra`, and the returned set holds every AC id a row lists.
+function checkRows(rows, { ac, task, chk }, knownIds, defined, problems, extra) {
+  const listed = new Set();
+  for (const row of rows) {
+    const acCell = row[ac] || '';
+    const { ids, backwards, tooLarge } = parseAcCell(acCell);
+    for (const b of backwards) problems.push(`Traceability row "${acCell}" has a backwards range ${b}; write the lower id first`);
+    for (const r of tooLarge) problems.push(`Traceability row "${acCell}" has a range too large to expand: ${r} spans more than ${MAX_RANGE} ids`);
+    if (ids.length === 0) continue;
+    for (const id of ids) {
+      listed.add(id);
+      if (!defined.has(id)) extra.add(id);
+    }
+    const { named, ghosts } = taskRefs(row[task] || '', knownIds);
+    for (const n of ghosts) problems.push(`Traceability row "${acCell}" names unknown task ${n} (GHOST reference: ${n})`);
+    if (named.length === 0) {
+      problems.push(`Traceability row "${acCell}" names no task from tasks[] in its Task cell: "${row[task] || ''}"`);
+    }
+    if ((row[chk] || '').replace(/`/g, '').trim() === '') {
+      problems.push(`Traceability row "${acCell}" has an empty Check cell; name the command that proves it`);
+    }
+  }
+  return listed;
+}
+
 export function validateTraceability(plan, body, errors, warnings) {
   const lines = unfencedLines(body);
   const defined = new Set();
@@ -133,26 +159,7 @@ export function validateTraceability(plan, body, errors, warnings) {
     problems.push(`the Traceability table has no ${missing.join(', ')} column header; it needs AC, Task and Check columns`);
   } else {
     const knownIds = (plan.tasks || []).map((t) => t.id).filter((id) => typeof id === 'string' && id);
-    const listed = new Set();
-    for (const row of table.rows) {
-      const acCell = row[ac] || '';
-      const { ids, backwards, tooLarge } = parseAcCell(acCell);
-      for (const b of backwards) problems.push(`Traceability row "${acCell}" has a backwards range ${b}; write the lower id first`);
-      for (const r of tooLarge) problems.push(`Traceability row "${acCell}" has a range too large to expand: ${r} spans more than ${MAX_RANGE} ids`);
-      if (ids.length === 0) continue;
-      for (const id of ids) {
-        listed.add(id);
-        if (!defined.has(id)) extra.add(id);
-      }
-      const { named, ghosts } = taskRefs(row[task] || '', knownIds);
-      for (const n of ghosts) problems.push(`Traceability row "${acCell}" names unknown task ${n} (GHOST reference: ${n})`);
-      if (named.length === 0) {
-        problems.push(`Traceability row "${acCell}" names no task from tasks[] in its Task cell: "${row[task] || ''}"`);
-      }
-      if ((row[chk] || '').replace(/`/g, '').trim() === '') {
-        problems.push(`Traceability row "${acCell}" has an empty Check cell; name the command that proves it`);
-      }
-    }
+    const listed = checkRows(table.rows, { ac, task, chk }, knownIds, defined, problems, extra);
     const untraced = [...defined].filter((id) => !listed.has(id)).sort(byAcNumber);
     for (const id of untraced) {
       problems.push(`${id} is defined but has no row in the Traceability table; add one naming the task that `

@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { planFileOf, planRepoAtClaim } from './lib/registry-plan-file.mjs';
 import { claimSlot, resolveMergeRepo } from './pr-registry.mjs';
+import { auditCloseout } from './plan-closeout.mjs';
 
 const dirs = [];
 after(() => { for (const d of dirs) rmSync(d, { recursive: true, force: true }); });
@@ -35,12 +36,28 @@ describe('planRepoAtClaim', () => {
     assert.equal(planRepoAtClaim({ plan: 'p', repoRoot: target, viveraRoot: vivera }), path.resolve(vivera));
   });
 
+  test('looks for the slug the registry records, not the raw --plan text', () => {
+    const vivera = repoWithPlans('my-plan');
+    const target = repoWithPlans();
+    assert.equal(planRepoAtClaim({ plan: 'my plan', repoRoot: target, viveraRoot: vivera }), path.resolve(vivera));
+  });
+
   test('is null when the plan exists in the claimed repository, in neither, or both are one checkout', () => {
     const vivera = repoWithPlans('p');
     const target = repoWithPlans('p');
     assert.equal(planRepoAtClaim({ plan: 'p', repoRoot: target, viveraRoot: vivera }), null);
     assert.equal(planRepoAtClaim({ plan: 'q', repoRoot: target, viveraRoot: vivera }), null);
     assert.equal(planRepoAtClaim({ plan: 'p', repoRoot: vivera, viveraRoot: vivera }), null);
+  });
+});
+
+describe('audit location', () => {
+  test('an audit row names the repository holding the plan, not the PR repository', () => {
+    const rows = auditCloseout({
+      sessions: [{ session: 'a', plan: 'p', state: 'merged', repo: '/repo/bcb', plan_repo: '/repo/vivera' }],
+      planStatusOf: () => 'Approved',
+    });
+    assert.equal(rows[0].repo, '/repo/vivera');
   });
 });
 

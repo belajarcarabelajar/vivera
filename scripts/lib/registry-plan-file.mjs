@@ -8,6 +8,7 @@
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { slugify } from './registry-names.mjs';
 
 const planRel = (plan) => path.join('docs', 'code-plan', 'plans', `${plan}.md`);
 
@@ -22,10 +23,12 @@ export function planMissingOf(session) {
 }
 
 // At claim time the plan is already written: when it exists only in the vivera
-// checkout running the claim, that checkout is the session's plan_repo.
+// checkout running the claim, that checkout is the session's plan_repo. The file
+// is looked up by the slug the registry records, as planFileOf reads it.
 export function planRepoAtClaim({ plan, repoRoot, viveraRoot }) {
+  const rel = planRel(slugify(plan, 'plan id'));
   const repo = path.resolve(repoRoot);
   const vivera = path.resolve(viveraRoot);
-  if (repo === vivera || existsSync(path.join(repo, planRel(plan)))) return null;
-  return existsSync(path.join(vivera, planRel(plan))) ? vivera : null;
+  if (repo === vivera || existsSync(path.join(repo, rel))) return null;
+  return existsSync(path.join(vivera, rel)) ? vivera : null;
 }

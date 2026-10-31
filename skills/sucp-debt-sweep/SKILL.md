@@ -17,6 +17,7 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [02-rank-and-execute.md](references/02-rank-and-execute.md) | Before ranking candidates (6.3) or executing selected follow-ups (6.5). |
 | [03-graphify-sync.md](references/03-graphify-sync.md) | Before the 6.6 graphify sync, or when a sync reports no eligible docs. |
 | [04-stars-anti-patterns.md](references/04-stars-anti-patterns.md) | Before drawing the progress-star meter, or when self-checking the sweep against its anti-patterns and flow diagram. |
+| [05-memory-reorg.md](references/05-memory-reorg.md) | Before auditing the rule handbook (monthly, when a `docs/memory/` file passes about 12 KB, or on the owner's request) or retiring a rule ID. |
 
 ## 6️⃣ 🧹 Session-Close Debt Sweep & Follow-Up Injection (Mandatory)
 > 🧹 **Closing stage — zero-debt session:** once the plan is `Done 100%` and the evidence gate is green, the agent mines everything it learned during planning and execution, turns it into a short list of concrete follow-ups that can be finished right now, and asks the user to pick them with a single tap. Reporting alone is a failed close: the deliverable of this stage is a question the user answers with a checkbox, not a paragraph they must retype.

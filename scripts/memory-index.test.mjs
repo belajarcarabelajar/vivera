@@ -44,9 +44,13 @@ function checkMemoryIndex({ memory, topics }) {
     if (held.get(id) !== file) problems.push(`${id} is listed under ${file}, which does not hold it`);
   }
   for (const id of held.keys()) if (!listed.has(id)) problems.push(`${id} is missing from the index`);
-  const max = Math.max(0, ...[...held.keys(), ...listed.keys()].map(num));
+  // Retired IDs are never reused, so they fill their gap but must be gone from every topic file.
+  const retired = new Set(memory.match(/^Retired: (.*)$/m)?.[1].match(/L\d+/g) ?? []);
+  for (const id of retired) if (held.has(id)) problems.push(`${id} is retired but ${held.get(id)} still holds it`);
+  const max = Math.max(0, ...[...held.keys(), ...listed.keys(), ...retired].map(num));
   for (let n = 1; n <= max; n++) {
-    if (!held.has(`L${n}`) && !listed.has(`L${n}`)) problems.push(`L${n} is a gap: IDs run from L1 to L${max}`);
+    const id = `L${n}`;
+    if (!held.has(id) && !listed.has(id) && !retired.has(id)) problems.push(`${id} is a gap: IDs run from L1 to L${max}`);
   }
   return problems;
 }
@@ -109,6 +113,20 @@ describe('checkMemoryIndex fixtures', () => {
     expect(checkMemoryIndex(f)).toContain('rule row L9 is still in MEMORY.md');
   });
 
+  test('an ID on the Retired line fills its gap', () => {
+    const f = {
+      memory: `${index([['a', 'L1, L2'], ['b', 'L4']])}\nRetired: L3\n`,
+      topics: { 'docs/memory/a.md': topic('L1', 'L2'), 'docs/memory/b.md': topic('L4') },
+    };
+    expect(checkMemoryIndex(f)).toEqual([]);
+  });
+
+  test('a retired ID that a topic file still holds is reported', () => {
+    const f = valid();
+    f.memory += '\nRetired: L2\n';
+    expect(checkMemoryIndex(f)).toContain('L2 is retired but docs/memory/a.md still holds it');
+  });
+
   // Padded by bytes: the arrow in a rule row is three bytes but one string unit.
   const sized = (bytes) => topic('L3') + 'x'.repeat(bytes - Buffer.byteLength(topic('L3')));
 
@@ -131,6 +149,7 @@ describe('the real handbook', () => {
     const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort() : [];
     const topics = Object.fromEntries(files.map((f) => [`docs/memory/${f}`, fs.readFileSync(path.join(dir, f), 'utf8')]));
     expect(checkMemoryIndex({ memory: fs.readFileSync(path.join(ROOT, 'MEMORY.md'), 'utf8'), topics })).toEqual([]);
+    expect(fs.readFileSync(path.join(ROOT, 'MEMORY.md'), 'utf8')).toMatch(/^Retired: (\(none\)|L\d+(, L\d+)*)$/m);
     expect(files).toEqual(['gates-and-tests.md', 'git-and-delivery.md', 'other-repositories.md', 'plans-and-approvals.md', 'subagents.md', 'tools-and-environment.md']);
   });
 });

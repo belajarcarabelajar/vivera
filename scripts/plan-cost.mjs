@@ -21,7 +21,11 @@ import readline from 'node:readline';
 import { parseArgs } from 'node:util';
 import { callCostUsd, readTranscript } from './session-metrics.mjs';
 
-const CLAIM_RE = /pr-registry(?:\.mjs)?\s+claim\b([^;&|\n]*)/g;
+// A claim counts only as a shell segment that runs it with bun, so an rg, echo, or commit
+// message that merely mentions a claim command is not attributed. A `timeout <n>` wrapper or
+// a loop's `do` keyword in front still runs it (20 real claims had one, measured 2026-10-31).
+const SEGMENT_SPLIT_RE = /&&|\|\||[;|&\n]/;
+const CLAIM_SEGMENT_RE = /^(?:do\s+)?(?:timeout\s+\S+\s+)?bun\s+(?:\S*\/)?pr-registry(?:\.mjs)?\s+claim(?:\s(.*))?$/s;
 // The id ends at whitespace, a quote, or the end, so an id never matches a longer one it prefixes.
 const PLAN_ARG_RE = /--plan(?:=|\s+)['"]?([^\s'"]+)/g;
 const ESTIMATE_CAVEATS = [
@@ -41,7 +45,8 @@ export async function claimedPlans(file) {
     for (const item of rec.message.content) {
       const cmd = item?.type === 'tool_use' && item.name === 'Bash' ? item.input?.command : null;
       if (typeof cmd !== 'string') continue;
-      for (const [, args] of cmd.matchAll(CLAIM_RE)) {
+      for (const segment of cmd.split(SEGMENT_SPLIT_RE)) {
+        const args = segment.trim().match(CLAIM_SEGMENT_RE)?.[1] ?? '';
         for (const [, id] of args.matchAll(PLAN_ARG_RE)) ids.add(id);
       }
     }

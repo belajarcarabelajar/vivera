@@ -55,12 +55,51 @@ describe('plan-cost attribution', () => {
     expect(r.estimate).toBe(true);
   });
 
-  test('the --plan=<id> form inside quotes also matches, and pr-registry without .mjs too', () => {
+  test('the quoted --plan=<id> form, an absolute script path, and pr-registry without .mjs also match', () => {
     const pr = root();
-    writeJsonl(path.join(pr, '-mnt-disk-vivera-wt-sad-book', 's1.jsonl'), [
-      assistant('m1', MILLION_IN, [bash(`bash -lc "pr-registry claim --plan=${PLAN}"`)]),
+    const dir = path.join(pr, '-mnt-disk-vivera-wt-sad-book');
+    writeJsonl(path.join(dir, 's1.jsonl'), [
+      assistant('m1', MILLION_IN, [bash(`bun /home/u/vivera/scripts/pr-registry.mjs claim --plan="${PLAN}" --session s`)]),
+    ]);
+    writeJsonl(path.join(dir, 's2.jsonl'), [
+      assistant('m2', MILLION_IN, [bash(`bun pr-registry claim --plan ${PLAN}`)]),
+    ]);
+    expect(json(pr).mainTranscripts).toBe(2);
+  });
+
+  test('a cd segment before the bun claim segment still matches', () => {
+    const pr = root();
+    writeJsonl(path.join(pr, '-home-someone-Proyek-vivera', 's1.jsonl'), [
+      assistant('m1', MILLION_IN, [bash(`cd /x && bun scripts/pr-registry.mjs claim --plan ${PLAN} --session s --worktree`)]),
     ]);
     expect(json(pr).mainTranscripts).toBe(1);
+  });
+
+  test('a bun claim wrapped in timeout or run as a loop body still matches', () => {
+    const pr = root();
+    const dir = path.join(pr, '-home-someone-Proyek-vivera');
+    writeJsonl(path.join(dir, 's1.jsonl'), [
+      assistant('m1', MILLION_IN, [bash(`timeout 60 bun scripts/pr-registry.mjs claim --plan ${PLAN} --session s`)]),
+    ]);
+    writeJsonl(path.join(dir, 's2.jsonl'), [
+      assistant('m2', MILLION_IN, [bash(`for s in a b; do bun scripts/pr-registry.mjs claim --plan ${PLAN} --session $s; done`)]),
+    ]);
+    expect(json(pr).mainTranscripts).toBe(2);
+  });
+
+  test('a Bash input that only searches for or echoes a claim command does not match', () => {
+    const pr = root();
+    const dir = path.join(pr, '-home-someone-Proyek-vivera');
+    writeJsonl(path.join(dir, 's1.jsonl'), [
+      assistant('m1', MILLION_IN, [bash(`rg "pr-registry claim --plan ${PLAN}" docs`)]),
+    ]);
+    writeJsonl(path.join(dir, 's2.jsonl'), [
+      assistant('m2', MILLION_IN, [bash(`echo bun scripts/pr-registry.mjs claim --plan ${PLAN}`)]),
+    ]);
+    writeJsonl(path.join(dir, 's3.jsonl'), [
+      assistant('m3', MILLION_IN, [bash(`git commit -m "run pr-registry claim --plan ${PLAN} first"`)]),
+    ]);
+    expect(json(pr).mainTranscripts).toBe(0);
   });
 
   test('a plan id that is a prefix of the claimed id does not match', () => {

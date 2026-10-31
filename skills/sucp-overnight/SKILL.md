@@ -80,7 +80,7 @@ The first line of the final message is the PR URL, or the word `none` and why.
 
 A handoff that still says `Result: running` with no live process is a stale handoff: `plan-status` flags it `stale` once `Last update` is older than two hours.
 
-1. Run `bun ~/vivera/scripts/plan-status.mjs <plan.md>` and trust its computed block (checklist, current task, open gates, `stale`) over any summary. Read `Last update`: it names the last finished item.
+1. Run `bun ~/vivera/scripts/plan-status.mjs <plan.md>` and trust its computed block (task steps, current task, open gates, `stale`) over any summary. Read `Last update`: it names the last finished item.
 2. Re-run the runner on the plan. Steps already done report `SKIPPED-IDEMPOTENT`.
 3. Never re-dispatch an item already `[x]`; continue from the current task.
 4. Rewrite the handoff's `Last update` and add a `Decisions` line saying the run was resumed and from where.

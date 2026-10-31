@@ -202,6 +202,19 @@ describe('plan-cost output', () => {
     expect(r.out).not.toContain('pr-registry');
   });
 
+  test('a third caveat names the claim forms that are not counted, in text and in --json caveats', () => {
+    const pr = root();
+    writeJsonl(path.join(pr, '-home-someone-Proyek-vivera', 's1.jsonl'), [assistant('m1', MILLION_IN, [bash(claim(PLAN))])]);
+    const t = run(['--plan', PLAN, '--projects-root', pr]);
+    expect(t.code).toBe(0);
+    const lines = t.out.split('\n').filter((l) => l.startsWith('caveat: '));
+    expect(lines).toHaveLength(3);
+    for (const form of ['VAR=x bun', 'bash -c', 'subshell', 'backslash']) expect(lines[2]).toContain(form);
+    const j = json(pr);
+    expect(j.caveats).toHaveLength(3);
+    expect(`caveat: ${j.caveats[2]}`).toBe(lines[2]);
+  });
+
   test('no matching transcript prints n/a and exits 0', () => {
     const pr = root();
     const r = run(['--plan', PLAN, '--projects-root', pr]);

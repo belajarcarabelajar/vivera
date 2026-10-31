@@ -31,6 +31,7 @@ const PLAN_ARG_RE = /--plan(?:=|\s+)['"]?([^\s'"]+)/g;
 const ESTIMATE_CAVEATS = [
   'a session that continued the plan without running the registry claim is not counted',
   'other work done in a claiming session, before or after the claim, is also counted',
+  'a claim behind an env prefix (VAR=x bun ...), inside bash -c or a subshell, or split by a backslash line continuation is not counted',
 ];
 
 // Plan ids claimed by the Bash tool inputs of one transcript.

@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { checkCloseout } from './plan-closeout.mjs';
 import { reconcile, setupWorktree, openPr } from './lib/registry-sync.mjs';
 import { slugify, branchFor, worktreeFor } from './lib/registry-names.mjs';
+import { planRepoAtClaim } from './lib/registry-plan-file.mjs';
 
 export { branchFor, worktreeFor };
 
@@ -227,7 +228,7 @@ function assertNoCollisions(sessions, where) {
 
 // ---------- Claim ----------
 
-export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn = [] }) {
+export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn = [], planRepo = null }) {
   const planSlug = slugify(plan, 'plan id');
   const sessionSlug = slugify(session, 'session id');
   const branch = branchFor(planSlug, sessionSlug);
@@ -248,16 +249,11 @@ export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn =
     return { session: backfilled, created: false, registry: { ...registry, sessions } };
   }
   if (existing) {
-    // Re-claiming the same session id is idempotent rather than an error: a
-    // retried claim after a crashed session must not need a manual edit, and
-    // the derived names are a pure function of the inputs so they cannot drift.
-    //
-    // `registry` is returned here too, unchanged, because it is returned in the
-    // create path. The asymmetry was real and it bit a caller: `claimSlot(...).registry`
-    // was `undefined` on exactly the path a crashed-session retry takes, and the
-    // CAS wrapper then wrote back the registry it had loaded rather than the
-    // mutation's own value. The mutation contract has to be the same on both
-    // paths, or a caller cannot rely on it.
+    // Re-claiming the same session id is idempotent: a retried claim after a
+    // crashed session needs no manual edit, and the derived names cannot drift.
+    // `registry` is returned unchanged, as on the create path: when it was
+    // `undefined` here, the CAS wrapper wrote back the registry it had loaded
+    // instead of the mutation's value, so both paths keep one contract.
     return { session: existing, created: false, registry };
   }
 
@@ -275,6 +271,7 @@ export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn =
     branch,
     worktree,
     repo,
+    ...(planRepo ? { plan_repo: planRepo } : {}),
     base: 'main',
     state: 'isolated',
     pr: null,
@@ -498,11 +495,11 @@ export function closeoutVerdict(session, { repoRoot, repoFromFlag = false, check
   return { lines };
 }
 
-// Where `state <s> merged` looks for the plan: the flag, then the repository the
-// session was claimed in, then this repository for entries that predate `repo`.
+// Where `state <s> merged` looks for the plan: the flag, then `plan_repo`, then the
+// claimed repository, then this repository for entries that predate `repo`.
 export function resolveMergeRepo(session, flagRepo) {
   if (flagRepo) return path.resolve(flagRepo);
-  return session.repo ?? rootDir;
+  return session.plan_repo ?? session.repo ?? rootDir;
 }
 
 function printSession(s) {
@@ -531,6 +528,7 @@ function main(argv) {
         repoRoot,
         root: process.env.VIVERA_WORKTREE_ROOT,
         dependsOn: flags['depends-on'] ? flags['depends-on'].split(',').map((d) => d.trim()).filter(Boolean) : [],
+        planRepo: planRepoAtClaim({ plan: flags.plan, repoRoot, viveraRoot: rootDir }),
       }), { registryPath });
       const { session, created, repoMismatch } = result;
       if (repoMismatch) {

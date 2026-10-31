@@ -114,3 +114,49 @@ describe('session signals', () => {
     for (const out of [j.stdout, j.stderr, t.stdout, t.stderr]) expect(out).not.toContain('SIGNAL_INPUT_MUST_NOT_LEAK');
   });
 });
+
+describe('linked worktree', () => {
+  // Claude Code keys transcripts by the dir a session started in, usually the main checkout.
+  function setup() {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'session-metrics-wt-')));
+    dirs.push(root);
+    const main = path.join(root, 'main');
+    const wt = path.join(root, 'wt');
+    const git = (cwd, ...args) => {
+      const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, env: ENV, encoding: 'utf8' });
+      if (r.status !== 0) throw new Error(r.stderr);
+    };
+    fs.mkdirSync(main);
+    git(main, 'init', '-q');
+    git(main, 'commit', '-q', '--allow-empty', '-m', 'init');
+    git(main, 'worktree', 'add', '-q', '--detach', wt);
+    const home = path.join(root, 'home');
+    const proj = path.join(home, '.claude', 'projects', main.replace(/\//g, '-'));
+    writeJsonl(path.join(proj, 'sess.jsonl'), [{ type: 'assistant', timestamp: TS, message: { id: 'm1', usage: usage(1, 0, 0, 1), content: [] } }]);
+    const run = (...extra) => spawnSync(process.execPath, [SCRIPT, '--registry', path.join(root, 'none.json'), ...extra], { cwd: wt, env: { ...ENV, HOME: home }, encoding: 'utf8' });
+    return { main, wt, proj, run };
+  }
+
+  test('without --repo or --projects-dir it falls back to the main checkout and says so in one note', () => {
+    const { main, run } = setup();
+    const r = run('--json');
+    expect(r.status).toBe(0);
+    const j = JSON.parse(r.stdout);
+    expect(j.mainSessions).toBe(1);
+    expect(j.notes.filter((n) => n.includes('linked worktree') && n.includes(main))).toHaveLength(1);
+  });
+
+  test('an explicit --repo or --projects-dir is never overridden', () => {
+    const { wt, run } = setup();
+    expect(run('--repo', wt).status).toBe(1);
+    expect(run('--projects-dir', path.join(wt, 'nope')).status).toBe(1);
+  });
+
+  test('a main checkout without transcripts still exits 1', () => {
+    const { proj, run } = setup();
+    fs.rmSync(proj, { recursive: true, force: true });
+    const r = run();
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('project dir not found');
+  });
+});

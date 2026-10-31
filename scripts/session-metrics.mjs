@@ -375,14 +375,25 @@ export async function main(argv) {
     repo = r.stdout.trim();
   }
   repo = path.resolve(repo);
-  const projectsDir = values['projects-dir'] ?? path.join(os.homedir(), '.claude', 'projects', slugFor(repo));
+  let projectsDir = values['projects-dir'] ?? path.join(os.homedir(), '.claude', 'projects', slugFor(repo));
+  let fallback = null;
+  // Transcripts are keyed by the dir a session started in, usually the main checkout, not a linked worktree.
+  if (!values.repo && !values['projects-dir'] && !fs.existsSync(projectsDir)) {
+    const g = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-dir', '--git-common-dir'], { encoding: 'utf8' });
+    const [gitDir, common] = g.status === 0 ? g.stdout.trim().split('\n') : [];
+    if (common && gitDir !== common) {
+      repo = path.dirname(common);
+      projectsDir = path.join(os.homedir(), '.claude', 'projects', slugFor(repo));
+      fallback = `linked worktree: read the transcripts of the main checkout ${repo}`;
+    }
+  }
   const registryPath = values.registry ?? path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'pr.registry.json');
   if (!fs.existsSync(projectsDir) || !fs.statSync(projectsDir).isDirectory()) {
     process.stderr.write(`session-metrics: project dir not found: ${projectsDir}\nNo transcripts were read, so no counts are reported.\n`);
     return 1;
   }
   const window = { since: values.since, until: values.until };
-  const notes = [];
+  const notes = fallback ? [fallback] : [];
   const files = listTranscripts(projectsDir, windowBounds(window).from);
   const mains = [];
   for (const f of files.mains) mains.push({ file: f, ...(await readTranscript(f)), signals: await readTranscriptSignals(f) });

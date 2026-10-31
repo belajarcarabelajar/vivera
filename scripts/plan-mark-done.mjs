@@ -124,6 +124,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { writeFileAtomic } from './lib/atomic-write.mjs';
+import { escapeRe } from './lib/escape-re.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The runner's own frontmatter and YAML-subset parsers, IMPORTED rather than
@@ -266,14 +267,8 @@ const FENCE_RE = /^[ \t]*(?:```|~~~)/;
 //
 // `(?![A-Za-z0-9_-])` after the id, so `Task T1` is not matched while looking for
 // `T10`.
-//
-// Built by concatenation rather than a template literal on purpose: the escape
-// regex contains the two characters `${`, which a template literal would read as
-// the start of an interpolation and the file would not parse.
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
 export function taskSectionRange(lines, id) {
-  const re = new RegExp('^#{1,6}[ \\t]+Task[ \\t]+' + escapeRegExp(id) + '(?![A-Za-z0-9_-])');
+  const re = new RegExp('^#{1,6}[ \\t]+Task[ \\t]+' + escapeRe(id) + '(?![A-Za-z0-9_-])');
   const start = lines.findIndex((l) => re.test(l));
   if (start === -1) return null;
   let end = lines.length;

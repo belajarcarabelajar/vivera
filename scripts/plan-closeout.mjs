@@ -20,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo } from './plan-issue-sync.mjs';
+import { planFileOf, planMissingOf } from './lib/registry-plan-file.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
@@ -415,16 +416,21 @@ function readRegistry(opts) {
 
 function auditCli(opts) {
   const planStatusOf = (s) => {
-    const file = path.join(s.repo ?? repoRoot, 'docs', 'code-plan', 'plans', `${s.plan}.md`);
+    const file = planFileOf(s, repoRoot);
     return existsSync(file) ? planStatus(readFileSync(file, 'utf8')) : null;
   };
-  const rows = auditCloseout({ sessions: readRegistry(opts).sessions, planStatusOf });
+  const { sessions } = readRegistry(opts);
+  const rows = auditCloseout({ sessions, planStatusOf });
   // A plan file that cannot be found is unread, not debt: sessions claimed before `repo` was recorded
   // point at this repository, so counting them would bury the real debt under false rows.
+  // An unreadable plan recorded with plan_missing is counted once; a readable file still wins.
+  const missing = new Set(sessions.filter(planMissingOf).map((s) => s.plan));
   const debt = rows.filter((r) => r.status !== null);
-  const unread = rows.filter((r) => r.status === null);
+  const unread = rows.filter((r) => r.status === null && !missing.has(r.plan));
+  const noFile = rows.length - debt.length - unread.length;
   for (const r of debt) console.log(`${r.plan}\t${r.status}\t${r.sessions.join(',')}\t${r.repo ?? repoRoot}`);
   console.log(`closeout debt: ${debt.length} plan(s)`);
+  if (noFile) console.log(`no plan file: ${noFile} plan(s) recorded with plan_missing in the registry`);
   if (unread.length) {
     console.log(`not read: ${unread.length} plan file(s) not found; re-claim the session with --repo <repository> to record where its plan lives`);
     for (const r of unread) console.log(`  ${r.plan}\t${r.repo ?? repoRoot}`);

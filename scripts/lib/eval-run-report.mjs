@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { FLAKY_MIN_ATTEMPTS, compareBaseline, isFlaky } from './eval-repeat.mjs';
+import { passK, wilson } from './eval-stats.mjs';
 
 function money(n) {
   return String(Math.round(n * 10000) / 10000);
@@ -23,8 +24,9 @@ export function line(r, width) {
   if (r.skipped) return `${id}  SKIP  total budget reached`;
   const failed = r.results.find((x) => !x.pass);
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
-  const tally = (r.attempts > 1 ? `  passes=${r.passes}/${r.attempts}` : '') + (r.flaky ? '  flaky' : '') + (r.confirmed === false ? '  unconfirmed' : '');
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.stream ? `  fixture=${r.fixture}  stream=${r.stream}` : ''}`;
+  const ci = r.attempts > 1 && wilson(r.passes, r.attempts);
+  const tally = (ci ? `  passes=${r.passes}/${r.attempts} (95% CI ${ci.low.toFixed(2)}-${ci.high.toFixed(2)})` : '') + (r.flaky ? '  flaky' : '') + (r.confirmed === false ? '  unconfirmed' : '');
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.fixture ? `  fixture=${r.fixture}` : ''}${r.stream ? `  stream=${r.stream}` : ''}`;
 }
 
 // Prints the totals line and, after a full-length run, the flaky list; returns the counts the exit code needs.
@@ -39,6 +41,7 @@ export function printSummary(done, spent) {
   if (ran.length && ran.every((r) => r.attempts >= FLAKY_MIN_ATTEMPTS)) {
     for (const r of ran.filter(isFlaky)) console.log(`flaky: ${r.id} (pass rate ${Math.round(r.pass_rate * 100) / 100})`);
   }
+  for (const r of ran.filter((x) => x.attempts >= FLAKY_MIN_ATTEMPTS)) console.log(`pass^${r.attempts}: ${r.id} ${passK(r.passes / r.attempts, r.attempts).toFixed(2)}`);
   return { passed, skipped, unconfirmed };
 }
 

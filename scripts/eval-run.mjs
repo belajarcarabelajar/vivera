@@ -37,6 +37,7 @@ import { score } from './eval-score.mjs';
 import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
 import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
+import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -251,7 +252,7 @@ function deniedToolNames(events) {
   return denials.map((d) => d?.tool_name).filter((n) => typeof n === 'string');
 }
 
-async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt) {
+async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt, evalsDir) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
   const nth = attempt ? `-${attempt + 1}` : '';
@@ -279,9 +280,11 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
   if (run.timedOut) results.unshift({ type: 'run', pass: false, detail: `timed out after ${RUN_TIMEOUT_S} s` });
   else if (run.spawnError) results.unshift({ type: 'run', pass: false, detail: `could not start claude: ${run.spawnError.code ?? run.spawnError.message}` });
   else if (parsed.result.subtype == null) results.unshift({ type: 'run', pass: false, detail: `no result event (exit ${run.status})` });
+  const pass = results.every((r) => r.pass);
+  const failed = stream || pass ? undefined : keepFailedStream(evalsDir, path.basename(runDir), scenario.id, nth, stdout);
   return {
     ...base,
-    pass: results.every((r) => r.pass),
+    pass,
     results,
     turns: parsed.result.num_turns,
     // Unknown, not zero: a run killed before its result event may have spent up to its ceiling.
@@ -290,7 +293,7 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
     usage: parsed.result.usage,
     permission_denials: deniedToolNames(parsed.events),
     seconds: Math.round((Date.now() - started) / 100) / 10,
-    ...(stream ? { stream, fixture: dest } : {}),
+    ...(stream ? { stream, fixture: dest } : failed ? { stream: failed } : {}),
   };
 }
 
@@ -329,6 +332,7 @@ async function main(argv) {
   const commit = (spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).stdout ?? '').trim();
   const runId = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
   const runDir = path.join(scratch, runId);
+  const out = opts.out ?? path.join(ROOT, 'docs', 'code-plan', 'evals', `${date}-${commit.slice(0, 7) || 'nocommit'}.json`);
   const width = Math.max(...scenarios.map((s) => s.id.length), 2);
   let bwrap = opts.noSandbox ? null : process.env.EVAL_BWRAP || '/usr/bin/bwrap';
   if (bwrap && !fs.existsSync(bwrap)) {
@@ -351,7 +355,7 @@ async function main(argv) {
         // A full ceiling per attempt, so a confirmation never stops undecided.
         const record = await runRepeated(async (attempt) => {
           const cap = ceiling(opts.budget - spent);
-          const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt);
+          const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt, path.dirname(out));
           spent += r.cost ?? cap;
           return r;
         }, { ...repeat, expected: before?.pass, canRun: () => opts.budget - spent >= RUN_CEILING_USD });
@@ -363,10 +367,10 @@ async function main(argv) {
     if (opts.keep) console.log(`kept fixtures in ${runDir}`);
     else fs.rmSync(runDir, { recursive: true, force: true });
   }
+  if (!opts.keep) pruneStreamRuns(path.join(path.dirname(out), 'streams'));
 
   const { passed, skipped, unconfirmed } = printSummary(done, spent);
 
-  const out = opts.out ?? path.join(ROOT, 'docs', 'code-plan', 'evals', `${date}-${commit.slice(0, 7) || 'nocommit'}.json`);
   writeReport(out, { runId, commit, date, scenarios: done });
   const regressed = baseline ? printComparison(baseline, done) : false;
   return runExitCode({ passed, total: done.length, regressed, skipped: skipped + unconfirmed, baseline: Boolean(baseline) });

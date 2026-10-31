@@ -31,12 +31,13 @@ function defaultGit(root) {
 }
 
 // A token is a repo path when it has no spaces, placeholders, or globs, is relative,
-// and either ends in `/` or its last segment has a file extension.
+// and either ends in `/` or its last segment has a file extension. A bare `name/` is
+// skipped: rules use it for scratch folders outside the repo, such as `vivera-scratch/`.
 export function repoPathOf(token) {
   if (/[\s<>*{}$]/.test(token) || token.includes('://') || /^[~/]/.test(token)) return null;
   const clean = token.replace(/^\.\//, '').replace(/:\d+(-\d+)?$/, '');
   if (!clean.includes('/')) return null;
-  if (clean.endsWith('/')) return clean;
+  if (clean.endsWith('/')) return clean.indexOf('/') < clean.length - 1 ? clean : null;
   return /\.[A-Za-z0-9]+$/.test(clean.split('/').at(-1)) ? clean : null;
 }
 

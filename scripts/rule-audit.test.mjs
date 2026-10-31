@@ -28,7 +28,7 @@ beforeAll(() => {
   write('docs/kept/.keep', '');
   write('docs/memory/gates.md', topic(
     row('L1', 'WHEN x → DO run `scripts/present.mjs` and read `docs/kept/`, NOT `scripts/gone.mjs`'),
-    row('L2', 'WHEN y → DO `bun test` with `--json`, NOT z'),
+    row('L2', 'WHEN y → DO `bun test` with `--json` in `scratchy/`, NOT z'),
   ));
   write('docs/memory/tools.md', topic(
     row('L3', 'WHEN a → DO read `docs/missing-dir/`, then `missing-dir/`, NOT b'),
@@ -72,6 +72,12 @@ describe('auditRules', () => {
   test('without git, an ignored or suffix-resolved path counts as missing', () => {
     expect(byId(auditRules({ root, git: () => null })).L6.missingPaths)
       .toEqual(['build/out/', 'lib/helper.mjs', 'util/dup.mjs']);
+  });
+
+  test('a single-segment folder is not a repo path, while a multi-segment one is still checked', () => {
+    const r = byId(auditRules({ root, git: stubGit }));
+    expect(r.L2.missingPaths).toEqual([]);
+    expect(r.L3.missingPaths).toEqual(['docs/missing-dir/']);
   });
 
   test('rows in other-repositories.md skip the path check', () => {

@@ -88,3 +88,9 @@ test('a mod change leaves the tests of another mod out unless they name the chan
   const plan = planChecks(['mods/telegram-ask/README.md'], { ...MOD_INDEX, sources });
   expect(modTestFiles(plan)).toEqual(['./scripts/readme-reader.test.mjs', './scripts/telegram-ask.test.mjs']);
 });
+
+test('the eval suite passes --budget-usd 20, so every flaky scenario gets its five runs', () => {
+  const cmd = planChecks(['skills/x/SKILL.md'], { sources: {} }).suites.find((s) => s.name === 'eval')?.cmd ?? [];
+  expect(cmd).toContain('--budget-usd');
+  expect(cmd[cmd.indexOf('--budget-usd') + 1]).toBe('20');
+});

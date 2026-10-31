@@ -59,6 +59,16 @@ describe('audit: plan_file and plan_missing', () => {
     assert.doesNotMatch(out, /not read|\bgone\b|\bsingle\b/);
   });
 
+  test('a readable plan file wins over plan_missing on another session of the same plan', () => {
+    const { out } = audit(
+      [{ session: 'a', plan: 'p' }, { session: 'b', plan: 'p', plan_missing: 'x' }],
+      { 'docs/code-plan/plans/p.md': plan('Approved') },
+    );
+    assert.match(out, /^p\tApproved\ta,b\t/m);
+    assert.match(out, /closeout debt: 1 plan\(s\)/);
+    assert.doesNotMatch(out, /no plan file/);
+  });
+
   test('a plan with neither field and no file is still listed under not read', () => {
     const { out } = audit([
       { session: 'a', plan: 'hilang' },

@@ -420,16 +420,17 @@ function auditCli(opts) {
     return existsSync(file) ? planStatus(readFileSync(file, 'utf8')) : null;
   };
   const { sessions } = readRegistry(opts);
-  // A plan recorded with no file is neither debt nor unread; it is counted once.
-  const missing = new Set(sessions.filter(planMissingOf).map((s) => s.plan));
-  const rows = auditCloseout({ sessions: sessions.filter((s) => !missing.has(s.plan)), planStatusOf });
+  const rows = auditCloseout({ sessions, planStatusOf });
   // A plan file that cannot be found is unread, not debt: sessions claimed before `repo` was recorded
   // point at this repository, so counting them would bury the real debt under false rows.
+  // An unreadable plan recorded with plan_missing is counted once; a readable file still wins.
+  const missing = new Set(sessions.filter(planMissingOf).map((s) => s.plan));
   const debt = rows.filter((r) => r.status !== null);
-  const unread = rows.filter((r) => r.status === null);
+  const unread = rows.filter((r) => r.status === null && !missing.has(r.plan));
+  const noFile = rows.length - debt.length - unread.length;
   for (const r of debt) console.log(`${r.plan}\t${r.status}\t${r.sessions.join(',')}\t${r.repo ?? repoRoot}`);
   console.log(`closeout debt: ${debt.length} plan(s)`);
-  if (missing.size) console.log(`no plan file: ${missing.size} plan(s) recorded with plan_missing in the registry`);
+  if (noFile) console.log(`no plan file: ${noFile} plan(s) recorded with plan_missing in the registry`);
   if (unread.length) {
     console.log(`not read: ${unread.length} plan file(s) not found; re-claim the session with --repo <repository> to record where its plan lives`);
     for (const r of unread) console.log(`  ${r.plan}\t${r.repo ?? repoRoot}`);

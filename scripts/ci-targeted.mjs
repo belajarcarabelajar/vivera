@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GitError, gitText } from './lib/git.mjs';
 import { buildIndex, modTests } from './lib/ci-targeted-index.mjs';
+import { escapeRe } from './lib/escape-re.mjs';
 
 export { buildIndex, mermaidBlocks, scriptsOnlyChange } from './lib/ci-targeted-index.mjs';
 
@@ -80,7 +81,6 @@ const REF = /[\w$./-]*[\w-]\.(?:mjs|cjs|js|sh|py|ps1|tsv|json|md|txt|ya?ml)(?![\
 const SELF_SCAN = /readdirSync\(\s*(?:new URL\(\s*['"`]\.\/['"`]|import\.meta\.dirname?\b|__dirname\b)/;
 
 const isTest = (p) => p.endsWith('.test.mjs');
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function toolchainReason(p) {
   // A fixture's package.json belongs to a throwaway eval repository, not to this one.

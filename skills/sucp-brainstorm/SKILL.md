@@ -98,6 +98,7 @@ Treat unknown elements according to their epistemic nature before asking the use
    The phase closes with the intent-lock question (header `Intent`) asked through the Confirmation Protocol.
 3. Phase 3 — Implementation Chat: Detail decision-complete architecture (interfaces, data flow, failure modes, acceptance criteria). Must include at least one Mermaid diagram as visual companion (a `flowchart` showing tasks, dependencies, gates, and verification is MANDATORY; add `sequenceDiagram`, `stateDiagram-v2`, or `erDiagram` when they clarify interactions, lifecycle, or data).
 4. Propose 2-3 approaches — trade-offs, recommendation, YAGNI applied.
+   Score them in the alternative matrix of the 💡 Creative & Convergent row (criteria and weights before scores).
    When the approaches are interface or module shapes, produce them with Design It Twice.
 5. Present the design in sections scaled to complexity, and ask approval after each section through the Confirmation Protocol (header `Section`).
 6. Write design doc — save to docs/code-plan/specs/YYYY-MM-DD-<topic>-design.md, commit.

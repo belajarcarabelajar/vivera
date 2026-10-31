@@ -11,6 +11,7 @@ defaults:
   allow_loose_skip_if: []            # task ids grandfathered from the skip_if probe ban
   require_impacts: true              # every task must declare the surfaces it can break
   allow_no_impacts: []               # task ids exempted from impacts; a stale name is an error
+  require_traceability: true         # every AC-n needs a Traceability row naming its task and check
   retry_if: any                      # any | transient. `transient` spends a retry budget ONLY on a failure the classifier calls transient; an unrecognised value throws
 tasks:
   - id: T1
@@ -70,6 +71,13 @@ tasks:
   - [ ] AC-1: [Criterion 1 — observable, testable]
   - [ ] AC-2: [Criterion 2]
   - [ ] AC-3: [Criterion 3]
+- **Traceability:** one row per AC; the Task cell names ids from `tasks[]`, the Check cell the command that proves it.
+
+| AC | Task | Check | Evidence |
+|---|---|---|---|
+| AC-1 | T1 | `[command that proves AC-1]` | [what the run shows] |
+| AC-2 | T2 | `[command]` | [evidence] |
+| AC-3 | T1, T2 | `[command]` | [evidence] |
 
 ## 2. Visual Implementation Map — MANDATORY (approval gate blocker if missing)
 > Every plan MUST include at least one valid Mermaid diagram. Minimum: a `flowchart` showing every task node, every `depends_on` edge, the approval gate, and the Verify → Completion tail. Add a second diagram (`sequenceDiagram` for interactions, `stateDiagram-v2` for lifecycle, `erDiagram` for data) when it clarifies the design. Node ids must be identical to `tasks[].id` in frontmatter and to the `Task <id>` headings in §4. Edge direction is `A --> B` meaning B depends on A. Every diagram MUST carry `accTitle` and `accDescr`. Validate with `bun scripts/validate-skill.mjs` (syntax + accessibility) and `bun scripts/ultra-plan-runner.mjs <plan.md>` (id and edge consistency, both directions) before requesting approval.

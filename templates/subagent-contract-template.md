@@ -24,7 +24,7 @@ You edit files and run tests. You do **not** touch git state.
 - Your report states what you changed and the verification output. The parent stages, commits, and pushes.
 
 ## 1b. Task Chunking & Fan-Out Plan (written before dispatch)
-The parent chunks the work into the smallest independently verifiable units, then assigns one unit per subagent. Size the batch proportionally: 2 to 4 for medium work, 10 to 15 only for that many disjoint chunks.
+The parent chunks the work into the smallest independently verifiable units, then bundles them so each subagent gets 15+ turns of real work (L86). Each chunk keeps its own row and verification command. Size the batch proportionally: 2 to 4 for medium work, 10 to 15 only for that many disjoint chunks.
 
 | Chunk ID | Single-purpose scope | Owner subagent | Permitted target files | Expected output | Verification command |
 |---|---|---|---|---|---|

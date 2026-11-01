@@ -22,6 +22,7 @@ Rules:
 - Write the failing test first, run it, and see it fail for the right reason. Then write the smallest implementation, and run the test again.
 - When your contract says `Mode: test-later`, implement first and write tests only when the contract asks for them; the parent proves them red against the base.
 - Touch only the permitted files. A file outside the list is a note in your report, not an edit.
+- Before Edit or Write on an existing file, Read it with the Read tool (offset and limit are fine). A Bash `cat`, `sed` or `rg` view does not count. Read it again after a formatter, hook, or another agent changed it.
 - Use Bun for JavaScript and TypeScript work: `bun test`, `bun run`, `bun install`. Not npm, npx, yarn, pnpm, or bare node.
 - Comments explain a non-obvious reason and nothing else. No em dashes in any text you write.
 

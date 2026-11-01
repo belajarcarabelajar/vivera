@@ -3,7 +3,7 @@
 Some implementation choices cannot be settled from the codebase: the decision depends on a
 library surface the agent has not observed, on comparing more than two alternatives along
 several axes, or on being defensible to a reviewer who never saw the reasoning. The
-`🔬 Deep Research Workflow` in the master skill exists for exactly that case, and it runs
+`Deep Research Workflow` in the master skill exists for exactly that case, and it runs
 between the spike and the implementation plan rather than replacing either.
 
 | Concern | Rule |

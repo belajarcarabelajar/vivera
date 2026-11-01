@@ -7,7 +7,7 @@ description: Phase skill for super-ultra-code-plan Step 2 (path process). Covers
 
 > Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase after design approval: `sucp-plan`.
 
-## 📚 Load on demand
+## Load on demand
 
 The core rules in this file are always loaded; a reference file is read in full whenever its trigger below applies.
 
@@ -16,12 +16,12 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [01-reasoning-lenses.md](references/01-reasoning-lenses.md) | When selecting reasoning lenses for a task, or writing the Reasoning Lenses line of a plan. |
 | [02-deep-research.md](references/02-deep-research.md) | Before deep research, a graphify preflight, or any web retrieval with TinyFish. |
 
-## 🧠 Adaptive Reasoning Modes
+## Adaptive Reasoning Modes
 Activate only the reasoning lenses relevant to the task. Always use the core lenses; add conditional lenses when the scope or risk requires them. Do not expose private chain-of-thought. Report the selected lenses through their conclusions, assumptions, decisions, risks, artifacts, and evidence.
 
 Core lenses, computational thinking, conditional lenses, and Design It Twice: [references/01-reasoning-lenses.md](references/01-reasoning-lenses.md).
 
-### 🧭 Task-to-Mode Routing
+### Task-to-Mode Routing
 
 | Task path | Activate first |
 |---|---|
@@ -37,7 +37,7 @@ Deep research workflow, graphify preflight, and TinyFish web evidence: [referenc
 
 ## Step 2 — Path Process
 
-### 🧭 Epistemic Invariant: Two Kinds of Unknowns
+### Epistemic Invariant: Two Kinds of Unknowns
 Treat unknown elements according to their epistemic nature before asking the user:
 1. **Discoverable Facts (Repo/System Truth)**: Explore first.
    - Run targeted non-mutating searches, inspect entrypoints, configs, schemas, types, constants, and recent commits.
@@ -57,7 +57,7 @@ Treat unknown elements according to their epistemic nature before asking the use
    - Specification Triggers: When the user provides a specification—a noun phrase describing a visual or structural artifact (e.g. "comparison table of REST vs GraphQL", "state machine for order lifecycle", "contact form layout")—the spec is the request. Render the artifact directly rather than describing it in prose.
    - Request Evaluation Checklist: (Step 0) Does the request need a visual at all? (Conveys spatial, architecture, or lifecycle flow vs text prose); (Step 1) Is a connected tool or MCP a category match? (Match category, not style preference; never subdivide categories to bypass tools); (Step 2) Did the user ask for a file? (Write to disk + present); (Step 3) Default inline visualizer (render Mermaid/SVG).
 
-### 🛡️ Plan Mode Invariant: Strict Non-Mutation
+### Plan Mode Invariant: Strict Non-Mutation
 - In any planning or design phase, mutating tools (file edits, writes, deletions, commits) are strictly locked.
 - Sandbox Enforcement Mapping: the active sandbox is the mechanical form of this invariant. `read-only` permits planning and inspection only; `workspace-write` confines edits to the working directory and declared writable roots; `full access` relaxes the filesystem limit but never the plan-mode lock or the human approval gate. Any write outside the writable roots needs explicit approval, and a harness denial is evidence to report, never a route to work around.
 - Non-mutating exploration is encouraged to ground the plan in reality.
@@ -66,7 +66,7 @@ Treat unknown elements according to their epistemic nature before asking the use
   - Wrap final implementation plans in `<proposed_plan>...</proposed_plan>` tags.
   - If the user requests modifications, any revised plan must be emitted as a *complete replacement* (`<proposed_plan>`) rather than an ambiguous partial delta.
 
-### 📖 Project Glossary and ADRs
+### Project Glossary and ADRs
 - Read the target repository's `GLOSSARY.md` when present, and use its terms in questions, the design, and test names.
 - Challenge a term that conflicts with the glossary as soon as it appears. Propose one precise term for a fuzzy or overloaded one.
 - Cross-check the user's claims about current behavior against the code, and surface a contradiction instead of picking a side silently.
@@ -91,14 +91,14 @@ Treat unknown elements according to their epistemic nature before asking the use
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:
    - **One task, one file, no dependency:** no plan file. The in-chat Mermaid diagram and the `[ ]` checklist are the plan. Writing a file here is ceremony the skill already promised to scale away.
    - **Two or more tasks, any `depends_on` edge, or anything a subagent will own:** write a real plan to `docs/code-plan/plans/YYYY-MM-DD-<name>.md` with `ultra-plan/v1` frontmatter, and validate it with `bun scripts/ultra-plan-runner.mjs <plan.md>` before the `Design` question in step 4. The point is not the document; it is that the runner can then check the DAG, the Mermaid contract, and each task's `run[]`/`skip_if` hook mechanically. A Bounded task that fans out to subagents with no runner behind it is the least-checked work in the whole pipeline.
-### 🧠 Architectural — Brainstorming → Design
+### Architectural: Brainstorming → Design
 1. Phase 1 — Ground in Environment: Non-mutating exploration of project context, configs, dependencies, and architecture before asking questions.
 2. Phase 2 — Intent Chat: Clarify goal, success criteria, constraints, and tradeoffs using the Two Kinds of Unknowns protocol.
    Ask in frontier rounds until the frontier is empty, and apply Project Glossary and ADRs as terms come up.
    The phase closes with the intent-lock question (header `Intent`) asked through the Confirmation Protocol.
 3. Phase 3 — Implementation Chat: Detail decision-complete architecture (interfaces, data flow, failure modes, acceptance criteria). Must include at least one Mermaid diagram as visual companion (a `flowchart` showing tasks, dependencies, gates, and verification is MANDATORY; add `sequenceDiagram`, `stateDiagram-v2`, or `erDiagram` when they clarify interactions, lifecycle, or data).
 4. Propose 2-3 approaches — trade-offs, recommendation, YAGNI applied.
-   Score them in the alternative matrix of the 💡 Creative & Convergent row (criteria and weights before scores).
+   Score them in the alternative matrix of the Creative & Convergent row (criteria and weights before scores).
    When the approaches are interface or module shapes, produce them with Design It Twice.
 5. Present the design in sections scaled to complexity, and ask approval after each section through the Confirmation Protocol (header `Section`).
 6. Write design doc — save to docs/code-plan/specs/YYYY-MM-DD-<topic>-design.md, commit.

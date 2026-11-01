@@ -29,7 +29,7 @@ Read from the repository, not asked from the user. Nothing in this section came 
 
 ## 2. Short Design (Bounded path, presented in chat)
 
-> **🗺️ Plan**
+> **Plan**
 >
 > **Approach:** Parse the body with a zod schema at the route boundary, before the handler
 > runs. Return 400 with a flat `[{ field, message }]` list so mobile clients can map errors

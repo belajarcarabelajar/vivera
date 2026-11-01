@@ -1,9 +1,9 @@
-### 🔗 Requirements Traceability
+### Requirements Traceability
 - Give each acceptance criterion a stable identifier such as `AC-1`, `AC-2`, and `AC-3`.
 - Map every criterion to the task that implements it, the test or check that exercises it, and the evidence that proves it.
 - A requirement without a task, a test/check, or final evidence is incomplete even when the build passes.
 
-### 👀 Review, Diff & Publication
+### Review, Diff & Publication
 
 - Autonomous Code Review Rubric & 8-Point Bug Qualification Filter: reviewer agents emit this contract via `templates/code-review-template.md`.
   - An issue is a genuine review bug ONLY if it meets all 8 qualification criteria:
@@ -40,7 +40,7 @@
 - A failed required check blocks a completion claim. If an environment failure prevents verification, report the exact boundary instead of treating the check as passed.
 - Zero-Tolerance Clean Pass: A passing run must be clean. Test output must report 0 failures and lint/type/build output 0 errors and 0 warnings. A single failure or warning in the affected surface is not a pass, and it may not be explained away as cosmetic or silenced with a suppression; resolve it and re-run until the run is clean before claiming completion. Distinguish pre-existing warnings outside the changed surface from new ones, and report any pre-existing warning explicitly as a follow-up rather than carrying it as part of the deliverable.
 
-### 🔐 Security, Compatibility & Operations
+### Security, Compatibility & Operations
 - Treat authentication, authorization, input validation, secret handling, dependency changes, and sensitive data flows as explicit review surfaces.
 - For API, IPC, schema, database, event, or file-format changes, enumerate consumers and decide whether compatibility, versioning, migration, backfill, rollback, and data preservation are required.
 - For production-impacting changes, define what should be observed, how rollout is controlled, how failure is detected, how rollback works, and what post-deployment check proves the change is healthy.
@@ -56,13 +56,13 @@
 - Record plan version, approval state, changed decisions, superseded sections, and the reason for each scope or contract change.
 - A completion claim requires every applicable gate to pass or an explicit, documented risk acceptance from the authorized human partner.
 
-### 🧰 Reproducibility & Environment
+### Reproducibility & Environment
 - Record the runtime, language, package manager, dependency, operating-system, database, service, and tool versions that materially affect the implementation or verification.
 - Record setup prerequisites, environment variables by name without exposing secret values, exact commands, fixtures, seed data, and expected outputs needed to reproduce the result.
 - Keep dependency manifests and lockfiles synchronized. Explain new dependencies, rejected alternatives, license impact, size/performance impact, and removal or upgrade considerations.
 - Distinguish a repository failure from a local environment limitation. Do not claim reproducibility when the required environment or dependency is unavailable.
 
-### 🧪 Test Reliability & Failure Classification
+### Test Reliability & Failure Classification
 - Prefer deterministic, isolated tests with controlled fixtures, stable clocks, explicit cleanup, and no dependence on execution order or external state unless the test is specifically an integration test.
 - When a test is flaky, classify the cause, capture evidence, and report the affected scope. Do not hide flakiness with unbounded retries or weaken assertions.
 - Classify failed checks as code failure, test failure, contract failure, environment failure, infrastructure failure, or unrelated pre-existing failure. The classification must be supported by evidence.
@@ -71,7 +71,7 @@
 - **A failure row carries its own evidence.** The Error Ledger records the command's stderr tail (stdout when stderr is empty), bounded to the last few lines, plus the expectation the step actually carried. A row that states only "exit 1" cannot be acted on without re-running the command, and re-running a stateful step is not the same command twice. When the ledger says `_no output captured_`, that is itself the finding: the failing command produced nothing to diagnose with.
 - **A timed-out step is terminated with its children.** `spawnSync` signals only the shell it spawned; measured on `sh -c "sleep N & wait"`, the backgrounded process outlived the reported ETIMEDOUT. The runner therefore runs steps in their own process group and signals the group, so a step that overruns `step_timeout_s` leaves no build or test worker holding a lock. This is the machine form of the Stalled Subagent & Stale-Writer Guardrail below, which the agent follows by hand.
 
-### 🚀 Rollout, Observability & Recovery
+### Rollout, Observability & Recovery
 - Deployment method default: deploy through the active repository's direct deployment script (e.g. `<deploy script>`) unless the user explicitly asks for CI, a workflow, or a pipeline to perform the deployment. Do not route a deployment through CI/CI-triggered jobs by default; treat CI-driven deployment as an explicit user choice.
 - For production-impacting work, define the rollout mode, owner, health signal, success threshold, observation window, rollback trigger, and rollback owner before deployment.
 - Prefer staged rollout, feature flags, canarying, or a reversible migration when the change has meaningful blast radius and the platform supports it.
@@ -79,12 +79,12 @@
 - For data or infrastructure changes, verify backup availability, restore procedure, migration rehearsal, rollback limits, and data integrity before applying the production change.
 - After deployment, run the documented post-deployment check and record the result, timestamp, version, and any follow-up action.
 
-### 🛡️ Privacy, Data Governance & Supply Chain
+### Privacy, Data Governance & Supply Chain
 - Classify data before changing its collection, storage, transmission, display, export, or retention. Minimize collection and restrict access to the smallest required scope.
 - Review redaction, deletion, retention, audit trail, encryption, and user-consent behavior when personal, confidential, or regulated data is involved.
 - For dependencies and release artifacts, review lockfile changes, known vulnerabilities, license compatibility, integrity checks, provenance, and whether generated artifacts contain unintended content.
 
-### 🌐 User-Visible Completeness
+### User-Visible Completeness
 - For user-facing changes, define and verify the normal path plus loading, empty, error, retry, recovery, offline, permission-denied, and destructive-confirmation states that apply.
 - Verify keyboard operation, focus behavior, semantics, contrast, screen-reader exposure, responsive layouts, localization, text expansion, and reduced-motion behavior when applicable.
 - Treat WCAG 2.2 Level AA as the default accessibility target for web interfaces and user-facing flows, mapping applicable success criteria to acceptance criteria and verification evidence; document an explicit exception when the platform or approved design makes a criterion inapplicable.

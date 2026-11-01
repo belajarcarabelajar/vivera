@@ -1,4 +1,4 @@
-### ⚡ Token-Efficient Execution
+### Token-Efficient Execution
 - Think in Code: Analyze, filter, parse, search, and transform data by writing code (a shell pipe or a short inline script) rather than loading raw data into context. Read only the needed range of a large file instead of its entire contents. Batch independent commands in one turn. Return only distilled answers, summaries, key patterns, and actionable errors.
 - Maximized Command Chaining & Consolidation Standard:
   - Consolidate sequential, related dependent shell operations into a single chained command via `&&` to eliminate unnecessary tool round-trips and maximize token savings. Treat repetitive terminal tasks as atomic "all-in-one" instruction chains.
@@ -25,7 +25,7 @@
 - Prompt-Cache Stability: a model switch, a change to the MCP server or plugin list, or an edit to always-loaded text (`CLAUDE.md`, `AGENTS.md`, `MEMORY.md`, a loaded `SKILL.md`) in the middle of a phase rebuilds the cached prefix, so the next turns pay full input price again. Make such changes at a phase boundary, together with `/clear` or `/compact`, the same boundary as the compaction habit at about 150k tokens (L85 in `docs/memory/tools-and-environment.md`) ("AI Agents in Depth", ch2: KV-cache friendly context).
 - Token savings never override safety, required verification, output completeness, or the distinction between independent parallel work and dependent sequential work.
 
-### 🧠 Reasoning, Research & Scope
+### Reasoning, Research & Scope
 - Choose an approach and commit to it; revisit it only when new evidence contradicts the current approach.
 - Use deeper analysis only when it materially improves a multi-step decision. Keep private reasoning private; report concise rationale, decisions, and evidence.
 - For complex or uncertain research, develop competing hypotheses, record confidence, self-review the plan, and preserve useful findings in research notes. Skip this ceremony for straightforward tasks.

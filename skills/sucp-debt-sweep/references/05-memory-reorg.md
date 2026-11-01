@@ -1,4 +1,4 @@
-### 🗂️ Memory reorg: audit the rule handbook and retire rules
+### Memory reorg: audit the rule handbook and retire rules
 
 The rule handbook is `MEMORY.md` (the index) plus the topic files under `docs/memory/`. Rules pile up; this step finds the ones worth a second look. It never retires anything on its own.
 

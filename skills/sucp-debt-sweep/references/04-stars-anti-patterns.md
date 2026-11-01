@@ -1,4 +1,4 @@
-### ⭐ Progress stars
+### Progress stars
 The meter line during the sweep (`sucp-rules`, Output) is one star per debt the sweep found, so 7 debts are 7 stars and 5 debts are 5. The total follows the findings and is never fixed or padded. The stars appear in the chat reply only; the sweep record holds the evidence, never the stars.
 
 - **What counts as a debt:** every candidate in the ranked list from 6.2, `NOW` or `LATER`. Learning-harvest rules (6.2.8) are not debts and get no star.
@@ -6,7 +6,7 @@ The meter line during the sweep (`sucp-rules`, Output) is one star per debt the 
 - **No stars before the ranked list exists.** Once it does, every star starts as `☆`. A sweep that finds no debt prints `0 debt found` instead of stars.
 - **The total can grow.** A candidate found by the re-pass after a follow-up batch (6.5) adds a star and the line says `+1 debt`. It stays `☆`, because it goes to the backlog (6.5). Existing stars keep their state.
 
-### 🚫 Anti-Patterns
+### Anti-Patterns
 - Closing the session with a report and no question. A debt sweep that produces prose instead of a selectable question has not run.
 - Letting generated Markdown stay invisible to `graphify query` because `graphify update` "should have handled it". It only parses code; run `bun "$VIVERA/scripts/graphify-sync.mjs" --root "$(pwd)"` from the session repository after it, every session (6.6).
 - Generic chips (`"Anything else?"`, `"More tests?"`) with no file path and no finish line. Unactionable options waste the user's attention and get ignored.
@@ -39,5 +39,5 @@ flowchart TD
     CloseGate -->|"No, Keep it open,\nor dismissed"| KeepOpen["Closeout status section:\nverdict, what remains, trigger"]
     Complete --> Graph["6.6 graphify update, then sync"]
     KeepOpen --> Graph
-    Graph --> Close(["🏁 Zero-debt session\nor documented deferral"])
+    Graph --> Close(["Zero-debt session\nor documented deferral"])
 ```

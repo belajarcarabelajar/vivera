@@ -107,7 +107,7 @@ flowchart TD
     Check -->|"No"| Ready["Re-run readiness\nafter follow-ups land"]
     Backlog --> Ready
     Ready --> Gate2{"Apply the Close plan answer:\nMark Complete and still READY?"}
-    Gate2 -->|"Yes"| Close(["🏁 Zero-debt session"])
+    Gate2 -->|"Yes"| Close(["Zero-debt session"])
     Gate2 -->|"No or Keep it open"| Status["Closeout status section"]
     Status --> Close
 ```

@@ -180,7 +180,7 @@ vivera/
 ```
 
 TinyFish is documented inside the master skill itself, in the
-`🌐 Web Evidence & Retrieval` (TinyFish) section: the four-rung escalation ladder
+`Web Evidence & Retrieval` (TinyFish) section: the four-rung escalation ladder
 (`search` → `fetch_content` → `run_web_automation` → `create_browser_session`),
 the parameter sets that matter, the run-management and cost rules, and the
 gotchas. It used to ship as a separate vendored skill (use-tinyfish,

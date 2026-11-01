@@ -1,4 +1,4 @@
-### 📇 6.6 Sync Session Artifacts to Graphify: local, no model, mandatory (a repo without a graph is offered registration)
+### 6.6 Sync Session Artifacts to Graphify: local, no model, mandatory (a repo without a graph is offered registration)
 
 - **Order is load-bearing.** `graphify update .` rewrites the code graph and is not known to preserve foreign nodes; running it *after* the sync can discard the document nodes the sync just added. So the sequence is: (1) `graphify update .`, (2) the sync command below.
 - **What the sync does.** It runs the deterministic structural layer of the vault-index pipeline over this repository's eligible Markdown (one `document` node per file, its ATX `heading` nodes, and its resolvable `[[wikilinks]]` as `references` edges), then unions them into `graphify-out/graph.json` with the same merge used by the vault rebuild. It is a **local line scan: no LLM call, no API key, no network**, so it does not cross the cloud-extraction boundary recorded in `.graphifyignore`.

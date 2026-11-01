@@ -8,7 +8,7 @@ const SKILL_DIR = path.join(ROOT, 'skills', 'sucp-rules');
 const INDEX = path.join(SKILL_DIR, 'SKILL.md');
 const REFS = path.join(SKILL_DIR, 'references');
 const LIMIT = 20000;
-const READING_HEADING = '## 📚 Load on demand';
+const READING_HEADING = '## Load on demand';
 
 function refNames() {
   return fs.existsSync(REFS) ? fs.readdirSync(REFS).sort() : [];

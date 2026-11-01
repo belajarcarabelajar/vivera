@@ -1,4 +1,4 @@
-## 📋 Plan Checklist
+## Plan Checklist
 > The plan file holds the to-do list. Each item is a `[ ]` line, and it is checked off only with the evidence that proves it. The harness todo tool is not used: it duplicates the list, is lost on compaction or a harness switch, and differs in name and permissions across harnesses.
 
 ### Ownership

@@ -39,3 +39,22 @@ export const WATERMARK_PATTERNS = [
   { re: /^\s*co-authored-by\b[^\n]*<[^<>@\s]+@[^<>\s]+>\s*$/i, label: 'co-author trailer', strict: true },
   { re: /^\s*signed-off-by\b[^\n]*<[^<>@\s]+@[^<>\s]+>\s*$/i, label: 'sign-off trailer', strict: true },
 ];
+
+/**
+ * Emoji as rendered: a code point with emoji presentation by default, or a
+ * pictograph forced to emoji style by U+FE0F. Plain symbols such as an arrow or
+ * a check mark (U+2713) stay text and are not matched.
+ */
+export const EMOJI_RE = /\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F/gu;
+/** Status marks that carry meaning in a checklist: check, cross, warning. */
+export const STATUS_EMOJI = new Set(['\u2705', '\u274C', '\u26A0\uFE0F']);
+
+/**
+ * The decorative emoji on one line, deduplicated and space-joined, or ''.
+ * Checked with the same scope as the em dash: artifacts (.md, .txt) and commit
+ * messages. A script's progress output keeps its emoji (user decision 2026-11-01).
+ */
+export function decorativeEmoji(line) {
+  const found = (line.match(EMOJI_RE) ?? []).filter((e) => !STATUS_EMOJI.has(e));
+  return [...new Set(found)].join(' ');
+}

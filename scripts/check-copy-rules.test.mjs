@@ -66,7 +66,8 @@ test('does NOT flag a legitimate mention of a tool name', () => {
     'Gemini uses `update_plan` for the same list.',
   ];
   for (const c of legitimate) {
-    const v = checkText(c, { where: 'x' });
+    // The robot here is a diagram icon, not a watermark; the emoji rule judges it.
+    const v = checkText(c, { where: 'x' }).filter((x) => x.rule !== 'emoji');
     assert.deepEqual(v.map((x) => x.rule), [], `false positive on ${JSON.stringify(c)}: ${JSON.stringify(v)}`);
   }
 });

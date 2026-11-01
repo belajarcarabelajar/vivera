@@ -7,7 +7,7 @@ description: Phase skill for super-ultra-code-plan Step 5 (verification before c
 
 > Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase after the evidence gate: `sucp-debt-sweep`.
 
-## 📚 Load on demand
+## Load on demand
 
 The core rules in this file are always loaded; a reference file is read in full whenever its trigger below applies.
 
@@ -17,32 +17,32 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [02-pr-delivery.md](references/02-pr-delivery.md) | Before claiming a session, opening a PR, moving the registry state machine, or reviewing a PR. |
 | [03-verification-matrix.md](references/03-verification-matrix.md) | Before the completion audit: the minimum evidence for each change surface. |
 
-## 🏗️ Professional Engineering Gates
+## Professional Engineering Gates
 Apply the gates relevant to the approved scope. Record `N/A` with a reason when a gate does not apply; never claim a gate passed without its evidence.
 
 | Gate | Apply when | Required evidence |
 |---|---|---|
-| 🔗 Requirements traceability | Every requested change | Each acceptance criterion maps to a task, test/check, and final evidence |
-| 🧬 Active project profile | Every plan or code change | Active root, target scope, verified configuration sources, commands, toolchain, and protected boundaries |
-| 👀 Review and diff | Every non-trivial, shared, risky, or externally visible change | Diff review confirms intended files, behavior, tests, and no accidental changes or secrets |
-| 🚦 CI and quality | Any code, test, configuration, or build change | Repository-required checks pass, with targeted checks run first where practical |
-| 🔐 Security | Auth, permissions, secrets, input boundaries, dependencies, network, or sensitive data are involved | Allowed/denied paths, boundary checks, secret review, and relevant dependency/security audit |
-| 🔄 Compatibility | API, IPC, schema, database, event, file format, or shared interface changes | Consumer impact, backward-compatibility decision, migration order, and rollback/data-preservation evidence |
-| 📈 Production readiness | Deployment, runtime behavior, migration, or operational change is in scope | Observability signal, rollout plan, rollback path, and post-deployment verification |
-| 📚 Documentation | Behavior, setup, configuration, API, migration, or operations change | Relevant documentation, examples, changelog, and runbook updates are accurate |
+| Requirements traceability | Every requested change | Each acceptance criterion maps to a task, test/check, and final evidence |
+| Active project profile | Every plan or code change | Active root, target scope, verified configuration sources, commands, toolchain, and protected boundaries |
+| Review and diff | Every non-trivial, shared, risky, or externally visible change | Diff review confirms intended files, behavior, tests, and no accidental changes or secrets |
+| CI and quality | Any code, test, configuration, or build change | Repository-required checks pass, with targeted checks run first where practical |
+| Security | Auth, permissions, secrets, input boundaries, dependencies, network, or sensitive data are involved | Allowed/denied paths, boundary checks, secret review, and relevant dependency/security audit |
+| Compatibility | API, IPC, schema, database, event, file format, or shared interface changes | Consumer impact, backward-compatibility decision, migration order, and rollback/data-preservation evidence |
+| Production readiness | Deployment, runtime behavior, migration, or operational change is in scope | Observability signal, rollout plan, rollback path, and post-deployment verification |
+| Documentation | Behavior, setup, configuration, API, migration, or operations change | Relevant documentation, examples, changelog, and runbook updates are accurate |
 | ✅ Definition of Done | Every requested change | All applicable acceptance, quality, review, security, documentation, and operational gates are complete |
-| 🧰 Reproducibility | Code, build, test, or environment behavior changes | Runtime/tool versions, setup, commands, fixtures, and environment assumptions are recorded |
-| 🧪 Test reliability | Automated tests are added or changed | Tests are isolated and deterministic; flaky or environment-dependent behavior is identified and reported |
-| 🔁 Plan lifecycle | A plan has multiple tasks or approval checkpoints | Status, version, decisions, superseded sections, and approval state are current |
-| 📦 Supply chain | Dependencies, lockfiles, packages, or release artifacts change | Pinning/lockfile review, license check, vulnerability audit, and artifact provenance are addressed |
-| 🛡️ Privacy and data governance | Personal, confidential, regulated, or user-generated data is involved | Data classification, minimization, redaction, retention, access, and audit behavior are reviewed |
-| 🌐 User-visible completeness | A user-facing behavior or interface changes | Happy, loading, empty, error, retry/recovery, keyboard, accessibility, responsive, and localization states are covered as applicable |
+| Reproducibility | Code, build, test, or environment behavior changes | Runtime/tool versions, setup, commands, fixtures, and environment assumptions are recorded |
+| Test reliability | Automated tests are added or changed | Tests are isolated and deterministic; flaky or environment-dependent behavior is identified and reported |
+| Plan lifecycle | A plan has multiple tasks or approval checkpoints | Status, version, decisions, superseded sections, and approval state are current |
+| Supply chain | Dependencies, lockfiles, packages, or release artifacts change | Pinning/lockfile review, license check, vulnerability audit, and artifact provenance are addressed |
+| Privacy and data governance | Personal, confidential, regulated, or user-generated data is involved | Data classification, minimization, redaction, retention, access, and audit behavior are reviewed |
+| User-visible completeness | A user-facing behavior or interface changes | Happy, loading, empty, error, retry/recovery, keyboard, accessibility, responsive, and localization states are covered as applicable |
 
 Gate detail (traceability, security, reproducibility, test reliability, rollout, privacy, user-visible completeness): [references/01-engineering-gates.md](references/01-engineering-gates.md).
 
-### 👀 Review, Diff & Publication
+### Review, Diff & Publication
 - Review the final diff, changed-file list, status, and generated artifacts before completion. Confirm that only approved files and behavior changed.
-- A session ends in a pull request on its own branch, never in a commit on the working branch. See `5.5️⃣ 📤 Pull Request Delivery, Review & Batch Merge` for the isolation contract, the state machine, the body rules, and the ordered batch merge. Two related contracts live there and are not restated here: Git writes are parent-only (a subagent never commits, stages, or pushes), and a session's branch and worktree names are derived by `bun scripts/pr-registry.mjs claim` rather than chosen.
+- A session ends in a pull request on its own branch, never in a commit on the working branch. See `5.5️⃣ Pull Request Delivery, Review & Batch Merge` for the isolation contract, the state machine, the body rules, and the ordered batch merge. Two related contracts live there and are not restated here: Git writes are parent-only (a subagent never commits, stages, or pushes), and a session's branch and worktree names are derived by `bun scripts/pr-registry.mjs claim` rather than chosen.
 - Reviewing somebody else's pull request follows `templates/pr-review-template.md`. Reviewing your own local diff follows this section and `templates/code-review-template.md`; the difference is only what has to be fetched first and what gets posted.
 - Post-Execution Final Code Review & Temp-File Purge: After plan execution completes and before any completion claim, run a dedicated final code review that (1) verifies each executed task against its acceptance criteria and cited evidence, (2) deletes every script, log, fixture, scratch file, or temporary/helper artifact created during execution, except a spike prototype kept under docs/code-plan/spikes/<spike-id>/, unless it is an explicit deliverable or part of the approved change, and (3) re-scans the worktree and final diff to confirm the deleted files are absent and only approved files remain.
 - Autonomous Code Review Rubric & 8-Point Bug Qualification Filter: reviewer agents emit this contract via `templates/code-review-template.md`.
@@ -54,7 +54,7 @@ The 8-point filter and the rest of the rubric: [references/01-engineering-gates.
 - Local commits follow repository conventions and the approved workflow. Pushes, releases, deployments, PR comments, and other externally visible publication require explicit authorization, asked through the Confirmation Protocol (header `Publish`, safe option first) unless the approved scope already names it.
 - Never include secrets, credentials, private data, temporary artifacts, or unrelated cleanup in a commit or publication.
 
-### 🚦 CI, Test Layers & Quality Gates
+### CI, Test Layers & Quality Gates
 - For the commit and PR gate, the targeted gate is the default: `bun run ci:targeted` in vivera, the repository's own targeted command elsewhere (`check:terarah` in bcb), with its `--rencana` plan quoted in the PR. Run the full CI only when the targeted gate selects it, a release or installer change requires it, or the owner asks; never by habit (`sucp-rules`, Targeted Gate by Default).
 ## 5️⃣ ✅ Verification Before Completion (Iron Law)
 > ✅ **Component 4 — Evidence gate:** identify, run, read, and confirm the proof before making the claim.
@@ -108,8 +108,8 @@ flowchart TD
 
 Red flags: "should", "probably", "seems to", satisfaction expressed pre-verification, trusting agent reports without diff check, "I'm tired", "just this once".
 
-## 5.5️⃣ 📤 Pull Request Delivery, Review & Batch Merge
-> 📤 **Component 5 — Delivery:** a session ends in a pull request on its own branch, never in a commit on the working branch. This is the stage that makes twenty concurrent sessions survivable: isolation, review, and an ordered merge are the only things standing between twenty agents and twenty silently clobbering each other.
+## 5.5️⃣ Pull Request Delivery, Review & Batch Merge
+> **Component 5: Delivery:** a session ends in a pull request on its own branch, never in a commit on the working branch. This is the stage that makes twenty concurrent sessions survivable: isolation, review, and an ordered merge are the only things standing between twenty agents and twenty silently clobbering each other.
 
 Why a PR, 5.1 isolation, 5.2 the session state machine, 5.3 opening the PR, 5.4 reviewing a PR: [references/02-pr-delivery.md](references/02-pr-delivery.md).
 

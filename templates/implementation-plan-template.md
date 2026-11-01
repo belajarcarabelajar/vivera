@@ -79,7 +79,7 @@ tasks:
 | AC-2 | T2 | `[command]` | [evidence] |
 | AC-3 | T1, T2 | `[command]` | [evidence] |
 
-## 2. Visual Implementation Map — MANDATORY (approval gate blocker if missing)
+## 2. Visual Implementation Map: MANDATORY (approval gate blocker if missing)
 > Every plan MUST include at least one valid Mermaid diagram. Minimum: a `flowchart` showing every task node, every `depends_on` edge, the approval gate, and the Verify → Completion tail. Add a second diagram (`sequenceDiagram` for interactions, `stateDiagram-v2` for lifecycle, `erDiagram` for data) when it clarifies the design. Node ids must be identical to `tasks[].id` in frontmatter and to the `Task <id>` headings in §4. Edge direction is `A --> B` meaning B depends on A. Every diagram MUST carry `accTitle` and `accDescr`. Validate with `bun scripts/validate-skill.mjs` (syntax + accessibility) and `bun scripts/ultra-plan-runner.mjs <plan.md>` (id and edge consistency, both directions) before requesting approval.
 ```mermaid
 flowchart TD

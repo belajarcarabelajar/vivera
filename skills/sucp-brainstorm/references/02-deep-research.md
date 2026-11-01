@@ -1,4 +1,4 @@
-## 🔬 Deep Research Workflow
+## Deep Research Workflow
 
 The deep research workflow produces a long-form, citation-grounded report that the implementation plan can cite as evidence base. It sits between the brainstorming spike and the implementation plan, and only runs when the implementation choice depends on information that is not already in the codebase, the active project's overlay, or the agent's verified configuration. Typical triggers are selecting between competing libraries, evaluating a new framework release, understanding an RFC, or surveying an ecosystem for a vendor decision.
 
@@ -10,7 +10,7 @@ Invoke the workflow when at least one of the following is true. The decision tou
 
 The report follows the structure defined in `templates/deep-research-report-template.md`. It opens with an executive summary paragraph, develops three to seven `##` themes with `###` subsections, and closes with a synthesis. Every claim is grounded in an inline citation of the form `[n]`. Mathematical notation uses LaTeX delimiters. Lists are converted to prose; tables are used for multi-axis comparisons. The report length matches the scope of the question, not a fixed minimum.
 
-### 🕸️ Codebase Graph Preflight: graphify
+### Codebase Graph Preflight: graphify
 
 <!-- Added 2026-10-01; re-wired 2026-10-04 so implementation, not only research,
      gets a "who else consumes this?" query for `tasks[].impacts`. Corrected
@@ -37,7 +37,7 @@ Two moments use it. **Research**: a question about the repository's own code, su
 
 **Graph results are leads, not evidence.** Cite the source file the graph names, and read it before asserting anything about it. Never report a graph result the tool did not actually produce, and never cite `graphify-out/GRAPH_REPORT.md` for a fact you did not read there.
 
-### 🌐 Web Evidence & Retrieval: TinyFish
+### Web Evidence & Retrieval: TinyFish
 
 <!-- Integrated 2026-10-01 into this master skill, absorbing the separate
      standalone TinyFish skill that used to be vendored under skills/.

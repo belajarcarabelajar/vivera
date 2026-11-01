@@ -1,7 +1,7 @@
-## 🧭 Cross-Cutting Operating Rules
+## Cross-Cutting Operating Rules
 These rules apply to every path and support the four skill components without replacing their gates.
 
-### 🔎 Initialization, Investigation & Continuity
+### Initialization, Investigation & Continuity
 - Begin with the current working directory and project state. Inspect relevant files, documentation, existing tests, recent commits, and available progress artifacts before making claims.
 - Read fully, then be lazy: Comprehension precedes reduction. Trace the full flow end-to-end and inspect all callers of touched functions before picking a minimal solution. A small diff in the wrong place is a bug, not efficiency. Fix bugs at the shared root cause so sibling callers are not left broken.
 - **Affected-Surface Audit (the mechanical form of the rule above):** comprehension is a promise the agent makes to itself, and a promise is not a gate. Every task therefore declares `impacts` (the surfaces it can break, each with the command or graph query that shows the impact) and `ultra-plan-runner.mjs` refuses a plan whose tasks declare none. `files` is not a substitute: it names what a task touches, never what consumes it. When a task changes a shared interface, a public export shape, a CLI flag, a config key, or a documented rule, the audit enumerates sibling callers, the later task or plan that reads it, the README or template that documents it, and the other repository that consumes it, then either updates each one or records it as a named follow-up with a finish line. A surface noticed and left untouched is a debt entry, never a silent omission.
@@ -24,5 +24,5 @@ These rules apply to every path and support the four skill components without re
 - Mandatory Pre-Execution Todo Breakdown:
   - Before writing the first line of code or running stateful mutation commands, the agent MUST explicitly output an itemized to-do list / checklist (`[ ] Task 1: ...`, `[ ] Task 2: ...`) mapping out each sequential phase (reproduction/failing test, implementation, verification test, review).
   - Real-Time Todo State Transition: Each item must be visibly updated (`[x]`) immediately upon completion with fresh verification evidence cited before proceeding to check off or start the next item. Never execute multiple tasks in an opaque block without itemized checklist progression.
-  - **The to-do list lives in the plan file, as a `[ ]` / `[x]` checklist.** Do not use the harness's own todo tool. See `📋 Plan Checklist` for the ownership and completion rules.
+  - **The to-do list lives in the plan file, as a `[ ]` / `[x]` checklist.** Do not use the harness's own todo tool. See `Plan Checklist` for the ownership and completion rules.
 

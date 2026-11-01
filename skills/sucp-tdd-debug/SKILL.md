@@ -7,8 +7,8 @@ description: Phase skill for super-ultra-code-plan Step 4 (test-driven developme
 
 > Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase: `sucp-verify-deliver`.
 
-## 4️⃣ 🧪 Test-Driven Development (Iron Law)
-> 🧪 **Component 3: Test loop:** RED → GREEN → REFACTOR, repeated for each behavior, executed inside subagents (see Delegation & Execution for chunking, proportional fan-out, and the gather & synthesize loop).
+## 4️⃣ Test-Driven Development (Iron Law)
+> **Component 3: Test loop:** RED → GREEN → REFACTOR, repeated for each behavior, executed inside subagents (see Delegation & Execution for chunking, proportional fan-out, and the gather & synthesize loop).
 
 ```
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
@@ -66,8 +66,8 @@ stateDiagram-v2
     }
 ```
 
-## 4.1 🐞 Systematic Debugging (Iron Law of Bug Isolation)
-> 🐞 **Diagnostic loop:** FEEDBACK LOOP → REPRODUCE → DIAGNOSE (RCA) → SMALLEST SAFE FIX → REGRESSION PROOF & CLEANUP.
+## 4.1 Systematic Debugging (Iron Law of Bug Isolation)
+> **Diagnostic loop:** FEEDBACK LOOP → REPRODUCE → DIAGNOSE (RCA) → SMALLEST SAFE FIX → REGRESSION PROOF & CLEANUP.
 
 ```
 NO BUG FIX WITHOUT A MINIMAL REPRODUCING FAILING TEST AND ROOT CAUSE ISOLATION
@@ -121,8 +121,8 @@ NO HYPOTHESIS WITHOUT A RED-CAPABLE FEEDBACK LOOP
    - The confirmed hypothesis goes into the commit message or the PR body, so the reason for the fix outlives the session.
 
 
-## 4.2 ⏩ Test-Later Mode (feature work, owner's request only)
-> ⏩ **Order:** CODE → BUILD AND SHOW → MANUAL CHECK → TESTS FROM THE OWNER'S NOTES → RED AGAINST THE BASE → Step 5 unchanged.
+## 4.2 Test-Later Mode (feature work, owner's request only)
+> **Order:** CODE → BUILD AND SHOW → MANUAL CHECK → TESTS FROM THE OWNER'S NOTES → RED AGAINST THE BASE → Step 5 unchanged.
 
 The owner sometimes wants to see the result (a render, a preview, a build, a CLI run) and judge it by hand before any test exists. This mode moves the tests to the end of the change. It never removes them: the pull request is not opened, and never merged, before they pass.
 

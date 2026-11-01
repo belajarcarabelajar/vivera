@@ -1,4 +1,4 @@
-### 🧠 Continuous Learning & Memory Lifecycle
+### Continuous Learning & Memory Lifecycle
 - Maintain knowledge persistence across sessions via two distinct memory phases:
 - Phase 1: Rollout Extraction (Post-Task Retrospective):
   - At the completion of a task, inspect the rollout session to extract durable learnings: (1) user preferences, (2) reusable knowledge (proven workflows, verification tricks, architecture insights), and (3) failures and mitigations (landmines encountered and how to do differently).
@@ -21,7 +21,7 @@
 - Memory Retrieval Decision Boundary: skip memory lookup only when the question is genuinely self-contained and needs no workspace history, conventions, or prior decisions (current time, a formatting rewrite, a one-line command, a file rename). Otherwise run a quick pass first: read the summary, search the index, open only the one or two files it points to, and stop within a handful of steps. An empty result is a normal outcome, never a reason to scan everything.
 - Unverified Memory Claims: when a fact comes from memory rather than from a check performed in the current turn, say so and flag it as possibly stale, especially for versions, prices, and anything drift-prone. Do not present a memory-derived fact as confirmed-current, and offer a refresh when one is cheap.
 
-### 🎨 Frontend-Only Aesthetic Rules
+### Frontend-Only Aesthetic Rules
 - For frontend work, use a deliberate typography, color, theme, spacing, motion, and background system appropriate to the product context.
 - Avoid generic AI-generated layouts, clichéd palettes, predictable component patterns, and typography chosen only for convenience. Avoid visual slop clichés: generic blue-purple gradients, excessive glassmorphism on every card/modal, pill-shaped radius everywhere, oversaturated ambient glow, and overly soft washed-out shadows.
 - **Named tells.** A principle with no recognizable shape cannot be applied to a shape, so these seven are named explicitly. Each is a default rather than a decision, and each violates C-1 on sight:

@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "096aa0542879"
+source_hash: "2f5d825c0668"
 ---
 
 <a id="repository-structure"></a>
@@ -191,7 +191,7 @@ vivera/
 ```
 
 TinyFish didokumentasikan di dalam master skill itu sendiri, di bagian
-`🌐 Web Evidence & Retrieval` (TinyFish): tangga eskalasi empat anak tangga
+`Web Evidence & Retrieval` (TinyFish): tangga eskalasi empat anak tangga
 (`search` → `fetch_content` → `run_web_automation` → `create_browser_session`),
 set parameter yang penting, aturan pengelolaan run dan biaya, serta jebakan yang
 perlu diwaspadai. Dulu TinyFish dikirim sebagai skill vendored terpisah (use-tinyfish,

@@ -7,7 +7,7 @@ description: Phase skill for super-ultra-code-plan Step 3 (writing plans, archit
 
 > Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead. Next phase: `sucp-tdd-debug`.
 
-## 📚 Load on demand
+## Load on demand
 
 The core rules in this file are always loaded; a reference file is read in full whenever its trigger below applies.
 
@@ -17,10 +17,10 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [02-plan-templates.md](references/02-plan-templates.md) | Before writing a plan file: the plan header template and the task template. |
 | [03-publishing-and-issue.md](references/03-publishing-and-issue.md) | Before running the publisher or `plan-issue-sync`, or when a mirror or an issue disagrees with its plan. |
 
-## 3️⃣ 🗺️ Writing Plans (architectural path only)
-> 🗺️ **Component 2 — Plan output:** every task must be independently understandable, executable, and testable.
+## 3️⃣ Writing Plans (architectural path only)
+> **Component 2: Plan output:** every task must be independently understandable, executable, and testable.
 
-### 🗺️ Visual Implementation Map — MANDATORY for every plan
+### Visual Implementation Map: MANDATORY for every plan
 - Every plan (Bounded short design in chat AND Architectural plan file) MUST include at least one valid ` ```mermaid` diagram. No exceptions, no `N/A`. A plan without Mermaid is incomplete and blocks the approval gate.
 - Minimum: one `flowchart` (TD or LR) placed near the plan overview showing task nodes (`T1`, `T2`, ...), `depends_on` edges, human approval gate(s) (`{{...}}`), and the Verify → Completion tail.
 - Choose additional diagram types that match the reasoning when they add clarity: `flowchart` for process and decisions, `sequenceDiagram` for component/user interactions, `stateDiagram-v2` for lifecycle/status, `graph` for architecture/dependencies, `erDiagram` for data relationships.
@@ -68,15 +68,15 @@ Execution handoff: fan-out is proportional to the work, and the reason for the c
 2. Two to four subagents for the usual plan: chunk each task into small verifiable units, dispatch, then gather and synthesize their reports.
 3. 10 to 15 only for that many disjoint scopes, at most 15 in flight, every chunk with one owner and no two writing the same file.
 
-### 📤 Plan Publishing
-> 📤 **Component 2b — Reachability:** a plan that exists only inside a project repository cannot be searched, rendered, or re-read months later. Publishing is a required step of finishing a plan, not an optional convenience.
+### Plan Publishing
+> **Component 2b: Reachability:** a plan that exists only inside a project repository cannot be searched, rendered, or re-read months later. Publishing is a required step of finishing a plan, not an optional convenience.
 
 - **The trigger is "the plan is finished", not "the plan is approved".** Three publishes, in this order:
   1. **Immediately after `bun scripts/ultra-plan-runner.mjs <plan.md>` prints `Validation: OK`, and before requesting approval.** The plan lands in the vault at `status: Draft` while the human is still deciding, so review happens in Obsidian — where they are looking — instead of only in a repository directory they have to go find.
   2. **Again after approval, and before `bun scripts/ultra-plan-runner.mjs <plan.md> --execute`.** The mirror then carries the approved state.
   3. **After execution and after the Session-Close Debt Sweep.** Close the plan in three sub-steps: apply the task ticks, set `status: Complete` only when the owner answers the `Close plan` gate with `Mark Complete` after `bun scripts/plan-closeout.mjs --readiness <plan.md>` (`sucp-debt-sweep`, 6.5.5), publish again. The ticks are applied by `bun scripts/plan-mark-done.mjs <plan.md> --from <runner.log>`, which reads the runner's own recorded statuses and refuses to tick anything the runner recorded as `NEEDS-AGENT`, `READY (dry-run)`, `HALTED-UPSTREAM` or `FAILED-*`. Capture the runner output to a log first; that log is the evidence.
 
-  **The same three steps also drive the GitHub issue mirror**, run immediately after the vault publish of the same step. See `🐙 Plan → GitHub Issue` below. One command runs both: `bun scripts/plan-sync.mjs <plan.md> [--project <key>]` publishes, then syncs the issue, and prints `publish: exit N` and `issue-sync: exit M`, because a file write here and a network write to somebody else's API fail for different reasons. Both scripts stay callable alone.
+  **The same three steps also drive the GitHub issue mirror**, run immediately after the vault publish of the same step. See `Plan → GitHub Issue` below. One command runs both: `bun scripts/plan-sync.mjs <plan.md> [--project <key>]` publishes, then syncs the issue, and prints `publish: exit N` and `issue-sync: exit M`, because a file write here and a network write to somebody else's API fail for different reasons. Both scripts stay callable alone.
   **Between steps 2 and 3, sync on delivery as well:** run `plan-sync.mjs` on the session branch's plan when the session PR is opened and after every push that changes the plan, so the issue does not show the approval snapshot through the whole execution. The PR links the issue with `Refs #<n>`, never `Closes #<n>`, because the plan's status closes it.
   Do not skip step 1 because approval feels close. The whole reason the trigger moved earlier is that the authoring and approval window is exactly when a human wants to read the plan, and it is currently the window in which the vault has no copy at all.
 

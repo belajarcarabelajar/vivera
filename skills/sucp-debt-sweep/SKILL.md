@@ -7,7 +7,7 @@ description: Phase skill for super-ultra-code-plan Step 6 (session-close debt sw
 
 > Part of `super-ultra-code-plan`. The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead.
 
-## 📚 Load on demand
+## Load on demand
 
 The core rules in this file are always loaded; a reference file is read in full whenever its trigger below applies.
 
@@ -19,21 +19,21 @@ The core rules in this file are always loaded; a reference file is read in full 
 | [04-stars-anti-patterns.md](references/04-stars-anti-patterns.md) | Before drawing the progress-star meter, or when self-checking the sweep against its anti-patterns and flow diagram. |
 | [05-memory-reorg.md](references/05-memory-reorg.md) | Before auditing the rule handbook (monthly, when a `docs/memory/` file passes about 12 KB, or on the owner's request) or retiring a rule ID. |
 
-## 6️⃣ 🧹 Session-Close Debt Sweep & Follow-Up Injection (Mandatory)
-> 🧹 **Closing stage — zero-debt session:** once the plan is `Done 100%` and the evidence gate is green, the agent mines everything it learned during planning and execution, turns it into a short list of concrete follow-ups that can be finished right now, and asks the user to pick them with a single tap. Reporting alone is a failed close: the deliverable of this stage is a question the user answers with a checkbox, not a paragraph they must retype.
+## 6️⃣ Session-Close Debt Sweep & Follow-Up Injection (Mandatory)
+> **Closing stage: zero-debt session:** once the plan is `Done 100%` and the evidence gate is green, the agent mines everything it learned during planning and execution, turns it into a short list of concrete follow-ups that can be finished right now, and asks the user to pick them with a single tap. Reporting alone is a failed close: the deliverable of this stage is a question the user answers with a checkbox, not a paragraph they must retype.
 
 ```
 A SESSION ENDS WITH ZERO UNEXAMINED CODING DEBT
 ```
 
-### 🧾 6.1 Preconditions — the plan must be finished first
+### 6.1 Preconditions: the plan must be finished first
 - The approved plan is `Done 100%` per the Plan Completion Saturation Rule. Every task carries fresh evidence; nothing sits at "mostly done". The sweep is the step *after* a finished plan, never a substitute for finishing it.
 - The Verification gate passed with fresh evidence, git hygiene is done, and the final diff has been audited. Starting the sweep on unverified work converts a completion claim into a bigger unverified claim.
 - The session's pull request exists and its number is recorded in the registry (`bun scripts/pr-registry.mjs pr <session> --number <N>`). A follow-up selected in the sweep is a new chunk of work on the same branch, so an unrecorded PR means the follow-up work has nowhere to land.
 - Anything that is genuinely `Blocked` by an external dependency is excluded from follow-up candidates and instead reported with the exact unblock condition. A blocked item is not a follow-up question; asking the user to "also fix" it is noise.
 - Order of the close: the sweep (6.2 to 6.5) with the plan closeout question (6.5.5) asked in the same call as the follow-ups, then the graphify sync (6.6). The plan reaches `Complete` only through 6.5.5.
 
-### 🔍 6.2 Harvest — collect debt candidates from the whole session
+### 6.2 Harvest: collect debt candidates from the whole session
 Sweep the session record, not just the last command, for anything that was noticed but not closed. Candidate sources, in priority order:
 1. Recorded `defer:` deliberate shortcuts whose `<ceiling>` has actually been hit, so the debt the plan promised to revisit is now due. Find the markers with `git grep -nE '(#|//|/[*]) ?defer:'`, run from the session repository, whether that is vivera or any other repository; the comment prefix keeps prose mentions of the marker (documentation, skill text) out of the list. Each hit is a marker to evaluate, and it becomes a candidate when its ceiling has been hit or when it has no upgrade trigger. A marker with no comma, so no trigger after the ceiling, is tagged `no-trigger` (a comma is only a text proxy for a trigger, so read the text after it) and is a candidate by itself, because it names nothing that would ever make it due. Report `<N> markers, <M> with no trigger.`, and state a result of zero markers together with one line proving the command finds a known marker (for example the markers in `scripts/validate-agents.mjs`), because "nothing found" holds only when the method could have found something.
 2. Findings deferred to follow-up by the code review, the review's Design Notes (non-blocking smells, which are not findings but are still debt candidates), the Zero-Tolerance Clean Pass pre-existing warnings, or the Simplicity Ladder pruning pass.
@@ -45,19 +45,19 @@ Sweep the session record, not just the last command, for anything that was notic
 
 Every candidate must be stated as an outcome with a file path and a checkable finish line, not as a topic. "Refactor the auth module" is not a candidate. "Extract token refresh out of session.ts:88-140 and cover it with a new session.test.ts case" is.
 
-### 🧠 6.2.8 Learning Harvest — the agent's own mistakes, not just code debt
+### 6.2.8 Learning Harvest: the agent's own mistakes, not just code debt
 
 The ledger, the two gates, and the rule classification: [references/01-learning-harvest.md](references/01-learning-harvest.md).
 
 - `KEEP` rules are written in-repo automatically. In a repository that keeps `docs/memory/` (as vivera does), each becomes a new row, with the next free ID (one above the highest there), in its topic file there, and its ID is added to that topic's row in the `MEMORY.md` index; in any other repository it is appended under a `Task Group:` header in `MEMORY.md`. A rule that recurs across projects on this machine may additionally be promoted to `~/AGENTS.md`, but global promotion is **per-item and requires explicit user approval**: each item is asked through the Confirmation Protocol (header `Promote`, first option `Keep in the repository only`). Promotion is never destructive or credential-touching, and always writes a revert note inside the edited file. Decline leaves the rule in the ledger only.
 
-### 🧮 6.3 Rank & Cap — default 3 to 5 questions
+### 6.3 Rank & Cap: default 3 to 5 questions
 
 Ranking, the question cap, and NOW versus LATER: [references/02-rank-and-execute.md](references/02-rank-and-execute.md).
 
 - Banned from the batch: anything destructive, externally visible, credential-touching, or scope-expanding. Each such item is asked on its own, outside the sweep call, through the Confirmation Protocol with the safe option first, never as a quick-select chip.
 
-### 🙋 6.4 Inject — ask, do not narrate (mandatory)
+### 6.4 Inject: ask, do not narrate (mandatory)
 > Record the sweep with `templates/follow-up-injection-template.md` (candidates, ranking, the question, the execution record, the deferred backlog).
 - Use the harness's own structured question mechanism. Find it through the tool table in the Confirmation Protocol and read its schema before the first call. Present the follow-ups as **multi-select checkboxes** so the user answers by tapping, never by typing.
 - Batch every follow-up into **one single question-set call**, never one call per item, and place it after the final recap so the user first sees what was delivered, then decides what to finish.
@@ -89,8 +89,8 @@ This step is mandatory, including when the user picked `Nothing, close session`.
 
 Across sessions, run `bun scripts/plan-closeout.mjs --audit` during the sweep for the repository. It reports every plan whose registry sessions are all finished with at least one merged while the plan is not `Complete`. Each plan it lists gets the same `Close plan` question in this step.
 
-### 📇 6.6 Sync Session Artifacts to Graphify: local, no model, mandatory (a repo without a graph is offered registration)
-> 📇 **Closing stage — the documents you generated are part of the deliverable, so they belong in the knowledge graph.** A plan, batch manifest, spike report, handoff, progress log or learning ledger that only exists on disk is invisible to `graphify query`, `path` and `explain`. `graphify update .` cannot fix this: its help reads "re-extract code files and update the graph (no LLM needed)" and it parses code, so Markdown is never ingested by it.
+### 6.6 Sync Session Artifacts to Graphify: local, no model, mandatory (a repo without a graph is offered registration)
+> **Closing stage: the documents you generated are part of the deliverable, so they belong in the knowledge graph.** A plan, batch manifest, spike report, handoff, progress log or learning ledger that only exists on disk is invisible to `graphify query`, `path` and `explain`. `graphify update .` cannot fix this: its help reads "re-extract code files and update the graph (no LLM needed)" and it parses code, so Markdown is never ingested by it.
 
 ```
 RUN `graphify update .` FIRST, THEN THE SYNC WITH `--root "$(pwd)"`, IN THAT ORDER

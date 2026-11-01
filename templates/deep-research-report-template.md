@@ -31,7 +31,7 @@ Verify that sources are available for every claim you intend to make. If a secti
      and the tinyfish-evidence check in scripts/validate-skill.mjs. -->
 
 Collect evidence with TinyFish, as specified by the master skill's
-`🌐 Web Evidence & Retrieval — TinyFish` section, which is the single source of
+`Web Evidence & Retrieval` (TinyFish) section, which is the single source of
 truth for the ladder. In short: `search` to discover sources, then
 `fetch_content` on the best hits for full content, escalating to
 `run_web_automation` only for pages that need interaction (forms, login,

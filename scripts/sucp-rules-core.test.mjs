@@ -8,7 +8,7 @@ const SKILL_DIR = path.join(ROOT, 'skills', 'sucp-rules');
 const INDEX = path.join(SKILL_DIR, 'SKILL.md');
 const REFS = path.join(SKILL_DIR, 'references');
 const CORE_LIMIT = 20000;
-const LOAD_HEADING = '## 📚 Load on demand';
+const LOAD_HEADING = '## Load on demand';
 
 function refNames() {
   return fs.readdirSync(REFS).filter((n) => n.endsWith('.md')).sort();
@@ -51,6 +51,6 @@ describe('sucp-rules core plus on-demand references', () => {
   test('the core holds the Git Ownership bullet and the Confirmation Protocol heading', () => {
     const lines = fs.readFileSync(INDEX, 'utf8').split('\n');
     expect(lines.some((l) => l.startsWith('- **Git Ownership Is Parent-Only (Non-Negotiable).**'))).toBe(true);
-    expect(lines).toContain('### ⏸️ Confirmation Protocol');
+    expect(lines).toContain('### Confirmation Protocol');
   });
 });

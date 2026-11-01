@@ -1,4 +1,4 @@
-### 📤 Plan Publishing
+### Plan Publishing
 
 - **Step 3 is not optional bookkeeping.** Without it the mirror keeps the step-2 snapshot forever, so a plan whose work is finished reads `status: Draft` in the vault. That is a known and measurable state: `bun scripts/plan-lifecycle-audit.mjs` counts exactly how many plans are in it and why, not something to be guessed at.
 - **The runner never writes to a plan file.** `ultra-plan-runner.mjs` reads the plan, prints a ledger, and exits; it has no write path at all. So ticking is a separate, explicit step, and that separation is deliberate: a checkbox that the runner could set itself would be a claim rather than a record.
@@ -34,7 +34,7 @@ flowchart LR
     Mirror -.-> NoReadback["Mirror is never\nread back as an input"]
 ```
 
-## 🐙 Plan → GitHub Issue
+## Plan → GitHub Issue
 > The second derived copy. The Obsidian mirror makes a plan searchable and readable; the issue makes its **history** searchable: who opened it, when it was approved, what was closed and when, and every comment in one timeline that GitHub already indexes, notifies, and links from the commit.
 
 ### Same rule as the vault mirror: one way, forever

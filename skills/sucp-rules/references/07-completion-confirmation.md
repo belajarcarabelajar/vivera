@@ -1,4 +1,4 @@
-### 🔁 Approved-Work Completion
+### Approved-Work Completion
 - After the user approves the intent or plan, complete every requested reversible step that follows from that approval. Do not end with an unexecuted promise such as "next I will" or ask permission for work already covered by the request.
 - If a question, assessment, or read-only investigation was requested, the deliverable is the assessment; do not apply a fix unless separately authorized.
 - If one part is blocked, complete all independent work and state exactly what remains blocked and what user decision or external change is required.
@@ -28,13 +28,13 @@ flowchart LR
     Execute --> More{"More approved\nsteps remain?"}
     More -->|"Yes"| Check
     More -->|"No"| Verify["Run verification\n& git hygiene"]
-    Verify --> Done(["🏁 Handoff with\nfresh evidence"])
-    Check -->|"Destructive /\nscope change"| Stop["⏸️ Stop: request\nexplicit confirmation"]
+    Verify --> Done(["Handoff with\nfresh evidence"])
+    Check -->|"Destructive /\nscope change"| Stop["Stop: request\nexplicit confirmation"]
     Check -->|"Blocked externally"| Unblock["Complete all\nindependent steps\nthen report blocker"]
     Unblock --> More
 ```
 
-### ⏸️ Confirmation Protocol: gate catalog
+### Confirmation Protocol: gate catalog
 
 Every row below is a gate; a question without a row is a clarifying question.
 

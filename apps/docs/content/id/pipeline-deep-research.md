@@ -5,7 +5,7 @@ category: pipeline
 slug: deep-research
 order: 4
 source: README.md#Deep Research Workflow
-source_hash: "804f15959e2d"
+source_hash: "407e2e2b0371"
 ---
 
 <a id="deep-research-workflow"></a>
@@ -14,7 +14,7 @@ source_hash: "804f15959e2d"
 Sebagian pilihan implementasi tidak bisa diputuskan dari codebase: keputusannya bergantung pada
 permukaan library yang belum pernah diamati agen, pada perbandingan lebih dari dua alternatif di
 beberapa sumbu, atau pada kebutuhan agar keputusan itu bisa dipertanggungjawabkan kepada reviewer
-yang tidak pernah melihat penalarannya. `🔬 Deep Research Workflow` di master skill ada tepat untuk
+yang tidak pernah melihat penalarannya. `Deep Research Workflow` di master skill ada tepat untuk
 kasus itu, dan alur ini berjalan di antara spike dan plan implementasi, bukan menggantikan salah satunya.
 
 | Aspek | Aturan |

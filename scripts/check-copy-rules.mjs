@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 // scripts/check-copy-rules.mjs
 //
-// Two copy rules that are otherwise invisible to every existing gate, because
-// both are things a reviewer reads rather than something a test executes:
+// Copy rules that are otherwise invisible to every existing gate, because
+// all are things a reviewer reads rather than something a test executes:
 //
 //   1. No em dash (U+2014) in user-visible copy.
 //   2. No attribution footer, watermark, badge, or co-author line.
+//   3. No decorative emoji.
 //
 // WHY THIS EXISTS, measured.
 //
@@ -62,7 +63,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const EM_DASH = '\u2014';
 
-import { WATERMARK_PATTERNS } from './lib/copy-rule-patterns.mjs';
+import { WATERMARK_PATTERNS, decorativeEmoji } from './lib/copy-rule-patterns.mjs';
 
 export { WATERMARK_PATTERNS };
 
@@ -112,7 +113,7 @@ export { WATERMARK_PATTERNS };
 // `atribusi` is the Indonesian stem: the bilingual docs site states the rule as
 // "footer atribusi", and without it the Indonesian page failed on the same quotes
 // the README's English copy is exempt for.
-const RULE_STATEMENT = /attribution|atribusi|watermark|co-?author|never use em dashes|no em dash|credit badge|sign-?off trailer|generated-with footer/i;
+const RULE_STATEMENT = /decorative emoji|attribution|atribusi|watermark|co-?author|never use em dashes|no em dash|credit badge|sign-?off trailer|generated-with footer/i;
 const RULE_LOOKBACK = 3;
 
 /** Off by default: a file path pattern is a guess about which files are artifacts. */
@@ -139,6 +140,8 @@ export function checkText(text, { where, emDashApplies = true } = {}) {
     if (emDashApplies && line.includes(EM_DASH)) {
       violations.push({ where: at, rule: 'em-dash', detail: EM_DASH, line: line.trim().slice(0, 120) });
     }
+    const e = emDashApplies && decorativeEmoji(line);
+    if (e) violations.push({ where: at, rule: 'emoji', detail: e, line: line.trim().slice(0, 120) });
     for (const p of WATERMARK_PATTERNS) {
       if (!p.strict && p.re.test(line)) {
         violations.push({ where: at, rule: p.label, detail: p.re.source, line: line.trim().slice(0, 120) });

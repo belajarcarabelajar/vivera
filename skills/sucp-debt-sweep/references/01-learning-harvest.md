@@ -1,4 +1,4 @@
-### 🧠 6.2.8 Learning Harvest: detail
+### 6.2.8 Learning Harvest: detail
 
 The same sweep that mines code debt also mines the session for the agent's **own operational mistakes**: wrong tool calls, misread or missed skill/AGENTS rules, blind retries, premature guesses made instead of searching first, and scope creep. This is the concrete execution of the Continuous Learning & Memory Lifecycle Phase 1 (Rollout Extraction), run at the one point in the pipeline where the whole session is visible and verified. It is distinct from the Error Ledger: the Error Ledger records per-task *technical* failures (test/build/exit code), while this harvest records *behavioral* failures of the agent and turns the durable ones into rules the next session reads before it starts.
 

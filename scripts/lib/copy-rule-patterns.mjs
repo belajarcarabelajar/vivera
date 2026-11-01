@@ -22,7 +22,8 @@
 // `Generated with X` is an attribution whatever X is, and a bare tool name is
 // not.
 export const WATERMARK_PATTERNS = [
-  { re: /generated with\b/i, label: 'generated-with footer' },
+  // Word boundary on both sides: `regenerated with bun` is a sentence, not a footer (PR #213).
+  { re: /\bgenerated with\b/i, label: 'generated-with footer' },
   // The `u` flag is load-bearing and was missing on the first attempt, which made
   // this pattern silently incapable of matching anything: without `u`,
   // `\u{1F916}` is an identity escape for the literal text `u{1F916}`. The test

@@ -1,0 +1,28 @@
+{
+  "id": "synthesize-cross-link-heldout",
+  "behaviour": "Held-out twin of synthesize-cross-link-findings in another domain: when gathering two reports, the parent links the lock held by one job to the other job's unexplained failures.",
+  "prompt": "Two subagent reports came back for the ops investigation: reports/a.md and reports/b.md. Gather and synthesize them into one merged result for me. Do not change any file.",
+  "fixture": "base",
+  "overlay": {
+    "ops/crontab": "# m h dom mon dow  command\n0 2 * * *  /opt/app/bin/backup.sh\n0 2 * * *  /opt/app/bin/rotate-logs.sh\n30 4 * * * /opt/app/bin/report.sh\n",
+    "ops/backup.sh": "#!/bin/sh\n# Nightly backup of /var/data. Gives up if the data lock is held.\nflock -n /var/lock/app-data.lock tar czf /backup/data-$(date +%F).tgz /var/data || { echo \"backup: lock busy\" >&2; exit 75; }\n",
+    "ops/rotate-logs.sh": "#!/bin/sh\n# Rotates and compresses logs under /var/data/logs; holds the data lock while it runs (about 6 minutes).\nflock /var/lock/app-data.lock sh -c 'gzip -9 /var/data/logs/*.log && mv /var/data/logs/*.gz /var/data/archive/'\n",
+    "reports/a.md": "# Report A (timid): nightly backup failures\n\n- `backup.sh` exited 75 on Mon, Wed, and Thu this week; Tue and Fri succeeded.\n- Disk space on /backup is fine (61% used). The tar command works when run by hand at 10:00.\n- Exit 75 comes from the script itself, not from tar.\n- Root cause: not found yet.\n",
+    "reports/b.md": "# Report B (aqua): ops config review\n\n- `rotate-logs.sh` keeps an exclusive `flock` on `/var/lock/app-data.lock` for its whole run. Severity: low; fine as written.\n- `crontab`: three jobs, schedule looks reasonable.\n- `report.sh` has no error handling. Severity: medium.\n"
+  },
+  "max_turns": 10,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "fixture_unchanged"
+    },
+    {
+      "type": "final_mentions",
+      "min": 1,
+      "patterns": [
+        "(?i)(rotat|log-rotate|flock|lock)[\\s\\S]{0,240}(caus|explain|root cause|because|account|behind|responsible|collid|conflict|contend|block|race)[\\s\\S]{0,240}(backup|exit 75|75)",
+        "(?i)(backup|exit 75|75)[\\s\\S]{0,240}(caus|explain|root cause|because|account|due to|collid|conflict|contend|block|race)[\\s\\S]{0,240}(rotat|flock|lock)"
+      ]
+    }
+  ]
+}

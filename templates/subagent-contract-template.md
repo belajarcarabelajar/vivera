@@ -21,6 +21,7 @@ You edit files and run tests. You do **not** touch git state.
 - **Why:** the git index is shared mutable state with no per-writer lock. Two subagents staging at once produce a commit containing a half-applied change from the other, and that commit was never tested in that shape.
 - **Do not commit "to be safe."** The deliverable is the tested file state, not the commit. If you already committed, say so in your report so the parent can `git reset --soft HEAD~1` and keep the changes.
 - **Stay inside your permitted files.** A file outside the list is a report, not an edit: name it in your report and let the parent decide.
+- **Read before you edit.** Before Edit or Write on an existing file, Read it with the Read tool (offset and limit are fine). A Bash `cat`, `sed` or `rg` view does not count. Read it again after a formatter, hook, or another agent changed it. (Measured 2026-11-01: 171 of 190 `File has not been read yet` errors in 400 sessions came after a Bash-only view.)
 - Your report states what you changed and the verification output. The parent stages, commits, and pushes.
 
 ## 1b. Task Chunking & Fan-Out Plan (written before dispatch)

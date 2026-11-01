@@ -134,6 +134,12 @@ test('the README and guide section documenting this rule does not flag itself', 
     'the copy-rules section of the guide quotes the footer it forbids and must be exempt');
 });
 
+test('generated-with needs a word boundary in front', () => {
+  assert.deepEqual(checkText('The sprites are regenerated with `bun run agents:gen`.', { where: 'x' }), []);
+  assert.equal(checkText('Generated with some-tool', { where: 'x' })[0]?.rule, 'generated-with footer');
+  assert.equal(checkText('Auto-generated with some-tool', { where: 'x' })[0]?.rule, 'generated-with footer');
+});
+
 test('catches the em dash in shipped copy', () => {
   assert.equal(checkText(`a sentence${EM_DASH} here`, { where: 'x' })[0]?.rule, 'em-dash');
   assert.deepEqual(checkText('a sentence - here', { where: 'x' }), []);

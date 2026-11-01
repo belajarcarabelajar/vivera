@@ -1,0 +1,27 @@
+{
+  "id": "synthesize-cross-link-findings",
+  "behaviour": "When gathering two subagent reports, the parent links a finding in one report to the open question in the other (a shared root cause) instead of listing them separately.",
+  "prompt": "Two subagent reports came back for the checkout investigation: reports/a.md and reports/b.md. Gather and synthesize them into one merged result for me. Do not change any file.",
+  "fixture": "base",
+  "overlay": {
+    "src/tax.mjs": "// Sales tax for a cart subtotal, in cents.\nexport const TAX_RATE = 0.07;\n\nexport function taxCents(subtotalCents) {\n  return Math.floor(subtotalCents * TAX_RATE);\n}\n",
+    "src/cart.mjs": "import { taxCents } from './tax.mjs';\n\n// Order total in cents: item subtotal plus sales tax.\nexport function orderTotalCents(items) {\n  const subtotal = items.reduce((sum, it) => sum + it.priceCents * it.qty, 0);\n  return subtotal + taxCents(subtotal);\n}\n",
+    "reports/a.md": "# Report A (timid): support ticket #4411, checkout total\n\nQuestion: why do some customers see a checkout total one cent lower than the receipt their accountant computes?\n\n- Reproduced: 3 x $0.99 at 7% tax shows $3.17 in checkout; the accountant's sheet says $3.18.\n- `src/cart.mjs` `orderTotalCents` sums `priceCents * qty` correctly: 297 cents for this cart.\n- Not reproduced for a single $10.00 item (both say $10.70).\n- Root cause: not found. Suspect the accountant's spreadsheet rounding.\n\nNot read: src/tax.mjs\n",
+    "reports/b.md": "# Report B (aqua): style review of src/\n\n- `src/tax.mjs` uses `Math.floor` where the style guide prefers `Math.round` for money. Severity: low, cosmetic. Suggest changing it in a later cleanup.\n- `src/cart.mjs`: fine.\n- No tests cover `src/tax.mjs`.\n\nNot read: none\n"
+  },
+  "max_turns": 10,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "fixture_unchanged"
+    },
+    {
+      "type": "final_mentions",
+      "min": 1,
+      "patterns": [
+        "(?i)floor[\\s\\S]{0,240}(caus|explain|root cause|because|account|behind|responsible|produc|yield|truncat)[\\s\\S]{0,240}(cent|3\\.1[78]|ticket|#?4411|total)",
+        "(?i)(cent|3\\.1[78]|ticket|#?4411|total)[\\s\\S]{0,240}(caus|explain|root cause|because|account|due to|from|result)[\\s\\S]{0,240}floor"
+      ]
+    }
+  ]
+}

@@ -51,6 +51,7 @@ describe('hard rules', () => {
       'const API_KEY_ENV = "ANTHROPIC_API_KEY"', // letters only, no digit
       'const MAX_TOKENS_PER_REQUEST = 4096',
       `xAK${'IA'}${'QWERTYUIOP123456'}`, // inside a longer word
+      'const withEvidenceToken = T5_GREP_FAMILY_ROWS', // a constant name, not a value
     ];
     for (const m of misses) expect(rules(m)).toEqual([]);
   });
@@ -63,6 +64,7 @@ describe('hard rules', () => {
       `SECRET = "EXAMPLE${alnum(20)}"`,
       `PASSWORD = "<${alnum(24)}>"`,
       `${'API_KEY'}=\${${alnum(20)}}`,
+      `api_key=${'synthetic'}-fixture-value-1`,
     ];
     for (const f of fakes) expect(rules(f)).toEqual([]);
   });
@@ -81,7 +83,7 @@ describe('personal-data rules', () => {
   test('a real-looking home user fires, placeholders do not', () => {
     expect(rules(`cwd: ${home('alice', '/project')}`)).toEqual(['home-path']);
     expect(rules(`cwd: "${home('alice')}"`)).toEqual(['home-path']);
-    for (const user of ['u', 'x', 'user', 'you', 'example', 'testuser', 'me', 'someone', '...']) {
+    for (const user of ['u', 'x', 'user', 'you', 'example', 'testuser', 'me', 'someone', 'bun', '...']) {
       expect(HOME_ALLOW.has(user)).toBe(true);
       expect(rules(home(user, '/project'))).toEqual([]);
     }

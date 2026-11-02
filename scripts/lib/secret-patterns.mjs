@@ -19,7 +19,7 @@
 // report cannot leak what it reports.
 //
 // PLACEHOLDERS. A matched hard value that looks synthetic (FAKE, EXAMPLE,
-// PLACEHOLDER, 0123456789, XXXX, REDACTED, your-..., <...>, ${...}) is skipped: the
+// PLACEHOLDER, SYNTHETIC, 0123456789, XXXX, REDACTED, your-..., <...>, ${...}) is skipped: the
 // repository's own redaction tests need fake credentials. A bare private key header
 // without a body is skipped for the same reason.
 //
@@ -28,10 +28,12 @@
 // Usage: import { scanText, isTestPath } from './lib/secret-patterns.mjs'
 
 export const HOME_ALLOW = new Set([
-  'u', 'x', 'user', 'username', 'you', 'example', 'name', 'me', 'someone', 'testuser', 'runner', 'vagrant', 'ubuntu', 'node', '...',
+  'u', 'x', 'user', 'username', 'you', 'example', 'name', 'me', 'someone', 'testuser', 'runner', 'vagrant', 'ubuntu', 'node', 'bun', '...',
 ]);
 
-const PLACEHOLDER = /FAKE|EXAMPLE|PLACEHOLDER|0123456789|XXXX|REDACTED|your[-_]|<[^>]+>|\$\{/i;
+const PLACEHOLDER = /FAKE|EXAMPLE|PLACEHOLDER|SYNTHETIC|0123456789|XXXX|REDACTED|your[-_]|<[^>]+>|\$\{/i;
+// A value that is an UPPER_SNAKE constant name (`T5_GREP_FAMILY_ROWS`) is an identifier, not a secret.
+const CONSTANT_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
 const OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
 const tail = (n) => `(?:\\.${OCTET}){${n}}`;
@@ -76,6 +78,7 @@ function* matches(re, line) {
 const looksReal = (value, rule) => {
   if (PLACEHOLDER.test(value)) return false;
   if (rule.needsLetterAndDigit && !(/[A-Za-z]/.test(value) && /\d/.test(value))) return false;
+  if (rule.needsLetterAndDigit && CONSTANT_NAME.test(value)) return false;
   return true;
 };
 

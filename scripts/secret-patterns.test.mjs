@@ -6,6 +6,7 @@
 import { describe, expect, test } from 'bun:test';
 import { HARD_RULES, HOME_ALLOW, PERSONAL_RULES, isTestPath, scanText } from './lib/secret-patterns.mjs';
 
+const aws2 = () => `AS${'IA'}${'QWERTYUIOP123456'}`;
 const alnum = (n, seed = 'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cF') => seed.repeat(Math.ceil(n / seed.length)).slice(0, n);
 const telegram = (n = 35) => `${'1234567'}${'890'}:${alnum(n)}`;
 const anthropic = () => ['sk', 'ant', 'api03', alnum(30)].join('-');
@@ -17,6 +18,51 @@ const home = (u, rest = '') => `/home/${u}${rest}`;
 const waiver = (reason = '') => `secrets:${' '}allow${reason ? ` ${reason}` : ''}`;
 
 const rules = (text, opts = {}) => scanText(text, opts).map((f) => f.rule);
+
+describe('review round 1: boundaries that let a credential or the owner path through', () => {
+  test('a Telegram token in the bot URL form, ending in a dash, quoted or at the end of a line', () => {
+    const body = alnum(34);
+    const urlForm = `https://api.telegram.org/bot${'1234567'}${'890'}:${alnum(35)}/getMe`;
+    expect(rules(urlForm)).toEqual(['telegram-bot-token']);
+    expect(rules(`t = '${'1234567'}${'890'}:${body}-'`)).toEqual(['telegram-bot-token']);
+    expect(rules(`t = ${'1234567'}${'890'}:${body}-`)).toEqual(['telegram-bot-token']);
+    expect(rules(`t = ${'1234567'}${'890'}:${alnum(36)}`)).toEqual([]); // 36 characters is not a token
+    expect(rules(`n = 12${'1234567'}${'890'}:${alnum(35)}`)).toEqual([]); // 12 digits is not a bot id
+  });
+
+  test('the owner path is caught whatever follows the name', () => {
+    for (const tail of ['</code>', '**', '|x', '!', '=', '?', '>', '\\nx', '. Next sentence']) {
+      expect(rules(`see ${home('alice')}${tail}`)).toEqual(['home-path']);
+    }
+    expect(rules(`<${home('alice')}>`)).toEqual(['home-path']);
+    expect(rules(`${home('alice')}/`)).toEqual(['home-path']);
+    expect(rules(`${home('alice')}.`)).toEqual(['home-path']); // the dot ends a sentence, the name is still the owner's
+    expect(rules(`${home('user')}.`)).toEqual([]); // a placeholder, the dot is punctuation
+    expect(rules(`${home('first.last', '/x')}`)).toEqual(['home-path']); // a dot inside a name is part of it
+  });
+
+  test('macOS and removable-media roots count, with the same placeholders', () => {
+    expect(rules(`/Users/${'alice'}/x`)).toEqual(['home-path']);
+    expect(rules(`/run/media/${'alice'}/disk`)).toEqual(['home-path']);
+    expect(rules(`/Users/${'u'}/x`)).toEqual([]);
+    expect(rules(`/run/media/${'u'}/disk`)).toEqual([]);
+  });
+
+  test('AWS temporary (ASIA) keys are caught', () => {
+    expect(rules(`id=${aws2()}`)).toEqual(['aws-access-key']);
+  });
+
+  test('prose that mentions the waiver word is not a waiver without a reason', () => {
+    expect(rules(`use \`${waiver()}\` to waive a personal finding`)).toEqual([]);
+    expect(rules(`${waiver()}.`)).toEqual([]);
+  });
+
+  test('a very long line of word characters does not stall the scan', () => {
+    const started = Date.now();
+    expect(rules('tokenx'.repeat(400000))).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+});
 
 describe('hard rules', () => {
   const positives = {

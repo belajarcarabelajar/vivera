@@ -64,6 +64,43 @@ describe('review round 1: boundaries that let a credential or the owner path thr
   });
 });
 
+describe('review round 2: the long-line cap was a bypass, and its neighbours', () => {
+  test('a secret assignment is caught on a minified, very long line', () => {
+    const filler = '{"a":1},'.repeat(700); // over 5000 characters before the secret
+    expect(rules(`${filler}{"api_key":"${alnum(30)}"}`)).toEqual(['secret-assignment']);
+    expect(rules(`{"password":"${alnum(30)}"}${filler}`)).toEqual(['secret-assignment']);
+    expect(rules(`${'x'.repeat(100000)} {"client_secret":"${alnum(30)}"}`)).toEqual(['secret-assignment']);
+  });
+
+  test('scan time stays small just under and far over any cap', () => {
+    const started = Date.now();
+    for (let i = 0; i < 300; i++) rules('tokenx'.repeat(660));
+    expect(rules('tokenx'.repeat(400000))).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  test('a dash right after the name is punctuation, a dash that continues the name is not', () => {
+    expect(rules(`${home('alice')}-`)).toEqual(['home-path']);
+    expect(rules(`${home('alice')}- x`)).toEqual(['home-path']);
+    expect(rules(`${home('alice')}-.`)).toEqual(['home-path']);
+    expect(rules(`${home('alice-smith', '/x')}`)).toEqual(['home-path']);
+    expect(rules(`${home('user')}-`)).toEqual([]);
+  });
+
+  test('a route or a shared macOS folder is not a home path', () => {
+    expect(rules('GET /scim/v2/Users/abc123')).toEqual([]);
+    expect(rules('/Users/Shared/x')).toEqual([]);
+    expect(rules('/Users/Guest/x')).toEqual([]);
+    expect(rules(`x/home/${'alice'}`)).toEqual([]); // not the start of a path
+  });
+
+  test('an ASIA word is not a key, an ASIA key id with a digit and an AKIA key are', () => {
+    expect(rules(`REGION = ${'ASIA'}${'PACIFICSOUTHEAST'}`)).toEqual([]);
+    expect(rules(`id=${aws2()}`)).toEqual(['aws-access-key']);
+    expect(rules(`id=${aws()}`)).toEqual(['aws-access-key']);
+  });
+});
+
 describe('hard rules', () => {
   const positives = {
     'telegram-bot-token': `TOKEN_X = '${telegram()}'`,

@@ -25,12 +25,13 @@
 //
 // defer: regex rules only, no entropy score; add one when a real secret slips past review
 // defer: secret-assignment is a heuristic and is not waivable; add a waiver for that one rule if a legitimate line is blocked in practice
-// defer: PGP key blocks, Authorization: Bearer, private_key= and Windows drive-letter Users paths are not detected; add a rule when one shows up in review
+// defer: PGP key blocks, Authorization: Bearer, private_key=, symbol-only passwords, uppercase /HOME/ and Windows drive-letter Users paths are not detected; add a rule when one shows up in review
+// defer: an ASIA key without a digit is not caught (the digit check keeps the word ASIAPACIFICSOUTHEAST from being a hard finding)
 //
 // Usage: import { scanText, isTestPath } from './lib/secret-patterns.mjs'
 
 export const HOME_ALLOW = new Set([
-  'u', 'x', 'user', 'username', 'you', 'example', 'name', 'me', 'someone', 'testuser', 'runner', 'vagrant', 'ubuntu', 'node', 'bun', '...',
+  'u', 'x', 'user', 'username', 'you', 'example', 'name', 'me', 'someone', 'testuser', 'runner', 'vagrant', 'ubuntu', 'node', 'bun', 'Shared', 'Guest', '...',
 ]);
 
 const PLACEHOLDER = /FAKE|EXAMPLE|PLACEHOLDER|SYNTHETIC|0123456789|XXXX|REDACTED|your[-_]|<[^>]+>|\$\{/i;
@@ -42,14 +43,14 @@ const octets = (n) => `(?:\\.${OCTET}){${n}}`;
 // RFC1918: 10/8, 172.16/12, 192.168/16. Not part of a longer dotted number on either side.
 const PRIVATE_IP_SOURCE = `(?<![\\d.])(?:10${octets(3)}|192\\.168${octets(2)}|172\\.(?:1[6-9]|2\\d|3[01])${octets(2)})(?!\\d|\\.\\d)`;
 
-// The owner's name after /home/, /Users/ or /run/media/. A trailing dot or dash is punctuation, not part of the name,
-// and anything that cannot continue a name ends it (`*`, `|`, `!`, `<`, a JSON backslash, ...).
-const HOME_PATH = /(?:\/home|\/Users|\/run\/media)\/(\.\.\.|[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_-])/g;
-const SECRET_ASSIGNMENT = /\b\w*(?:token|secret|password|passwd|api[_-]?key)\w*["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{16,})/gi;
+// The owner's name after /home/, /Users/ or /run/media/. The root must start a path (so a route like /scim/v2/Users/x is
+// not one). A trailing dot or dash is punctuation, not part of the name, and anything that cannot continue a name ends it
+// (`*`, `|`, `!`, `<`, a JSON backslash, ...).
+const HOME_PATH = /(?<![\w.-])(?:\/home|\/Users|\/run\/media)\/(\.\.\.|[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_]|-[A-Za-z0-9_])/g;
+// The word runs around the keyword are bounded: an unbounded `\w*` backtracks badly on a long run (measured: 3.5 s at
+// 120 KB of 'tokenx' repeated), and skipping long lines instead would switch the rule off for minified JSON.
+const SECRET_ASSIGNMENT = /\b\w{0,64}(?:token|secret|password|passwd|api[_-]?key)\w{0,64}["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{16,})/gi;
 const PEM_HEADER = /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/g;
-// SECRET_ASSIGNMENT backtracks on a long run of word characters (measured: 3.5 s at 120 KB of 'tokenx' repeated),
-// so lines longer than this are not given to it. Minified bundles and base64 blobs are not assignments.
-const MAX_ASSIGNMENT_LINE = 4000;
 const BASE64_BODY = /[A-Za-z0-9+/=]{40,}/;
 const WAIVER = /secrets:\s*allow(?=\s|$)(?:[ \t]+(\S.*))?/;
 
@@ -58,7 +59,7 @@ export const HARD_RULES = [
   { id: 'telegram-bot-token', kind: 'hard', re: /(?<!\d)\d{8,10}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g },
   { id: 'anthropic-key', kind: 'hard', re: /\bsk-ant-[A-Za-z0-9_-]{20,}/g },
   { id: 'github-token', kind: 'hard', re: /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})/g },
-  { id: 'aws-access-key', kind: 'hard', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g },
+  { id: 'aws-access-key', kind: 'hard', re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, accept: (v) => v.startsWith('AKIA') || /\d/.test(v) },
   { id: 'private-key-block', kind: 'hard', re: PEM_HEADER, multiline: true },
   { id: 'secret-assignment', kind: 'hard', re: SECRET_ASSIGNMENT, valueGroup: 1, needsLetterAndDigit: true },
 ];
@@ -84,6 +85,7 @@ function* matches(re, line) {
 
 const looksReal = (value, rule) => {
   if (PLACEHOLDER.test(value)) return false;
+  if (rule.accept && !rule.accept(value)) return false;
   if (rule.needsLetterAndDigit && !(/[A-Za-z]/.test(value) && /\d/.test(value))) return false;
   if (rule.needsLetterAndDigit && CONSTANT_NAME.test(value)) return false;
   return true;
@@ -113,7 +115,6 @@ export function scanText(text, { path = '', startLine = 1, lines = null } = {}) 
     const line = all[i];
     if (wanted(n)) {
       for (const rule of HARD_RULES) {
-        if (rule.valueGroup && line.length > MAX_ASSIGNMENT_LINE) continue;
         for (const m of matches(rule.re, line)) {
           if (rule.multiline) {
             const rest = line.slice(m.index + m[0].length);

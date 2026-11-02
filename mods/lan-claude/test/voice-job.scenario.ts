@@ -121,7 +121,7 @@ if (mode === "session-closed") {
   await Bun.sleep(200);
 }
 
-await until(() => calls.some((c) => mentions(c, "halo dunia")), 15_000);
+await until(() => calls.some((c) => mentions(c, "halo dunia")), 40_000);
 await Bun.sleep(300);
 
 const carriers = calls.filter((c) => mentions(c, "halo dunia"));

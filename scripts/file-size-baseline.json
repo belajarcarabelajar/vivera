@@ -5,7 +5,7 @@
   "scripts/agents-md-current.test.mjs": 22184,
   "scripts/check-design-tells.mjs": 22188,
   "scripts/check-duplicate-defs.test.mjs": 20224,
-  "scripts/ci-targeted.test.mjs": 21600,
+  "scripts/ci-targeted.test.mjs": 22169,
   "scripts/container.test.mjs": 23423,
   "scripts/docs-gen.mjs": 21580,
   "scripts/docs-gen.test.mjs": 26824,

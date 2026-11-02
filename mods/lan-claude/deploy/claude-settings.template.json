@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__BUN__ __APP__/hooks/permission-hook.ts",
+            "timeout": 660
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__BUN__ __APP__/hooks/stop-hook.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

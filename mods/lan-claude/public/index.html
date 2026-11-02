@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>lan-claude</title>
+<style>
+  :root { color-scheme: dark; --bg:#111; --card:#1c1c1c; --line:#333; --fg:#eee; --mute:#999; --acc:#d97706; --ok:#16a34a; --bad:#dc2626; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--fg); padding:12px 12px 80px; }
+  h1 { font-size:18px; margin:4px 0 12px; display:flex; justify-content:space-between; align-items:center; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; border:0; border-radius:10px; padding:12px 14px; background:#2a2a2a; color:var(--fg); }
+  button.primary { background:var(--acc); color:#000; font-weight:600; }
+  button.ok { background:var(--ok); } button.bad { background:var(--bad); }
+  button:disabled { opacity:.5; }
+  button.rec { width:100%; padding:22px; font-size:18px; }
+  button.rec.on { background:var(--bad); }
+  textarea, select { width:100%; font:inherit; background:#0d0d0d; color:var(--fg); border:1px solid var(--line); border-radius:10px; padding:10px; }
+  textarea { min-height:90px; resize:vertical; }
+  .mute { color:var(--mute); font-size:13px; }
+  .badge { font-size:12px; padding:2px 8px; border-radius:99px; background:#333; }
+  .warn { color:#fbbf24; }
+  pre { white-space:pre-wrap; word-break:break-word; background:#000; padding:8px; border-radius:8px; font-size:12px; max-height:50vh; overflow:auto; }
+  .hidden { display:none; }
+  label { display:block; margin:8px 0 4px; font-size:13px; color:var(--mute); }
+</style>
+</head>
+<body>
+<h1>lan-claude <span id="status" class="badge">…</span></h1>
+
+<div id="msg" class="card hidden"></div>
+
+<div id="perms"></div>
+
+<div class="card">
+  <button id="rec" class="rec primary">🎙️ Mulai rekam</button>
+  <p class="mute" id="recHint"></p>
+  <input id="file" type="file" accept="audio/*" capture class="hidden">
+  <div class="row" style="margin-top:8px">
+    <button id="pick">📎 Pilih/rekam file audio</button>
+  </div>
+  <label for="text">Atau ketik perintah</label>
+  <textarea id="text" placeholder="contoh: buka repo api, cek kenapa tes gagal"></textarea>
+  <div class="row" style="margin-top:8px"><button id="sendText">✨ Rapikan</button></div>
+</div>
+
+<div id="draft" class="card hidden">
+  <div class="mute">Transkrip</div>
+  <div id="dTranscript" style="margin:4px 0 8px"></div>
+  <div id="dNote" class="warn mute"></div>
+  <label for="dPrompt">Prompt untuk Claude Code (bisa diedit)</label>
+  <textarea id="dPrompt"></textarea>
+  <label for="dFolder">Folder kerja</label>
+  <select id="dFolder"></select>
+  <input id="dFolderPath" type="text" placeholder="atau ketik folder lain (mis. ~/Unduhan atau /etc)" autocapitalize="off" autocomplete="off" spellcheck="false" style="width:100%;margin-top:6px;padding:10px;font:inherit;background:#0d0d0d;color:var(--fg);border:1px solid var(--line);border-radius:10px">
+  <div class="row" style="margin-top:10px">
+    <button id="launch" class="primary">▶️ Jalankan</button>
+    <button id="cancel">❌ Batal</button>
+  </div>
+  <p class="mute">Sesi dibuka di window tmux baru (latar belakang) dengan pengaturan yang sama seperti sesi manual di PC.</p>
+</div>
+
+<div id="jobs"></div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <span>Kill switch</span><button id="kill">…</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let state = null, draft = null, openScreen = null;
+
+async function call(path, opts = {}) {
+  const init = { credentials: "same-origin", ...opts, headers: { "x-lan-claude": "1", ...(opts.headers || {}) } };
+  const r = await fetch(path, init);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || ("HTTP " + r.status));
+  return body;
+}
+function show(text, isError) {
+  const m = $("msg"); m.textContent = text; m.classList.remove("hidden");
+  m.style.borderColor = isError ? "var(--bad)" : "var(--line)";
+  if (!isError) setTimeout(() => m.classList.add("hidden"), 4000);
+}
+function busy(on, label) {
+  for (const b of document.querySelectorAll("button")) b.disabled = on;
+  if (on) show(label || "Memproses…");
+}
+
+function renderDraft() {
+  if (!draft) { $("draft").classList.add("hidden"); return; }
+  $("draft").classList.remove("hidden");
+  $("dTranscript").textContent = draft.transcript;
+  $("dNote").textContent = draft.note || "";
+  $("dPrompt").value = draft.prompt;
+  $("dFolderPath").value = "";
+  const sel = $("dFolder"); sel.textContent = "";
+  if (!draft.folder) {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "- pilih folder dulu (perintah tidak menyebut proyek) -"; o.selected = true; sel.appendChild(o);
+  }
+  for (const f of state.folders) {
+    const o = document.createElement("option"); o.value = f.path; o.textContent = f.label;
+    if (f.path === draft.folder) o.selected = true; sel.appendChild(o);
+  }
+}
+
+function renderPerms() {
+  const box = $("perms"); box.textContent = "";
+  for (const p of state.pending) {
+    const c = document.createElement("div"); c.className = "card"; c.style.borderColor = "var(--acc)";
+    const h = document.createElement("div"); h.innerHTML = "<b>🔐 Minta izin</b> "; const t = document.createElement("span"); t.className = "badge"; t.textContent = p.tool; h.appendChild(t);
+    const pre = document.createElement("pre"); pre.textContent = p.summary;
+    const row = document.createElement("div"); row.className = "row";
+    for (const [d, label, cls] of [["allow", "✅ Izinkan", "ok"], ["deny", "⛔ Tolak", "bad"]]) {
+      const b = document.createElement("button"); b.className = cls; b.textContent = label;
+      b.onclick = async () => { try { await call("/api/permission", { method: "POST", body: JSON.stringify({ id: p.id, decision: d }) }); refresh(); } catch (e) { show(e.message, true); } };
+      row.appendChild(b);
+    }
+    c.append(h, pre, row); box.appendChild(c);
+  }
+}
+
+function renderJobs() {
+  const box = $("jobs"); box.textContent = "";
+  for (const j of state.jobs.filter((j) => j.status === "launched").slice(0, 6)) {
+    const c = document.createElement("div"); c.className = "card";
+    const top = document.createElement("div"); top.className = "row"; top.style.justifyContent = "space-between";
+    const name = document.createElement("span"); name.textContent = j.prompt.slice(0, 70) + (j.prompt.length > 70 ? "…" : "");
+    const st = document.createElement("span"); st.className = "badge"; st.textContent = j.waiting ? "menunggu kamu" : "bekerja";
+    top.append(name, st);
+    const meta = document.createElement("div"); meta.className = "mute"; meta.textContent = new Date(j.launchedAt).toLocaleTimeString() + " · " + j.folder.replace(/^\/home\/[^/]+/, "~");
+    const reply = document.createElement("div"); reply.className = "mute"; reply.style.marginTop = "6px";
+    if (j.lastReply) reply.textContent = "Balasan terakhir: " + j.lastReply.slice(0, 300);
+    const btn = document.createElement("button"); btn.textContent = openScreen === j.id ? "Tutup layar" : "🖥️ Lihat layar"; btn.style.marginTop = "8px";
+    const pre = document.createElement("pre"); pre.id = "screen-" + j.id; if (openScreen !== j.id) pre.classList.add("hidden");
+    btn.onclick = () => { openScreen = openScreen === j.id ? null : j.id; renderJobs(); if (openScreen) loadScreen(); };
+    c.append(top, meta, reply, btn, pre); box.appendChild(c);
+  }
+}
+
+async function loadScreen() {
+  if (!openScreen) return;
+  try { const r = await call("/api/screen?job=" + openScreen); const el = $("screen-" + openScreen); if (el) { el.textContent = r.screen; el.scrollTop = el.scrollHeight; } } catch {}
+}
+
+async function refresh() {
+  try {
+    state = await call("/api/state");
+    $("status").textContent = state.killed ? "kill switch ON" : state.terminalOpen ? "PC siap" : "terminal tertutup";
+    $("status").style.background = state.killed ? "var(--bad)" : state.terminalOpen ? "var(--ok)" : "#555";
+    $("kill").textContent = state.killed ? "Matikan kill switch" : "Aktifkan"; $("kill").className = state.killed ? "ok" : "bad";
+    renderPerms(); renderJobs();
+  } catch (e) { $("status").textContent = "error"; show(e.message, true); }
+}
+
+async function sendAudio(blob, name) {
+  const fd = new FormData(); fd.append("audio", blob, name);
+  busy(true, "Mentranskripsi (bisa ±30–60 detik)…");
+  try { draft = (await call("/api/voice", { method: "POST", body: fd })).job; await refresh(); renderDraft(); $("msg").classList.add("hidden"); }
+  catch (e) { show(e.message, true); } finally { busy(false); }
+}
+
+// Recording: MediaRecorder needs a secure context (HTTPS). Fallback: the file picker (capture).
+let rec = null, chunks = [];
+if (!(window.isSecureContext && navigator.mediaDevices && window.MediaRecorder)) {
+  $("rec").disabled = true; $("recHint").textContent = "Rekam langsung tidak tersedia di browser ini; pakai tombol file audio.";
+}
+$("rec").textContent = "🎙️ Mulai rekam";
+$("rec").onclick = async () => {
+  if (rec && rec.state === "recording") { rec.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = []; rec = new MediaRecorder(stream);
+    rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      $("rec").classList.remove("on"); $("rec").textContent = "🎙️ Mulai rekam";
+      const type = rec.mimeType || "audio/webm"; const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+      sendAudio(new Blob(chunks, { type }), "voice." + ext);
+    };
+    rec.start(); $("rec").classList.add("on"); $("rec").textContent = "⏹️ Selesai & kirim";
+  } catch (e) { show("Mikrofon: " + e.message, true); }
+};
+$("pick").onclick = () => $("file").click();
+$("file").onchange = () => { const f = $("file").files[0]; if (f) sendAudio(f, f.name); $("file").value = ""; };
+$("sendText").onclick = async () => {
+  const text = $("text").value.trim(); if (!text) return;
+  busy(true, "Merapikan…");
+  try { draft = (await call("/api/text", { method: "POST", body: JSON.stringify({ text }) })).job; await refresh(); renderDraft(); $("text").value = ""; $("msg").classList.add("hidden"); }
+  catch (e) { show(e.message, true); } finally { busy(false); }
+};
+$("launch").onclick = async () => {
+  busy(true, "Membuka sesi…");
+  try {
+    await call("/api/launch", { method: "POST", body: JSON.stringify({ job: draft.id, prompt: $("dPrompt").value, folder: $("dFolderPath").value.trim() || $("dFolder").value }) });
+    draft = null; renderDraft(); show("Sesi dibuka di PC."); await refresh();
+  } catch (e) { show(e.message, true); } finally { busy(false); }
+};
+$("cancel").onclick = async () => { if (draft) await call("/api/cancel", { method: "POST", body: JSON.stringify({ job: draft.id }) }).catch(() => {}); draft = null; renderDraft(); };
+$("kill").onclick = async () => { try { await call("/api/kill", { method: "POST", body: JSON.stringify({ on: !state.killed }) }); refresh(); } catch (e) { show(e.message, true); } };
+
+refresh();
+setInterval(() => { if (!document.hidden) { refresh(); loadScreen(); } }, 3000);
+</script>
+</body>
+</html>

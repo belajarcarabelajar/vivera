@@ -41,7 +41,7 @@ export function parseButton(text: string | undefined): ButtonAct | null {
 export function replyKeyboard(label: string | null): ReplyKeyboard {
   return {
     keyboard: [
-      [{ text: BTN.prev }, { text: `🎯 ${cut(label ?? "\u2014", 22)}` }, { text: BTN.next }],
+      [{ text: BTN.prev }, { text: `🎯 ${cut(label ?? "-", 22)}` }, { text: BTN.next }],
       [{ text: BTN.screen }, { text: BTN.close }, { text: BTN.model }, { text: BTN.status }],
     ],
     resize_keyboard: true,

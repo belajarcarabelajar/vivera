@@ -1,7 +1,8 @@
-// Working folders the phone may pick: folders Claude Code already trusts (hasTrustDialogAccepted in
-// ~/.claude.json). An untrusted folder would stop the new session at the trust dialog, which the
-// phone cannot answer. The home folder is never offered: Claude Code does not persist trust for it.
-// A path sent by the phone is matched exactly against this list, never joined or resolved.
+// Working folders offered on the phone as a quick list: folders Claude Code already trusts
+// (hasTrustDialogAccepted in ~/.claude.json). The list is a convenience, not a limit: validateFolder accepts
+// any existing directory typed or browsed on the phone. A folder Claude Code does not trust yet stops the
+// new session at its trust dialog, which can be answered from Telegram (see dialog.ts). The home folder is
+// never offered in the list: Claude Code does not persist trust for it.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -9,7 +10,7 @@ export type Folder = { path: string; label: string; mtimeMs: number };
 
 // Also required: hasClaudeMdExternalIncludesWarningShown. ~/CLAUDE.md imports ~/AGENTS.md, a file
 // outside every project folder, so a folder that never answered "Allow external CLAUDE.md file
-// imports?" stops at that dialog on start (seen 2026-11-02 with ~/Proyek/app).
+// imports?" stops at that dialog on start (seen with a project folder that never answered it).
 type ProjectFlags = { hasTrustDialogAccepted?: boolean; hasClaudeMdExternalIncludesWarningShown?: boolean };
 
 export function trustedPaths(claudeJson: string, read = (p: string) => readFileSync(p, "utf8")): string[] {

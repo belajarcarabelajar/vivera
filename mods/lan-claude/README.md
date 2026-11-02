@@ -12,6 +12,7 @@ This tool controls tmux and Claude Code on the machine it runs on. Read the secu
 |---|---|
 | [Bun](https://bun.sh) 1.4 | runs the server and the specs |
 | `tmux` and the `claude` CLI | sessions are opened as tmux windows |
+| An open Alacritty window with a tmux client in it | a launch attaches to the tmux session of an Alacritty window; without one it fails with a 409 message |
 | `uv`, `ffmpeg`, `ffprobe` | voice notes: `scripts/transcribe.py` runs faster-whisper through `uv` |
 | `openssl` | the LAN page is HTTPS only; you create a self-signed certificate once |
 | `qrencode` (optional) | `bin/pair-qr.sh` shows the pairing QR code |
@@ -65,12 +66,12 @@ The tool lets anyone who passes its checks start Claude Code sessions in your tr
 | Network | The server refuses client addresses outside the machine's own private subnets (so loopback and public addresses get 403). Add a firewall rule as well |
 | Pairing | A random 32-byte token in `<config dir>/token` (mode 600), shown as a QR code on the PC screen only. The phone then holds an HttpOnly, Secure, SameSite=Strict cookie |
 | CSRF | Every POST needs the header `x-lan-claude: 1` |
-| Launch | Only folders Claude Code already trusts in `~/.claude.json`, matched exactly. At most 6 launches per hour. A kill switch on the page creates `<state dir>/off` |
+| Launch | Any existing directory can be launched: the quick list shows folders Claude Code already trusts in `~/.claude.json`, but a typed or browsed path is accepted too, and Claude Code's trust and external-import dialogs for it can be answered from Telegram. At most 6 launches per hour. A kill switch on the page creates `<state dir>/off` |
 | Hooks | `PermissionRequest` and `Stop` hooks are added per job through a generated settings file and talk to a Unix socket (mode 600) |
 | Telegram | Only the configured chat id is served; the token is never logged |
 | Secrets | The Anthropic key comes from the environment or a file outside the repository, and error messages name the file, never a value |
 
-Not covered: the self-signed certificate is not pinned, anyone on your LAN who steals the pairing cookie is you, and rules in your Claude Code `allow` list run without asking even in default permission mode. Messages through Telegram pass Telegram's servers (bot chats are not end-to-end encrypted).
+Not covered: a paired phone or the configured chat can start Claude Code in any directory of the machine, the self-signed certificate is not pinned, anyone on your LAN who steals the pairing cookie is you, and rules in your Claude Code `allow` list run without asking even in default permission mode. Messages through Telegram pass Telegram's servers (bot chats are not end-to-end encrypted).
 
 ## Tests
 

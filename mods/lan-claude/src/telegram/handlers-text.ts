@@ -209,7 +209,7 @@ export function createTextHandlers(ctx: Ctx): TextHandlers {
       const job = jobs.get(ctx.editing.id);
       ctx.editing = null;
       if (!job || job.status !== "draft") return void (await send("Draf itu sudah tidak aktif."));
-      const prompt = text.trim().replace(/^-+\s*/, "");
+      const prompt = text.trim().replace(/^[-\s]+/, "");
       if (!prompt || prompt.length > 8000) return void (await send("Prompt kosong atau terlalu panjang."));
       const saved = jobs.update(job.id, { prompt })!;
       const card = draftCard(saved);

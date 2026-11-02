@@ -100,7 +100,7 @@ function renderDraft() {
   $("dFolderPath").value = "";
   const sel = $("dFolder"); sel.textContent = "";
   if (!draft.folder) {
-    const o = document.createElement("option"); o.value = ""; o.textContent = "— pilih folder dulu (perintah tidak menyebut proyek) —"; o.selected = true; sel.appendChild(o);
+    const o = document.createElement("option"); o.value = ""; o.textContent = "- pilih folder dulu (perintah tidak menyebut proyek) -"; o.selected = true; sel.appendChild(o);
   }
   for (const f of state.folders) {
     const o = document.createElement("option"); o.value = f.path; o.textContent = f.label;

@@ -142,7 +142,7 @@ export async function launch(jobId: string, promptIn: string, folderIn: string, 
   if (killed()) throw new UserError("Kill switch aktif.", 423);
   const job = jobs.get(jobId);
   if (!job || job.status !== "draft") throw new UserError("Job tidak ditemukan atau sudah dijalankan.");
-  const prompt = promptIn.trim().replace(/^-+\s*/, "");
+  const prompt = promptIn.trim().replace(/^[-\s]+/, "");
   if (!prompt || prompt.length > 8000) throw new UserError("Prompt kosong atau terlalu panjang.");
   if (!folderIn.trim()) throw new UserError("Pilih folder dulu.");
   const folder = validateFolder(folderIn, config.home);

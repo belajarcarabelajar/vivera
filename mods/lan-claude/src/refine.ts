@@ -43,7 +43,7 @@ let client: Anthropic | null = null;
 
 export function sanitizePrompt(p: string): string {
   // A leading "-" would be read as a CLI flag by `claude`; the launcher passes the prompt as one argument.
-  return p.trim().replace(/^-+\s*/, "").slice(0, 8000);
+  return p.trim().replace(/^[-\s]+/, "").slice(0, 8000);
 }
 
 export async function refine(transcript: string, folderLabels: string[]): Promise<Refined> {

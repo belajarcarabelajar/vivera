@@ -1,11 +1,12 @@
-import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // The state dir is read at import time (config.ts), so point it at a scratch dir before any import of core.
-const scratch = join(process.env.HOME ?? "/tmp", ".cache/tmp/lan-claude-t4-scratch");
-mkdirSync(scratch, { recursive: true });
-process.env.LAN_CLAUDE_STATE_DIR = mkdtempSync(join(scratch, "state-"));
+const scratch = mkdtempSync(join(tmpdir(), "lan-claude-core-"));
+process.env.LAN_CLAUDE_STATE_DIR = join(scratch, "state");
+afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const SRC = join(import.meta.dir, "../src");
 const LIMIT = 20_000;

@@ -12,7 +12,7 @@ if [ "${1:-}" = "--terminal" ]; then
   qrencode -t ANSIUTF8 "$url"
   exit 0
 fi
-out="$HOME/.cache/tmp/lan-claude-pair.png"
+out="$(mktemp --suffix=.png)"
 qrencode -s 10 -o "$out" "$url"
 chmod 600 "$out"
 echo "QR dibuka di layar: $out (hapus setelah dipindai)."

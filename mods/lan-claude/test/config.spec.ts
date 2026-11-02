@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { anthropicKey } from "../src/refine";
+import { anthropicKey, sanitizePrompt } from "../src/refine";
 
 const MOD = join(import.meta.dir, "..");
 // Built from fragments so this file never contains a denylisted string itself.
@@ -91,6 +91,23 @@ describe("anthropicKey", () => {
       }
       expect(msg).toContain("ANTHROPIC_API_KEY is not set");
       expect(msg).toContain(FILE);
+    }
+  });
+});
+
+describe("prompt flag guard", () => {
+  test("every leading dash and space is dropped, however many passes it takes", () => {
+    expect(sanitizePrompt("- --some-flag")).toBe("some-flag");
+    expect(sanitizePrompt("-- -p x")).toBe("p x");
+    expect(sanitizePrompt("  - - -do it")).toBe("do it");
+    expect(sanitizePrompt("fix the - bug")).toBe("fix the - bug");
+  });
+
+  test("the launch path and the voice follow-up use the same guard as refine", () => {
+    for (const f of ["src/refine.ts", "src/core/base.ts", "src/telegram/handlers-text.ts"]) {
+      const text = readFileSync(join(MOD, f), "utf8");
+      expect(text).toContain("replace(/^[-\\s]+/");
+      expect(text).not.toContain("replace(/^-+\\s*/");
     }
   });
 });

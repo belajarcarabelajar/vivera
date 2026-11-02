@@ -104,7 +104,7 @@ describe("telegram", () => {
 
 import { escapeMd } from "../src/telegram";
 test("escapeMd backslash-escapes markdown markers in our own labels", () => {
-  expect(escapeMd("💬 ~/Proyek/social_media (app-01) selesai:")).toBe("💬 \\~/Proyek/social\\_media \\(app\\-01\\) selesai:");
+  expect(escapeMd("💬 ~/Proyek/my_app (app-01) selesai:")).toBe("💬 \\~/Proyek/my\\_app \\(app\\-01\\) selesai:");
   expect(escapeMd("a|b `c` *d* #e")).toBe("a\\|b \\`c\\` \\*d\\* \\#e");
 });
 
@@ -158,7 +158,7 @@ test("bottom keyboard texts are parsed back, anything else is not a button", () 
   expect(parseButton("tolong kerjakan ini")).toBeNull();
   expect(parseButton("🎯" + "x".repeat(60))).toBeNull();
   expect(parseButton(undefined)).toBeNull();
-  expect(replyKeyboard(null).keyboard[0][1].text).toBe("🎯 —");
+  expect(replyKeyboard(null).keyboard[0][1].text).toBe("🎯 -");
   expect(replyKeyboard("x".repeat(80)).keyboard[0][1].text.length).toBeLessThan(40);
 });
 

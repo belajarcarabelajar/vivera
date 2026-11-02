@@ -46,7 +46,7 @@ describe('planChecks', () => {
     const plan = check(['scripts/core.mjs']);
     targeted(plan);
     expect(testFiles(plan)).toEqual(['./scripts/core.test.mjs', './scripts/top.test.mjs']);
-    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
+    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules', 'secrets']);
     expect(plan.suites[1].cmd.slice(0, 4)).toEqual(['bun', 'test', '--timeout', '30000']);
   });
 
@@ -99,7 +99,7 @@ describe('planChecks', () => {
   test('a skills file selects validate-skill, the eval last, and the tests that read skills/', () => {
     const plan = check(['skills/demo/SKILL.md']);
     targeted(plan);
-    expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules', 'eval']);
+    expect(names(plan)).toEqual(['validate-skill', 'file-size', 'tests', 'copy-rules', 'secrets', 'eval']);
     expect(plan.suites.at(-1)).toEqual({ name: 'eval', cmd: EVAL.split(' '), requires: EVAL_BASE, reasons: ['skills/demo/SKILL.md: skill or agent rules changed'] });
     expect(testFiles(plan)).toEqual(['./scripts/skills-reader.test.mjs']);
   });
@@ -113,36 +113,36 @@ describe('planChecks', () => {
   test('a module the agent generator imports selects both agent checks', () => {
     const plan = check(['scripts/sprite-agents/crew.mjs']);
     targeted(plan);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules', 'secrets']);
     expect(testFiles(plan)).toEqual(['./scripts/gen-sprite-agents.test.mjs']);
   });
 
   test('a root file a check reads by path literal selects that check, a prose mention does not', () => {
     const reads = { ...SOURCES, 'scripts/validate-lib.mjs': "const MEM = path.join(ROOT, 'MEMORY.md');\n" };
     const prose = { ...SOURCES, 'scripts/validate-lib.mjs': "const HINT = 'see MEMORY.md for the rules';\nconst NEEDLES = ['MEMORY.md'];\n" };
-    expect(names(planChecks(['MEMORY.md'], { sources: reads }))).toEqual(['validate-skill', 'file-size', 'copy-rules']);
-    expect(names(planChecks(['MEMORY.md'], { sources: prose }))).toEqual(['file-size', 'copy-rules']);
+    expect(names(planChecks(['MEMORY.md'], { sources: reads }))).toEqual(['validate-skill', 'file-size', 'copy-rules', 'secrets']);
+    expect(names(planChecks(['MEMORY.md'], { sources: prose }))).toEqual(['file-size', 'copy-rules', 'secrets']);
   });
 
   test('a CLAUDE.md change selects the tests that name it instead of the full list', () => {
     const sources = { ...SOURCES, 'scripts/claude-md.test.mjs': "writeFileSync(join(root, 'CLAUDE.md'), text);\n" };
     const plan = planChecks(['CLAUDE.md'], { sources });
     targeted(plan);
-    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules']);
+    expect(names(plan)).toEqual(['file-size', 'tests', 'copy-rules', 'secrets']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-md.test.mjs']);
   });
 
   test('an agents file selects validate-agents, gen-sprite-agents --check, and the eval', () => {
     const plan = check(['agents/chef.md']);
     const gen = suite(plan, 'gen-sprite-agents');
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'eval']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'secrets', 'eval']);
     expect(gen.cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
   });
 
   test('a claude-agents file selects validate-agents and gen-sprite-agents, not full ci', () => {
     const plan = check(['.claude/agents/staid.md']);
     targeted(plan);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'eval']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'copy-rules', 'secrets', 'eval']);
     expect(suite(plan, 'gen-sprite-agents').cmd).toEqual(['bun', 'scripts/gen-sprite-agents.mjs', '--check']);
     expect(plan.skipped.map((s) => s.name)).toEqual(['render-diagrams', 'validate-skill', 'tests', 'sync-snippets']);
   });
@@ -151,7 +151,7 @@ describe('planChecks', () => {
     const sources = { ...SOURCES, 'scripts/claude-agents-reader.test.mjs': "assertFileContains('.claude/agents/staid.md', NEEDLE);\n" };
     const plan = planChecks(['.claude/agents/staid.md'], { sources });
     targeted(plan);
-    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules', 'eval']);
+    expect(names(plan)).toEqual(['validate-agents', 'gen-sprite-agents', 'file-size', 'tests', 'copy-rules', 'secrets', 'eval']);
     expect(testFiles(plan)).toEqual(['./scripts/claude-agents-reader.test.mjs']);
   });
 
@@ -175,8 +175,8 @@ describe('planChecks', () => {
   test('a docs markdown file selects only the docs-gen, file-size, and copy checks', () => {
     const plan = check(['docs/guide.md']);
     targeted(plan);
-    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'docs-warn', 'copy-rules']);
-    expect(plan.suites.at(-1).cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
+    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
+    expect(suite(plan, 'copy-rules').cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
     expect(plan.skipped.map((s) => s.name)).toEqual([
       'render-diagrams', 'validate-skill', 'validate-agents', 'gen-sprite-agents', 'tests', 'sync-snippets',
     ]);
@@ -184,7 +184,7 @@ describe('planChecks', () => {
 
   test('a markdown file whose mermaid block changed selects render-diagrams', () => {
     const plan = planChecks(['docs/guide.md'], { sources: SOURCES, mermaidChanged: ['docs/guide.md'] });
-    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'docs-warn', 'copy-rules']);
+    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
   });
 
   test('a diagram source selects render-diagrams', () => {
@@ -200,10 +200,18 @@ describe('planChecks', () => {
     }
   });
 
+  test('the secrets check runs against the base in a targeted plan and in a full plan', () => {
+    for (const opts of [{ base: 'u/d' }, { base: 'u/d', full: true }]) {
+      const plan = planChecks(['docs/guide.md'], INDEX, opts);
+      expect(plan.full).toBe(Boolean(opts.full));
+      expect(suite(plan, 'secrets').cmd).toEqual(['bun', 'scripts/check-secrets.mjs', '--diff', 'u/d']);
+    }
+  });
+
   test('bun.lock forces the full ci list', () => {
     const plan = check(['bun.lock']);
     expect(plan.full).toBe(true);
-    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'docs-warn', 'copy-rules']);
+    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
     expect(plan.suites[0].reasons.join('\n')).toContain('bun.lock');
     expect(plan.skipped).toEqual([]);
   });
@@ -224,7 +232,7 @@ describe('planChecks', () => {
   test('an apps/ path and graphify-out do not force full', () => {
     for (const p of ['apps/other/src/main.rs', 'graphify-out/graph.json']) {
       const plan = check([p]);
-      expect([plan.full, names(plan)]).toEqual([false, ['file-size', 'copy-rules']]);
+      expect([plan.full, names(plan)]).toEqual([false, ['file-size', 'copy-rules', 'secrets']]);
     }
   });
 
@@ -235,19 +243,19 @@ describe('planChecks', () => {
 
   test('file-size runs before the tests and the snippet check', () => {
     const n = names(check(['bun.lock']));
-    expect(n.slice(n.indexOf('gen-sprite-agents'), -3)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
+    expect(n.slice(n.indexOf('gen-sprite-agents'), -4)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
   test('eval scenarios and fixtures select their tests and the eval; evals/README.md is a doc', () => {
     const sources = { 'scripts/eval-scenarios.test.mjs': "join(ROOT, 'evals', 'scenarios')" };
     const plan = planChecks(['evals/scenarios/x.json', 'evals/fixtures/base/package.json'], { sources });
     expect([plan.full, testFiles(plan), names(plan).at(-1)]).toEqual([false, ['./scripts/eval-scenarios.test.mjs'], 'eval']);
-    expect(names(planChecks(['evals/README.md'], { sources }))).toEqual(['file-size', 'copy-rules']);
+    expect(names(planChecks(['evals/README.md'], { sources }))).toEqual(['file-size', 'copy-rules', 'secrets']);
   });
 
   test('--full adds the eval only when skills/ or agents/ changed', () => {
     const run = (p) => planChecks([p], INDEX, { full: true });
-    expect([run('agents/a.md').full, names(run('agents/a.md')).at(-1), names(run('docs/x.md')).at(-1)]).toEqual([true, 'eval', 'copy-rules']);
+    expect([run('agents/a.md').full, names(run('agents/a.md')).at(-1), names(run('docs/x.md')).at(-1)]).toEqual([true, 'eval', 'secrets']);
   });
 
   test('a docs-only or scripts-only change still runs file-size over the index', () => {
@@ -255,7 +263,7 @@ describe('planChecks', () => {
     expect({ full: plan.full, reasons: suite(plan, 'file-size')?.reasons }).toEqual({ full: false, reasons: ['always: a few git calls over the index'] });
     expect(plan.skipped.map((s) => s.name)).not.toContain('file-size');
     const sources = { 'scripts/a.mjs': 'export const a = 1;\n', 'scripts/a.test.mjs': "import './a.mjs';\n" };
-    expect(names(planChecks(['scripts/a.mjs'], { sources }))).toEqual(['file-size', 'tests', 'copy-rules']);
+    expect(names(planChecks(['scripts/a.mjs'], { sources }))).toEqual(['file-size', 'tests', 'copy-rules', 'secrets']);
   });
 });
 

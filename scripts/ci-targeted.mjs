@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { GitError, gitText } from './lib/git.mjs';
 import { buildIndex, modTests } from './lib/ci-targeted-index.mjs';
 import { escapeRe } from './lib/escape-re.mjs';
+import { copySuite, secretSuite } from './lib/ci-targeted-always.mjs';
 
 export { buildIndex, mermaidBlocks, scriptsOnlyChange } from './lib/ci-targeted-index.mjs';
 
@@ -215,7 +216,7 @@ function testsForOther(p, sources) {
 function fullPlan(base, reasons, ignored, paths) {
   return {
     full: true,
-    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), ...docsSuites(reasons), copySuite(base), ...evalSuites(paths)],
+    suites: [...FULL_CI.map((s) => ({ ...s, cmd: withBase(s, base), reasons: [...reasons] })), ...docsSuites(reasons), copySuite(base), secretSuite(base), ...evalSuites(paths)],
     skipped: [],
     ignored,
   };
@@ -223,10 +224,6 @@ function fullPlan(base, reasons, ignored, paths) {
 
 // A ceiling raised since the base must name a plan id.
 const withBase = (s, base) => (s.name === 'file-size' ? [...s.cmd, '--base', base] : [...s.cmd]);
-
-function copySuite(base) {
-  return { name: 'copy-rules', cmd: ['bun', 'scripts/check-copy-rules.mjs', '--diff', base], reasons: ['always: commits and added lines since the base'] };
-}
 
 const EVAL_BASELINE = 'docs/code-plan/evals/baseline.json';
 const EVAL_INPUT = /^(?:skills|agents|\.claude\/agents|evals\/scenarios|evals\/fixtures)\//;
@@ -327,7 +324,7 @@ export function planChecks(changed, index, { base = 'origin/main', full = false 
   const docsReasons = paths.filter((p) => isDocsSource(p) || inc.has(p))
     .map((p) => `${p}: ${isDocsSource(p) ? 'docs page source' : 'source included by a docs page'} changed`);
   if (docsReasons.length) suites.push(...docsSuites(docsReasons));
-  suites.push(copySuite(base), ...evalSuites(paths));
+  suites.push(copySuite(base), secretSuite(base), ...evalSuites(paths));
   return { full: false, suites, skipped, ignored };
 }
 

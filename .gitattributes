@@ -16,3 +16,5 @@ examples/graph-viewer-demo.html -size-gate
 .claude/agents/*.md -size-gate
 .opencode/skills/graphify/** -size-gate
 .opencode/plugins/graphify.js -size-gate
+# Recorded real eval streams carry the recorder's own paths and are never edited by hand, so the secret gate (scripts/check-secrets.mjs) skips them.
+evals/fixtures/streams/*.jsonl -secret-gate

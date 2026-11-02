@@ -9,6 +9,17 @@ import { join } from "node:path";
 
 const scratch = mkdtempSync(join(tmpdir(), "lan-claude-voice-"));
 
+// The draft scenario runs refine(), which loads the Anthropic SDK (a fake fetch stands in for the API, but the SDK
+// itself must be installed). On a clean clone it is not, so that case is skipped and says why in its name.
+const hasSdk = (() => {
+  try {
+    Bun.resolveSync("@anthropic-ai/sdk", join(import.meta.dir, "../src"));
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 type Call = { method: string; body: Record<string, any>; id?: number };
 type Result = { calls: Call[]; lastIdBefore: number; statusId: number; tapResult: string | null };
 
@@ -61,7 +72,7 @@ describe("voice note while the owner keeps using the chat", () => {
     expect(r.calls.some((c) => textOf(c).includes("❌"))).toBe(false);
   }, 60_000);
 
-  test("new-draft transcript (no session mode) arrives as a new message with the draft buttons", async () => {
+  test.skipIf(!hasSdk)("new-draft transcript (no session mode; needs bun install --cwd mods/lan-claude) arrives as a new message with the draft buttons", async () => {
     const r = await scenario("draft");
     const sent = withTranscript(r).filter((c) => c.method === "sendMessage");
     expect(sent.length).toBe(1);

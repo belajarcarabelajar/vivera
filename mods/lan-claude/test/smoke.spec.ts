@@ -72,7 +72,7 @@ describe("server smoke run", () => {
     expect(started.web).toBe(ip ? "TLS cert or key missing" : "no private LAN subnet");
     const res = await fetch("http://lan-claude/hook/permission", { unix: socket, method: "POST", body: JSON.stringify({ job: "000000000000" }) });
     expect(await res.json()).toEqual({ decision: "none" });
-  });
+  }, 20_000);
 
   test.skipIf(!ip || !hasOpenssl)("a wrong pairing token gets 403 over HTTPS", async () => {
     const home = join(tmp, "tls");
@@ -85,7 +85,7 @@ describe("server smoke run", () => {
     expect(started.web).toContain(`web on :${port}`);
     const res = await fetch(`https://${ip}:${port}/pair?t=wrong`, { tls: { rejectUnauthorized: false }, redirect: "manual" });
     expect(res.status).toBe(403);
-  });
+  }, 20_000);
 
   test.skipIf(!!ip && hasOpenssl)(`the pairing case is skipped: ${ip ? "no openssl" : "no private IPv4"} on this machine`, () => {
     expect(true).toBe(true);

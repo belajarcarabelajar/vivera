@@ -2,17 +2,25 @@
 # .githooks/pre-commit
 #
 # WHAT THIS IS FOR
-#   Two jobs, in this order:
+#   Three jobs, in this order:
 #
-#   1. Size gate. Block a commit that stages a file over 5,000 tokens
+#   1. Secret gate. Block a commit that adds a credential, or a personal path or
+#      address, to this public repository (rules: scripts/lib/secret-patterns.mjs):
+#
+#        bun scripts/check-secrets.mjs --staged
+#
+#      It runs first so a leaked token is refused before anything else looks at it.
+#      There is no environment bypass; only `git commit --no-verify`.
+#
+#   2. Size gate. Block a commit that stages a file over 5,000 tokens
 #      (20,000 bytes), or one that grows a file past its ceiling in
 #      scripts/file-size-baseline.json:
 #
 #        bun scripts/check-file-size.mjs --staged
 #
-#      It runs first so a blocked commit spends no time on a graph refresh.
+#      It runs before the graph refresh so a blocked commit spends no time on it.
 #
-#   2. Graph refresh. Keep this repository's graphify graph consistent with what
+#   3. Graph refresh. Keep this repository's graphify graph consistent with what
 #      the commit actually contains, in one step, without anyone remembering:
 #
 #        graphify update .        # re-extract code (local AST, no LLM, no network)
@@ -47,6 +55,12 @@
 #
 # GATING: what runs when
 #   no staged change           -> nothing, silently
+#   secret gate passes         -> continue to the size gate, printing nothing
+#   secret gate finds a line   -> print the report, exit 1
+#   secret gate exits 2        -> skip with a one-line note, continue
+#   secret checker crashes     -> any other exit, or exit 1 without a
+#                                 [secret-gate] line: print a blocked note, exit 1
+#   bun / checker not found    -> skip the secret gate with a one-line note
 #   size gate passes           -> continue to the graph refresh
 #   size gate finds a file     -> print the report with the split advice, exit 1
 #   size gate exits 2          -> skip with a one-line note, commit proceeds
@@ -60,10 +74,11 @@
 #   graphify / bun not found   -> skip with a one-line note, commit proceeds
 #
 # CONTRACT
-#   The size gate is the one blocking path: when the checker exits 1, or
-#   crashes, this hook exits 1 and the checker's stderr reaches the terminal
-#   unchanged. Every other path exits 0. The graph is derived, local, and regenerable; a refresh that
-#   fails must never block a commit. A failure is printed as a warning.
+#   The secret gate and the size gate are the two blocking paths: when either
+#   checker exits 1, or crashes, this hook exits 1 and the checker's stderr
+#   reaches the terminal unchanged. Every other path exits 0. The graph is
+#   derived, local, and regenerable; a refresh that fails must never block a
+#   commit. A failure is printed as a warning.
 #
 # ENABLE
 #   install.sh runs `git config core.hooksPath .githooks` for you. By hand:
@@ -71,8 +86,8 @@
 #
 # DISABLE (temporarily)
 #   GRAPHIFY_SYNC_SKIP=1 git commit ...   # skips the graph refresh only
-#   git commit --no-verify ...            # skips every hook, size gate included;
-#                                         # `bun run ci` still runs the size check
+#   git commit --no-verify ...            # skips every hook, secret and size gates
+#                                         # included; `bun run ci` still runs the size check
 #
 # REVERT
 #   git config --unset core.hooksPath      # back to the default .git/hooks
@@ -99,11 +114,43 @@ fi
 
 # Every staged path in one newline-delimited list. `--diff-filter=ACMR` ignores
 # deletes: a deleted file is handled by the next full run, and a pre-commit hook
-# cannot know the union it wants. Computed before the size gate so an empty
+# cannot know the union it wants. Computed before the gates so an empty
 # commit stays silent instead of printing a skip note.
 staged="$(git -C "$REPO_DIR" diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)"
 if [ -z "$staged" ]; then
   exit 0
+fi
+
+# Secret gate. Same shape as the size gate below: stdout is captured so the
+# "checked N files" summary is dropped on a pass, stderr goes to a temp file so an
+# exit 1 with a real report ([secret-gate] line) can be told apart from a checker
+# that failed before judging. There is no environment bypass; only --no-verify.
+SECRET_CHECK="$REPO_DIR/scripts/check-secrets.mjs"
+if [ -z "$BUN_BIN" ]; then
+  echo "[secret-gate] skipped: bun not found" >&2
+elif [ ! -f "$SECRET_CHECK" ]; then
+  echo "[secret-gate] skipped: scripts/check-secrets.mjs not found" >&2
+else
+  secret_stderr="$(mktemp)" || { echo "[secret-gate] blocked: cannot create a temp file (TMPDIR=${TMPDIR:-unset}). Fix it, or commit with --no-verify." >&2; exit 1; }
+  trap 'rm -f "$secret_stderr"' EXIT
+  secret_output="$(cd "$REPO_DIR" && "$BUN_BIN" scripts/check-secrets.mjs --staged 2>"$secret_stderr")" && secret_status=0 || secret_status=$?
+  cat "$secret_stderr" >&2
+  if [ "$secret_status" -ne 0 ] && [ -n "$secret_output" ]; then
+    printf '%s\n' "$secret_output"
+  fi
+  if [ "$secret_status" -eq 1 ]; then
+    if ! grep -q '^\[secret-gate\]' "$secret_stderr"; then
+      echo "[secret-gate] blocked: the checker failed before judging (exit 1). Fix it, or commit with --no-verify." >&2
+    fi
+    exit 1
+  elif [ "$secret_status" -eq 2 ]; then
+    echo "[secret-gate] skipped: checker exited 2" >&2
+  elif [ "$secret_status" -ne 0 ]; then
+    echo "[secret-gate] blocked: the checker crashed (exit $secret_status). Fix it, or commit with --no-verify." >&2
+    exit 1
+  fi
+  rm -f "$secret_stderr"
+  trap - EXIT
 fi
 
 # Size gate. stdout is captured only to drop the "checked N files" summary on a

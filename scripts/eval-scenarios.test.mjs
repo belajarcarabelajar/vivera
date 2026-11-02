@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { ASSERTION_TYPES } from './eval-score.mjs';
 
@@ -63,6 +63,52 @@ function rulesProblems(rules, known) {
     if (typeof id !== 'string' || !/^L[1-9]\d*$/.test(id)) return [`${id} is not a rule ID like L12`];
     return known.has(id) ? [] : [`${id} is in neither docs/memory nor the Retired line`];
   });
+}
+
+// Leak check: a scenario measures behaviour only while the text it hands the model (prompt, turns,
+// overlay, fixture files) is absent from what the runner installs (skills/ and .claude/agents/).
+// A run of eight words, ignoring case and punctuation, counts as copied; the idea comes from the
+// held-out answer check of okf (github.com/wmahfoudh/okf). Rewording is not caught.
+const LEAK_RUN = 8;
+const wordsOf = (text) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+// Every run of n words in each text, kept per text so a run never spans two files.
+function runsOf(texts, n) {
+  const runs = new Set();
+  for (const text of texts) {
+    const words = wordsOf(text);
+    for (let i = 0; i + n <= words.length; i++) runs.add(words.slice(i, i + n).join(' '));
+  }
+  return runs;
+}
+
+function leakedRuns(texts, installedRuns, n) {
+  return [...runsOf(texts, n)].filter((run) => installedRuns.has(run));
+}
+
+// Follows symlinks the way the runner's cpSync(dereference) does.
+function filesUnder(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).flatMap((name) => {
+    const full = realpathSync(join(dir, name));
+    return statSync(full).isDirectory() ? filesUnder(full) : [full];
+  });
+}
+
+const INSTALLED_RUNS = runsOf(
+  [...filesUnder(SKILL_DIR), ...filesUnder(join(ROOT, '.claude', 'agents'))]
+    .filter((file) => /\.(md|mjs|js|json|sh|txt|ya?ml)$/.test(file))
+    .map((file) => readFileSync(file, 'utf8')),
+  LEAK_RUN,
+);
+
+function scenarioTexts(s) {
+  const fixture = existsSync(join(FIXTURE_DIR, s.fixture)) ? filesUnder(join(FIXTURE_DIR, s.fixture)) : [];
+  return [
+    ...[s.prompt, ...(s.turns ?? []).map((t) => t.prompt)].filter(isString),
+    ...Object.values(s.overlay ?? {}).filter(isString),
+    ...fixture.map((file) => readFileSync(file, 'utf8')),
+  ];
 }
 
 const isScope = (value) => SCOPES.includes(value);
@@ -196,6 +242,10 @@ describe('eval scenarios', () => {
         for (const a of all) expect(ASSERTION_TYPES).toContain(a.type);
         expect(all.flatMap(assertionProblems)).toEqual([]);
       });
+
+      test('no run of eight words from its prompt, overlay, or fixture is in the installed skills or sprites', () => {
+        expect(leakedRuns(scenarioTexts(s), INSTALLED_RUNS, LEAK_RUN)).toEqual([]);
+      });
     });
   }
 });
@@ -222,6 +272,14 @@ describe('eval fixtures', () => {
     const line = readFileSync(join(ROOT, 'MEMORY.md'), 'utf8').match(/^Retired: (.*)$/m);
     expect(line).not.toBeNull();
     for (const id of line[1].match(/L\d+/g) ?? []) expect(KNOWN_RULES.has(id)).toBe(true);
+  });
+
+  test('the leak check finds a planted run of eight words and ignores shorter or reworded overlap', () => {
+    const installed = runsOf(['Report it. Gives up if the DATA lock is held, then exit.'], LEAK_RUN);
+    expect(leakedRuns(['# backup.sh gives up if the data lock is held!'], installed, LEAK_RUN))
+      .toEqual(['gives up if the data lock is held']);
+    expect(leakedRuns(['gives up if the data lock'], installed, LEAK_RUN)).toEqual([]);
+    expect(leakedRuns(['gives up when the data lock is held'], installed, LEAK_RUN)).toEqual([]);
   });
 
   test('every fixture file stays under 2 KB', () => {

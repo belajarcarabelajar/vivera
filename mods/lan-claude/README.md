@@ -75,7 +75,7 @@ Not covered: a paired phone or the configured chat can start Claude Code in any 
 
 ## Tests
 
-`bun test scripts/lan-claude.test.mjs` from the repository root runs every spec of the mod, checks that no file names a personal path or address, and checks the unit file. Inside the mod folder: `bun test ./test/<name>.spec.ts` and `bunx tsc --noEmit` after `bun install`. The specs need no network, no tmux and no installed dependencies.
+`bun test scripts/lan-claude.test.mjs` from the repository root runs every spec of the mod, checks that no file names a personal path or address, and checks the unit file. Inside the mod folder: `bun test ./test/<name>.spec.ts` and `bunx tsc --noEmit` after `bun install`. The specs need no network and no tmux. They also run without installed dependencies, except the new-draft case of the voice-job scenario, which needs the SDK from `bun install --cwd mods/lan-claude` and is reported as skipped without it.
 
 ## Revert
 

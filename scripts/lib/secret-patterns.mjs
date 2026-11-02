@@ -26,6 +26,7 @@
 // defer: regex rules only, no entropy score; add one when a real secret slips past review
 // defer: secret-assignment is a heuristic and is not waivable; add a waiver for that one rule if a legitimate line is blocked in practice
 // defer: PGP key blocks, Authorization: Bearer, private_key=, symbol-only passwords, uppercase /HOME/ and Windows drive-letter Users paths are not detected; add a rule when one shows up in review
+// defer: a route such as /scim/v2/Users/<id> is read as a home path (waivable); a word run of 65 or more characters next to a secret keyword is not bounded by `\b`, so such an identifier is not caught; JSON-escaped slashes (`\/home\/<name>`) are not detected
 // defer: an ASIA key without a digit is not caught (the digit check keeps the word ASIAPACIFICSOUTHEAST from being a hard finding)
 //
 // Usage: import { scanText, isTestPath } from './lib/secret-patterns.mjs'
@@ -43,10 +44,10 @@ const octets = (n) => `(?:\\.${OCTET}){${n}}`;
 // RFC1918: 10/8, 172.16/12, 192.168/16. Not part of a longer dotted number on either side.
 const PRIVATE_IP_SOURCE = `(?<![\\d.])(?:10${octets(3)}|192\\.168${octets(2)}|172\\.(?:1[6-9]|2\\d|3[01])${octets(2)})(?!\\d|\\.\\d)`;
 
-// The owner's name after /home/, /Users/ or /run/media/. The root must start a path (so a route like /scim/v2/Users/x is
-// not one). A trailing dot or dash is punctuation, not part of the name, and anything that cannot continue a name ends it
+// The owner's name after /home/, /Users/ or /run/media/. The root is matched anywhere, also behind a prefix (/data/home/<name>,
+// /System/Volumes/Data/Users/<name>), because a prefix must not hide the owner. A trailing dot or dash is punctuation, not part of the name, and anything that cannot continue a name ends it
 // (`*`, `|`, `!`, `<`, a JSON backslash, ...).
-const HOME_PATH = /(?<![\w.-])(?:\/home|\/Users|\/run\/media)\/(\.\.\.|[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_]|-[A-Za-z0-9_])/g;
+const HOME_PATH = /(?:\/home|\/Users|\/run\/media)\/(\.\.\.|[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?)(?![A-Za-z0-9_]|-[A-Za-z0-9_])/g;
 // The word runs around the keyword are bounded: an unbounded `\w*` backtracks badly on a long run (measured: 3.5 s at
 // 120 KB of 'tokenx' repeated), and skipping long lines instead would switch the rule off for minified JSON.
 const SECRET_ASSIGNMENT = /\b\w{0,64}(?:token|secret|password|passwd|api[_-]?key)\w{0,64}["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{16,})/gi;

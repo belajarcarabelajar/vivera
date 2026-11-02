@@ -87,11 +87,13 @@ describe('review round 2: the long-line cap was a bypass, and its neighbours', (
     expect(rules(`${home('user')}-`)).toEqual([]);
   });
 
-  test('a route or a shared macOS folder is not a home path', () => {
-    expect(rules('GET /scim/v2/Users/abc123')).toEqual([]);
+  test('a shared macOS folder is not a home path, a prefix does not hide the owner', () => {
     expect(rules('/Users/Shared/x')).toEqual([]);
     expect(rules('/Users/Guest/x')).toEqual([]);
-    expect(rules(`x/home/${'alice'}`)).toEqual([]); // not the start of a path
+    for (const prefix of ['/data', '/var', '.', '/mnt/x', '/System/Volumes/Data', 'rootfs', '$ROOT', '-v /host']) {
+      const root = prefix.includes('System') ? 'Users' : 'home';
+      expect(rules(`${prefix}/${root}/${'alice'}/x`)).toEqual(['home-path']);
+    }
   });
 
   test('an ASIA word is not a key, an ASIA key id with a digit and an AKIA key are', () => {

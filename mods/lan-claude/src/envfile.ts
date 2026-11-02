@@ -1,5 +1,6 @@
 // Parser for `KEY=value` env files. Same rules as the Telegram bridge's parser: `KEY=value # note` drops the
 // note, quotes keep `#`, a leading `export` is ignored.
+// dup-defs: allow same rules as the bridge's env parser; the mod ships on its own and must not import the bridge internals
 export function parseEnvFile(text: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const raw of text.split("\n")) {

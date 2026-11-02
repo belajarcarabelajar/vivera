@@ -2,6 +2,8 @@
   "apps/docs/content/id/integrations-graphify-runbook.md": 50892,
   "apps/docs/src/routes.rs": 21536,
   "docs/graphify-integration.md": 43327,
+  "mods/lan-claude/src/core.ts": 28104,
+  "mods/lan-claude/src/telegram.ts": 58969,
   "scripts/agents-md-current.test.mjs": 22184,
   "scripts/check-design-tells.mjs": 22188,
   "scripts/check-duplicate-defs.test.mjs": 20224,

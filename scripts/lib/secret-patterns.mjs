@@ -36,9 +36,9 @@ const PLACEHOLDER = /FAKE|EXAMPLE|PLACEHOLDER|SYNTHETIC|0123456789|XXXX|REDACTED
 const CONSTANT_NAME = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
 
 const OCTET = '(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
-const tail = (n) => `(?:\\.${OCTET}){${n}}`;
+const octets = (n) => `(?:\\.${OCTET}){${n}}`;
 // RFC1918: 10/8, 172.16/12, 192.168/16. Not part of a longer dotted number on either side.
-const PRIVATE_IP_SOURCE = `(?<![\\d.])(?:10${tail(3)}|192\\.168${tail(2)}|172\\.(?:1[6-9]|2\\d|3[01])${tail(2)})(?!\\d|\\.\\d)`;
+const PRIVATE_IP_SOURCE = `(?<![\\d.])(?:10${octets(3)}|192\\.168${octets(2)}|172\\.(?:1[6-9]|2\\d|3[01])${octets(2)})(?!\\d|\\.\\d)`;
 
 const HOME_PATH = /\/home\/([A-Za-z0-9_.-]+)(?=[/"'`\s)\]},:;]|$)/g;
 const SECRET_ASSIGNMENT = /\b\w*(?:token|secret|password|passwd|api[_-]?key)\w*["']?\s*[:=]\s*["']?([A-Za-z0-9_-]{16,})/gi;

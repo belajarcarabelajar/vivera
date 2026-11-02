@@ -46,14 +46,14 @@ import { scanText } from './lib/secret-patterns.mjs';
 const USAGE = 'usage: bun scripts/check-secrets.mjs (--staged | --all | --diff <base>) [--root <dir>]';
 const HINT = '[secret-gate] a credential cannot be waived; a personal-data finding (home-path, private-ip) can be, with a comment "secrets: allow <reason>" on the line or the line above';
 const DIFF_FLAGS = ['--unified=0', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
-const nulList = (out) => out.split('\u0000').filter(Boolean);
+const splitNul = (out) => out.split('\u0000').filter(Boolean);
 
-class UsageError extends Error {}
+class SecretsUsageError extends Error {}
 
 export function parseArgs(argv) {
   const opts = { mode: null, base: null, root: null };
   const setMode = (m) => {
-    if (opts.mode) throw new UsageError(`only one of --staged, --all, --diff (got ${opts.mode} and ${m})`);
+    if (opts.mode) throw new SecretsUsageError(`only one of --staged, --all, --diff (got ${opts.mode} and ${m})`);
     opts.mode = m;
   };
   for (let i = 0; i < argv.length; i++) {
@@ -62,21 +62,21 @@ export function parseArgs(argv) {
     else if (a === '--all') setMode('all');
     else if (a === '--diff' || a === '--root') {
       const v = argv[++i];
-      if (!v || v.startsWith('-')) throw new UsageError(`${a} needs a value`);
+      if (!v || v.startsWith('-')) throw new SecretsUsageError(`${a} needs a value`);
       if (a === '--diff') {
         setMode('diff');
         opts.base = v;
       } else opts.root = v;
-    } else throw new UsageError(`unknown argument ${a}`);
+    } else throw new SecretsUsageError(`unknown argument ${a}`);
   }
-  if (!opts.mode) throw new UsageError('pick one of --staged, --all, --diff <base>');
+  if (!opts.mode) throw new SecretsUsageError('pick one of --staged, --all, --diff <base>');
   return opts;
 }
 
 /** Index entries: path -> { mode, oid }, from `git ls-files -s -z`. */
-function indexEntries(cwd) {
+function trackedEntries(cwd) {
   const entries = new Map();
-  for (const rec of nulList(gitText(cwd, ['ls-files', '-s', '-z'], { label: 'git ls-files failed' }))) {
+  for (const rec of splitNul(gitText(cwd, ['ls-files', '-s', '-z'], { label: 'git ls-files failed' }))) {
     const m = /^(\d+) ([0-9a-f]+) \d\t([\s\S]*)$/.exec(rec);
     if (m) entries.set(m[3], { mode: m[1], oid: m[2] });
   }
@@ -110,7 +110,7 @@ function optedOut(cwd, paths) {
   if (paths.length === 0) return out;
   const r = spawnSync('git', ['check-attr', '--stdin', '-z', 'secret-gate'], { cwd, input: `${paths.join('\u0000')}\u0000`, encoding: 'utf8', maxBuffer: 1 << 30 });
   if (r.error || r.status !== 0) throw new GitError(`git check-attr failed: ${r.error?.message ?? r.stderr.trim()}`);
-  const f = nulList(r.stdout);
+  const f = splitNul(r.stdout);
   for (let i = 0; i + 2 < f.length; i += 3) if (f[i + 2] === 'unset') out.add(f[i]);
   return out;
 }
@@ -119,13 +119,13 @@ const isBinary = (buf) => buf.subarray(0, 8000).includes(0);
 
 /** Targets { path, text, lines } for a mode; `lines` null = every line. */
 function targetsFor(opts, cwd) {
-  const entries = indexEntries(cwd);
+  const entries = trackedEntries(cwd);
   let wanted; // path -> Set of added line numbers, or null for the whole file
   let fromIndex = true;
   if (opts.mode === 'all') {
     wanted = new Map([...entries.keys()].map((p) => [p, null]));
   } else if (opts.mode === 'staged') {
-    const names = nulList(gitText(cwd, ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'], { label: 'git diff --cached failed' }));
+    const names = splitNul(gitText(cwd, ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'], { label: 'git diff --cached failed' }));
     if (names.length === 0) return null;
     const added = parseAddedLines(gitText(cwd, ['diff', '--cached', ...DIFF_FLAGS], { label: 'git diff --cached failed' }));
     wanted = new Map(names.map((p) => [p, added.get(p) ?? new Set()]));
@@ -134,7 +134,7 @@ function targetsFor(opts, cwd) {
     const base = gitText(cwd, ['merge-base', opts.base, 'HEAD'], { label: `cannot resolve merge-base of '${opts.base}' and HEAD` }).trim();
     const added = parseAddedLines(gitText(cwd, ['diff', ...DIFF_FLAGS, base], { label: `git diff ${base.slice(0, 8)} failed` }));
     wanted = new Map(added);
-    for (const p of nulList(gitText(cwd, ['ls-files', '-z', '--others', '--exclude-standard'], { label: 'git ls-files --others failed' }))) wanted.set(p, null);
+    for (const p of splitNul(gitText(cwd, ['ls-files', '-z', '--others', '--exclude-standard'], { label: 'git ls-files --others failed' }))) wanted.set(p, null);
   }
 
   let paths = [...wanted.keys()].filter((p) => {

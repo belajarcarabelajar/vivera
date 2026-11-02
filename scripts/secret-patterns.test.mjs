@@ -79,6 +79,13 @@ describe('review round 2: the long-line cap was a bypass, and its neighbours', (
     expect(Date.now() - started).toBeLessThan(2000);
   });
 
+  test('a line with very many personal-data matches scans in linear time', () => {
+    const started = Date.now();
+    const found = rules(['/ho', 'me/a '].join('').repeat(100000));
+    expect(found.length).toBe(100000);
+    expect(Date.now() - started).toBeLessThan(1500);
+  });
+
   test('a dash right after the name is punctuation, a dash that continues the name is not', () => {
     expect(rules(`${home('alice')}-`)).toEqual(['home-path']);
     expect(rules(`${home('alice')}- x`)).toEqual(['home-path']);

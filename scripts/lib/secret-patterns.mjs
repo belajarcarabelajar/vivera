@@ -26,8 +26,10 @@
 // defer: regex rules only, no entropy score; add one when a real secret slips past review
 // defer: secret-assignment is a heuristic and is not waivable; add a waiver for that one rule if a legitimate line is blocked in practice
 // defer: PGP key blocks, Authorization: Bearer, private_key=, symbol-only passwords, uppercase /HOME/ and Windows drive-letter Users paths are not detected; add a rule when one shows up in review
-// defer: a route such as /scim/v2/Users/<id> is read as a home path (waivable); a word run of 65 or more characters next to a secret keyword is not bounded by `\b`, so such an identifier is not caught; JSON-escaped slashes (`\/home\/<name>`) are not detected
-// defer: an ASIA key without a digit is not caught (the digit check keeps the word ASIAPACIFICSOUTHEAST from being a hard finding)
+// defer: a route such as /scim/v2/Users/<id> is read as a home path (waivable); add a route allowlist when a real route is blocked in practice
+// defer: a word run of 65 or more characters next to a secret keyword is beyond the `\w{0,64}` cap and is not caught; raise the cap if such an identifier shows up in a real leak
+// defer: JSON-escaped slashes (`\/home\/<name>`) are not detected; add an unescape pass when a recorded stream or fixture needs it
+// defer: an ASIA key without a digit is not caught (the digit check keeps the word ASIAPACIFICSOUTHEAST from being a hard finding); add a letters-only ASIA check when a real key of that shape is seen
 //
 // Usage: import { scanText, isTestPath } from './lib/secret-patterns.mjs'
 
@@ -128,11 +130,12 @@ export function scanText(text, { path = '', startLine = 1, lines = null } = {}) 
           if (looksReal(value, rule)) out.push({ line: n, rule: rule.id, kind: 'hard' });
         }
       }
+      let waived; // looked up at most once per line, not once per match
       for (const rule of PERSONAL_RULES) {
         if (rule.skipTests && isTestPath(path)) continue;
         for (const m of matches(rule.re, line)) {
           if (rule.allow?.(m)) continue;
-          if (!waiverAt(i)) out.push({ line: n, rule: rule.id, kind: 'personal' });
+          if (!(waived ??= waiverAt(i))) out.push({ line: n, rule: rule.id, kind: 'personal' });
         }
       }
       const w = WAIVER.exec(line);

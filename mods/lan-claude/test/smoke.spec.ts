@@ -3,7 +3,7 @@
 // IPv4 and openssl) refuses a wrong pairing token with 403. LAN_CLAUDE_SMOKE_ENTRY points at another entry file,
 // which is how the RED control proves a server that never starts fails this spec.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -70,6 +70,7 @@ describe("server smoke run", () => {
     const { started, socket } = await start("plain", freePort());
     expect(started.telegram).toBe(false);
     expect(started.web).toBe(ip ? "TLS cert or key missing" : "no private LAN subnet");
+    expect(statSync(socket).mode & 0o777).toBe(0o600); // owner-only hook socket
     const res = await fetch("http://lan-claude/hook/permission", { unix: socket, method: "POST", body: JSON.stringify({ job: "000000000000" }) });
     expect(await res.json()).toEqual({ decision: "none" });
   }, 20_000);

@@ -127,6 +127,9 @@ function startWeb(): string {
 
 // Hook side: only processes of this user reach the Unix socket (mode 600).
 if (existsSync(config.socketPath)) rmSync(config.socketPath);
+// A socket is created with the default umask (mode 755, measured), so the chmod below alone leaves a short
+// window: create it owner-only from the first instant.
+const prevUmask = process.umask(0o177);
 const hooks = Bun.serve({
   unix: config.socketPath,
   async fetch(req) {
@@ -155,6 +158,7 @@ const hooks = Bun.serve({
     return json({ decision: "none" }, 404);
   },
 });
+process.umask(prevUmask);
 Bun.spawnSync(["chmod", "600", config.socketPath]);
 
 let web: string;

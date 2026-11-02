@@ -70,6 +70,20 @@ describe("launch-claude.sh", () => {
     expect(existsSync(join(f.dir, "exit.json"))).toBe(false);
   });
 
+  test("a bun path with a double quote or a newline is refused before anything is written", () => {
+    for (const name of ['we"ird', "line\nbreak"]) {
+      const f = fixture();
+      const odd = join(f.root, name);
+      mkdirSync(odd);
+      const bun = join(odd, "bun");
+      writeFileSync(bun, "#!/usr/bin/env bash\nexit 0\n");
+      chmodSync(bun, 0o755);
+      const r = run(f, JOB, { LAN_CLAUDE_BUN: bun });
+      expect(r.status).toBe(2);
+      expect(existsSync(join(f.dir, "settings.json"))).toBe(false);
+    }
+  });
+
   test("a missing claude binary is reported before any file is written", () => {
     const f = fixture();
     const r = run(f, JOB, { LAN_CLAUDE_CLAUDE_BIN: join(f.root, "nope") });

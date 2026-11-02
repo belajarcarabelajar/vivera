@@ -17,8 +17,8 @@ CLAUDE="${LAN_CLAUDE_CLAUDE_BIN:-$(command -v claude || true)}"
 BUN="${LAN_CLAUDE_BUN:-$(command -v bun || true)}"
 [ -n "$CLAUDE" ] && [ -x "$CLAUDE" ] || { echo "lan-claude: claude not found (set LAN_CLAUDE_CLAUDE_BIN)"; exit 2; }
 [ -n "$BUN" ] && [ -x "$BUN" ] || { echo "lan-claude: bun not found (set LAN_CLAUDE_BUN)"; exit 2; }
-# The paths go into a sed replacement below: refuse characters that would break it.
-case "$APP$BUN" in *"|"* | *"&"* | *"\\"*) echo "lan-claude: a path contains | & or a backslash"; exit 2 ;; esac
+# The paths go into a sed replacement and into a JSON string below: refuse characters that would break either.
+case "$APP$BUN" in *"|"* | *"&"* | *"\\"* | *'"'* | *$'\n'*) echo "lan-claude: a path contains | & \\ \" or a newline"; exit 2 ;; esac
 
 dir="$STATE/jobs/$job"
 prompt="$(cat "$dir/prompt.txt" 2>/dev/null)" || { echo "lan-claude: no prompt for $job"; exit 2; }

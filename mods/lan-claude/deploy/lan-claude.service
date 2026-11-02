@@ -1,0 +1,18 @@
+# lan-claude: phone (same Wi-Fi) -> Claude Code launcher. Install: copy this file to ~/.config/systemd/user/, then
+# `systemctl --user daemon-reload && systemctl --user enable --now lan-claude.service`. It assumes the vivera clone
+# is at ~/vivera; for another location use `systemctl --user edit lan-claude.service` and override WorkingDirectory
+# and ExecStart (see README.md in this folder).
+# Revert: systemctl --user disable --now lan-claude.service && rm ~/.config/systemd/user/lan-claude.service && systemctl --user daemon-reload
+[Unit]
+Description=lan-claude (LAN-only phone launcher for Claude Code)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/vivera/mods/lan-claude
+ExecStart=%h/.bun/bin/bun src/server.ts
+Restart=always
+RestartSec=5
+Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin
+
+[Install]
+WantedBy=default.target

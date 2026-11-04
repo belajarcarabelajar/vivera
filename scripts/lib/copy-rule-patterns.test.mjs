@@ -54,8 +54,11 @@ describe('lines that still pass', () => {
   test('a quoted example in backticks does not start a line with the trailer', () => {
     expect(rules('The message ended with `Co-Authored-By: Claude <noreply@anthropic.com>`.\n')).toEqual([]);
   });
+});
 
-  test('a robot emoji leading a diagram label is not alone on its line', () => {
-    expect(rules('    A["\u{1F916} Subagents execute"]\n')).toEqual([]);
+describe('a robot emoji that is not a credit badge', () => {
+  // Rule 3 (no decorative emoji, 44dd9ee) flags it; the badge rule must not.
+  test('a robot emoji leading a diagram label is decorative, not a credit badge', () => {
+    expect(rules('    A["\u{1F916} Subagents execute"]\n')).toEqual(['msg:1 emoji']);
   });
 });

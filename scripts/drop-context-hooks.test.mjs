@@ -19,11 +19,7 @@ const DELETED = [
   'scripts/context-hooks-install.test.mjs',
 ];
 
-// Task T2 owns the eval-hooks pair and drops its context-hook-entries import there;
-// the parent removes these two exclusions after integrating T2.
 const EXCLUDED = new Set([
-  'scripts/lib/eval-hooks.mjs',
-  'scripts/lib/eval-hooks.test.mjs',
   'scripts/drop-context-hooks.test.mjs',
 ]);
 

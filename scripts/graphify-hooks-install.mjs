@@ -12,19 +12,19 @@
 // twice, refuses a file it cannot parse, and writes atomically with a one
 // generation `.bak` so the previous file is one copy away.
 
-import { readFileSync, existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { writeFileAtomic } from './lib/atomic-write.mjs';
 import { graphifyStatus } from './lib/graphify-status.mjs';
+import * as settingsHooks from './lib/settings-hooks.mjs';
 
 // Anchored because a matcher with regex characters is tested unanchored, so
 // `Read` alone would also fire on any tool whose name merely contains it.
 export const MATCHER = '^(Grep|Glob|Read|Bash|mcp__graphify__.*)$';
 
-const OWNER_MARK = '/scripts/hooks/graphify-';
+const OWNER_MARKS = ['/scripts/hooks/graphify-'];
 const START_SCRIPT = 'graphify-session-start.mjs';
 const NUDGE_SCRIPT = 'graphify-search-nudge.mjs';
 const EVENTS = ['SessionStart', 'SubagentStart', 'PreToolUse'];
@@ -41,39 +41,22 @@ const USAGE = `usage: bun scripts/graphify-hooks-install.mjs (--install | --unin
   --dry-run          print the resulting JSON and write nothing
   -h, --help         this message`;
 
-function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function commandsOf(entry) {
-  if (!Array.isArray(entry?.hooks)) return [];
-  return entry.hooks.map((h) => h?.command).filter((c) => typeof c === 'string');
-}
-
 /** True when any hook command in this matcher entry runs one of our scripts. */
 export function isOurs(entry) {
-  // Separators are normalised so an entry written on Windows is still recognised.
-  return commandsOf(entry).some((c) => c.replaceAll('\\', '/').includes(OWNER_MARK));
+  return settingsHooks.isOwned(entry, OWNER_MARKS);
 }
 
 /** Throws when the settings cannot be merged without guessing. */
 export function validateSettings(settings) {
-  if (!isPlainObject(settings)) throw new Error('the settings file is not a JSON object');
-  if (!Object.hasOwn(settings, 'hooks')) return;
-  if (!isPlainObject(settings.hooks)) throw new Error('`hooks` in the settings file is not an object');
-  for (const event of EVENTS) {
-    if (Object.hasOwn(settings.hooks, event) && !Array.isArray(settings.hooks[event])) {
-      throw new Error(`\`hooks.${event}\` in the settings file is not an array`);
-    }
-  }
+  settingsHooks.validateSettings(settings, EVENTS);
 }
 
 function freshEntries(hooksDir, bunPath) {
-  const hook = (script) => ({ type: 'command', command: `"${bunPath}" "${hooksDir}/${script}"`, timeout: 10 });
+  const hook = (script) => settingsHooks.hookCommand(bunPath, `${hooksDir}/${script}`);
   return {
-    SessionStart: { hooks: [hook(START_SCRIPT)] },
-    SubagentStart: { hooks: [hook(START_SCRIPT)] },
-    PreToolUse: { matcher: MATCHER, hooks: [hook(NUDGE_SCRIPT)] },
+    SessionStart: [{ hooks: [hook(START_SCRIPT)] }],
+    SubagentStart: [{ hooks: [hook(START_SCRIPT)] }],
+    PreToolUse: [{ matcher: MATCHER, hooks: [hook(NUDGE_SCRIPT)] }],
   };
 }
 
@@ -81,40 +64,16 @@ function freshEntries(hooksDir, bunPath) {
 export function installEntries(settings, hooksDir, bunPath) {
   validateSettings(settings);
   const fresh = freshEntries(hooksDir, bunPath);
-  if (!Object.values(fresh).every(isOurs)) {
+  if (!Object.values(fresh).flat().every(isOurs)) {
     // Otherwise the next install could not find these entries and would add a second set.
     throw new Error(`the hooks dir must end in scripts/hooks so later runs can recognise the entries: ${hooksDir}`);
   }
-  const out = structuredClone(settings);
-  out.hooks ??= {};
-  for (const event of EVENTS) {
-    out.hooks[event] = [...(out.hooks[event] ?? []).filter((e) => !isOurs(e)), fresh[event]];
-  }
-  return out;
+  return settingsHooks.installEntries(settings, fresh, EVENTS, OWNER_MARKS);
 }
 
 /** Returns a copy of `settings` with only our entries removed. */
 export function uninstallEntries(settings) {
-  validateSettings(settings);
-  const out = structuredClone(settings);
-  if (!out.hooks) return out;
-  let droppedKey = false;
-  for (const event of EVENTS) {
-    const list = out.hooks[event];
-    if (!list) continue;
-    const kept = list.filter((e) => !isOurs(e));
-    if (kept.length === list.length) continue;
-    // A list that held only our entries was created by an install; an already
-    // empty list never reaches here, so a foreign empty key is left alone.
-    if (kept.length === 0) {
-      delete out.hooks[event];
-      droppedKey = true;
-    } else {
-      out.hooks[event] = kept;
-    }
-  }
-  if (droppedKey && Object.keys(out.hooks).length === 0) delete out.hooks;
-  return out;
+  return settingsHooks.uninstallEntries(settings, EVENTS, OWNER_MARKS);
 }
 
 /** Reports which of the three entries and two script files are missing. */
@@ -122,7 +81,7 @@ export function checkEntries(settings, hooksDir) {
   validateSettings(settings);
   const matchesAll = (m) => m === undefined || m === '' || m === '*';
   const has = (event, script, matcherOk) => (settings.hooks?.[event] ?? []).some((e) =>
-    isOurs(e) && matcherOk(e.matcher) && commandsOf(e).some((c) => c.includes(`"${hooksDir}/${script}"`)));
+    isOurs(e) && matcherOk(e.matcher) && settingsHooks.commandsOf(e).some((c) => c.includes(`"${hooksDir}/${script}"`)));
 
   const missing = [];
   if (!has('SessionStart', START_SCRIPT, matchesAll)) missing.push(`hooks.SessionStart entry without a matcher running ${START_SCRIPT}`);
@@ -198,10 +157,12 @@ export function main(argv, { scriptsDir = SCRIPTS_DIR } = {}) {
     return 0;
   }
 
-  const before = exists ? readFileSync(target, 'utf8') : null;
+  let before;
   let next;
   try {
-    const settings = before === null ? {} : JSON.parse(before);
+    const read = settingsHooks.readSettings(target);
+    before = read.before;
+    const { settings } = read;
     if (opts.mode === 'check') {
       const result = checkEntries(settings, hooksDir);
       if (result.ok) {
@@ -223,14 +184,10 @@ export function main(argv, { scriptsDir = SCRIPTS_DIR } = {}) {
     return 0;
   }
   const verb = opts.mode === 'install' ? 'installed in' : 'removed from';
-  // Rewriting identical bytes would replace the one generation backup with a
-  // copy of the current file, losing the state from before the first install.
-  if (text === before) {
+  if (!settingsHooks.writeSettings(target, text, before)) {
     console.log(`graphify hooks: already ${verb} ${target}, nothing written`);
     return 0;
   }
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileAtomic(target, text, { keepBackup: true });
   console.log(`graphify hooks: ${verb} ${target}${exists ? ` (previous content in ${target}.bak)` : ''}`);
   return 0;
 }

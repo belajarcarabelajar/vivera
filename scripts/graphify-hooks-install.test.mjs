@@ -325,7 +325,7 @@ describe('linked worktree guard', () => {
     }
     // The CLI finds its repository from its own path, so a copy inside the
     // worktree behaves exactly as a checkout of the script there would.
-    for (const rel of ['graphify-hooks-install.mjs', 'lib/atomic-write.mjs', 'lib/graphify-status.mjs']) {
+    for (const rel of ['graphify-hooks-install.mjs', 'lib/atomic-write.mjs', 'lib/graphify-status.mjs', 'lib/settings-hooks.mjs']) {
       const dest = path.join(wtRoot, 'scripts', rel);
       mkdirSync(path.dirname(dest), { recursive: true });
       copyFileSync(path.join(import.meta.dir, rel), dest);

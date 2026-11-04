@@ -5,7 +5,7 @@ category: tooling
 slug: context-hooks
 order: 9
 source: docs/context-hooks.md
-source_hash: "06508f28f56e"
+source_hash: "86a68537063a"
 ---
 
 <a id="context-hooks"></a>
@@ -29,7 +29,7 @@ Kill switch) didefinisikan di `GLOSSARY.md`.
 
 | Hook | Event dan matcher | Perilaku |
 |---|---|---|
-| `scripts/hooks/output-cap.mjs` | PreToolUse `Read` | Menolak Read seluruh file untuk file di atas 16.384 B dan menyebut alternatif yang terbatas (Read dengan `offset` dan `limit`, `rg -n`, `sed -n`, `wc -c`). Read dengan `offset` atau `limit`, file yang tidak ada, atau direktori selalu lolos. |
+| `scripts/hooks/output-cap.mjs` | PreToolUse `Read` | Menolak Read seluruh file untuk file di atas 16.384 B dan menyebut alternatif yang terbatas (Read dengan `offset` dan `limit`, `rg -n`, `sed -n`, `wc -c`). Read dengan `offset`, `limit`, atau `pages`, file yang tidak ada, atau direktori selalu lolos. Gambar (png, jpg, jpeg, gif, webp, bmp, svg), PDF, dan notebook (ipynb) tidak pernah dibatasi, karena Claude Code merendernya sendiri. |
 | `scripts/hooks/output-replace.mjs` | PostToolUse `Bash` dan `mcp__.*` | Bila output di atas 4.096 B, menyimpan teks lengkapnya ke file dan mengganti output dengan 1.024 B pertama dan terakhir ditambah satu baris berisi ukuran yang dihilangkan dan path simpanannya. Output gambar tidak diubah. |
 | `scripts/hooks/session-journal.mjs` | PostToolUse `Edit`, `Write`, `NotebookEdit` dan PostToolUseFailure `Bash` (`record`); SessionStart `compact` (`inject`) | Mencatat setiap path yang diedit dan setiap perintah yang gagal (200 karakter pertama dan exit code-nya). Setelah compaction, menyuntikkan blok state paling banyak 2.048 B: branch, HEAD, path yang baru diedit, kegagalan terakhir, dan file plan terakhir yang diedit. Bila ada perbedaan, file plan yang menang. |
 

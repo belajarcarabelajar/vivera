@@ -17,7 +17,7 @@ Kill switch) are defined in `GLOSSARY.md`.
 
 | Hook | Event and matcher | Behavior |
 |---|---|---|
-| `scripts/hooks/output-cap.mjs` | PreToolUse `Read` | Denies a full-file Read of a file over 16,384 B and names bounded alternatives (Read with `offset` and `limit`, `rg -n`, `sed -n`, `wc -c`). A Read with `offset` or `limit`, a missing file, or a directory always passes. |
+| `scripts/hooks/output-cap.mjs` | PreToolUse `Read` | Denies a full-file Read of a file over 16,384 B and names bounded alternatives (Read with `offset` and `limit`, `rg -n`, `sed -n`, `wc -c`). A Read with `offset`, `limit`, or `pages`, a missing file, or a directory always passes. Images (png, jpg, jpeg, gif, webp, bmp, svg), PDFs, and notebooks (ipynb) are never capped, because Claude Code renders them itself. |
 | `scripts/hooks/output-replace.mjs` | PostToolUse `Bash` and `mcp__.*` | When an output is over 4,096 B, saves the full text to a file and replaces the output with its first and last 1,024 B plus a line that gives the omitted size and the saved path. Image output is left untouched. |
 | `scripts/hooks/session-journal.mjs` | PostToolUse `Edit`, `Write`, `NotebookEdit` and PostToolUseFailure `Bash` (`record`); SessionStart `compact` (`inject`) | Records each edited path and each failed command (first 200 characters and the exit code). After a compaction it injects a state block of at most 2,048 B: branch, HEAD, recently edited paths, last failure, and the last edited plan file. The plan file wins on any difference. |
 

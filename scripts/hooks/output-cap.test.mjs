@@ -118,6 +118,50 @@ test('a Read over the cap with limit set is allowed', () => {
   expectSilent(runHook(fx, readEvent(fx.work, { file_path: file, limit: 200 })));
 });
 
+test('a Read over the cap with pages set is allowed', () => {
+  const fx = fixture('pages');
+  const file = fileOfSize(fx.work, 'big.txt', CAP * 4);
+  expectSilent(runHook(fx, readEvent(fx.work, { file_path: file, pages: '1-3' })));
+});
+
+test('a full Read of a png over the cap is allowed', () => {
+  const fx = fixture('png');
+  const file = fileOfSize(fx.work, 'big.png', 40 * 1024);
+  expectSilent(runHook(fx, readEvent(fx.work, { file_path: file })));
+});
+
+test('a full Read of an uppercase .PNG over the cap is allowed', () => {
+  const fx = fixture('png-upper');
+  const file = fileOfSize(fx.work, 'SHOT.PNG', 40 * 1024);
+  expectSilent(runHook(fx, readEvent(fx.work, { file_path: file })));
+});
+
+test('a full Read of a pdf over the cap is allowed', () => {
+  const fx = fixture('pdf');
+  const file = fileOfSize(fx.work, 'paper.pdf', CAP * 4);
+  expectSilent(runHook(fx, readEvent(fx.work, { file_path: file })));
+});
+
+test('every specially rendered extension over the cap is allowed', () => {
+  const fx = fixture('special');
+  for (const ext of ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'pdf', 'ipynb']) {
+    const file = fileOfSize(fx.work, `big.${ext}`, CAP + 1);
+    expectSilent(runHook(fx, readEvent(fx.work, { file_path: file })));
+  }
+});
+
+test('a full Read of a .txt over the cap is still denied', () => {
+  const fx = fixture('txt');
+  const file = fileOfSize(fx.work, 'notes.txt', 40 * 1024);
+  expect(denyReason(runHook(fx, readEvent(fx.work, { file_path: file })))).toContain(`${file} is 40960 bytes`);
+});
+
+test('a file whose name only ends in png without a dot is still denied', () => {
+  const fx = fixture('no-dot');
+  const file = fileOfSize(fx.work, 'notapng', CAP + 1);
+  denyReason(runHook(fx, readEvent(fx.work, { file_path: file })));
+});
+
 test('a Read of a missing file is allowed', () => {
   const fx = fixture('missing');
   expectSilent(runHook(fx, readEvent(fx.work, { file_path: path.join(fx.work, 'nope.txt') })));

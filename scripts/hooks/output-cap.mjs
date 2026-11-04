@@ -1,13 +1,13 @@
 // scripts/hooks/output-cap.mjs
 //
 // PreToolUse hook for Read: denies a full Read of a regular file over 16,384
-// bytes and names bounded alternatives instead. A Read that sets offset or
-// limit always passes, so the agent cannot loop on the deny. The size comes
-// from stat only; the file is never opened. Missing paths and directories are
-// left to the Read tool itself.
+// bytes and names bounded alternatives instead. A Read that sets offset,
+// limit, or pages always passes, so the agent cannot loop on the deny. The
+// size comes from stat only; the file is never opened. Missing paths and
+// directories are left to the Read tool itself.
 //
-// Images and PDFs are capped like text for now (deferred in the plan until a
-// deny on one shows up in the error log or the A/B transcripts).
+// Images, PDFs, and notebooks are never capped: Claude Code renders them
+// itself, and the text alternatives in the deny reason do not apply to them.
 //
 // Kill switch and fail-open behaviour come from scripts/lib/hook-io.mjs.
 //
@@ -19,6 +19,7 @@ import path from 'node:path';
 import { runHook } from '../lib/hook-io.mjs';
 
 const CAP_BYTES = 16384;
+const UNCAPPED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.pdf', '.ipynb']);
 
 function reasonFor(file, size) {
   return (
@@ -32,9 +33,10 @@ export function decide(input) {
   if (input.tool_name !== 'Read') return null;
   const toolInput = input.tool_input;
   if (!toolInput || typeof toolInput !== 'object') return null;
-  if (toolInput.offset !== undefined || toolInput.limit !== undefined) return null;
+  if (toolInput.offset !== undefined || toolInput.limit !== undefined || toolInput.pages !== undefined) return null;
   const filePath = toolInput.file_path;
   if (typeof filePath !== 'string' || filePath === '') return null;
+  if (UNCAPPED_EXTENSIONS.has(path.extname(filePath).toLowerCase())) return null;
   const base = typeof input.cwd === 'string' && input.cwd !== '' ? input.cwd : process.cwd();
   const file = path.resolve(base, filePath);
   const stat = statSync(file, { throwIfNoEntry: false });

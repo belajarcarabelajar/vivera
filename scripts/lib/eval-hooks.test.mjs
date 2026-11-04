@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { RefusedError, generateFixtures, generateProblem, hookSet, installHooks, safeRelative } from './eval-hooks.mjs';
+import { installEntries } from '../context-hooks-install.mjs';
 
 const made = [];
 const tmp = (label) => {
@@ -120,12 +121,26 @@ describe('installHooks', () => {
     const settings = JSON.parse(fs.readFileSync(path.join(dest, '.claude', 'settings.json'), 'utf8'));
     expect(settings).toEqual({
       hooks: {
-        PreToolUse: [entry('Read', 'output-cap.mjs')],
-        PostToolUse: [entry('Bash|mcp__.*', 'output-replace.mjs'), entry('Edit|Write|NotebookEdit', 'session-journal.mjs', 'record')],
-        PostToolUseFailure: [entry('Bash', 'session-journal.mjs', 'record')],
+        PreToolUse: [entry('^Read$', 'output-cap.mjs')],
+        PostToolUse: [entry('^(Bash|mcp__.*)$', 'output-replace.mjs'), entry('^(Edit|Write|NotebookEdit)$', 'session-journal.mjs', 'record')],
+        PostToolUseFailure: [entry('^Bash$', 'session-journal.mjs', 'record')],
         SessionStart: [entry('compact', 'session-journal.mjs', 'inject')],
       },
     });
+  });
+
+  test('installs the same entries as the context hooks installer, apart from the command prefix', () => {
+    const dest = tmp('inst-parity');
+    installHooks(dest, 'context', { sourceDir: stubSource() });
+    const evalHooks = JSON.parse(fs.readFileSync(path.join(dest, '.claude', 'settings.json'), 'utf8')).hooks;
+    const installed = installEntries({}, '/repo/scripts/hooks', '/bin/bun').hooks;
+    // Keep only the hook file and its mode argument, the part both commands share.
+    const strip = (hooks) => Object.fromEntries(Object.entries(hooks).map(([event, list]) => [event, list.map((e) => ({
+      ...e,
+      hooks: e.hooks.map((h) => ({ ...h, command: h.command.replace(/^.*\/hooks\/([\w.-]+)"/, '$1') })),
+    }))]));
+    expect(strip(evalHooks)).toEqual(strip(installed));
+    expect(strip(evalHooks).SessionStart[0].hooks[0].command).toBe('session-journal.mjs inject');
   });
 
   test('a settings command runs the copied hook, its relative import resolves, and state sits beside the project', () => {

@@ -17,6 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { contextHookEntries } from './context-hook-entries.mjs';
+
 export class RefusedError extends Error {}
 
 const SCRIPTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,19 +35,13 @@ export function safeRelative(p) {
 // agent write, and outside the fixture's git tree so its status stays as scored.
 // Claude Code hook entries have no env of their own, so the command sets them.
 const ENV = 'VIVERA_HOOK_STATE_DIR="$CLAUDE_PROJECT_DIR/../hook-state" VIVERA_HOOK_SCRATCH_DIR="$CLAUDE_PROJECT_DIR/../hook-scratch"';
-const command = (file, mode) => `${ENV} "$HOME/.bun/bin/bun" "$CLAUDE_PROJECT_DIR/.claude/hooks/hooks/${file}"${mode ? ` ${mode}` : ''}`;
-const entry = (matcher, file, mode) => ({ matcher, hooks: [{ type: 'command', command: command(file, mode), timeout: 10 }] });
+const command = (file, args) => `${ENV} "$HOME/.bun/bin/bun" "$CLAUDE_PROJECT_DIR/.claude/hooks/hooks/${file}"${args.map((a) => ` ${a}`).join('')}`;
 
-// Same entries as scripts/context-hooks-install.mjs (plan 2026-11-05-context-hooks, T6).
+// The copied hooks import only lib/hook-io.mjs, so the entries module stays out of the copy list.
 const SETS = {
   context: {
     files: ['lib/hook-io.mjs', 'hooks/output-cap.mjs', 'hooks/output-replace.mjs', 'hooks/session-journal.mjs'],
-    hooks: () => ({
-      PreToolUse: [entry('Read', 'output-cap.mjs')],
-      PostToolUse: [entry('Bash|mcp__.*', 'output-replace.mjs'), entry('Edit|Write|NotebookEdit', 'session-journal.mjs', 'record')],
-      PostToolUseFailure: [entry('Bash', 'session-journal.mjs', 'record')],
-      SessionStart: [entry('compact', 'session-journal.mjs', 'inject')],
-    }),
+    hooks: () => contextHookEntries(command),
   },
 };
 

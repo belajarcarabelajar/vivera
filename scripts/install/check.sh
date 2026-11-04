@@ -17,10 +17,9 @@
 # line and counts for nothing; the last line then says "sprite agents not verified: <why>" instead of a
 # bare CURRENT.
 #
-# After the targets come three machine rows that never change a count or the exit code: `hooks-path`
-# ([ok] or [warn] on core.hooksPath in a git checkout of its own, else [skip]), `bun-version` ([ok] or
-# [warn] on the installed bun against packageManager in package.json) and `context-hooks` ([info] on
-# whether ~/.claude/settings.json runs the opt-in context hooks); the last two are [skip] with no bun.
+# After the targets come two machine rows that never change a count or the exit code: `hooks-path`
+# ([ok] or [warn] on core.hooksPath in a git checkout of its own, else [skip]) and `bun-version` ([ok]
+# or [warn] on the installed bun against packageManager in package.json, [skip] with no bun).
 # On a problem, `[draft]` lines before the verdict hold a `gh issue create` command for the user to run
 # by hand; install.sh never runs it, and HOME in its body is written as ~.
 
@@ -45,11 +44,12 @@ check_row() {
   esac
 }
 
-# The machine rows. Read-only: git config is read, JSON is parsed by bun from paths passed in the
+# The machine rows. Read-only: git config is read, JSON is parsed by bun from a path passed in the
 # environment, so a path never becomes code.
-# defer: no matching rows in install.ps1 -Check, upgrade when a Windows install is reported broken
+# defer: no hooks-path or bun-version rows in install.ps1 -Check, upgrade when a Windows install is
+# reported broken
 check_machine_rows() {
-  local hooks_path pinned settings missing
+  local hooks_path pinned
 
   if tool_available git && repo_is_own_checkout; then
     hooks_path="$(git -C "$REPO_DIR" config core.hooksPath 2>/dev/null)" || hooks_path=""
@@ -64,7 +64,6 @@ check_machine_rows() {
 
   if ! tool_available bun; then
     echo "[skip] bun-version: bun not found"
-    echo "[skip] context-hooks: bun not found"
     return 0
   fi
   CHECK_BUN_VERSION="$(bun --version 2>/dev/null)" || CHECK_BUN_VERSION="unknown"
@@ -80,34 +79,6 @@ check_machine_rows() {
   else
     echo "[warn] bun-version: bun $CHECK_BUN_VERSION is installed, package.json pins $pinned"
   fi
-
-  settings="$HOME/.claude/settings.json"
-  if [ ! -f "$settings" ]; then
-    echo "[info] context-hooks: not installed (opt-in: bun run context:hooks --install from $REPO_DIR)"
-    return 0
-  fi
-  # Prints the hook names whose command is missing, an empty line when all three are there, or
-  # "unreadable" for a file that is not JSON.
-  missing="$(VIVERA_SETTINGS="$settings" bun -e '
-    let s;
-    try { s = JSON.parse(require("fs").readFileSync(process.env.VIVERA_SETTINGS, "utf8")); } catch { console.log("unreadable"); process.exit(0); }
-    const hooks = s && typeof s.hooks === "object" && s.hooks ? s.hooks : {};
-    const cmds = [];
-    for (const entries of Object.values(hooks)) {
-      for (const e of Array.isArray(entries) ? entries : []) {
-        for (const h of Array.isArray(e && e.hooks) ? e.hooks : []) if (h && typeof h.command === "string") cmds.push(h.command);
-      }
-    }
-    const names = ["output-cap", "output-replace", "session-journal"];
-    console.log(names.filter((n) => !cmds.some((c) => c.includes(`/scripts/hooks/${n}`))).join(" "));' 2>/dev/null)" || missing="unreadable"
-  case "$missing" in
-    "") echo "[info] context-hooks: installed in $settings" ;;
-    unreadable) echo "[info] context-hooks: $settings could not be read as JSON; not checked" ;;
-    "output-cap output-replace session-journal")
-      echo "[info] context-hooks: not installed (opt-in: bun run context:hooks --install from $REPO_DIR)"
-      ;;
-    *) echo "[info] context-hooks: partly installed, missing $missing (bun run context:hooks --install adds them)" ;;
-  esac
 }
 
 # Prints the issue draft for the problems found. Never runs gh: the user decides whether to file it.

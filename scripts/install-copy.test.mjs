@@ -52,7 +52,9 @@ function expectSameTree(a, b) {
   expect(listTree(b)).toEqual(files);
   for (const f of files) expect(fs.readFileSync(path.join(b, f)).equals(fs.readFileSync(path.join(a, f)))).toBe(true);
 }
-const reportKinds = (r) => r.stdout.split('\n').filter((l) => /^\[(ok|missing|stale|dangling|foreign)\] /.test(l));
+// The machine rows (hooks-path, bun-version, context-hooks) are not paths, so they are left out.
+const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version|context-hooks): /;
+const reportKinds = (r) => r.stdout.split('\n').filter((l) => /^\[(ok|missing|stale|dangling|foreign)\] /.test(l) && !CONTEXT_ROW.test(l));
 
 describe('install', () => {
   test('copy: --copy on a bare HOME makes no symlink, marks every package dir, and copies byte for byte', () => {

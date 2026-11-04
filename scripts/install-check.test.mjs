@@ -12,7 +12,10 @@ import { makeSandbox } from './lib/install-sandbox.mjs';
 
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const PKG = '.agents/skills/super-ultra-code-plan';
-const LINE = /^\[(ok|missing|stale|dangling|foreign|skip)\] /;
+const LINE = /^\[(ok|missing|stale|dangling|foreign|skip|info|warn)\] /;
+// The machine rows (hooks-path, bun-version, context-hooks) are not links, so the link cases leave them
+// out; install-check-context.test.mjs tests them.
+const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version|context-hooks): /;
 
 const open = [];
 afterEach(() => {
@@ -30,7 +33,7 @@ const link = (sb, target, rel) => {
   fs.mkdirSync(path.dirname(at(sb, rel)), { recursive: true });
   fs.symlinkSync(target, at(sb, rel));
 };
-const reportLines = (r) => r.stdout.split('\n').filter((l) => LINE.test(l));
+const reportLines = (r) => r.stdout.split('\n').filter((l) => LINE.test(l) && !CONTEXT_ROW.test(l));
 const kinds = (r) => reportLines(r).map((l) => l.match(LINE)[1]);
 const linkCount = (sb) => sb.snapshot().filter((l) => l.split('|')[1] === 'l').length;
 

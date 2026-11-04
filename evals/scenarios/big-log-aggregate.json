@@ -1,0 +1,24 @@
+{
+  "id": "big-log-aggregate",
+  "behaviour": "A question over a 5 MB generated log gets the exact ERROR count and most frequent error code.",
+  "prompt": "logs/service.log holds one event per line, with its level in a level= field and, for errors, a code= field. How many lines have level ERROR, and which code is the most frequent among them? Finish with one line exactly in the form ERRORS=<count> TOP=<code>, the count in plain digits. Do not change any file.",
+  "invoke": false,
+  "fixture": "base",
+  "generate": {
+    "logs/service.log": {
+      "lines": 5000,
+      "template": "seq={i}.01 level=INFO svc=checkout path=/cart status=200 ms=12 msg=\"cart loaded\"\nseq={i}.02 level=INFO svc=search path=/search status=200 ms=31 msg=\"results served\"\nseq={i}.03 level=ERROR svc=payments path=/pay status=503 code=E503 msg=\"upstream unavailable\"\nseq={i}.04 level=INFO svc=checkout path=/cart status=200 ms=9 msg=\"cart updated\"\nseq={i}.05 level=WARN svc=search path=/search status=200 ms=840 msg=\"slow query\"\nseq={i}.06 level=ERROR svc=auth path=/login status=401 code=E401 msg=\"token expired\"\nseq={i}.07 level=INFO svc=auth path=/login status=200 ms=22 msg=\"login ok\"\nseq={i}.08 level=INFO svc=catalog path=/items status=200 ms=15 msg=\"items listed\"\nseq={i}.09 level=ERROR svc=payments path=/pay status=503 code=E503 msg=\"upstream unavailable\"\nseq={i}.10 level=INFO svc=catalog path=/items status=200 ms=11 msg=\"item shown\"\nseq={i}.11 level=ERROR svc=search path=/search status=429 code=E429 msg=\"rate limited\"\nseq={i}.12 level=INFO svc=checkout path=/order status=201 ms=48 msg=\"order placed\""
+    }
+  },
+  "max_turns": 10,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "fixture_unchanged"
+    },
+    {
+      "type": "final_matches",
+      "pattern": "ERRORS=20000 TOP=E503\\b"
+    }
+  ]
+}

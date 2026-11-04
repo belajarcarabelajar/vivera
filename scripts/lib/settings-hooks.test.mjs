@@ -119,6 +119,27 @@ function cmdEntry(file) {
   return { hooks: [cmd(`"bun" "${file}"`)] };
 }
 
+describe('an entry mixing a foreign hook with one of ours', () => {
+  const guard = cmd('/usr/local/bin/guard.sh');
+  const oldCap = cmd('"bun" "/old/scripts/hooks/output-cap.mjs"');
+  const mixed = () => ({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [guard, oldCap] }] } });
+
+  test('install keeps the foreign hook under its matcher and appends the fresh entry', () => {
+    const out = installEntries(mixed(), { PreToolUse: [capEntry] }, EVENTS, MARKS);
+    expect(out.hooks.PreToolUse).toEqual([{ matcher: 'Bash', hooks: [guard] }, capEntry]);
+  });
+
+  test('uninstall keeps the foreign hook under its matcher', () => {
+    expect(uninstallEntries(mixed(), EVENTS, MARKS)).toEqual({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [guard] }] } });
+  });
+
+  test('an entry holding only our hooks is still removed whole', () => {
+    const ours = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [oldCap, cmd('"bun" "/r/scripts/hooks/state-block.mjs"')] }] } };
+    expect(uninstallEntries(ours, EVENTS, MARKS)).toEqual({});
+    expect(installEntries(ours, { PreToolUse: [capEntry] }, EVENTS, MARKS).hooks.PreToolUse).toEqual([capEntry]);
+  });
+});
+
 describe('uninstallEntries', () => {
   test('removes only our entries and restores the foreign settings', () => {
     const installed = installEntries(foreignSettings(), { PreToolUse: [capEntry], PostToolUse: [stateEntry] }, EVENTS, MARKS);

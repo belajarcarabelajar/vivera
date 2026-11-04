@@ -3,9 +3,9 @@
 // Shared helpers for installers that add, replace, or remove their own hook
 // entries in a Claude Code settings file that other tools also edit.
 //
-// An installer owns only the matcher entries whose command contains one of its
-// owner marks (path fragments such as `/scripts/hooks/graphify-`). Everything
-// else in the file is foreign and is carried through untouched.
+// An installer owns only the hooks whose command contains one of its owner
+// marks (path fragments such as `/scripts/hooks/graphify-`). Everything else
+// in the file is foreign and is carried through untouched.
 
 import { readFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -29,6 +29,30 @@ export function isOwned(entry, ownerMarks) {
   // Separators are normalised so an entry written on Windows is still recognised.
   const marks = ownerMarks.map(slashes);
   return commandsOf(entry).some((c) => marks.some((m) => slashes(c).includes(m)));
+}
+
+/**
+ * Removes our hook objects from each entry of `list`; returns the new list and
+ * whether anything was removed. Another tool may have put its own hook in the
+ * same entry, so ownership is judged per hook here, not per entry: an entry
+ * left with foreign hooks keeps them under its matcher, an emptied one is dropped.
+ */
+function stripOwned(list, ownerMarks) {
+  let changed = false;
+  const kept = [];
+  for (const entry of list) {
+    if (!Array.isArray(entry?.hooks)) {
+      kept.push(entry);
+      continue;
+    }
+    const hooks = entry.hooks.filter((h) => !isOwned({ hooks: [h] }, ownerMarks));
+    if (hooks.length === entry.hooks.length) kept.push(entry);
+    else {
+      changed = true;
+      if (hooks.length > 0) kept.push({ ...entry, hooks });
+    }
+  }
+  return { kept, changed };
 }
 
 /** Throws when the settings cannot be merged for `events` without guessing. */
@@ -60,7 +84,7 @@ export function installEntries(settings, fresh, events, ownerMarks) {
   const out = structuredClone(settings);
   out.hooks ??= {};
   for (const event of events) {
-    const kept = (out.hooks[event] ?? []).filter((e) => !isOwned(e, ownerMarks));
+    const { kept } = stripOwned(out.hooks[event] ?? [], ownerMarks);
     out.hooks[event] = [...kept, ...structuredClone(fresh[event] ?? [])];
   }
   return out;
@@ -75,8 +99,8 @@ export function uninstallEntries(settings, events, ownerMarks) {
   for (const event of events) {
     const list = out.hooks[event];
     if (!list) continue;
-    const kept = list.filter((e) => !isOwned(e, ownerMarks));
-    if (kept.length === list.length) continue;
+    const { kept, changed } = stripOwned(list, ownerMarks);
+    if (!changed) continue;
     // A list that held only our entries was created by an install; an already
     // empty list never reaches here, so a foreign empty key is left alone.
     if (kept.length === 0) {

@@ -95,6 +95,18 @@ describe('install', () => {
     expect(readJson(sb.settings)).toEqual(foreignSettings());
   });
 
+  test('a foreign hook sharing an entry with one of ours survives install and uninstall', () => {
+    const sb = sandbox();
+    const guard = { type: 'command', command: '/usr/local/bin/guard.sh', timeout: 5 };
+    const ours = { type: 'command', command: `"${BUN}" "/old/scripts/hooks/output-replace.mjs"`, timeout: 10 };
+    writeFileSync(sb.settings, `${JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [guard, ours] }] } })}\n`);
+    expect(install(sb).code).toBe(0);
+    const installed = readJson(sb.settings);
+    expect(installed.hooks.PostToolUse).toEqual([{ matcher: 'Bash', hooks: [guard] }, ...expectedHooks(sb.hooksDir).PostToolUse]);
+    expect(run(sb, '--uninstall', '--settings', sb.settings).code).toBe(0);
+    expect(readJson(sb.settings)).toEqual({ hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [guard] }] } });
+  });
+
   test('a hooks dir that no owner mark recognises is refused', () => {
     expect(() => installEntries({}, '/tmp/elsewhere', BUN)).toThrow(/owner mark/);
   });

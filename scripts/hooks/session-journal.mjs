@@ -40,6 +40,17 @@ export function parseExitCode(error) {
   return match ? Number(match[1]) : null;
 }
 
+// A newline in a command or path would let journal text forge a block line
+// (for example a fake "plan:" line), so whitespace runs become one space and
+// control characters are dropped.
+export function oneLine(value) {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\s+/g, ' ')
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, '')
+    .trim();
+}
+
 function rowFor(input) {
   const t = new Date().toISOString();
   const toolInput = input.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
@@ -50,7 +61,7 @@ function rowFor(input) {
     return { t, kind: 'edit', path: path.resolve(base, file) };
   }
   if (input.hook_event_name === 'PostToolUseFailure' && input.tool_name === 'Bash') {
-    const cmd = typeof toolInput.command === 'string' ? toolInput.command.slice(0, CMD_LIMIT) : '';
+    const cmd = oneLine(toolInput.command).slice(0, CMD_LIMIT);
     return { t, kind: 'fail', cmd, exit: parseExitCode(input.error) };
   }
   return null;
@@ -61,8 +72,9 @@ function record(input, paths) {
   const row = rowFor(input);
   if (!row) return null;
   const file = journalFile(paths, input.session_id);
-  mkdirSync(path.dirname(file), { recursive: true });
-  appendFileSync(file, `${JSON.stringify(row)}\n`);
+  // Command text can be sensitive, so the journal is private to the user.
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  appendFileSync(file, `${JSON.stringify(row)}\n`, { mode: 0o600 });
   return null;
 }
 
@@ -102,10 +114,13 @@ export function buildBlock({ rows, branch, head }) {
   for (let i = rows.length - 1; i >= 0; i -= 1) {
     const row = rows[i];
     if (row.kind === 'edit' && typeof row.path === 'string') {
-      if (!editedAll.includes(row.path) && editedAll.length < EDITED_LIMIT) editedAll.push(row.path);
-      if (plan === null && row.path.includes(PLAN_MARK)) plan = row.path;
+      const p = oneLine(row.path);
+      if (!p) continue;
+      if (!editedAll.includes(p) && editedAll.length < EDITED_LIMIT) editedAll.push(p);
+      if (plan === null && p.includes(PLAN_MARK)) plan = p;
     } else if (row.kind === 'fail' && lastFail === null) {
-      lastFail = row;
+      const exit = Number.isInteger(row.exit) ? row.exit : null;
+      lastFail = { cmd: oneLine(row.cmd), exit };
     }
   }
   const hasJournal = editedAll.length > 0 || lastFail !== null;

@@ -1,0 +1,25 @@
+{
+  "id": "sibling-output-tests",
+  "behaviour": "After adding a row to a command's output, the agent also runs the sibling test that asserts over every printed row, sees it fail on the new tag, and fixes it, instead of running only the command's own test.",
+  "rules": ["L100"],
+  "prompt": "Add a third row to the status report that bin/report.mjs prints: the `schema` item with a new tag `info`, so the report ends with `[info] schema`. The design is approved; implement it now and verify your change before you finish.",
+  "fixture": "sibling-output-tests",
+  "max_turns": 16,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "bash_some",
+      "pattern": "\\bbun (run )?test\\b(?=[^;&|\\n]*report-rows|(?![^;&|\\n]*report\\.test\\b))",
+      "scope": "all"
+    },
+    {
+      "type": "file_exists",
+      "path": "test/report-rows.test.mjs"
+    },
+    {
+      "type": "file_lacks",
+      "path": "test/report-rows.test.mjs",
+      "pattern": "\\(ok\\|warn\\)"
+    }
+  ]
+}

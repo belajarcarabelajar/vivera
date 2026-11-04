@@ -69,6 +69,7 @@ function safeId(id) {
 }
 
 // Saved outputs can hold secrets printed by a command, so only the owner reads them.
+// defer: no per-session disk cap on saved outputs, upgrade when one session's tool-output dir passes 200 MB
 function save(paths, input, content) {
   const dir = path.join(paths.scratchDir, 'tool-output', input.session_id);
   mkdirSync(dir, { recursive: true, mode: 0o700 });

@@ -73,6 +73,7 @@ function record(input, paths) {
   if (!row) return null;
   const file = journalFile(paths, input.session_id);
   // Command text can be sensitive, so the journal is private to the user.
+  // defer: no journal rotation, upgrade when a journal file passes 1 MB
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   appendFileSync(file, `${JSON.stringify(row)}\n`, { mode: 0o600 });
   return null;

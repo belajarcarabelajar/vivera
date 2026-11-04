@@ -47,6 +47,7 @@ check_row() {
 
 # The machine rows. Read-only: git config is read, JSON is parsed by bun from paths passed in the
 # environment, so a path never becomes code.
+# defer: no matching rows in install.ps1 -Check, upgrade when a Windows install is reported broken
 check_machine_rows() {
   local hooks_path pinned settings missing
 

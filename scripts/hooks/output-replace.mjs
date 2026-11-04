@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 // scripts/hooks/output-replace.mjs
 //
-// PostToolUse hook for Bash and MCP tools. When a tool result is over 4,096
-// bytes, the full text is saved to
-// <scratchDir>/tool-output/<session_id>/<tool_use_id>.txt and the result the
-// model sees becomes the first 1,024 bytes, a marker line with the saved path,
-// and the last 1,024 bytes. Head plus tail keeps the command echo and the error
+// PostToolUse hook for Bash and MCP tools. When one field of a tool result
+// (Bash stdout or stderr, or the joined MCP text) is over 4,096 bytes, the full
+// text is saved (mode 0600, dirs 0700) to
+// <scratchDir>/tool-output/<session_id>/<tool_use_id>.txt and that field
+// becomes its first 1,024 bytes, a marker line with the saved path, and its
+// last 1,024 bytes. Head plus tail keeps the command echo and the error
 // tail, the two parts most often needed; the rest stays one Read away.
 //
 // Bash results must be replaced with the full {stdout, stderr, interrupted,
@@ -57,14 +58,22 @@ function shrink(text, total, file) {
 }
 
 function safeId(id) {
-  return typeof id === 'string' && id !== '' && !id.includes('/') && !id.includes('..');
+  return (
+    typeof id === 'string' &&
+    id !== '' &&
+    id !== '.' &&
+    !id.includes('/') &&
+    !id.includes('\\') &&
+    !id.includes('..')
+  );
 }
 
+// Saved outputs can hold secrets printed by a command, so only the owner reads them.
 function save(paths, input, content) {
   const dir = path.join(paths.scratchDir, 'tool-output', input.session_id);
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = path.join(dir, `${input.tool_use_id}.txt`);
-  writeFileSync(file, content);
+  writeFileSync(file, content, { mode: 0o600 });
   return file;
 }
 
@@ -78,17 +87,23 @@ function replaceBash(input, paths) {
   if (res.isImage === true) return null;
   const stdout = res.stdout;
   const stderr = typeof res.stderr === 'string' ? res.stderr : '';
-  const total = Buffer.byteLength(stdout, 'utf8') + Buffer.byteLength(stderr, 'utf8');
-  if (total <= TRIGGER) return null;
+  const outBytes = Buffer.byteLength(stdout, 'utf8');
+  const errBytes = Buffer.byteLength(stderr, 'utf8');
+  // Only a field that is itself over the trigger gets cut, so a result with no
+  // such field would only grow by the marker line.
+  if (outBytes <= TRIGGER && errBytes <= TRIGGER) return null;
+  const total = outBytes + errBytes;
 
   const separator = stdout === '' || stdout.endsWith('\n') ? '' : '\n';
   const full = stderr === '' ? stdout : `${stdout}${separator}--- stderr ---\n${stderr}`;
   const file = save(paths, input, full);
 
-  let newOut = shrink(stdout, total, file);
-  const newErr = shrink(stderr, total, file);
-  if (newOut === stdout && newErr === stderr) newOut = stdout + marker(0, total, file);
-  return output({ stdout: newOut, stderr: newErr, interrupted: res.interrupted, isImage: false });
+  return output({
+    stdout: shrink(stdout, total, file),
+    stderr: shrink(stderr, total, file),
+    interrupted: res.interrupted,
+    isImage: false,
+  });
 }
 
 function replaceMcp(input, paths) {

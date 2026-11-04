@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -130,16 +130,11 @@ describe('output-replace Bash shape', () => {
     expect(Number(m[2])).toBe(3 + bytes(err));
   });
 
-  test('when no field alone is over the trigger the marker is appended to stdout once', () => {
-    const out = 'o'.repeat(3000);
-    const err = 'e'.repeat(3000);
-    const r = run(bash(out, err));
-    const value = r.json.hookSpecificOutput.updatedToolOutput;
-    expect(value.stderr).toBe(err);
-    expect(value.stdout.startsWith(out)).toBe(true);
-    expect(markers(value.stdout).length).toBe(1);
-    expect(markers(value.stderr).length).toBe(0);
-    expect(Number(markers(value.stdout)[0][2])).toBe(6000);
+  test('stdout and stderr of 3,000 bytes each, neither over the trigger, pass through untouched', () => {
+    const r = run(bash('o'.repeat(3000), 'e'.repeat(3000)));
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe('');
+    expect(existsSync(path.join(dirs.scratch, 'tool-output'))).toBe(false);
   });
 
   test('a multibyte character is never split at the head or tail cut', () => {
@@ -172,6 +167,12 @@ describe('output-replace saved file in the scratch dir', () => {
     expect(readFileSync(savedPath('sess-1', 'toolu_01'), 'utf8')).toBe(`${out}--- stderr ---\n${err}`);
   });
 
+  test('the scratch session dir is mode 0700 and the saved file is mode 0600', () => {
+    run(bash('x'.repeat(9000)));
+    expect(statSync(path.join(dirs.scratch, 'tool-output', 'sess-1')).mode & 0o777).toBe(0o700);
+    expect(statSync(savedPath('sess-1', 'toolu_01')).mode & 0o777).toBe(0o600);
+  });
+
   test('a save failure leaves the original output alone', () => {
     writeFileSync(path.join(ROOT, `case-${caseNo}`, 'scratch'), 'not a dir');
     const r = run(bash('x'.repeat(9000)));
@@ -183,6 +184,9 @@ describe('output-replace saved file in the scratch dir', () => {
     ['a session_id with a slash', 'a/b', 'toolu_01'],
     ['a session_id with dot dot', '..', 'toolu_01'],
     ['an empty session_id', '', 'toolu_01'],
+    ['a session_id of a single dot', '.', 'toolu_01'],
+    ['a session_id with a backslash', 'a\\b', 'toolu_01'],
+    ['a tool_use_id with a backslash', 'sess-1', 'toolu\\01'],
     ['a tool_use_id with dot dot', 'sess-1', '..x'],
     ['a missing tool_use_id', 'sess-1', undefined],
   ]) {

@@ -26,7 +26,8 @@ export function line(r, width) {
   const why = failed ? `  ${failed.type}: ${failed.detail}` : '';
   const ci = r.attempts > 1 && wilson(r.passes, r.attempts);
   const tally = (ci ? `  passes=${r.passes}/${r.attempts} (95% CI ${ci.low.toFixed(2)}-${ci.high.toFixed(2)})` : '') + (r.flaky ? '  flaky' : '') + (r.confirmed === false ? '  unconfirmed' : '');
-  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}  ${r.seconds}s${r.fixture ? `  fixture=${r.fixture}` : ''}${r.stream ? `  stream=${r.stream}` : ''}`;
+  const bytes = typeof r.usage?.tool_result_bytes === 'number' ? `  tool_result_bytes=${r.usage.tool_result_bytes}` : '';
+  return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}${bytes}  ${r.seconds}s${r.fixture ? `  fixture=${r.fixture}` : ''}${r.stream ? `  stream=${r.stream}` : ''}`;
 }
 
 // Prints the totals line and, after a full-length run, the flaky list; returns the counts the exit code needs.
@@ -35,7 +36,8 @@ export function printSummary(done, spent) {
   const skipped = done.filter((r) => r.skipped).length;
   const unconfirmed = done.filter((r) => r.confirmed === false).length;
   const tokens = done.reduce((sum, r) => sum + contextTokens(r.usage), 0);
-  console.log(`${passed}/${done.length} passed${skipped ? `, ${skipped} skipped` : ''}${unconfirmed ? `, ${unconfirmed} unconfirmed` : ''}, total cost $${money(spent)}, context tokens ${tokens}`);
+  const bytes = done.reduce((sum, r) => sum + (Number(r.usage?.tool_result_bytes) || 0), 0);
+  console.log(`${passed}/${done.length} passed${skipped ? `, ${skipped} skipped` : ''}${unconfirmed ? `, ${unconfirmed} unconfirmed` : ''}, total cost $${money(spent)}, context tokens ${tokens}, tool-result bytes ${bytes}`);
   // A pass rate from fewer runs is too coarse to call flaky, so the list needs every run scenario at full length.
   const ran = done.filter((r) => !r.skipped);
   if (ran.length && ran.every((r) => r.attempts >= FLAKY_MIN_ATTEMPTS)) {

@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASSERTION_TYPES, parseStream, score } from './eval-score.mjs';
+import { line, printSummary } from './lib/eval-run-report.mjs';
 
 const STREAMS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'evals', 'fixtures', 'streams');
 const load = (name) => parseStream(fs.readFileSync(path.join(STREAMS, `${name}.jsonl`), 'utf8'));
@@ -230,5 +231,49 @@ describe('score', () => {
 
   test('an invalid regex fails the assertion instead of throwing', () => {
     expect(one(skill, facts(), { type: 'final_matches', pattern: '(' }).pass).toBe(false);
+  });
+});
+
+describe('tool_result_bytes', () => {
+  const stream = (events) => parseStream(events.map((e) => JSON.stringify(e)).join('\n'));
+  const result = { type: 'result', subtype: 'success', num_turns: 1, total_cost_usd: 0.01, usage: { input_tokens: 1 }, result: 'done' };
+  const user = (content, parent = null) => ({ type: 'user', parent_tool_use_id: parent, message: { content } });
+
+  test('tool_result_bytes counts UTF-8 bytes of string and text-block content, images and missing content as 0', () => {
+    const p = stream([
+      user([{ type: 'tool_result', tool_use_id: 'a', content: 'abc' }]),
+      user([{ type: 'tool_result', tool_use_id: 'b', content: [{ type: 'text', text: 'h\u00e9llo' }, { type: 'image', source: { type: 'base64', data: 'QUJD' } }] }]),
+      user([{ type: 'tool_result', tool_use_id: 'c' }]),
+      user([{ type: 'tool_result', tool_use_id: 'd', content: '\u65e5\u672c' }], 'toolu_parent'),
+      result,
+    ]);
+    // 3 (abc) + 6 (h, e-acute 2 bytes, llo) + 0 + 0 + 6 (two 3-byte CJK chars)
+    expect(p.result.usage.tool_result_bytes).toBe(15);
+    expect(p.result.usage.input_tokens).toBe(1);
+  });
+
+  test('tool_result_bytes is 0 for a stream without tool results', () => {
+    expect(stream([result]).result.usage.tool_result_bytes).toBe(0);
+  });
+
+  test('tool_result_bytes appears in the summary line as a total over scenarios', () => {
+    const spy = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const done = [
+        { id: 'a', pass: true, attempts: 1, usage: { input_tokens: 2, tool_result_bytes: 1000 } },
+        { id: 'b', pass: false, attempts: 1, usage: { input_tokens: 3, tool_result_bytes: 234 } },
+        { id: 'c', skipped: true, attempts: 0 },
+      ];
+      printSummary(done, 0.5);
+      expect(spy.mock.calls[0][0]).toContain('context tokens 5, tool-result bytes 1234');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('tool_result_bytes shows on a scenario line only when the usage carries it', () => {
+    const base = { id: 'x', pass: true, results: [], attempts: 1, turns: 1, cost: 0.1, seconds: 2 };
+    expect(line({ ...base, usage: { tool_result_bytes: 42 } }, 4)).toContain('tool_result_bytes=42');
+    expect(line({ ...base, usage: { input_tokens: 1 } }, 4)).not.toContain('tool_result_bytes');
   });
 });

@@ -1,6 +1,6 @@
 // scripts/install-check-context.test.mjs
 //
-// The machine rows of `install.sh --check` (hooks-path, bun-version, context-hooks) and the `[draft]`
+// The machine rows of `install.sh --check` (hooks-path, bun-version) and the `[draft]`
 // issue command printed on a problem. The rows never change a count or the exit code; the link rows
 // are covered by install-check.test.mjs. Every run uses the sandbox from scripts/lib/install-sandbox.mjs.
 
@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './lib/install-sandbox.mjs';
 
-const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version|context-hooks): /;
+const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version): /;
 
 const open = [];
 afterEach(() => {
@@ -35,7 +35,8 @@ function setPackageManager(sb, value) {
   fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
-const CONTEXT_COMMANDS = {
+// The commands the removed context hooks used to install.
+const OLD_HOOK_COMMANDS = {
   PreToolUse: [{ matcher: 'Read', hooks: [{ type: 'command', command: '/b/bun /r/scripts/hooks/output-cap.mjs' }] }],
   PostToolUse: [
     { matcher: 'Bash|mcp__.*', hooks: [{ type: 'command', command: '/b/bun /r/scripts/hooks/output-replace.mjs' }] },
@@ -97,33 +98,27 @@ test('context rows: with no bun and no git every machine row is [skip] and the c
   expect(r.stdout).toContain('check: CURRENT');
   expect(tagsOf(r, 'hooks-path')).toEqual(['skip']);
   expect(tagsOf(r, 'bun-version')).toEqual(['skip']);
-  expect(tagsOf(r, 'context-hooks')).toEqual(['skip']);
 });
 
-test('context rows: context-hooks is [info] not installed without its commands and [info] installed with all three, never a problem', () => {
-  const sb = sandbox();
-  expect(sb.run([]).status).toBe(0);
-  const none = sb.run(['--check']);
-  expect(none.status).toBe(0);
-  expect(none.stdout).toContain('check: CURRENT');
-  expect(tagsOf(none, 'context-hooks')).toEqual(['info']);
-  expect(rowsOf(none, 'context-hooks')[0]).toContain('not installed');
+test('no context-hooks row', () => {
+  const withBun = sandbox();
+  // A settings file naming the old hooks must not bring the row back either. It goes in before the
+  // install because ~/.claude makes Claude Code a detected target.
+  fs.mkdirSync(at(withBun, '.claude'), { recursive: true });
+  fs.writeFileSync(at(withBun, '.claude/settings.json'), JSON.stringify({ hooks: OLD_HOOK_COMMANDS }));
+  expect(withBun.run([]).status).toBe(0);
+  const r = withBun.run(['--check']);
+  expect(r.status).toBe(0);
+  expect(r.stdout).toContain('check: CURRENT');
+  expect(tagsOf(r, 'bun-version').length).toBe(1);
+  expect(r.stdout.split('\n').filter((l) => l.includes('context-hooks'))).toEqual([]);
 
-  // Settings with only a foreign hook still count as not installed.
-  fs.mkdirSync(at(sb, '.claude'), { recursive: true });
-  fs.writeFileSync(at(sb, '.claude/settings.json'), JSON.stringify({ hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'x' }] }] } }));
-  expect(sb.run([]).status).toBe(0);
-  const foreign = sb.run(['--check']);
-  expect(foreign.status).toBe(0);
-  expect(rowsOf(foreign, 'context-hooks')[0]).toContain('not installed');
-
-  fs.writeFileSync(at(sb, '.claude/settings.json'), JSON.stringify({ hooks: CONTEXT_COMMANDS }));
-  const installed = sb.run(['--check']);
-  expect(installed.status).toBe(0);
-  expect(installed.stdout).toContain('check: CURRENT');
-  expect(tagsOf(installed, 'context-hooks')).toEqual(['info']);
-  expect(rowsOf(installed, 'context-hooks')[0]).not.toContain('not installed');
-  expect(rowsOf(installed, 'context-hooks')[0]).toContain('installed');
+  const noBun = sandbox([]);
+  expect(noBun.run(['--tier', 'minimal']).status).toBe(0);
+  const bare = noBun.run(['--check', '--tier', 'minimal']);
+  expect(bare.status).toBe(0);
+  expect(tagsOf(bare, 'bun-version')).toEqual(['skip']);
+  expect(bare.stdout.split('\n').filter((l) => l.includes('context-hooks'))).toEqual([]);
 });
 
 test('context rows: a problem prints a [draft] gh issue create command that install.sh never runs, and the command is ready to paste', () => {

@@ -32,14 +32,7 @@ Multi-turn scenarios: instead of `prompt`, a scenario may list `turns` (two or m
 
 Generated fixtures: a scenario may add `"generate": {"<path>": {"lines": N, "template": "text with {i}"}}` to write a large file into the fixture at run time instead of committing it (`scripts/lib/eval-hooks.mjs`). The template is repeated N times with `{i}` counting from 1, and may hold `\n` to repeat a block of lines. The files are written before the settings refusal and committed with the fixture, so `fixture_unchanged` holds. `big-log-aggregate` (a 5 MB log, 60,000 lines) and `big-file-question` (a 60 KB module) use it to force large tool output; both run a bare prompt and check the exact answer, so a cheaper run that answers wrongly still fails.
 
-A/B with `--with-hook`: `--with-hook context` installs the opt-in context hooks (`scripts/hooks/output-cap.mjs`, `output-replace.mjs`, `session-journal.mjs`) and their `.claude/settings.json` into each fixture; only the `context` set is accepted. Run the two arms into separate out files and without `--baseline`, so neither arm touches the baseline comparison:
-
-```bash
-bun scripts/eval-run.mjs --only big-log-aggregate,big-file-question --repeat 5 --no-early-stop --out docs/code-plan/evals/<date>-context-hooks-off.json --budget-usd 6
-bun scripts/eval-run.mjs --only big-log-aggregate,big-file-question --repeat 5 --no-early-stop --with-hook context --out docs/code-plan/evals/<date>-context-hooks-on.json --budget-usd 6
-```
-
-Compare per scenario between the two files: `pass_rate` first (a hook that saves bytes but costs correct answers is a loss), then `usage.tool_result_bytes`, the token fields in `usage`, and `cost`, all summed over the scenario's attempts, so divide by `attempts` for a per-run figure.
+Tool output size: every result records `usage.tool_result_bytes`, the UTF-8 bytes of all tool results in the run, summed over turns and attempts; the summary line prints the total next to context tokens.
 
 Not measured: the number of gates a single-prompt flow raises, since one headless run reaches at most one gate; multi-turn scenarios measure it.
 

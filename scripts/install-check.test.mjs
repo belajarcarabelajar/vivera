@@ -13,9 +13,9 @@ import { makeSandbox } from './lib/install-sandbox.mjs';
 const MASTER = 'Super Ultra Code Plan Implementation.md';
 const PKG = '.agents/skills/super-ultra-code-plan';
 const LINE = /^\[(ok|missing|stale|dangling|foreign|skip|info|warn)\] /;
-// The machine rows (hooks-path, bun-version, context-hooks) are not links, so the link cases leave them
-// out; install-check-context.test.mjs tests them.
-const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version|context-hooks): /;
+// The machine rows (hooks-path, bun-version) are not links, so the link cases leave them out;
+// install-check-context.test.mjs tests them.
+const CONTEXT_ROW = /^\[[a-z]+\] (hooks-path|bun-version): /;
 
 const open = [];
 afterEach(() => {

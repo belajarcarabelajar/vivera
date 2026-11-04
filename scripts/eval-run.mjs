@@ -10,7 +10,7 @@
 //   bun scripts/eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>]
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
 //                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
-//                            [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop] [--with-hook context]
+//                            [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]
 // The last three set the repeated attempts behind each verdict and the flaky rule:
 // scripts/lib/eval-repeat.mjs. Console and file output: scripts/lib/eval-run-report.mjs.
 //
@@ -39,7 +39,7 @@ import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } 
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
-import { RefusedError, generateFixtures, generateProblem, hookSet, installHooks, safeRelative } from './lib/eval-hooks.mjs';
+import { RefusedError, generateFixtures, generateProblem, safeRelative } from './lib/eval-hooks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
@@ -48,7 +48,7 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop] [--with-hook context]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -89,7 +89,6 @@ function parseArgs(argv) {
       if (Number.isNaN(n)) throw new UsageError(`${a} needs ${r ? 'an odd' : 'an even'} whole number, at least ${r ? 1 : 0}`);
       opts[r ? 'repeat' : 'confirmFlips'] = n;
     } else if (a === '--scenarios') opts.scenarios = path.resolve(value(i++, a));
-    else if (a === '--with-hook') opts.hooks = hookSet(value(i++, a), UsageError);
     else throw new UsageError(`unknown argument: ${a}`);
   }
   return opts;
@@ -178,7 +177,7 @@ function installRules(dir) {
   }
 }
 
-function buildFixture(scenario, fixturesDir, dest, hooks) {
+function buildFixture(scenario, fixturesDir, dest) {
   const src = path.join(fixturesDir, safeRelative(scenario.fixture));
   if (!fs.existsSync(src) || !fs.statSync(src).isDirectory()) throw new RefusedError(`refused: fixture not found: ${scenario.fixture}`);
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -191,7 +190,6 @@ function buildFixture(scenario, fixturesDir, dest, hooks) {
   generateFixtures(dest, scenario.generate);
   refuseRiskyConfig(dest);
   installRules(dest);
-  if (hooks) installHooks(dest, hooks);
   gitOk(dest, ['init', '-q', '-b', 'main']);
   gitOk(dest, ['add', '-A']);
   gitOk(dest, ['commit', '-q', '-m', 'eval fixture']);
@@ -247,7 +245,7 @@ function deniedToolNames(events) {
   return denials.map((d) => d?.tool_name).filter((n) => typeof n === 'string');
 }
 
-async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt, evalsDir, hooks) {
+async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt, evalsDir) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
   const nth = attempt ? `-${attempt + 1}` : '';
@@ -255,7 +253,7 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
   const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
   let initialSha;
   try {
-    initialSha = buildFixture(scenario, fixturesDir, dest, hooks);
+    initialSha = buildFixture(scenario, fixturesDir, dest);
   } catch (err) {
     if (!(err instanceof RefusedError)) throw err;
     return { ...base, pass: false, results: [{ type: 'fixture', pass: false, detail: err.message }], seconds: 0 };
@@ -350,7 +348,7 @@ async function main(argv) {
         // A full ceiling per attempt, so a confirmation never stops undecided.
         const record = await runRepeated(async (attempt) => {
           const cap = ceiling(opts.budget - spent);
-          const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt, path.dirname(out), opts.hooks);
+          const r = await runScenario(s, fixturesDir, runDir, cap, invokeOf(s), opts.keep, index, bwrap, attempt, path.dirname(out));
           spent += r.cost ?? cap;
           return r;
         }, { ...repeat, expected: before?.pass, canRun: () => opts.budget - spent >= RUN_CEILING_USD });

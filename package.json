@@ -44,7 +44,6 @@
     "graphify:register": "bun scripts/graphify-register.mjs",
     "graphify:audit": "bun scripts/graphify-audit.mjs",
     "graphify:hooks": "bun scripts/graphify-hooks-install.mjs",
-    "context:hooks": "bun scripts/context-hooks-install.mjs",
     "ci:targeted": "bun scripts/ci-targeted.mjs",
     "metrics": "bun scripts/session-metrics.mjs",
     "eval": "bun scripts/eval-run.mjs",

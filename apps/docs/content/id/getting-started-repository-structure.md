@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "2f5d825c0668"
+source_hash: "21ea7b371a22"
 ---
 
 <a id="repository-structure"></a>
@@ -20,7 +20,7 @@ vivera/
 ├── MEMORY.md                                    # Distilled in-repo rules from Step 6 learning harvest
 ├── install.sh                                   # 1-command installer: skills for every detected harness, sprite agents for six
 ├── install.ps1                                  # Windows installer: copy mode, skills only (run under pwsh 7.6.6 on Linux; not verified on Windows)
-├── Dockerfile                                   # Container image on oven/bun:1.4.2-debian, non-root user, standard tier (never built)
+├── Dockerfile                                   # Container image on oven/bun:1.4.4-debian, non-root user, standard tier (never built)
 ├── .dockerignore                                # Keeps private state out of the image
 ├── .gitattributes                               # Forces LF for *.sh, .githooks/* and scripts/install/tiers.tsv (a CRLF checkout breaks the installer)
 ├── .devcontainer/

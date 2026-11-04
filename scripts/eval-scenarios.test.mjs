@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { ASSERTION_TYPES } from './eval-score.mjs';
+import { generateFixtures, generateProblem } from './lib/eval-hooks.mjs';
 
 const ROOT = join(import.meta.dir, '..');
 const SCENARIO_DIR = join(ROOT, 'evals', 'scenarios');
@@ -289,5 +291,62 @@ describe('eval fixtures', () => {
         .filter((full) => statSync(full).size >= MAX_FIXTURE_FILE_BYTES)
       : ['evals/fixtures is missing'];
     expect(big).toEqual([]);
+  });
+});
+
+// The big-output scenarios generate their large file at run time; these cases build it the
+// way the runner does and check the asserted answer against the file, not against the spec.
+function generated(id, rel) {
+  const s = load(`${id}.json`);
+  const dir = mkdtempSync(join(tmpdir(), 'eval-big-'));
+  try {
+    generateFixtures(dir, s.generate);
+    return { s, text: readFileSync(join(dir, rel), 'utf8'), bytes: statSync(join(dir, rel)).size };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const finalPattern = (s) => new RegExp(s.assertions.find((a) => a.type === 'final_matches').pattern);
+
+describe('big-output scenarios', () => {
+  test('big- scenarios have well-formed generate specs and a bare prompt', () => {
+    for (const id of ['big-log-aggregate', 'big-file-question']) {
+      const s = load(`${id}.json`);
+      expect(generateProblem(s.generate)).toBeNull();
+      expect(s.invoke).toBe(false);
+      expect(s.assertions.map((a) => a.type)).toEqual(['fixture_unchanged', 'final_matches']);
+    }
+  });
+
+  test('big-log-aggregate: about 5 MB in 60,000 lines, and the asserted answer is the true ERROR count and top code', () => {
+    const { s, text, bytes } = generated('big-log-aggregate', 'logs/service.log');
+    expect(bytes).toBeGreaterThan(4_500_000);
+    expect(bytes).toBeLessThan(5_500_000);
+    const lines = text.split('\n').filter(Boolean);
+    expect(lines.length).toBe(60_000);
+    const codes = new Map();
+    for (const l of lines.filter((x) => /\blevel=ERROR\b/.test(x))) {
+      const code = l.match(/\bcode=(E\d+)\b/)[1];
+      codes.set(code, (codes.get(code) ?? 0) + 1);
+    }
+    const count = [...codes.values()].reduce((a, b) => a + b, 0);
+    const [top, topN] = [...codes].sort((a, b) => b[1] - a[1])[0];
+    expect([...codes.values()].filter((n) => n === topN)).toHaveLength(1);
+    expect(text.split('ERROR').length - 1).toBe(count);
+    const pattern = finalPattern(s);
+    expect(pattern.test(`ERRORS=${count} TOP=${top}`)).toBe(true);
+    expect(pattern.test(`ERRORS=${count - 1} TOP=${top}`)).toBe(false);
+    for (const other of [...codes.keys()].filter((c) => c !== top)) expect(pattern.test(`ERRORS=${count} TOP=${other}`)).toBe(false);
+  });
+
+  test('big-file-question: about 60 KB, and the asserted answer is the last constant, absent from the first 16 KB', () => {
+    const { s, text, bytes } = generated('big-file-question', 'src/settings.mjs');
+    expect(bytes).toBeGreaterThan(55_000);
+    expect(bytes).toBeLessThan(65_000);
+    const value = [...text.matchAll(/^export const \w+ = (\d+);$/gm)].at(-1)[1];
+    const pattern = finalPattern(s);
+    expect(pattern.test(`VALUE=${value}`)).toBe(true);
+    expect(pattern.test(`VALUE=${value}0`)).toBe(false);
+    expect(text.slice(0, 16_384).includes(value)).toBe(false);
   });
 });

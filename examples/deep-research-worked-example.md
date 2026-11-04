@@ -22,7 +22,7 @@ Compaction is the act of summarizing or evicting content from the short-term lay
 
 Summarization is the simplest to implement but suffers from compounding error. Each successive summary loses more nuance than the last, and after three or four compaction cycles the original intent is often irretrievable. Sliding window with retrieval is more robust because the originals remain available, but it places hard requirements on the retrieval index and on the agent's ability to formulate good queries against past turns. Structured distillation is the most reliable but requires deliberate scaffolding — the agent must know which facts matter enough to slot before the window evicts them.
 
-The vivera repository's routing rules favor sliding window with retrieval through the context-mode MCP, which provides a BM25-over-FTS5 index of past session events[5]. The choice is appropriate for the project's emphasis on recall over paraphrase.
+A routing layer such as the context-mode MCP implements sliding window with retrieval by providing a BM25-over-FTS5 index of past session events[5]. That choice suits a project that values recall over paraphrase.
 
 ## Mid-Term Episodic Capture
 
@@ -30,7 +30,7 @@ Episodic capture writes structured records about completed actions, decisions, e
 
 The principal risk of mid-term capture is silent bloat. Without a periodic compaction or pruning step, the store grows linearly with activity, and retrieval quality degrades as the corpus becomes a noisy dump of micro-events. The remedy is a scheduled task that either summarizes old events into curated notes, drops events that have not been retrieved in N days, or promotes frequently retrieved events into the long-term store.
 
-This repository already implements the write side through the context-mode hooks that auto-capture decisions, errors, blockers, and plans. It does not yet implement a scheduled prune or promotion step, which is the recommended addition from this report.
+A tool such as context-mode implements the write side through hooks that auto-capture decisions, errors, blockers, and plans. A write side alone does not prune or promote, so a scheduled prune or promotion step is the recommended addition from this report.
 
 ## Long-Term Curated Knowledge
 
@@ -54,7 +54,7 @@ Each failure mode has a known remedy — periodic promotion, scheduled pruning, 
 
 ## Conclusion
 
-The three-layer memory model is the de facto architecture for long-running AI coding agents in 2026, and this repository's design aligns with it. The short-term layer is the model's context window managed through context-mode's token-efficient routing. The mid-term layer is the auto-captured event store maintained by context-mode hooks. The long-term layer is the curated documentation in this repository itself.
+The three-layer memory model is the de facto architecture for long-running AI coding agents in 2026. The short-term layer is the model's context window, which a tool such as context-mode manages through token-efficient routing. The mid-term layer is an auto-captured event store, which such a tool maintains through hooks. The long-term layer is curated documentation, which in this repository is the documentation itself.
 
 The principal gap is operational hygiene on the mid-term layer. The recommendation is to introduce a scheduled compaction step that runs daily, summarizes events older than thirty days into a single curated note per day, and drops micro-events that have not been retrieved in that period. The change is small, the risk is low because the originals remain in long-term storage, and the benefit is that retrieval precision in the mid-term layer remains high as the project ages.
 

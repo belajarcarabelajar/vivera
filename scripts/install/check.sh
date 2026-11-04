@@ -16,6 +16,13 @@
 # skipped (no bun, tier minimal, a dir inside this checkout or behind a symlinked directory) is a [skip]
 # line and counts for nothing; the last line then says "sprite agents not verified: <why>" instead of a
 # bare CURRENT.
+#
+# After the targets come three machine rows that never change a count or the exit code: `hooks-path`
+# ([ok] or [warn] on core.hooksPath in a git checkout of its own, else [skip]), `bun-version` ([ok] or
+# [warn] on the installed bun against packageManager in package.json) and `context-hooks` ([info] on
+# whether ~/.claude/settings.json runs the opt-in context hooks); the last two are [skip] with no bun.
+# On a problem, `[draft]` lines before the verdict hold a `gh issue create` command for the user to run
+# by hand; install.sh never runs it, and HOME in its body is written as ~.
 
 # The counters live in globals so check_sprites can add to them. CHECK_UNVERIFIED lists, separated by
 # "; ", why some sprite check was skipped.
@@ -24,6 +31,116 @@ CHECK_CHECKED=0
 CHECK_UNVERIFIED=""
 # Set when a [stale] entry was a managed copy met in link mode, so the closing [hint] is printed once.
 CHECK_COPIES_SEEN=false
+# The problem rows printed so far, one per line, for the issue draft.
+CHECK_FAILED_ROWS=""
+CHECK_BUN_VERSION="not found"
+
+# Prints one report row and remembers it when its tag is a problem.
+check_row() {
+  echo "$1"
+  case "$1" in
+    "[missing]"* | "[stale]"* | "[dangling]"* | "[foreign]"* | "[FAIL]"*)
+      CHECK_FAILED_ROWS="${CHECK_FAILED_ROWS:+$CHECK_FAILED_ROWS$'\n'}$1"
+      ;;
+  esac
+}
+
+# The machine rows. Read-only: git config is read, JSON is parsed by bun from paths passed in the
+# environment, so a path never becomes code.
+# defer: no matching rows in install.ps1 -Check, upgrade when a Windows install is reported broken
+check_machine_rows() {
+  local hooks_path pinned settings missing
+
+  if tool_available git && repo_is_own_checkout; then
+    hooks_path="$(git -C "$REPO_DIR" config core.hooksPath 2>/dev/null)" || hooks_path=""
+    if [ "$hooks_path" = .githooks ]; then
+      echo "[ok] hooks-path: core.hooksPath is .githooks"
+    else
+      echo "[warn] hooks-path: core.hooksPath is ${hooks_path:-unset}, expected .githooks (./install.sh sets it)"
+    fi
+  else
+    echo "[skip] hooks-path: $REPO_DIR is not a git checkout of its own"
+  fi
+
+  if ! tool_available bun; then
+    echo "[skip] bun-version: bun not found"
+    echo "[skip] context-hooks: bun not found"
+    return 0
+  fi
+  CHECK_BUN_VERSION="$(bun --version 2>/dev/null)" || CHECK_BUN_VERSION="unknown"
+  pinned="$(VIVERA_PKG="$REPO_DIR/package.json" bun -e '
+    try {
+      const p = JSON.parse(require("fs").readFileSync(process.env.VIVERA_PKG, "utf8")).packageManager;
+      if (typeof p === "string") console.log(p);
+    } catch {}' 2>/dev/null)" || pinned=""
+  if [ -z "$pinned" ]; then
+    echo "[warn] bun-version: bun $CHECK_BUN_VERSION is installed; no packageManager found in $REPO_DIR/package.json"
+  elif [ "bun@$CHECK_BUN_VERSION" = "$pinned" ]; then
+    echo "[ok] bun-version: bun $CHECK_BUN_VERSION matches packageManager $pinned"
+  else
+    echo "[warn] bun-version: bun $CHECK_BUN_VERSION is installed, package.json pins $pinned"
+  fi
+
+  settings="$HOME/.claude/settings.json"
+  if [ ! -f "$settings" ]; then
+    echo "[info] context-hooks: not installed (opt-in: bun run context:hooks --install from $REPO_DIR)"
+    return 0
+  fi
+  # Prints the hook names whose command is missing, an empty line when all three are there, or
+  # "unreadable" for a file that is not JSON.
+  missing="$(VIVERA_SETTINGS="$settings" bun -e '
+    let s;
+    try { s = JSON.parse(require("fs").readFileSync(process.env.VIVERA_SETTINGS, "utf8")); } catch { console.log("unreadable"); process.exit(0); }
+    const hooks = s && typeof s.hooks === "object" && s.hooks ? s.hooks : {};
+    const cmds = [];
+    for (const entries of Object.values(hooks)) {
+      for (const e of Array.isArray(entries) ? entries : []) {
+        for (const h of Array.isArray(e && e.hooks) ? e.hooks : []) if (h && typeof h.command === "string") cmds.push(h.command);
+      }
+    }
+    const names = ["output-cap", "output-replace", "session-journal"];
+    console.log(names.filter((n) => !cmds.some((c) => c.includes(`/scripts/hooks/${n}`))).join(" "));' 2>/dev/null)" || missing="unreadable"
+  case "$missing" in
+    "") echo "[info] context-hooks: installed in $settings" ;;
+    unreadable) echo "[info] context-hooks: $settings could not be read as JSON; not checked" ;;
+    "output-cap output-replace session-journal")
+      echo "[info] context-hooks: not installed (opt-in: bun run context:hooks --install from $REPO_DIR)"
+      ;;
+    *) echo "[info] context-hooks: partly installed, missing $missing (bun run context:hooks --install adds them)" ;;
+  esac
+}
+
+# Prints the issue draft for the problems found. Never runs gh: the user decides whether to file it.
+check_issue_draft() {
+  local id harnesses="" rows="" count=0 line body tilde='~'
+
+  for id in $(target_ids); do
+    if target_detected "$id"; then
+      harnesses="${harnesses:+$harnesses }$id"
+    fi
+  done
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    count=$((count + 1))
+    if [ "$count" -le 20 ]; then
+      rows="${rows:+$rows$'\n'}$line"
+    fi
+  done <<< "$CHECK_FAILED_ROWS"
+  if [ "$count" -gt 20 ]; then
+    rows="$rows"$'\n'"... and $((count - 20)) more"
+  fi
+  body="install.sh --check found $CHECK_PROBLEMS problem(s)."$'\n\n'
+  body+="OS: $(uname -sr 2>/dev/null || echo unknown)"$'\n'
+  body+="bun: $CHECK_BUN_VERSION"$'\n'
+  body+="harnesses detected: ${harnesses:-none}"$'\n'
+  body+="failing rows:"$'\n'"$rows"
+  # Home paths are personal; the issue is public.
+  if [ -n "$HOME" ] && [ "$HOME" != / ]; then
+    body="${body//"$HOME"/$tilde}"
+  fi
+  echo "[draft] to report this, run the next line yourself (install.sh never runs it):"
+  echo "[draft] gh issue create --repo belajarcarabelajar/vivera --title \"install check: $CHECK_PROBLEMS problem(s)\" --body $(printf '%q' "$body")"
+}
 
 # Remembers one reason a sprite check was skipped, once.
 sprite_unverified() {
@@ -46,7 +163,7 @@ check_sprite_dir() {
   set_sprite_args "$id"
   errors="$(bun "$REPO_DIR/scripts/gen-sprite-agents.mjs" "${SPRITE_ARGS[@]}" --check 2>&1 >/dev/null)" || code=$?
   if [ "$code" -eq 0 ]; then
-    echo "[ok] $dir (sprite agents)"
+    check_row "[ok] $dir (sprite agents)"
     return 0
   fi
   while IFS= read -r line; do
@@ -66,13 +183,13 @@ check_sprite_dir() {
   done <<< "$errors"
   CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
   if [ -n "$refused" ]; then
-    echo "[FAIL] $id sprites: $refused"
+    check_row "[FAIL] $id sprites: $refused"
   elif [ "${last#sprite agents are out of date:}" = "$last" ]; then
-    echo "[FAIL] $id sprites: ${first:-the generator exited $code without a message}"
+    check_row "[FAIL] $id sprites: ${first:-the generator exited $code without a message}"
   elif [ "$present" -eq 0 ]; then
-    echo "[missing] $dir (sprite agents)"
+    check_row "[missing] $dir (sprite agents)"
   else
-    echo "[stale] $dir (sprite agents are out of date or hand-edited; --update renders them again)"
+    check_row "[stale] $dir (sprite agents are out of date or hand-edited; --update renders them again)"
   fi
 }
 
@@ -86,16 +203,16 @@ check_sprites() {
   fi
   dir="$(sprite_out_dir "$id")"
   if [ "$TIER" = minimal ]; then
-    echo "[skip] $id sprites: tier minimal renders none"
+    check_row "[skip] $id sprites: tier minimal renders none"
     sprite_unverified "tier minimal renders none"
   elif why="$(sprite_left_alone_why "$dir")"; then
-    echo "[skip] $id sprites: $dir $why; left alone"
+    check_row "[skip] $id sprites: $dir $why; left alone"
     sprite_unverified "a sprite dir $why"
   elif ! tool_available bun; then
-    echo "[skip] $id sprites: bun not found"
+    check_row "[skip] $id sprites: bun not found"
     sprite_unverified "bun is missing"
   elif [ ! -d "$dir" ]; then
-    echo "[missing] $dir (sprite agents)"
+    check_row "[missing] $dir (sprite agents)"
     CHECK_CHECKED=$((CHECK_CHECKED + 1))
     CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
   else
@@ -110,11 +227,13 @@ mode_check() {
   CHECK_CHECKED=0
   CHECK_UNVERIFIED=""
   CHECK_COPIES_SEEN=false
+  CHECK_FAILED_ROWS=""
+  CHECK_BUN_VERSION="not found"
 
   selected="$(select_targets)"
   for id in $selected; do
     if [ "$(target_kind "$id")" = none ]; then
-      echo "[skip] $id: no skills target"
+      check_row "[skip] $id: no skills target"
       check_sprites "$id"
       continue
     fi
@@ -126,27 +245,27 @@ mode_check() {
         inrepo)
           # The destination is a file of this checkout itself (a harness dir symlinked into the repo).
           if [ "$dest" -ef "$desired" ]; then
-            echo "[ok] $dest (inside this checkout)"
+            check_row "[ok] $dest (inside this checkout)"
           else
-            echo "[foreign] $dest (inside this checkout, not the expected file)"
+            check_row "[foreign] $dest (inside this checkout, not the expected file)"
             CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           fi
           ;;
         viadir)
           # A real file of another tree, reached through a symlinked directory: not ours, left alone.
-          echo "[foreign] $dest (behind a symlinked directory; left alone)"
+          check_row "[foreign] $dest (behind a symlinked directory; left alone)"
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           ;;
         absent)
-          echo "[missing] $dest"
+          check_row "[missing] $dest"
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           ;;
         ok)
           if [ -e "$dest" ]; then
-            echo "[ok] $dest"
+            check_row "[ok] $dest"
           else
             # The link is the right one, but the repo file it points to is gone.
-            echo "[dangling] $dest (its source is missing)"
+            check_row "[dangling] $dest (its source is missing)"
             CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           fi
           ;;
@@ -158,14 +277,14 @@ mode_check() {
               expected="a copy of $desired"
             fi
             if [ ! -e "$dest" ]; then
-              echo "[dangling] $dest -> $target (expected $expected)"
+              check_row "[dangling] $dest -> $target (expected $expected)"
             else
-              echo "[stale] $dest -> $target (expected $expected)"
+              check_row "[stale] $dest -> $target (expected $expected)"
             fi
           elif [ "${COPY_MODE:-false}" = true ]; then
-            echo "[stale] $dest (copy differs from $desired)"
+            check_row "[stale] $dest (copy differs from $desired)"
           else
-            echo "[stale] $dest (a managed copy; expected a link to $desired)"
+            check_row "[stale] $dest (a managed copy; expected a link to $desired)"
             CHECK_COPIES_SEEN=true
           fi
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
@@ -173,11 +292,11 @@ mode_check() {
         foreign)
           if [ ! -L "$dest" ] && [ -e "$dest" ] && copy_managed "$dest"; then
             # The installer's own copy, edited since: --update moves it aside before refreshing it.
-            echo "[stale] $dest (copy edited since it was installed; --update moves it aside)"
+            check_row "[stale] $dest (copy edited since it was installed; --update moves it aside)"
           elif [ "${COPY_MODE:-false}" = true ]; then
-            echo "[foreign] $dest (not a vivera copy; --update would move it aside)"
+            check_row "[foreign] $dest (not a vivera copy; --update would move it aside)"
           else
-            echo "[foreign] $dest (not a vivera link; --update would move it aside)"
+            check_row "[foreign] $dest (not a vivera link; --update would move it aside)"
           fi
           CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
           ;;
@@ -185,12 +304,13 @@ mode_check() {
     done 3< <(target_entries "$id")
     while IFS= read -r -u 4 stale; do
       if [ -n "$stale" ]; then
-        echo "[stale] $stale (a skill this checkout no longer has; --update prunes it)"
+        check_row "[stale] $stale (a skill this checkout no longer has; --update prunes it)"
         CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
       fi
     done 4<<< "$(stale_phase_dirs "$id")"
     check_sprites "$id"
   done
+  check_machine_rows
 
   if [ "$CHECK_COPIES_SEEN" = true ]; then
     echo "[hint] those are copies made by --copy: run ./install.sh --check --copy"
@@ -207,6 +327,7 @@ mode_check() {
     echo "check: CURRENT${note:+ ($note)}"
     exit 0
   fi
+  check_issue_draft
   echo "check: $CHECK_PROBLEMS problem(s)"
   exit 1
 }

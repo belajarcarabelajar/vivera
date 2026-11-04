@@ -30,6 +30,14 @@ export const ASSERTION_TYPES = Object.freeze([
 
 const EXCERPT_CHARS = 160;
 
+// Text blocks count their text; image and other blocks count 0, since their size in
+// context is not their encoded length.
+function toolResultBytes(content) {
+  if (typeof content === 'string') return Buffer.byteLength(content, 'utf8');
+  if (!Array.isArray(content)) return 0;
+  return content.reduce((n, b) => n + (b?.type === 'text' && typeof b.text === 'string' ? Buffer.byteLength(b.text, 'utf8') : 0), 0);
+}
+
 export function parseStream(text) {
   const events = [];
   for (const line of String(text).split('\n')) {
@@ -45,11 +53,14 @@ export function parseStream(text) {
   let lastMainText = '';
   let resultEvent = null;
   const byId = new Map();
+  let resultBytes = 0;
   for (const e of events) {
     if (e.type === 'result') resultEvent = e;
     if (e.type === 'user' && Array.isArray(e.message?.content)) {
       for (const block of e.message.content) {
-        if (block?.type === 'tool_result' && block.is_error === true && byId.has(block.tool_use_id)) byId.get(block.tool_use_id).error = true;
+        if (block?.type !== 'tool_result') continue;
+        resultBytes += toolResultBytes(block.content);
+        if (block.is_error === true && byId.has(block.tool_use_id)) byId.get(block.tool_use_id).error = true;
       }
     }
     if (e.type !== 'assistant' || !Array.isArray(e.message?.content)) continue;
@@ -72,7 +83,7 @@ export function parseStream(text) {
       subtype: resultEvent?.subtype ?? null,
       num_turns: resultEvent?.num_turns ?? null,
       total_cost_usd: resultEvent?.total_cost_usd ?? null,
-      usage: resultEvent?.usage ?? null,
+      usage: resultEvent?.usage ? { ...resultEvent.usage, tool_result_bytes: resultBytes } : null,
     },
   };
 }

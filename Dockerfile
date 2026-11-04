@@ -18,7 +18,7 @@
 # The user is bun (uid 1000, home /home/bun), which the base image already creates: its registry
 # config runs `useradd bun --uid 1000 --create-home`. A second user would get uid 1001, which does
 # not match a workspace bind-mounted from a host user with uid 1000.
-FROM oven/bun:1.4.2-debian AS base
+FROM oven/bun:1.4.4-debian AS base
 
 # git is what --tier standard asks for next to bun. The package lists are removed in the same
 # RUN so they never reach a layer. /opt/vivera is made for the user here, as root, because WORKDIR

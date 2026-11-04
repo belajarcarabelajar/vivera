@@ -6,7 +6,7 @@
 // with the installer's own usage text. They need no network.
 //
 // The image's user is bun, the one the base image already creates (read from the registry config of
-// oven/bun:1.4.2-debian: groupadd bun --gid 1000, useradd bun --uid 1000 --create-home). A second user
+// oven/bun:1.4.4-debian: groupadd bun --gid 1000, useradd bun --uid 1000 --create-home). A second user
 // would get uid 1001, and a devcontainer on a Linux host whose uid is 1000 keeps it at 1001 because 1000 is taken,
 // so it could not write to the bind-mounted workspace.
 

@@ -55,8 +55,18 @@ export async function runTurns({ turns, budget, runTurn, newId = randomUUID }) {
   return { parsed, stdout: outs.join('\n'), last };
 }
 
+// Unlike sumUsage in eval-repeat.mjs, a non-numeric key (server_tool_use, service_tier)
+// survives with the last turn's value, so a single turn comes back unchanged.
+function sumTurnUsage(list) {
+  const used = list.map((p) => p.result.usage).filter(Boolean);
+  if (!used.length) return null;
+  const sum = {};
+  for (const u of used) for (const [k, v] of Object.entries(u)) sum[k] = typeof v === 'number' && typeof sum[k] === 'number' ? sum[k] + v : v;
+  return sum;
+}
+
 // One parsed stream for the scenario-level assertions: every tool call tagged with its
-// turn, the last final message (and all of them in `finals`), cost and turns summed.
+// turn, the last final message (and all of them in `finals`), cost, turns and usage summed.
 export function mergeParsed(list) {
   const known = list.every((p) => p.result.subtype != null);
   return {
@@ -68,7 +78,7 @@ export function mergeParsed(list) {
       subtype: known ? list.at(-1).result.subtype : null,
       num_turns: list.reduce((n, p) => n + (p.result.num_turns ?? 0), 0),
       total_cost_usd: list.reduce((n, p) => n + (Number(p.result.total_cost_usd) || 0), 0),
-      usage: list.at(-1)?.result.usage ?? null,
+      usage: sumTurnUsage(list),
     },
   };
 }

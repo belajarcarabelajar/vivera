@@ -1,0 +1,24 @@
+{
+  "id": "big-file-question",
+  "behaviour": "A question about the last constant in a 60 KB generated source file gets its exact value.",
+  "prompt": "src/settings.mjs is a long generated module. What number is assigned to the very last exported constant in it? Finish with one line exactly in the form VALUE=<number>. Do not change any file.",
+  "invoke": false,
+  "fixture": "base",
+  "generate": {
+    "src/settings.mjs": {
+      "lines": 450,
+      "template": "// region {i}: generated retry settings for worker pool {i}\nexport const RETRY_LIMIT_{i} = {i}3;\nexport const BACKOFF_MS_{i} = {i}0{i};"
+    }
+  },
+  "max_turns": 6,
+  "permission_mode": "dontAsk",
+  "assertions": [
+    {
+      "type": "fixture_unchanged"
+    },
+    {
+      "type": "final_matches",
+      "pattern": "VALUE=4500450\\b"
+    }
+  ]
+}

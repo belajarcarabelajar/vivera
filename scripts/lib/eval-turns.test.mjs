@@ -85,6 +85,35 @@ describe('mergeParsed', () => {
     const m = mergeParsed([parseStream(turn('x')), parseStream('{"type":"assistant","message":{"content":[]}}')]);
     expect(m.result.subtype).toBe(null);
   });
+
+  const used = (usage) => ({ events: [], final: '', toolUses: [], result: { subtype: 'success', num_turns: 1, total_cost_usd: 0, usage } });
+
+  test('sums usage across turns: input_tokens and tool_result_bytes add up', () => {
+    const m = mergeParsed([used({ input_tokens: 100, tool_result_bytes: 4000 }), used({ input_tokens: 30, tool_result_bytes: 500 })]);
+    expect(m.result.usage).toEqual({ input_tokens: 130, tool_result_bytes: 4500 });
+  });
+
+  test('sums usage across turns: a turn with null usage contributes nothing', () => {
+    const m = mergeParsed([used({ input_tokens: 7, tool_result_bytes: 9 }), used(null), used({ input_tokens: 3, tool_result_bytes: 1 })]);
+    expect(m.result.usage).toEqual({ input_tokens: 10, tool_result_bytes: 10 });
+  });
+
+  test('sums usage across turns: all null usage stays null', () => {
+    expect(mergeParsed([used(null), used(null)]).result.usage).toBe(null);
+  });
+
+  test('sums usage across turns: a single turn is unchanged', () => {
+    const usage = { input_tokens: 5, server_tool_use: { web_search_requests: 1 }, service_tier: 'standard', tool_result_bytes: 12 };
+    expect(JSON.stringify(mergeParsed([used(usage)]).result.usage)).toBe(JSON.stringify(usage));
+  });
+
+  test('sums usage across turns: a nested object or string key keeps the last turn\'s value', () => {
+    const m = mergeParsed([
+      used({ input_tokens: 1, server_tool_use: { web_search_requests: 1 }, service_tier: 'priority' }),
+      used({ input_tokens: 2, server_tool_use: { web_search_requests: 4 }, service_tier: 'standard' }),
+    ]);
+    expect(m.result.usage).toEqual({ input_tokens: 3, server_tool_use: { web_search_requests: 4 }, service_tier: 'standard' });
+  });
 });
 
 describe('scoreTurns', () => {

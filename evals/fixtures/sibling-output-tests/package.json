@@ -1,0 +1,11 @@
+{
+  "name": "eval-report",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "report": "bin/report.mjs"
+  },
+  "scripts": {
+    "test": "bun test"
+  }
+}

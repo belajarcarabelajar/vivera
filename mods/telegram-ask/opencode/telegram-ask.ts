@@ -222,7 +222,15 @@ async function mirror(form: Form, project: string): Promise<void> {
         debug("wait", id, res.status, res.json?.status)
         if (res.status !== 200 || settled) break
         if (res.json?.status === "answered" && res.json.answers) {
-          answeredFromTelegram = await replyForm(form, toFormAnswer(fields, res.json.answers))
+          const answer = toFormAnswer(fields, res.json.answers)
+          // One retry covers a briefly busy server. After that the bridge already
+          // shows the ask as answered, so a notice sends the owner to the TUI.
+          answeredFromTelegram = (await replyForm(form, answer)) || (await replyForm(form, answer))
+          if (!answeredFromTelegram && !(settled as unknown)) {
+            await bridge("POST", "/notify", {
+              text: `Jawaban dari Telegram tidak bisa diteruskan ke OpenCode (${project}, sesi ${session || "opencode"}). Jawab langsung di TUI.`,
+            }).catch(() => {})
+          }
           break
         }
         if (res.json?.status !== "pending") break

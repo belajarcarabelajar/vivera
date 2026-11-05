@@ -17,7 +17,10 @@ const MOD = join(ROOT, 'mods/telegram-ask');
 test('bridge tests are named *.spec.ts so claude plugin test skips them', () => {
   const names = readdirSync(join(MOD, 'bridge'));
   expect(names.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
-  expect(names.filter((n) => n.endsWith('.spec.ts')).sort()).toEqual(['format.spec.ts', 'markdown.spec.ts', 'notify.spec.ts', 'server-updates.spec.ts', 'server.spec.ts']);
+  expect(names.filter((n) => n.endsWith('.spec.ts')).sort()).toEqual(['audit-fixes.spec.ts', 'format.spec.ts', 'markdown.spec.ts', 'notify.spec.ts', 'server-updates.spec.ts', 'server.spec.ts']);
+  const plugin = readdirSync(join(MOD, 'opencode'));
+  expect(plugin.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
+  expect(plugin.filter((n) => n.endsWith('.spec.ts'))).toEqual(['telegram-ask.spec.ts']);
 });
 
 test('the systemd unit runs the bridge from the main checkout', () => {
@@ -58,8 +61,8 @@ test('the OpenCode plugin and the bridge name the same socket file and override'
   expect(bridgeSocket).toContain('TELEGRAM_ASK_SOCKET');
 });
 
-test('the bridge tests pass', () => {
-  const run = spawnSync(process.execPath, ['test', './mods/telegram-ask/bridge/'], { cwd: ROOT, encoding: 'utf8', timeout: 100_000 });
+test('the bridge and OpenCode plugin tests pass', () => {
+  const run = spawnSync(process.execPath, ['test', './mods/telegram-ask/bridge/', './mods/telegram-ask/opencode/'], { cwd: ROOT, encoding: 'utf8', timeout: 100_000 });
   expect(run.status, run.stdout + run.stderr).toBe(0);
   expect(run.stdout + run.stderr).toMatch(/\b0 fail\b/);
 }, 120_000);

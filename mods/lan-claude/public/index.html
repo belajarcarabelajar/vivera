@@ -115,12 +115,15 @@ function renderPerms() {
     const h = document.createElement("div"); h.innerHTML = "<b>🔐 Minta izin</b> "; const t = document.createElement("span"); t.className = "badge"; t.textContent = p.tool; h.appendChild(t);
     const pre = document.createElement("pre"); pre.textContent = p.summary;
     const row = document.createElement("div"); row.className = "row";
-    for (const [d, label, cls] of [["allow", "✅ Izinkan", "ok"], ["deny", "⛔ Tolak", "bad"]]) {
+    // The server refuses allow for a cut summary or while the kill switch is on, so the button is hidden too.
+    const noAllow = p.truncated ? "⚠️ Ringkasan terpotong: Izinkan hanya bisa di PC, jawab di PC. Tolak tetap bisa dari sini." : state.killed ? "Kill switch aktif: Izinkan hanya bisa di PC. Tolak tetap bisa dari sini." : "";
+    const note = document.createElement("div"); note.textContent = noAllow;
+    for (const [d, label, cls] of noAllow ? [["deny", "⛔ Tolak", "bad"]] : [["allow", "✅ Izinkan", "ok"], ["deny", "⛔ Tolak", "bad"]]) {
       const b = document.createElement("button"); b.className = cls; b.textContent = label;
       b.onclick = async () => { try { await call("/api/permission", { method: "POST", body: JSON.stringify({ id: p.id, decision: d }) }); refresh(); } catch (e) { show(e.message, true); } };
       row.appendChild(b);
     }
-    c.append(h, pre, row); box.appendChild(c);
+    c.append(h, pre, ...(noAllow ? [note] : []), row); box.appendChild(c);
   }
 }
 

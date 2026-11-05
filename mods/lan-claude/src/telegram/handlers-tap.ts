@@ -18,6 +18,8 @@ export function createTapHandlers(ctx: Ctx): { onTap(cqId: string, messageId: nu
     if (tap.act === "mp" || tap.act === "ep") return ctx.menu.onPickTap(cqId, messageId, tap);
     if (tap.act === "ce" || tap.act === "ck" || tap.act === "cx") return ctx.menu.onCloseTap(cqId, messageId, tap);
     if (tap.act === "pa" || tap.act === "pd") {
+      const refused = tap.act === "pa" ? board.allowRefusal(tap.id) : null;
+      if (refused) return void (await ack(cqId, refused, true));
       const ok = board.decide(tap.id, tap.act === "pa" ? "allow" : "deny", "Telegram");
       log("permission", { id: tap.id, decision: tap.act === "pa" ? "allow" : "deny", ok, via: "telegram" });
       return void (await ack(cqId, ok ? undefined : "Permintaan izin ini sudah selesai."));

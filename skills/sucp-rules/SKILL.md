@@ -15,7 +15,7 @@ The core rules in this file are always loaded; a reference file is read in full 
 |---|---|
 | [01-authority-investigation-state.md](references/01-authority-investigation-state.md) | When starting a task, or resuming after compaction. |
 | [02-plan-checklist.md](references/02-plan-checklist.md) | Before writing or ticking a plan checklist, or resuming a plan. |
-| [03-tool-orchestration.md](references/03-tool-orchestration.md) | Before a long-running or background command, a subagent stall decision, or a RAM-heavy build. |
+| [03-tool-orchestration.md](references/03-tool-orchestration.md) | Before a long-running or background command, a subagent stall decision, a RAM-heavy build, or heavy work the host routes to a remote runner. |
 | [04-token-reasoning.md](references/04-token-reasoning.md) | Before research, chaining shell commands, or editing large files. |
 | [05-delegation.md](references/05-delegation.md) | Before chunking work or dispatching subagents. |
 | [06-quality-output.md](references/06-quality-output.md) | Before writing code comments, user-visible copy, a report, or a handoff. |

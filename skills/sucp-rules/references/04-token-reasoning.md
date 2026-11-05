@@ -8,7 +8,7 @@
     - Dependency & Verification: Immediately verify dependency installs with tests (`bun add <pkg> && rtk bun test`).
     - Quality Pipelines: Chain linting, formatting, and typechecking (`bun run lint --fix && bun run format && bun run typecheck`).
     - Search & Refactor: Chain search-replace via `sd` directly into targeted test verification (`sd 'old' 'new' $(tgrep -l 'old' -g '*.ts') && rtk bun test`).
-    - Heavy Task Pre-flight: For resource-intensive commands (Cargo/native), stop a leftover build by its process group first (`ps -o pgid= -p <pid>`, `kill -- -<pgid>`, list again), then chain the RAM check with compilation (`free -m && cargo check --tests -p <pkg> -j 4`).
+    - Heavy Task Pre-flight: For resource-intensive commands (Cargo/native) that run locally, stop a leftover build by its process group first (`ps -o pgid= -p <pid>`, `kill -- -<pgid>`, list again), then chain the RAM check with compilation (`free -m && cargo check --tests -p <pkg> -j 4`).
     - Directory Discovery: Chain discovery with git state (`printdirtree --dirs-only > dirtree-report.md && rtk git status`).
   - Short-Circuit & Log Visibility: If any link in the chain fails, execution stops immediately at that step. Maintain visibility into stderr and failure exit codes; wrap dev operations in `rtk` proxy where applicable.
   - Safety & Confirmation Boundaries: NEVER chain destructive or irreversible commands (`rm -rf`, `git reset --hard`, `git push --force`) without preceding explicit human confirmation. NEVER chain commands when subsequent steps require intermediate AI reasoning or evaluation of unexpected outputs.

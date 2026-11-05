@@ -80,10 +80,6 @@ export { WATERMARK_PATTERNS };
  * still failed, because a markdown checklist item WRAPS: the words "attribution
  * footer, watermark, badge" sit on line 106 while the quoted trigger sits on line
  * 107. So the exemption looks BACK a short window rather than at one line.
- *
- * Two lines is the window, chosen from the wrap width this repository actually
- * uses (about 80 columns). Wider would start exempting real violations that
- * happen to sit under a rule statement.
  */
 // Stemmed deliberately. The first version matched only the exact phrase
 // `attribution footer`, and running it against README's copy-rules section
@@ -126,6 +122,8 @@ const ARTIFACT_EXTENSIONS = new Set(['.md', '.txt']);
 export function checkText(text, { where, emDashApplies = true } = {}) {
   const violations = [];
   const lines = String(text).split(/\r?\n/);
+  // Icon files hold one emoji by design (e.g. Dawnbook book icons).
+  const icon = [...new Intl.Segmenter().segment(String(text).trim())].length === 1;
   lines.forEach((line, i) => {
     const at = `${where}:${i + 1}`;
     // Look FORWARD as well as back, and never include the current line.
@@ -140,7 +138,7 @@ export function checkText(text, { where, emDashApplies = true } = {}) {
     if (emDashApplies && line.includes(EM_DASH)) {
       violations.push({ where: at, rule: 'em-dash', detail: EM_DASH, line: line.trim().slice(0, 120) });
     }
-    const e = emDashApplies && decorativeEmoji(line);
+    const e = emDashApplies && !icon && decorativeEmoji(line);
     if (e) violations.push({ where: at, rule: 'emoji', detail: e, line: line.trim().slice(0, 120) });
     for (const p of WATERMARK_PATTERNS) {
       if (!p.strict && p.re.test(line)) {

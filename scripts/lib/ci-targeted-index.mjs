@@ -89,12 +89,15 @@ function readMarketplaceMods(root) {
 /** The suite tests a mods/ or workflow path selects: scripts/<mod>.test.mjs for a file in a
  * mod folder, that of every listed mod for the marketplace, scripts/workflows.test.mjs for
  * a .github/workflows file (GitHub runs the workflow, so its structure test is all a local
- * gate can check). Null when one is missing, so the path stays unrecognized and forces
- * the full list instead of going untested. */
+ * gate can check), scripts/<hook>.test.mjs for a .claude/hooks/<hook>.mjs script. Null when
+ * one is missing, so the path stays unrecognized and forces the full list instead of going
+ * untested. */
 export function modTests(p, sources, marketplaceMods = []) {
   const mod = p.match(/^mods\/([^./][^/]*)\/./)?.[1];
   const mods = p === MARKETPLACE ? marketplaceMods : mod ? [mod] : [];
   if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) mods.push('workflows');
+  const hook = p.match(/^\.claude\/hooks\/([^./][^/]*)\.mjs$/)?.[1];
+  if (hook) mods.push(hook);
   const tests = mods.map((m) => `scripts/${m}.test.mjs`);
   return tests.length && tests.every((t) => t in sources) ? tests : null;
 }

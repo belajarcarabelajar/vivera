@@ -224,6 +224,90 @@ describe("block-git-writes hook", () => {
   });
 });
 
+// Bypasses verified on origin/main e7969b9 by the 2026-11-05 audit (findings 17, 18, 61, 62,
+// 223 to 227): each exited 0 before the fix.
+const AUDIT_BLOCKED = [
+  "timeout 60 git push",
+  "nice git commit -m x",
+  "nice -n 5 git push",
+  "ionice -c3 git push",
+  "stdbuf -oL git push",
+  "env -u HOME git push",
+  "xargs -n 1 git rm",
+  "sudo -u root git push",
+  "/usr/bin/env git push",
+  "doas git push",
+  "flock /tmp/l git push",
+  "setsid git push",
+  "taskset -c 0 git push",
+  "chrt -i 0 git push",
+  "timeout -s KILL 60 nice -n 5 git push",
+  "echo $((1<<2))\ngit push origin main",
+  "(( x = 1<<2 ))\ngit push origin main",
+  "git -c alias.ci=commit ci -am wip",
+  "git -calias.ci=commit ci -am wip",
+  "git -c 'alias.p=!git push' p",
+  "git read-tree HEAD",
+  "git commit-tree abc -m x",
+  "git checkout-index -a",
+  "git fast-import",
+  "git merge-file a b c",
+  "git mktree",
+  "git mktag",
+  "git write-tree",
+  "git unpack-objects",
+  "git hash-object -w f",
+  "$'git' push",
+  "$'gi\\x74' push",
+  '$"git" push',
+  "G=git; $G push",
+  "G=git && ${G} push",
+  "G=git; H=$G; $H push",
+  "G=git; H=${G}; I=$H; $I push",
+  "git hash-object -t blob -w f",
+  "git hash-object --stdin -w",
+];
+
+const AUDIT_ALLOWED = [
+  "timeout 60 bun test",
+  "nice rg git",
+  "git status",
+  "git log --oneline",
+  "git hash-object f",
+  "git hash-object -tw f",
+  "git hash-object -t w f",
+  "git hash-object --type w f",
+  "git hash-object --type=w f",
+  "H=$UNKNOWN; $H push",
+  "G=$H; H=$G; $G push",
+  '"$BUN" test',
+  "echo $((1<<2))",
+  "cat <<EOF\ngit push origin main\ngit commit -m x\nEOF\nls",
+  "cat <<EOF\ngit push origin main",
+  "xargs -n 1 echo",
+  "env FOO=1 bun test",
+  "git -c alias.st=status st",
+  "G=bun; $G test",
+];
+
+describe("audit bypass", () => {
+  for (const command of AUDIT_BLOCKED) {
+    test(`blocks: ${JSON.stringify(command)}`, () => {
+      const { code, stderr } = runCommand(command);
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/^Blocked: subagents never write git state \(.+\)\. Report the change to the parent/);
+    });
+  }
+
+  for (const command of AUDIT_ALLOWED) {
+    test(`allows: ${JSON.stringify(command)}`, () => {
+      const { code, stderr } = runCommand(command);
+      expect(code).toBe(0);
+      expect(stderr).toBe("");
+    });
+  }
+});
+
 // The sprites register this hook with matcher "Bash|Monitor": a Monitor command
 // runs in the same shell, and with a Bash-only matcher a git commit went through
 // it (measured 2026-10-19). The hook reads tool_input.command whatever the tool.

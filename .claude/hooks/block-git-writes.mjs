@@ -6,20 +6,28 @@
 // Every parse failure exits 0, because a crashing guard would block all Bash calls.
 //
 // It tokenizes the command line and checks the command word of each command, not only the first
-// one. Matches: a git write subcommand or any gh call after && || ; | or a newline, behind a
-// leading VAR=value, env, command, sudo, nohup, time, exec or xargs, behind a path (/usr/bin/git),
-// with git global options (-C dir, -c a=b), inside one sh/bash/zsh/dash -c string, and inside the
-// value of an assignment such as x=$(git commit).
-// Does not catch: an alias or function, eval, a backtick or $( ) that is not an assignment, text
-// piped into a shell (echo ... | sh), a second nested sh -c, or a write by redirection.
+// one. Matches: a git write subcommand (plumbing writes included) or any gh call after && || ; |
+// or a newline, behind a leading VAR=value or the wrappers in WRAPPERS (env, sudo, doas, xargs,
+// timeout, nice, ionice, stdbuf, flock, setsid, taskset, chrt and others, by basename, with their
+// option values and operands), behind a path (/usr/bin/git), with git global options (-C dir,
+// -c a=b), through one inline -c alias.NAME=VALUE (a !shell alias always blocks), written as
+// $'git' or $"git", as $NAME or ${NAME} set by an earlier standalone NAME=value, inside one
+// sh/bash/zsh/dash -c string, and inside the value of an assignment such as x=$(git commit).
+// A << inside $(( )) or (( )) is arithmetic, not a heredoc.
+// Does not catch: an alias from git config, a function, eval, a backtick or $( ) that is not an
+// assignment, text piped into a shell (echo ... | sh), a second nested sh -c, env -S or flock -c
+// strings, a wrapper option missing from WRAPPERS that takes a separate value, or a write by
+// redirection.
 //
-// defer: no alias, eval, substitution, piped-shell or nested sh -c handling, upgrade when one of those bypasses is observed
+// defer: no config alias, eval, substitution, piped-shell or nested sh -c handling, upgrade when one of those bypasses is observed
 
 const ALWAYS_WRITE = new Set([
   "add", "commit", "push", "checkout", "switch", "merge", "rebase", "reset",
   "restore", "cherry-pick", "revert", "pull", "rm", "mv", "am", "init", "clone",
   "submodule", "gc", "prune", "repack", "notes", "update-ref", "update-index",
-  "filter-branch", "bisect", "replace", "maintenance",
+  "filter-branch", "bisect", "replace", "maintenance", "read-tree", "commit-tree",
+  "checkout-index", "fast-import", "merge-file", "mktree", "mktag", "write-tree",
+  "unpack-objects",
 ]);
 
 // Global options that take a separate value when written without "=".
@@ -28,13 +36,78 @@ const VALUE_GLOBALS = new Set([
   "--config-env", "--exec-path",
 ]);
 
-const LEADING_WORDS = new Set([
-  "(", "{", "!", "if", "then", "else", "elif", "do", "while", "until",
-  "time", "nohup", "exec", "command", "env", "sudo", "xargs",
+const LEADING_WORDS = new Set(["(", "{", "!", "if", "then", "else", "elif", "do", "while", "until"]);
+// Commands that run the rest of their arguments as a command, matched by basename: the options
+// that take a separate value, and how many operands (timeout's duration, flock's lock file,
+// taskset's mask, chrt's priority) come before the command. Without these, an option value
+// such as the 5 in "nice -n 5 git push" would be read as the command word.
+const WRAPPERS = new Map([
+  ["time", ["-f -o --format --output", 0]],
+  ["nohup", ["", 0]],
+  ["exec", ["-a", 0]],
+  ["command", ["", 0]],
+  ["env", ["-u --unset -C --chdir -S --split-string", 0]],
+  ["sudo", ["-u --user -g --group -h --host -p --prompt -C --close-from -D --chdir -r --role -t --type -U --other-user -T --command-timeout", 0]],
+  ["doas", ["-u -C", 0]],
+  ["xargs", ["-n --max-args -L --max-lines -P --max-procs -I -d --delimiter -E -s --max-chars -a --arg-file", 0]],
+  ["timeout", ["-s --signal -k --kill-after", 1]],
+  ["nice", ["-n --adjustment", 0]],
+  ["ionice", ["-c --class -n --classdata -p --pid -P --pgid -u --uid", 0]],
+  ["stdbuf", ["-i --input -o --output -e --error", 0]],
+  ["flock", ["-w --wait --timeout -E --conflict-exit-code", 1]],
+  ["setsid", ["", 0]],
+  ["taskset", ["", 1]],
+  ["chrt", ["-T --sched-runtime -P --sched-period -D --sched-deadline", 1]],
 ]);
-const WRAPPERS = new Set(["time", "nohup", "exec", "command", "env", "sudo", "xargs"]);
 const SHELLS = new Set(["sh", "bash", "zsh", "dash"]);
+const TARGETS = new Set(["git", "gh", ...SHELLS]);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const VARIABLE = /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})$/;
+const ANSI_ESCAPES = { n: "\n", t: "\t", r: "\r", a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", v: "\v" };
+
+const base = (word) => word.split("/").pop();
+
+// Index of the "))" that closes the "((" at start, or -1 when the parens do not close as one
+// "))" pair, in which case bash reads them as nested subshells.
+function arithEnd(src, start) {
+  let depth = 0;
+  let inner = -1;
+  for (let j = start; j < src.length; j++) {
+    if (src[j] === "(") depth++;
+    else if (src[j] === ")") {
+      depth--;
+      if (depth === 1) inner = j;
+      if (depth === 0) return inner === j - 1 ? j : -1;
+    }
+  }
+  return -1;
+}
+
+// Decodes the body of $'...' (ANSI-C quoting); returns [text, index after the closing quote].
+function ansiQuoted(src, from) {
+  let out = "";
+  let i = from;
+  while (i < src.length && src[i] !== "'") {
+    if (src[i] !== "\\" || i + 1 >= src.length) {
+      out += src[i++];
+      continue;
+    }
+    const rest = src.slice(i + 1);
+    const hex = /^x([0-9A-Fa-f]{1,2})/.exec(rest);
+    const oct = /^([0-7]{1,3})/.exec(rest);
+    if (hex) {
+      out += String.fromCharCode(parseInt(hex[1], 16));
+      i += 1 + hex[0].length;
+    } else if (oct) {
+      out += String.fromCharCode(parseInt(oct[1], 8));
+      i += 1 + oct[0].length;
+    } else {
+      out += ANSI_ESCAPES[rest[0]] ?? rest[0];
+      i += 2;
+    }
+  }
+  return [out, i + 1];
+}
 
 // Splits a command line into commands (arrays of words). Handles quotes,
 // backslash escapes, backslash-newline, comments, and heredoc bodies, which
@@ -77,6 +150,7 @@ function tokenize(src) {
   };
 
   let i = 0;
+  let end;
   while (i < n) {
     const c = src[i];
     if (c === "\\") {
@@ -85,6 +159,19 @@ function tokenize(src) {
         append(src[i + 1]);
         i += 2;
       } else i++;
+    } else if (c === "$" && src[i + 1] === "'") {
+      const [text, next] = ansiQuoted(src, i + 2);
+      append(text);
+      i = next;
+    } else if (c === "$" && src[i + 1] === '"') {
+      i++;
+    } else if (c === "$" && src.startsWith("((", i + 1) && (end = arithEnd(src, i + 1)) > 0) {
+      // Arithmetic: a << inside it is a shift, not a heredoc that would swallow the next lines.
+      append(src.slice(i, end + 1));
+      i = end + 1;
+    } else if (c === "(" && src[i + 1] === "(" && !inWord && (end = arithEnd(src, i)) > 0) {
+      cur.push(src.slice(i, end + 1));
+      i = end + 1;
     } else if (c === "'") {
       const j = src.indexOf("'", i + 1);
       const end = j < 0 ? n : j;
@@ -177,17 +264,57 @@ function tokenize(src) {
   return commands;
 }
 
+// Unknown options and operands pass: the first word that is neither is the wrapped command.
+function skipWrapperArgs(tokens, i, [values, operands]) {
+  const takesValue = values.split(" ");
+  let options = true;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (options && t === "--") {
+      options = false;
+      i++;
+    } else if (options && t.startsWith("-") && t.length > 1) i += takesValue.includes(t) ? 2 : 1;
+    else if (ASSIGNMENT.test(t)) i++;
+    else if (TARGETS.has(base(t)) || operands === 0) break;
+    else {
+      operands--;
+      i++;
+    }
+  }
+  return i;
+}
+
 function stripLeading(tokens) {
   let i = 0;
   while (i < tokens.length) {
     const t = tokens[i];
-    if (ASSIGNMENT.test(t)) i++;
-    else if (LEADING_WORDS.has(t)) {
-      i++;
-      if (WRAPPERS.has(t)) while (i < tokens.length && tokens[i].startsWith("-")) i++;
-    } else break;
+    const wrapper = WRAPPERS.get(base(t));
+    if (ASSIGNMENT.test(t) || LEADING_WORDS.has(t)) i++;
+    else if (wrapper) i = skipWrapperArgs(tokens, i + 1, wrapper);
+    else break;
   }
   return tokens.slice(i);
+}
+
+// Substitutes $NAME and ${NAME} set by an earlier standalone assignment; unknown names stay.
+function expand(tokens, vars) {
+  return tokens.flatMap((t) => {
+    const m = VARIABLE.exec(t);
+    const name = m && (m[1] ?? m[2]);
+    return name && vars.has(name) ? vars.get(name).split(/\s+/).filter(Boolean) : [t];
+  });
+}
+
+function firstBlocked(commands, depth) {
+  const vars = new Map();
+  for (const tokens of commands) {
+    if (tokens.every((t) => ASSIGNMENT.test(t))) {
+      for (const t of tokens) vars.set(t.slice(0, t.indexOf("=")), t.slice(t.indexOf("=") + 1));
+    }
+    const label = blockedLabel(expand(tokens, vars), depth);
+    if (label) return label;
+  }
+  return null;
 }
 
 function splitArgs(args) {
@@ -265,23 +392,34 @@ function blockedLabel(tokens, depth = 0) {
     const flag = t.findIndex((x, k) => k > 0 && /^-[A-Za-z]*c$/.test(x));
     const script = flag < 0 ? undefined : t[flag + 1];
     if (script === undefined) return null;
-    for (const inner of tokenize(script)) {
-      const label = blockedLabel(inner, depth + 1);
-      if (label) return label;
-    }
-    return null;
+    return firstBlocked(tokenize(script), depth + 1);
   }
 
   if (word === "gh") return "gh";
   if (word !== "git") return null;
 
+  const aliases = new Map();
   let i = 1;
   while (i < t.length && t[i].startsWith("-")) {
+    const config = t[i] === "-c" ? t[i + 1] : t[i].startsWith("-c") ? t[i].slice(2) : "";
+    const alias = /^alias\.([^=]+)=(.*)$/s.exec(config ?? "");
+    if (alias) aliases.set(alias[1].toLowerCase(), alias[2]);
     i += VALUE_GLOBALS.has(t[i]) ? 2 : 1;
   }
-  const sub = t[i];
+  let sub = t[i];
   if (!sub) return null;
-  return gitWrites(sub, t.slice(i + 1)) ? `git ${sub}` : null;
+  let rest = t.slice(i + 1);
+  // defer: one level of inline alias, upgrade when an alias of an alias is observed
+  const alias = aliases.get(sub.toLowerCase());
+  if (alias !== undefined) {
+    if (alias.trimStart().startsWith("!")) return `git ${sub}`;
+    const words = tokenize(alias)[0] ?? [];
+    if (!words.length) return null;
+    rest = [...words.slice(1), ...rest];
+    sub = words[0];
+  }
+  if (sub === "hash-object") return hasFlag(splitArgs(rest).flags, [], "w") ? "git hash-object" : null;
+  return gitWrites(sub, rest) ? `git ${sub}` : null;
 }
 
 let command;
@@ -292,13 +430,16 @@ try {
 }
 if (typeof command !== "string") process.exit(0);
 
-for (const tokens of tokenize(command)) {
-  const label = blockedLabel(tokens);
-  if (label) {
-    console.error(
-      `Blocked: subagents never write git state (${label}). Report the change to the parent, which stages and commits.`,
-    );
-    process.exit(2);
-  }
+let label;
+try {
+  label = firstBlocked(tokenize(command), 0);
+} catch {
+  process.exit(0);
+}
+if (label) {
+  console.error(
+    `Blocked: subagents never write git state (${label}). Report the change to the parent, which stages and commits.`,
+  );
+  process.exit(2);
 }
 process.exit(0);

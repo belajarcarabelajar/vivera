@@ -69,6 +69,16 @@ export const PATTERNS = [
     re: /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi,
   },
   {
+    // Same shapes as the hard rules in secret-patterns.mjs, so the commit gate
+    // and the redactor agree on what a bare key looks like.
+    name: 'anthropic-api-key',
+    re: /\bsk-ant-[A-Za-z0-9_-]{20,}/g,
+  },
+  {
+    name: 'telegram-bot-token',
+    re: /(?<!\d)\d{8,10}:[A-Za-z0-9_-]{35}(?![A-Za-z0-9_-])/g,
+  },
+  {
     // The label is part of the match on purpose. Replacing only the digits
     // would leave `code: [REDACTED:totp-code]`, which is both noisy and one
     // redaction away from being a false positive on the next pass.
@@ -85,9 +95,13 @@ export const PATTERNS = [
   {
     // Same quote discipline on the label. The VALUE side is its own alternation
     // because a value can be a quoted string, a bracketed placeholder left by
-    // an earlier pattern, or a bare run of non-delimiter characters.
+    // an earlier pattern, or a bare run of non-delimiter characters. The label
+    // may carry a `_` or `-` prefix (ANTHROPIC_API_KEY, DB_PASSWORD): `_` is a
+    // word character, so a bare `\b` before the key word never fired there.
+    // The lookbehind lets a match start only where such a word starts: with a
+    // plain `\b` the prefix group was retried at every hyphen of a long run.
     name: 'generic-secret-assignment',
-    re: /["']?\b(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
+    re: /["']?(?<![A-Za-z0-9_-])(?:[A-Za-z0-9]+[_-])*(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
   },
 ];
 

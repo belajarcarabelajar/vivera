@@ -47,6 +47,7 @@ import {
   splitFrontmatter, hashOf, issueBody, issueTitle, parseTrailer, PLAN_LABEL, ISSUE_FORMAT,
   PLAN_LABEL_COLOR, PLAN_LABEL_DESCRIPTION,
 } from './lib/plan-issue-render.mjs';
+import { assertOwnIssue } from './lib/sync-guards.mjs';
 
 // The rendering lives in scripts/lib/plan-issue-render.mjs; re-exported so every
 // caller keeps importing it from here.
@@ -252,11 +253,12 @@ export function readLiveState(run, { number, repo }) {
 export const LIST_LIMIT = 1000;
 
 // An issue filed before format 2 carries the plan_id as its title, so both the
-// current title and the plan_id are looked up; the trailer decides ownership.
+// current title and the plan_id are looked up; the trailer and the author
+// decide ownership.
 export function findExistingIssue(run, { repo, title, key, planId: id = title }) {
   // No --search: that reads the search index, which lags a fresh create. The plain
   // list reads the repository's issues directly.
-  const argv = ['issue', 'list', '--repo', repo, '--state', 'all', '--limit', String(LIST_LIMIT), '--json', 'number,title,url,state'];
+  const argv = ['issue', 'list', '--repo', repo, '--state', 'all', '--limit', String(LIST_LIMIT), '--json', 'number,title,url,state,author'];
   const refuse = (why) => new Error(
     `the lookup for an existing issue titled "${title}" (key ${key}) in ${repo} refused: ${why}. `
     + 'Nothing was created and nothing was written.',
@@ -298,14 +300,13 @@ export function findExistingIssue(run, { repo, title, key, planId: id = title })
     throw refuse(`${found.length} issues carry this exact title: ${found.map(describe).join(', ')}. Adopting one would leave the rest as duplicates, so record the right number in plan.issues.json by hand and re-run`);
   }
   const [{ row, trailer }] = found;
-  // Anyone can type a title; only this script writes a trailer with the plan's key,
-  // so the trailer is the proof the issue belongs to this plan.
   if (!trailer || trailer.key !== key || trailer.plan_id !== id) {
     throw refuse(`${describe(found[0])} has this exact title but its trailer does not name this plan, so it may be somebody else's issue. Retitle it or record its number in plan.issues.json by hand, then re-run`);
   }
   if (row.state !== 'OPEN' && row.state !== 'CLOSED') {
     throw refuse(`#${row.number} is in state ${JSON.stringify(row.state)}, which is neither OPEN nor CLOSED`);
   }
+  assertOwnIssue(run, row, refuse);
   return { number: row.number, url: row.url, state: row.state.toLowerCase(), hash: trailer.hash, format: trailer.format };
 }
 

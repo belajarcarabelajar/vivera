@@ -199,9 +199,29 @@ export function toRepoRelative(root, file) {
 const SYNC_BACKUP_NAME = /^backup-\d{4}-\d{2}-\d{2}-sync$/;
 
 /**
+ * Copy the graph to `backup-<stamp>-sync/graph.json` in `outDir`, unless that
+ * file already exists. The first backup of the day is kept: a second sync the
+ * same day would otherwise replace it with a graph that may already carry the
+ * first sync's mistake (owner 2026-11-05).
+ *
+ * @param {string} outDir
+ * @param {string} graphPath
+ * @param {string} stamp YYYY-MM-DD
+ * @returns {{ dir: string, kept: boolean }} kept is true when the existing file was left alone
+ */
+export function writeSyncBackup(outDir, graphPath, stamp) {
+  const dir = join(outDir, `backup-${stamp}-sync`);
+  if (existsSync(join(dir, 'graph.json'))) return { dir, kept: true };
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(graphPath, join(dir, 'graph.json'));
+  return { dir, kept: false };
+}
+
+/**
  * Remove every `backup-YYYY-MM-DD-sync` directory in `outDir` except `keep`.
  * Exactly one backup stays because the graph holds LLM-extracted concept nodes
- * that an offline rebuild cannot recreate.
+ * that an offline rebuild cannot recreate. That one is the first backup of its
+ * day (see writeSyncBackup), so later syncs that day never overwrite it.
  *
  * @param {string} outDir
  * @param {string} keep
@@ -369,11 +389,9 @@ function main() {
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const backupDir = join(root, 'graphify-out', `backup-${stamp}-sync`);
-  mkdirSync(backupDir, { recursive: true });
-  copyFileSync(graphPath, join(backupDir, 'graph.json'));
+  const { dir: backupDir, kept } = writeSyncBackup(join(root, 'graphify-out'), graphPath, stamp);
   const written = writeGraph(graph, graphPath);
-  console.log(`  backup:            ${backupDir}/graph.json`);
+  console.log(`  backup:            ${backupDir}/graph.json${kept ? ' (kept: first backup of the day)' : ''}`);
   console.log(`  wrote ${written.path} (${written.bytes} bytes, ${graph.nodes.length} nodes, ${graph.links.length} links)`);
   const pruned = pruneSyncBackups(join(root, 'graphify-out'), basename(backupDir));
   console.log(`  pruned:            ${pruned.length} older backup(s)`);

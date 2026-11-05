@@ -699,7 +699,7 @@ test('a dry run reports the action and records nothing', () => {
       // AC4: the dry run still looks before it would create, so the list is its one call.
       assert.equal(
         g.argv(),
-        'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state\n',
+        'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state,author\n',
         'a dry run makes the issue-list read and no other gh call',
       );
     });
@@ -908,6 +908,7 @@ function ghAnswers({ list = [], listResult = null, bodies = {}, state = 'OPEN' }
     const verb = args.slice(0, 2).join(' ');
     const json = args[args.indexOf('--json') + 1];
     if (verb === 'issue list') return listResult ?? { ok: true, status: 0, out: JSON.stringify(list) };
+    if (verb === 'api user') return { ok: true, status: 0, out: 'me' };
     if (verb === 'issue view' && json === 'body') return { ok: true, status: 0, out: JSON.stringify({ body: bodies[args[2]] }) };
     if (verb === 'issue view') return { ok: true, status: 0, out: JSON.stringify({ state }) };
     const url = 'https://github.com/u/snippet/issues/11';
@@ -916,8 +917,8 @@ function ghAnswers({ list = [], listResult = null, bodies = {}, state = 'OPEN' }
 }
 
 const TITLE = '2026-10-01-add-pr';
-const LIST_ARGV = 'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state';
-const issueRow = (number, title = TITLE, state = 'OPEN') => ({ number, title, url: `https://github.com/u/snippet/issues/${number}`, state });
+const LIST_ARGV = 'issue list --repo u/snippet --state all --limit 1000 --json number,title,url,state,author';
+const issueRow = (number, title = TITLE, state = 'OPEN') => ({ number, title, url: `https://github.com/u/snippet/issues/${number}`, state, author: { login: 'me' } });
 const trailerBody = (text, key = PLAN_REL) => issueBody(text, { planId: TITLE, key, sourcePath: null, status: planStatus(text), generatedBy: 'u/snippet' });
 const verbs = (run) => run.calls.map((c) => c.args.slice(0, 2).join(' '));
 const refusal = (...needles) => (e) => e.message.includes('u/snippet')
@@ -947,7 +948,7 @@ test('an unrecorded plan whose issue exists with this trailer is adopted', () =>
   try {
     const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(text) } });
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue view'], 'an adopted issue is never filed a second time');
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'api user'], 'an adopted issue is never filed a second time');
     assert.equal(run.calls[1].args.join(' '), 'issue view 5 --repo u/snippet --json body');
     assert.equal(res.action, 'adopt');
     assert.equal(res.written, true, 'a current adopted issue is still recorded');
@@ -1074,7 +1075,7 @@ test('a dry run on an unrecorded plan reads and writes nothing', () => {
     assert.equal(res.dryRun, true);
     assert.equal(res.action, 'adopt');
     assert.equal(res.cfg, undefined, 'a dry run must not hand back a config to persist');
-    assert.deepEqual(verbs(run), ['issue list', 'issue view']);
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'api user']);
   } finally {
     f.cleanup();
   }
@@ -1085,8 +1086,8 @@ test('an adopted issue whose plan changed is edited and marked adopted', () => {
   try {
     const run = ghAnswers({ list: [issueRow(5)], bodies: { 5: trailerBody(plan('Draft')) } });
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
-    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'label create', 'issue edit']);
-    assert.equal(run.calls[3].args[2], '5', 'the edit goes to the adopted issue');
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'api user', 'label create', 'issue edit']);
+    assert.equal(run.calls[4].args[2], '5', 'the edit goes to the adopted issue');
     assert.equal(res.action, 'update-body');
     assert.equal(res.adopted, true);
     assert.equal(res.cfg.issues[PLAN_REL].number, 5);
@@ -1115,7 +1116,7 @@ test('an adopted CLOSED issue of an open plan is reopened from the observed stat
     const run = ghAnswers({ list: [issueRow(5, TITLE, 'CLOSED')], bodies: { 5: trailerBody(text) } });
     const res = syncOne(cfgFor(f.repoRoot), { planPath: f.full, repoRoot: f.repoRoot, run });
     // The list row is the observation; assuming "open" would record CLOSED as current.
-    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'issue reopen']);
+    assert.deepEqual(verbs(run), ['issue list', 'issue view', 'api user', 'issue reopen']);
     assert.equal(res.action, 'update-state');
     assert.equal(res.adopted, true);
     assert.equal(res.cfg.issues[PLAN_REL].state, 'open');

@@ -50,7 +50,6 @@
 // from git — that only resurrects copies of files you still have.
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +59,7 @@ import {
 import {
   mergeFrontmatter, splitFrontmatter, PUBLISHER_VERSION,
 } from './plan-publish-frontmatter.mjs';
+import { stageInVault, isUnstaged } from './lib/sync-guards.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -238,27 +238,7 @@ function protectedReason(registry, dest) {
   return null;
 }
 
-// ---------- vault staging ----------
-
-// Stage ONLY the one file just written. The vault's
-// .obsidian/plugins/obsidian-git/data.json sets autoCommitOnlyStaged: true, so
-// without an explicit `git add` the Obsidian Git plugin never commits a mirror
-// and the copy silently rots in the working tree. This deliberately does NOT
-// commit and does NOT push: a mirror is derived state, and committing is the
-// vault owner's decision about their own history, made by the plugin on their
-// schedule. A staging failure is reported as a failure, not swallowed, because
-// the failure mode it prevents is silent.
-function stageInVault(registry, dest) {
-  const r = spawnSync('git', ['-C', path.resolve(registry.vault), 'add', '--', path.resolve(dest)], {
-    encoding: 'utf8',
-  });
-  if (r.error) return `cannot run git: ${r.error.message}`;
-  if (r.status !== 0) {
-    const first = (r.stderr || r.stdout || '').trim().split('\n')[0];
-    return `git add failed (exit ${r.status}): ${first || 'no output'}`;
-  }
-  return null;
-}
+// Vault staging (stageInVault, isUnstaged) lives in scripts/lib/sync-guards.mjs.
 
 // ---------- the transform's ctx ----------
 
@@ -308,18 +288,22 @@ function publishOne(registry, rawPlanPath, opts) {
   const stale = stalenessReason(readMirrorState(dest), hash);
 
   if (!stale) {
+    // A mirror whose earlier staging failed is current but unstaged: stage it now.
+    const stage = !opts.dryRun && registry.stageInVault && isUnstaged(registry, dest);
+    const err = stage && stageInVault(registry, dest);
+    if (err) throw new Error(`${dest} is current but not staged: ${err}`);
     if (opts.dryRun) {
       console.log(`🔍 DRY-RUN ${planPath}`);
       console.log(`            dest: ${dest}`);
       console.log(`            would not write: source_hash ${hash} already matches (SKIPPED-IDEMPOTENT)`);
     } else {
-      console.log(`⏭️  SKIPPED-IDEMPOTENT ${planPath} -> ${dest} (source_hash ${hash} unchanged)`);
+      console.log(`⏭️  SKIPPED-IDEMPOTENT ${planPath} -> ${dest} (source_hash ${hash} unchanged)${stage ? ' [staged in vault]' : ''}`);
     }
     // `skipped` is what distinguishes "the freshness rule said this mirror is
     // already current" from "--dry-run decided not to write anything". The bulk
     // path needs the difference: only the first one is a real no-op, and only
     // the second one is something a dry run is expected to produce in bulk.
-    return { dest, written: false, staged: false, skipped: true };
+    return { dest, written: false, staged: Boolean(stage), skipped: true };
   }
 
   const out = mergeFrontmatter(planText, publishCtx(registry, project, planPath, opts));

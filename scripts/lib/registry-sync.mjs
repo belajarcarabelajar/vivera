@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { loadRegistry, mutateRegistry, setPr } from '../pr-registry.mjs';
+import { maskUserinfo } from './sync-guards.mjs';
 
 const DAY_MS = 86400000;
 const LIVE_STATES = ['isolated', 'active', 'verified', 'open'];
@@ -58,7 +59,7 @@ function resolveSlug(repoPath, cache) {
   if (!cache.has(repoPath)) {
     const r = run('git', ['-C', repoPath, 'remote', 'get-url', 'origin']);
     const slug = r.ok ? parseRemote(r.out) : null;
-    cache.set(repoPath, slug ? { slug } : { error: `cannot resolve owner/repo for ${repoPath}: ${r.ok ? `unrecognised origin ${r.out}` : r.err}` });
+    cache.set(repoPath, slug ? { slug } : { error: `cannot resolve owner/repo for ${repoPath}: ${r.ok ? `unrecognised origin ${maskUserinfo(r.out)}` : r.err}` });
   }
   return cache.get(repoPath);
 }
@@ -161,6 +162,10 @@ function hasWorktree(repo, worktree, branch) {
   });
 }
 
+// Registry refs are validated at load; this also stops git reading one as an
+// option. Left out of the printed command, which is what a person would type.
+const EOO = '--end-of-options';
+
 export function setupWorktree(session, repoRoot) {
   const repo = session.repo ?? path.resolve(repoRoot);
   if (existsSync(session.worktree) && hasWorktree(repo, session.worktree, session.branch)) {
@@ -177,10 +182,10 @@ export function setupWorktree(session, repoRoot) {
   const external = Boolean(root) && session.worktree.startsWith(`${path.resolve(root)}${path.sep}`);
   const add = external
     ? ['wt-new', session.branch, path.basename(session.worktree), ...(branchExists ? [] : ['--from', `origin/${session.base}`])]
-    : ['git', 'worktree', 'add', session.worktree, ...(branchExists ? [session.branch] : ['-b', session.branch, `origin/${session.base}`])];
-  for (const [cmd, ...args] of [['git', 'worktree', 'prune'], ['git', 'fetch', 'origin', session.base], add]) {
+    : ['git', 'worktree', 'add', session.worktree, ...(branchExists ? [EOO, session.branch] : ['-b', session.branch, EOO, `origin/${session.base}`])];
+  for (const [cmd, ...args] of [['git', 'worktree', 'prune'], ['git', 'fetch', EOO, 'origin', session.base], add]) {
     const r = cmd === 'git' ? run(cmd, ['-C', repo, ...args]) : run(cmd, args, { cwd: repo });
-    console.log(`${r.ok ? 'ok' : 'FAILED'}: ${cmd} ${args.join(' ')} (in ${repo})`);
+    console.log(`${r.ok ? 'ok' : 'FAILED'}: ${cmd} ${args.filter((a) => a !== EOO).join(' ')} (in ${repo})`);
     if (!r.ok) {
       console.error(r.err);
       return 1;
@@ -210,7 +215,7 @@ export function openPr({ registryPath, rootDir, positional, flags }) {
     throw new Error(`session "${s.session}" is ${s.state}; open needs a verified session, so run the local checks and the diff audit first`);
   }
   const cwd = s.repo ?? rootDir;
-  const push = run('git', ['-C', cwd, 'push', '-u', 'origin', s.branch]);
+  const push = run('git', ['-C', cwd, 'push', '-u', EOO, 'origin', s.branch]);
   console.log(`${push.ok ? 'ok' : 'FAILED'}: git push -u origin ${s.branch} (in ${cwd})`);
   if (!push.ok) {
     console.error(push.err);
@@ -225,7 +230,16 @@ export function openPr({ registryPath, rootDir, positional, flags }) {
   }
   const m = /\/pull\/(\d+)/.exec(r.out);
   if (!m) throw new Error(`gh pr create printed no PR URL: ${r.out}`);
-  const { result } = mutateRegistry((registry) => setPr(registry, s.session, Number(m[1])), { registryPath });
+  let result;
+  try {
+    ({ result } = mutateRegistry((registry) => setPr(registry, s.session, Number(m[1])), { registryPath }));
+  } catch (e) {
+    // The PR exists on GitHub now, so the only safe recovery is recording it.
+    console.log(r.out);
+    console.error(`error: PR #${m[1]} was created but not recorded: ${e.message}`);
+    console.error(`Record it once the registry loads: bun scripts/pr-registry.mjs pr ${s.session} --number ${m[1]}`);
+    return 1;
+  }
   console.log(r.out);
   console.log(`✅ recorded PR #${result.session.pr} for ${result.session.session} (${result.session.state})`);
   return 0;

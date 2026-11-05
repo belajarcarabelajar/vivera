@@ -18,6 +18,8 @@ import { missingTestPaths } from './lib/test-paths.mjs';
 import { run, STEP_MAX_BUFFER } from './lib/runner-process.mjs';
 import { validateImpacts } from './lib/plan-impacts.mjs';
 import { validateTraceability } from './lib/plan-traceability.mjs';
+import { isStepTimeout, validateRunnerNumbers } from './lib/plan-runner-numbers.mjs';
+import { escapeRe } from './lib/escape-re.mjs';
 
 export { reapGroup } from './lib/runner-process.mjs';
 
@@ -526,11 +528,6 @@ export function parseMermaidMaps(body) {
 // already said by omitting the key, and a sentinel for it would be a second
 // spelling of absence. So `loop_until: "false"` is not a valid no-op: it is a
 // shell command, it exits 1, and the step can never converge.
-// A step's own timeout_s replaces defaults.step_timeout_s for its cmd and probe.
-function isStepTimeout(v) {
-  return typeof v === 'number' && Number.isFinite(v) && v > 0;
-}
-
 function loopUntilShape(step, taskId, index, errors, warnings) {
   if (step.loop_until === undefined) return null; // absence stays legal
   const v = step.loop_until;
@@ -589,6 +586,7 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
     }
   }
   try { topoSort(plan.tasks || []); } catch (e) { errors.push(e.message); }
+  validateRunnerNumbers(plan, errors);
 
   // Execution-hook contract. A task is machine-runnable only when it declares
   // `run[]`. A task with no `run[]` is handed to the agent as prose, which is
@@ -614,9 +612,6 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
         // a validation error naming the task and step, not a runtime surprise
         // discovered once the step's own work is already done.
         loopUntilShape(step, t.id, i, errors, warnings);
-        if (step.timeout_s !== undefined && !isStepTimeout(step.timeout_s)) {
-          errors.push(`task ${t.id} run[${i}] timeout_s must be a positive number of seconds, got ${JSON.stringify(step.timeout_s)}`);
-        }
       });
       continue;
     }
@@ -699,7 +694,7 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
       const depsOf = new Map((plan.tasks || []).map((t) => [t.id, t.depends_on || []]));
 
       for (const t of plan.tasks || []) {
-        const headingRe = new RegExp(`Task\\s+${t.id}\\b`);
+        const headingRe = new RegExp(`Task\\s+${escapeRe(String(t.id))}\\b`);
         if (!headingRe.test(body)) errors.push(`task ${t.id} has no matching "Task ${t.id}" heading in body`);
         if (!nodes.has(t.id)) errors.push(`task ${t.id} has no matching node in the mermaid map`);
       }

@@ -346,9 +346,9 @@ const ANY_HEADING_RE = /^#{1,6}[ \t]+/;
 //
 // The colon is allowed on EITHER side of the closing emphasis, because both
 // spellings occur in real plans: `**Status:** Complete` and `**Status**:
-// Complete`. Writing the pattern for only one of them was a real miss, caught
-// by a test fixture rather than by reading the plans it was meant to describe.
-const BODY_COMPLETE_RE = /^[ \t]*(?:[-*+][ \t]+)?\**[ \t]*status[ \t]*\**[ \t]*:?[ \t]*\**[ \t]*:?[ \t]*`?Complete`?[ \t]*\**[ \t]*$/i;
+// Complete`. A normalised compare, not a regex: the old pattern backtracked
+// super-linearly, 5.9 s on `status` plus 200 spaces plus `x`.
+const isBodyComplete = (l) => l.replace(/^[ \t]*[-*+][ \t]+/, '').replace(/[*`:\s]/g, '').toLowerCase() === 'statuscomplete';
 
 // Step checkboxes inside `### Task <id>` sections ONLY. The acceptance list in
 // section 1 and the approval gate in section 7 are not steps; counting them
@@ -397,7 +397,7 @@ export function staleStatusCandidates(planText, { mtimeMs = null, nowMs = Date.n
   const steps = stepTally(body);
   const signals = [];
 
-  if (body.some((l) => BODY_COMPLETE_RE.test(l))) signals.push('CONTRADICTED');
+  if (body.some(isBodyComplete)) signals.push('CONTRADICTED');
   if (steps && steps.unticked === 0) signals.push('FULLY-TICKED');
 
   let ageDays = null;

@@ -309,7 +309,9 @@ function firstBlocked(commands, depth) {
   const vars = new Map();
   for (const tokens of commands) {
     if (tokens.every((t) => ASSIGNMENT.test(t))) {
-      for (const t of tokens) vars.set(t.slice(0, t.indexOf("=")), t.slice(t.indexOf("=") + 1));
+      // Resolving at assignment time, as bash does, keeps every stored value final, so a chain
+      // like H=$G resolves in one step and a loop like G=$H; H=$G cannot recurse.
+      for (const t of tokens) vars.set(t.slice(0, t.indexOf("=")), expand([t.slice(t.indexOf("=") + 1)], vars).join(" "));
     }
     const label = blockedLabel(expand(tokens, vars), depth);
     if (label) return label;
@@ -418,7 +420,12 @@ function blockedLabel(tokens, depth = 0) {
     rest = [...words.slice(1), ...rest];
     sub = words[0];
   }
-  if (sub === "hash-object") return hasFlag(splitArgs(rest).flags, [], "w") ? "git hash-object" : null;
+  if (sub === "hash-object") {
+    // In a cluster, the letters after t are the object type (-tw is type "w"), not more flags.
+    const writes = rest.some((a, k) =>
+      /^-[^-]/.test(a) && a.slice(1).split("t")[0].includes("w") && rest[k - 1] !== "-t" && rest[k - 1] !== "--type");
+    return writes ? "git hash-object" : null;
+  }
   return gitWrites(sub, rest) ? `git ${sub}` : null;
 }
 

@@ -262,6 +262,10 @@ const AUDIT_BLOCKED = [
   '$"git" push',
   "G=git; $G push",
   "G=git && ${G} push",
+  "G=git; H=$G; $H push",
+  "G=git; H=${G}; I=$H; $I push",
+  "git hash-object -t blob -w f",
+  "git hash-object --stdin -w",
 ];
 
 const AUDIT_ALLOWED = [
@@ -270,6 +274,12 @@ const AUDIT_ALLOWED = [
   "git status",
   "git log --oneline",
   "git hash-object f",
+  "git hash-object -tw f",
+  "git hash-object -t w f",
+  "git hash-object --type w f",
+  "git hash-object --type=w f",
+  "H=$UNKNOWN; $H push",
+  "G=$H; H=$G; $G push",
   '"$BUN" test',
   "echo $((1<<2))",
   "cat <<EOF\ngit push origin main\ngit commit -m x\nEOF\nls",

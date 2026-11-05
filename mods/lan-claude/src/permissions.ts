@@ -9,12 +9,21 @@ export type Pending = {
   job: string;
   tool: string;
   summary: string;
+  /** The summary was cut, so the phone cannot see the whole request: only Deny is offered there. */
+  truncated?: boolean;
   createdAt: number;
 };
 
 type Entry = Pending & { resolve: (d: Decision) => void; promise: Promise<Decision> };
 
+const SUMMARY_MAX = 600;
+
 export function summarizeTool(tool: string, input: unknown): string {
+  const s = fullSummary(tool, input);
+  return s.length > SUMMARY_MAX ? s.slice(0, SUMMARY_MAX) + " …" : s;
+}
+
+function fullSummary(tool: string, input: unknown): string {
   const i = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const pick = (k: string) => (typeof i[k] === "string" ? (i[k] as string) : "");
   const s =
@@ -22,7 +31,7 @@ export function summarizeTool(tool: string, input: unknown): string {
     : ["Edit", "Write", "Read", "NotebookEdit"].includes(tool) ? pick("file_path") || pick("notebook_path")
     : tool === "WebFetch" ? pick("url")
     : JSON.stringify(i);
-  return s.length > 600 ? s.slice(0, 600) + " …" : s;
+  return s;
 }
 
 export type BoardEvent =
@@ -46,13 +55,15 @@ export class PermissionBoard {
     }
   }
 
-  constructor(private waitMs: number, private now = () => Date.now()) {}
+  /** `allowBlocked` returns why no request may be allowed right now (the kill switch), or null. */
+  constructor(private waitMs: number, private now = () => Date.now(), private allowBlocked: () => string | null = () => null) {}
 
   open(job: string, tool: string, input: unknown): Pending {
     const id = randomBytes(6).toString("hex");
     let resolve!: (d: Decision) => void;
     const promise = new Promise<Decision>((r) => (resolve = r));
-    const entry: Entry = { id, job, tool, summary: summarizeTool(tool, input), createdAt: this.now(), resolve, promise };
+    const truncated = fullSummary(tool, input).length > SUMMARY_MAX;
+    const entry: Entry = { id, job, tool, summary: summarizeTool(tool, input), truncated, createdAt: this.now(), resolve, promise };
     this.entries.set(id, entry);
     const t = setTimeout(() => this.finish(id, "none", "timeout"), this.waitMs);
     promise.finally(() => clearTimeout(t));
@@ -65,8 +76,23 @@ export class PermissionBoard {
     return this.entries.get(id)?.promise ?? Promise.resolve("none");
   }
 
+  /** Allow is refused (false, the request stays open) when `allowRefusal` gives a reason; deny always works. */
   decide(id: string, d: "allow" | "deny", by = "web"): boolean {
+    if (d === "allow" && this.allowRefusal(id)) return false;
     return this.finish(id, d, by);
+  }
+
+  /** Why allowing this request is refused (Indonesian, for the user), or null when it may be allowed. */
+  allowRefusal(id: string): string | null {
+    const e = this.entries.get(id);
+    if (!e) return null;
+    if (e.truncated) return "Ringkasan permintaan ini terpotong; Izinkan hanya bisa di PC, jawab di PC.";
+    return this.allowBlocked();
+  }
+
+  /** Resolves every open request as deny (the kill switch turned on). */
+  denyAll(by: string): void {
+    for (const id of [...this.entries.keys()]) this.finish(id, "deny", by);
   }
 
   list(): Pending[] {
@@ -83,7 +109,7 @@ export class PermissionBoard {
   }
 
   private view(e: Entry): Pending {
-    return { id: e.id, job: e.job, tool: e.tool, summary: e.summary, createdAt: e.createdAt };
+    return { id: e.id, job: e.job, tool: e.tool, summary: e.summary, truncated: e.truncated, createdAt: e.createdAt };
   }
 }
 

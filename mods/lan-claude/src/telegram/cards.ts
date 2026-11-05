@@ -95,12 +95,17 @@ export function startupCard(label: string, kind: "trust" | "imports", summary: s
 
 export function permissionCard(p: Pending, job: Job | undefined): Card {
   const where = job ? `${folderLabel(job.folder)} · ${cut(job.prompt, 120)}` : p.job;
+  const deny = { text: "⛔ Tolak", callback_data: lcData("pd", p.id) };
+  // A cut summary hides part of the request, so allowing it from the phone would be allowing unseen text.
+  if (p.truncated) {
+    return {
+      text: cut(`🔐 Minta izin: ${p.tool}\n\n${p.summary}\n\n⚠️ Ringkasan terpotong: Izinkan hanya bisa di PC, jawab di PC. Tolak tetap bisa dari sini.\n\n${where}`, TEXT_MAX),
+      keyboard: [[deny]],
+    };
+  }
   return {
     text: cut(`🔐 Minta izin: ${p.tool}\n\n${p.summary}\n\n${where}`, TEXT_MAX),
-    keyboard: [[
-      { text: "✅ Izinkan", callback_data: lcData("pa", p.id) },
-      { text: "⛔ Tolak", callback_data: lcData("pd", p.id) },
-    ]],
+    keyboard: [[{ text: "✅ Izinkan", callback_data: lcData("pa", p.id) }, deny]],
   };
 }
 

@@ -26,6 +26,7 @@ const permState = new Map<string, PermState>();
 const PERMISSION_WAIT = "permission prompt";
 // Start-up dialogs (trust, external imports) per launched job that has no live session yet.
 const startupState = new Map<string, { text: string; kind: string }>();
+const answeringStartup = new Set<string>(); // job ids whose start-up dialog is being answered
 
 
 export type WatchEvent =
@@ -75,7 +76,7 @@ export async function sendToSession(key: string, textIn: string, via: Via): Prom
   const text = textIn.trim();
   if (!text || text.length > 8000) throw new UserError("Pesan kosong atau terlalu panjang.");
   const w = watch(key);
-  if (!isReady(s.status) || w.queued.length > 0) {
+  if (!isReady(s.status) || w.queued.length > 0 || switching.has(key)) {
     w.queued.push(text);
     saveQueues();
     log("followup_queued", { session: key, via, status: s.status, chars: text.length });
@@ -143,12 +144,20 @@ export async function watchTick(): Promise<void> {
       w.announced = true;
       emitWatch({ type: "turn_end", session: s, text: lastAssistantText(config.home, s) });
     }
-    if (!ready || w.queued.length === 0) continue;
+    // Kill switch on: the queue is frozen as it is (memory and queues.json) until it goes off.
+    if (!ready || w.queued.length === 0 || killed()) continue;
     const text = w.queued.join("\n\n");
     w.queued = [];
     saveQueues();
     try {
       await Bun.sleep(1500); // let the TUI settle back to its input box
+      // The session may have changed during the pause (a new turn, a picker, the kill switch).
+      const now = findLive(key);
+      if (!now || !isReady(now.status) || switching.has(key) || killed()) {
+        w.queued.unshift(text);
+        saveQueues();
+        continue;
+      }
       await pasteText(s.pane, text);
       w.since = Date.now();
       w.announced = false;
@@ -250,28 +259,38 @@ export async function answerStartupDialog(jobId: string, accept: boolean, via: V
   const job = jobs.get(jobId);
   const st = startupState.get(jobId);
   if (!job?.windowId || !st) throw new UserError("Dialog itu sudah tidak aktif.");
-  const read = async () => parseStartupDialog((await capture(job.windowId!, 40)) ?? "");
+  if (answeringStartup.has(jobId)) throw new UserError("Dialog itu sedang diproses.");
+  answeringStartup.add(jobId);
+  try {
+    await answerStartupChecked(job.windowId, st, accept);
+  } finally {
+    answeringStartup.delete(jobId);
+  }
+  log("startup_dialog_answer", { job: jobId, kind: st.kind, decision: accept ? "accept" : "decline", via });
+}
+
+async function answerStartupChecked(win: string, st: { text: string; kind: string }, accept: boolean): Promise<void> {
+  const read = async () => parseStartupDialog((await capture(win, 40)) ?? "");
   let d = await read();
   if (!d || d.text !== st.text) throw new UserError("Dialog di PC sudah berubah atau dijawab di PC.");
   if (accept) {
     const cur = d.options.findIndex((o) => o.cursor);
     if (cur < 0) throw new UserError("Kursor dialog tidak terbaca; jawab di PC.");
     for (let i = 0; i < Math.abs(d.accept - cur); i++) {
-      await pressKeys(job.windowId, d.accept > cur ? "Down" : "Up");
+      await pressKeys(win, d.accept > cur ? "Down" : "Up");
       await Bun.sleep(150);
     }
     d = await read();
     if (!d || d.text !== st.text || d.options.findIndex((o) => o.cursor) !== d.accept) {
       throw new UserError("Kursor tidak berada di pilihan 'Yes'; tidak ada yang ditekan, jawab di PC.");
     }
-    await pressKeys(job.windowId, "Enter");
+    await pressKeys(win, "Enter");
   } else {
-    await pressKeys(job.windowId, "Escape");
+    await pressKeys(win, "Escape");
   }
   await Bun.sleep(1800);
   const after = await read();
   if (after && after.text === st.text) throw new UserError("Tombol sudah dikirim tapi dialog masih terbuka; cek di PC.");
-  log("startup_dialog_answer", { job: jobId, kind: st.kind, decision: accept ? "accept" : "decline", via });
 }
 
 /** Starts watching a session for turn ends (e.g. the session in focus after a restart). */

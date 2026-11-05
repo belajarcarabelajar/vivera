@@ -67,6 +67,8 @@ async function api(req: Request, url: URL, ip: string): Promise<Response> {
   if (p === "/api/permission") {
     const b = (await req.json().catch(() => null)) as { id?: string; decision?: string } | null;
     if (!b?.id || (b.decision !== "allow" && b.decision !== "deny")) return fail("Keputusan tidak valid.");
+    const refused = b.decision === "allow" ? board.allowRefusal(b.id) : null;
+    if (refused) return fail(refused, 423);
     const ok = board.decide(b.id, b.decision, "halaman LAN");
     log("permission", { id: b.id, decision: b.decision, ok, ip });
     return json({ ok });

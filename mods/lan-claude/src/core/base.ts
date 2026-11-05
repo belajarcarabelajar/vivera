@@ -13,7 +13,8 @@ import { probeSeconds, transcribe } from "../transcribe";
 
 mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
 export const jobs = new JobStore(paths.jobs);
-export const board = new PermissionBoard(config.permissionWaitMs);
+export const board = new PermissionBoard(config.permissionWaitMs, undefined, () =>
+  killed() ? "Kill switch aktif; Izinkan ditolak (Tolak tetap bisa). Jawab di PC atau kirim /on dulu." : null);
 
 // dup-defs: allow the mod ships on its own and must not import another mod's internals; small local helper
 export function log(event: string, data: Record<string, unknown> = {}): void {
@@ -71,8 +72,10 @@ export function setLaunchEffort(e: string): void {
 
 export const killed = () => existsSync(paths.killSwitch);
 export function setKilled(on: boolean): void {
-  if (on) writeFileSync(paths.killSwitch, new Date().toISOString() + "\n");
-  else rmSync(paths.killSwitch, { force: true });
+  if (on) {
+    writeFileSync(paths.killSwitch, new Date().toISOString() + "\n");
+    board.denyAll("kill switch");
+  } else rmSync(paths.killSwitch, { force: true });
 }
 /**
  * Quick list on the phone: folders Claude Code already trusts (no dialog on start) and the home folder.
@@ -138,18 +141,32 @@ export async function draftFromText(text: string, via: Via): Promise<Job> {
   return draftFrom("text", via, t);
 }
 
+// Jobs between the checks in launch() and their status write: the status is only written after awaits,
+// so without this set a double tap (or two launches near the hourly limit) passes the checks twice.
+const launching = new Set<string>();
+
 export async function launch(jobId: string, promptIn: string, folderIn: string, via: Via): Promise<Job> {
   if (killed()) throw new UserError("Kill switch aktif.", 423);
   const job = jobs.get(jobId);
   if (!job || job.status !== "draft") throw new UserError("Job tidak ditemukan atau sudah dijalankan.");
+  if (launching.has(job.id)) throw new UserError("Job itu sedang dijalankan.", 409);
   const prompt = promptIn.trim().replace(/^[-\s]+/, "");
   if (!prompt || prompt.length > 8000) throw new UserError("Prompt kosong atau terlalu panjang.");
   if (!folderIn.trim()) throw new UserError("Pilih folder dulu.");
   const folder = validateFolder(folderIn, config.home);
   if (!folder) throw new UserError("Folder itu tidak ada atau bukan folder.");
-  if (jobs.launchesSince(Date.now() - 3600_000) >= config.maxLaunchesPerHour) {
+  if (jobs.launchesSince(Date.now() - 3600_000) + launching.size >= config.maxLaunchesPerHour) {
     throw new UserError(`Batas ${config.maxLaunchesPerHour} sesi per jam tercapai.`, 429);
   }
+  launching.add(job.id);
+  try {
+    return await launchChecked(job, prompt, folder, via);
+  } finally {
+    launching.delete(job.id);
+  }
+}
+
+async function launchChecked(job: Job, prompt: string, folder: string, via: Via): Promise<Job> {
   const session = await findTargetSession();
   if (!session) throw new UserError("Alacritty dengan tmux tidak terbuka di PC.", 409);
   jobs.writePrompt(job.id, prompt);

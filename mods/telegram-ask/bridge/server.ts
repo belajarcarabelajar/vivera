@@ -194,9 +194,19 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       const open = tap.kind === 'send' ? unanswered(next) : []
       const ack = answerCallback(cq.id, open.length > 0 ? `Belum dijawab: pertanyaan ${open.join(', ')}` : undefined)
       if (next === entry.state) return { consumed: true, done: ack }
-      if (tap.kind === 'other') entry.otherSeq = ++otherSeq
+      const cleared: Promise<void>[] = []
+      if (tap.kind === 'other') {
+        entry.otherSeq = ++otherSeq
+        // A typed reply goes to one ask only, so every other ask leaves typing mode
+        // and drops its "type your answer" line.
+        for (const [otherId, e] of asks) {
+          if (e === entry || e.result || e.state.awaitingOther === null) continue
+          e.state = { ...e.state, awaitingOther: null }
+          cleared.push(queueEdit(otherId, e, () => (e.result ? null : renderAsk(e.state))))
+        }
+      }
       entry.state = next
-      return { consumed: true, done: Promise.all([ack, settle(tap.id, entry)]).then(() => {}) }
+      return { consumed: true, done: Promise.all([ack, settle(tap.id, entry), ...cleared]).then(() => {}) }
     }
     const msg = update.message
     if (!msg || typeof msg !== 'object' || !fromOwner(msg.chat) || typeof msg.text !== 'string') return NO
@@ -327,21 +337,29 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     return Response.json({ ok: true })
   }
 
-  const server = Bun.serve({
-    unix: socketPath,
-    // Bun's default idleTimeout (10 s) would cut the /wait long-poll; seconds, capped at 255.
-    idleTimeout: Math.min(255, Math.ceil(waitMs / 1000) + 10),
-    async fetch(req) {
-      const parts = new URL(req.url).pathname.split('/').filter(Boolean)
-      if (req.method === 'GET' && parts.length === 1 && parts[0] === 'health') return Response.json({ ok: true })
-      if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)
-      if (req.method === 'POST' && parts.length === 1 && parts[0] === 'update') return onUpdate(req)
-      if (req.method === 'POST' && parts.length === 1 && parts[0] === 'notify') return onNotify(req)
-      if (req.method === 'GET' && parts.length === 2 && parts[0] === 'wait') return onWait(parts[1])
-      if (req.method === 'POST' && parts.length === 2 && parts[0] === 'resolve') return onResolve(parts[1], req)
-      return new Response('not found', { status: 404 })
-    },
-  })
+  // Bun creates the socket file with the process umask; 077 keeps it private
+  // before the chmod below, and the old umask comes back right after.
+  const umask = process.umask(0o077)
+  let server: ReturnType<typeof Bun.serve>
+  try {
+    server = Bun.serve({
+      unix: socketPath,
+      // Bun's default idleTimeout (10 s) would cut the /wait long-poll; seconds, capped at 255.
+      idleTimeout: Math.min(255, Math.ceil(waitMs / 1000) + 10),
+      async fetch(req) {
+        const parts = new URL(req.url).pathname.split('/').filter(Boolean)
+        if (req.method === 'GET' && parts.length === 1 && parts[0] === 'health') return Response.json({ ok: true })
+        if (req.method === 'POST' && parts.length === 1 && parts[0] === 'ask') return onAsk(req)
+        if (req.method === 'POST' && parts.length === 1 && parts[0] === 'update') return onUpdate(req)
+        if (req.method === 'POST' && parts.length === 1 && parts[0] === 'notify') return onNotify(req)
+        if (req.method === 'GET' && parts.length === 2 && parts[0] === 'wait') return onWait(parts[1])
+        if (req.method === 'POST' && parts.length === 2 && parts[0] === 'resolve') return onResolve(parts[1], req)
+        return new Response('not found', { status: 404 })
+      },
+    })
+  } finally {
+    process.umask(umask)
+  }
   chmodSync(socketPath, 0o600)
 
   return {

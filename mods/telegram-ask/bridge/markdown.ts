@@ -54,7 +54,9 @@ export function stripMarkdown(src: string): string {
 
 const FENCE = /^\s*(```|~~~)\s*([\w+-]*)\s*$/
 const TABLE_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$/
-const HEADING = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/
+// The closing # sequence is stripped by headingText: a lazy group before
+// `\s*#*\s*$` backtracks cubically on a long run of inner spaces.
+const HEADING = /^\s{0,3}#{1,6}\s+(.*)$/
 const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/
 const BULLET = /^(\s*)[-*+]\s+(.*)$/
 const QUOTE = /^\s{0,3}>\s?(.*)$/
@@ -66,6 +68,13 @@ function cells(line: string): string[] {
     .replace(/\|$/, '')
     .split('|')
     .map((c) => stripMarkdown(c.trim()))
+}
+
+function headingText(s: string): string {
+  const trimmed = s.trimEnd()
+  let end = trimmed.length
+  while (end > 0 && trimmed[end - 1] === '#') end--
+  return trimmed.slice(0, end).trimEnd()
 }
 
 function width(s: string): number {
@@ -119,7 +128,7 @@ export function markdownToHtml(src: string): string {
     }
     const heading = HEADING.exec(line)
     const bullet = BULLET.exec(line)
-    if (heading) out.push(`<b>${inlineMarkdown(heading[1])}</b>`)
+    if (heading) out.push(`<b>${inlineMarkdown(headingText(heading[1]))}</b>`)
     else if (RULE.test(line)) out.push('──────────')
     else if (bullet) out.push(`${bullet[1]}• ${inlineMarkdown(bullet[2])}`)
     else out.push(inlineMarkdown(line))

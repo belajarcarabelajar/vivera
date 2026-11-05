@@ -24,3 +24,15 @@ test('EMOJI_RE is global, so a line with two emoji reports both', () => {
   assert.ok(EMOJI_RE.flags.includes('g'));
   assert.equal(checkText('\u{1F680} and \u{1F4A1}', { where: 'x' })[0]?.detail, '\u{1F680} \u{1F4A1}');
 });
+
+test('a file that is one emoji alone is an icon, not decoration', () => {
+  assert.deepEqual(checkText('\u{1F319}\n', { where: 'books/x/icon.txt' }), []);
+});
+
+test('an emoji beside a word is still decoration', () => {
+  assert.deepEqual(checkText('\u{1F319} bulan', { where: 'x' }).map((v) => v.rule), ['emoji']);
+});
+
+test('two emoji alone are not an icon', () => {
+  assert.deepEqual(checkText('\u{1F319}\u{1F680}\n', { where: 'x' }).map((v) => v.rule), ['emoji']);
+});

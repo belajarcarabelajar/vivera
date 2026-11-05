@@ -26,7 +26,8 @@ export function validateRunnerNumbers(plan, errors) {
     errors.push(`defaults.retry_transient_max ${retryRule}, got ${JSON.stringify(d.retry_transient_max)}`);
   }
   for (const t of plan.tasks || []) {
-    if (t.id && (typeof t.id !== 'string' || !TASK_ID_RE.test(t.id))) {
+    // String(): YAML reads `id: 1` as a number, which the runner always accepted.
+    if (t.id && !TASK_ID_RE.test(String(t.id))) {
       errors.push(`task id ${JSON.stringify(t.id)} must match ^[A-Za-z0-9._-]+$`);
     }
     if (!Array.isArray(t.run)) continue;

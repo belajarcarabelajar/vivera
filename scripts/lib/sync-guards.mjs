@@ -34,7 +34,7 @@ export function assertSamePlan(existing, planSlug) {
 }
 
 // An origin URL may carry `user:token@`; an error message must not.
-export const maskUserinfo = (url) => String(url).replace(/\/\/[^/@\s]*@/g, '//***@');
+export const maskUserinfo = (url) => String(url).replace(/\/\/[^/\s]*@/g, '//***@');
 
 // The plan-sync trailer is plain text in a public issue, so a copy of it proves
 // nothing on its own. The issue must also be filed by the account gh runs as.

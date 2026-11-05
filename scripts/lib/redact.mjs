@@ -98,8 +98,10 @@ export const PATTERNS = [
     // an earlier pattern, or a bare run of non-delimiter characters. The label
     // may carry a `_` or `-` prefix (ANTHROPIC_API_KEY, DB_PASSWORD): `_` is a
     // word character, so a bare `\b` before the key word never fired there.
+    // The lookbehind lets a match start only where such a word starts: with a
+    // plain `\b` the prefix group was retried at every hyphen of a long run.
     name: 'generic-secret-assignment',
-    re: /["']?\b(?:[A-Za-z0-9]+[_-])*(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
+    re: /["']?(?<![A-Za-z0-9_-])(?:[A-Za-z0-9]+[_-])*(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
   },
 ];
 

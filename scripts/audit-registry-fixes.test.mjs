@@ -12,6 +12,7 @@ import path from 'node:path';
 import { claimSlot, loadRegistry } from './pr-registry.mjs';
 import { findExistingIssue } from './plan-issue-sync.mjs';
 import { issueBody } from './lib/plan-issue-render.mjs';
+import { maskUserinfo } from './lib/sync-guards.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const REGISTRY_CLI = path.join(HERE, 'pr-registry.mjs');
@@ -119,6 +120,11 @@ test('open prints the PR URL and the recovery command when recording the PR fail
 });
 
 // ---------- reconcile: origin URL with credentials ----------
+
+test('a password containing @ is masked whole', () => {
+  assert.equal(maskUserinfo('https://u:p@ss@example.com/a/b/c'), 'https://***@example.com/a/b/c');
+  assert.equal(maskUserinfo('https://example.com/a@b/c'), 'https://example.com/a@b/c');
+});
 
 test('reconcile masks the userinfo of an unrecognised origin URL', () => {
   const dir = tmp('mask');

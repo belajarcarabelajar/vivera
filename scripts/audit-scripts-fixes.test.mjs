@@ -75,6 +75,12 @@ test('a task id outside [A-Za-z0-9._-] is a validation error, not a SyntaxError'
     JSON.stringify(result.errors));
 });
 
+test('a numeric task id from YAML (id: 1) is not rejected by the id rule', () => {
+  const plan = { schema: 'ultra-plan/v1', tasks: [{ id: 1, depends_on: [], run: [{ cmd: 'true' }] }] };
+  const { errors } = validatePlan(plan, '### Task 1: x\n');
+  assert.ok(!errors.some((e) => e.includes('A-Za-z0-9._-')), JSON.stringify(errors));
+});
+
 // ---------- finding 42: the body Complete check is linear ----------
 
 const draftWithLine = (line) => ['---', 'schema: ultra-plan/v1', 'status: Draft', '---', '', '# P', '', line, ''].join('\n');
@@ -112,6 +118,20 @@ test('a secret name with a prefix such as ANTHROPIC_API_KEY or DB_PASSWORD is ma
     const r = redact(s);
     assert.equal(r.text, '[REDACTED:generic-secret-assignment]', `${s} -> ${r.text}`);
   }
+});
+
+// The label prefix group must not make the pattern retry at every hyphen of a
+// long run (review of this branch: 64 KB of "a-" took 1.4 s, main 0.6 ms).
+test('a 64 KB run of hyphenated words is redacted in under 50 ms', () => {
+  const src = `import { redact } from ${JSON.stringify(path.join(ROOT, 'scripts', 'lib', 'redact.mjs'))};
+const text = 'ab-'.repeat(32000) + 'x';
+const t0 = performance.now();
+redact(text);
+console.log(JSON.stringify({ ms: performance.now() - t0 }));`;
+  const r = spawnSync(process.execPath, ['-e', src], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.signal, null, 'redact ran past the 5 s kill timeout');
+  const { ms } = JSON.parse(r.stdout.trim());
+  assert.ok(ms < 50, `took ${ms.toFixed(1)} ms`);
 });
 
 test('a bare Anthropic key is masked', () => {

@@ -49,6 +49,8 @@ const JWT = [
   'ZmFrZS1zaWduYXR1cmUtZml4dHVyZQ', // base64("fake-signature-fixture")
 ].join('.');
 const BEARER_VALUE = 'ZmFrZS1iZWFyZXItdG9rZW4tZml4dHVyZQ';
+const ANTHROPIC_KEY = ['sk', 'ant', 'api03', 'A'.repeat(24)].join('-');
+const TG_TOKEN = `${'1234' + '56789'}:${'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cF'}${'aB3dE5'}`;
 const PEM_BLOCK = [
   '-----BEGIN RSA PRIVATE KEY-----',
   'cHJpdmF0ZS1maXh0dXJlLW5vdC1hLXNpZ25pbGcta2V5',
@@ -70,6 +72,8 @@ const SAMPLES = {
   'pem-private-key': PEM_BLOCK,
   'jwt': JWT,
   'bearer-token': `Bearer ${BEARER_VALUE}`,
+  'anthropic-api-key': ANTHROPIC_KEY,
+  'telegram-bot-token': TG_TOKEN,
   'totp-code': 'code: 483920',
   'generic-secret-assignment': 'api_key=synthetic-fixture-value-1',
 };
@@ -86,6 +90,8 @@ const PLANTED_DOCUMENT = [
   `- fine grained pat ${GH_FINE}`,
   `- authorization Bearer ${BEARER_VALUE}`,
   `- session jwt ${JWT}`,
+  `- anthropic ${ANTHROPIC_KEY}`,
+  `- bot ${TG_TOKEN}`,
   '- 2fa code: 483920',
   '- api_key=synthetic-fixture-value-1',
   '',

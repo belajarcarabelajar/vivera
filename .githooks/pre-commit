@@ -144,7 +144,9 @@ else
     fi
     exit 1
   elif [ "$secret_status" -eq 2 ]; then
-    echo "[secret-gate] skipped: checker exited 2" >&2
+    # Exit 2 is a GitError, so the stage was never scanned (owner 2026-11-05).
+    echo "[secret-gate] blocked: the checker could not read git state (exit 2). Fix it, or commit with --no-verify." >&2
+    exit 1
   elif [ "$secret_status" -ne 0 ]; then
     echo "[secret-gate] blocked: the checker crashed (exit $secret_status). Fix it, or commit with --no-verify." >&2
     exit 1

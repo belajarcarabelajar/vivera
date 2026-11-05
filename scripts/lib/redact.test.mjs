@@ -42,6 +42,8 @@ const JWT = [
   'ZmFrZS1zaWduYXR1cmUtZml4dHVyZQ',
 ].join('.');
 const BEARER_VALUE = 'ZmFrZS1iZWFyZXItdG9rZW4tZml4dHVyZQ';
+const ANTHROPIC_KEY = ['sk', 'ant', 'api03', 'A'.repeat(24)].join('-');
+const TG_TOKEN = `${'1234' + '56789'}:${'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cF'}${'aB3dE5'}`;
 const PEM_BLOCK = [
   '-----BEGIN RSA PRIVATE KEY-----',
   'cHJpdmF0ZS1maXh0dXJlLW5vdC1hLXNpZ25pbGcta2V5',
@@ -156,6 +158,8 @@ const DOCUMENT = [
   `- fine: ${GH_FINE}`,
   `- authorization: Bearer ${BEARER_VALUE}`,
   `- jwt: ${JWT}`,
+  `- anthropic ${ANTHROPIC_KEY}`,
+  `- bot ${TG_TOKEN}`,
   '- 2fa code: 483920',
   '- api_key=synthetic-fixture-value-1',
   '',
@@ -163,7 +167,7 @@ const DOCUMENT = [
   '',
 ].join('\n');
 
-const ALL_SECRETS = [AWS_KEY, GH_CLASSIC, GH_FINE, BEARER_VALUE, JWT, PEM_BLOCK, '483920', 'synthetic-fixture-value-1'];
+const ALL_SECRETS = [AWS_KEY, GH_CLASSIC, GH_FINE, BEARER_VALUE, JWT, PEM_BLOCK, ANTHROPIC_KEY, TG_TOKEN, '483920', 'synthetic-fixture-value-1'];
 
 // ---------- 1. the shipped table is well formed ----------
 

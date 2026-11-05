@@ -108,22 +108,18 @@ test('a clean stage commits and the hook prints no summary line', () => {
   assert.notEqual(repo.head(), '');
 });
 
-test('a checker exit 2 is skipped with a note and the commit follows the size gate', () => {
+// Exit 2 is a GitError (the checker could not read git state), so the stage was
+// never scanned; letting it through would commit unscanned content (owner 2026-11-05).
+test('a checker exit 2 blocks the commit as unable to read git state', () => {
   const repo = secretGateRepo();
   repo.write('scripts/check-secrets.mjs', 'process.exit(2);\n');
   repo.write('small.txt', 'small\n');
   repo.git(['add', 'small.txt']);
   const r = repo.commit('exit 2');
-  assert.equal(r.status, 0, outputOf(r));
-  assert.ok(outputOf(r).includes('[secret-gate] skipped: checker exited 2'), outputOf(r));
-  assert.notEqual(repo.head(), '');
-
-  repo.write('big.txt', OVERSIZED);
-  repo.git(['add', 'big.txt']);
-  const blocked = repo.commit('exit 2 then oversized');
-  assert.equal(blocked.status, 1, outputOf(blocked));
-  assert.ok(outputOf(blocked).includes('[secret-gate] skipped: checker exited 2'), outputOf(blocked));
-  assert.ok(outputOf(blocked).includes('How to split'), outputOf(blocked));
+  assert.equal(r.status, 1, outputOf(r));
+  assert.ok(outputOf(r).includes('[secret-gate] blocked: the checker could not read git state (exit 2). Fix it, or commit with --no-verify.'), outputOf(r));
+  assert.ok(!outputOf(r).includes('skipped: checker exited 2'), outputOf(r));
+  assert.equal(repo.head(), '');
 });
 
 test('a checker exit 1 without a report line blocks as failed before judging', () => {

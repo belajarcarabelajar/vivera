@@ -43,6 +43,7 @@ import { checkCloseout } from './plan-closeout.mjs';
 import { reconcile, setupWorktree, openPr } from './lib/registry-sync.mjs';
 import { slugify, branchFor, worktreeFor } from './lib/registry-names.mjs';
 import { planRepoAtClaim } from './lib/registry-plan-file.mjs';
+import { assertRefNames, assertSamePlan } from './lib/sync-guards.mjs';
 
 export { branchFor, worktreeFor };
 
@@ -107,6 +108,7 @@ export function loadRegistry(registryPath = DEFAULT_REGISTRY) {
     if (!SESSION_STATES.includes(s.state)) {
       throw new Error(`PR registry ${registryPath}: session ${s.session} has unknown state ${JSON.stringify(s.state)}; expected one of ${SESSION_STATES.join(', ')}`);
     }
+    assertRefNames(s, registryPath);
   }
   assertNoCollisions(registry.sessions, registryPath);
   return registry;
@@ -117,10 +119,9 @@ export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY, { expect
   mkdirSync(path.dirname(path.resolve(registryPath)), { recursive: true });
   // Compare-and-swap, when the caller says what it read.
   //
-  // Atomicity is not mutual exclusion, and this comment is the second time it has
-  // to be said: `writeFileAtomic` makes each write INDIVISIBLE in its parts, and
-  // two writers can still interleave, so the later rename silently discards the
-  // earlier one. For the shipping bin that means a session's claim vanishes while
+  // Atomicity is not mutual exclusion: `writeFileAtomic` makes each write
+  // INDIVISIBLE in its parts, and two writers can still interleave, so the later
+  // rename silently discards the earlier one. For the shipping bin that means a session's claim vanishes while
   // its branch and worktree remain on disk, and the next claim reuses them. That
   // is the failure `assertNoCollisions` is meant to catch, arriving too late to
   // catch it.
@@ -131,10 +132,9 @@ export function saveRegistry(registry, registryPath = DEFAULT_REGISTRY, { expect
   // their own failure modes, and importing them here would trade a silent lost
   // write for a refused legitimate claim.
   //
-  // The residual window is stated rather than hidden: between the re-read below
-  // and the rename, another process could still write. That window is one
-  // function call wide instead of the whole session, and `mutateRegistry` closes
-  // it by re-reading and RE-APPLYING, which is why that wrapper exists.
+  // A residual window stays open: a write landing between the re-read below and
+  // the rename is lost unseen. It is one call wide, and
+  // `mutateRegistry` only re-applies on a conflict this check detects.
   if (expectedRaw !== null) {
     const current = existsSync(registryPath) ? readFileSync(registryPath, 'utf8') : null;
     if (current !== expectedRaw) {
@@ -236,6 +236,7 @@ export function claimSlot(registry, { plan, session, repoRoot, root, dependsOn =
   const repo = path.resolve(repoRoot);
 
   const existing = registry.sessions.find((s) => s.session === sessionSlug);
+  if (existing) assertSamePlan(existing, planSlug);
   if (existing && !existing.repo) {
     // Entries claimed before the repository was recorded get it on re-claim, so
     // a later `state <s> merged` reads the plan from the right place. Only when

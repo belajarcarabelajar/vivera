@@ -83,6 +83,15 @@ describe("follow-up delivery", () => {
     expect(r.queued).toBe(1);
     expect(r.fileHasText).toBe(true);
   });
+
+  test("a message sent during the settle pause queues behind the text being delivered", () => {
+    const r = run.orderDuringPause;
+    expect(r.error).toBeUndefined();
+    expect(r.result).toBe("queued");
+    expect(r.pastedDuringPause).toBe(0);
+    expect(r.pastedAfter).toBe(1);
+    expect(r.left).toEqual(["pesan baru"]);
+  });
 });
 
 describe("launch", () => {

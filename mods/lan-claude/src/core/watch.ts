@@ -146,26 +146,23 @@ export async function watchTick(): Promise<void> {
     }
     // Kill switch on: the queue is frozen as it is (memory and queues.json) until it goes off.
     if (!ready || w.queued.length === 0 || killed()) continue;
-    const text = w.queued.join("\n\n");
-    w.queued = [];
-    saveQueues();
+    // The texts stay queued during the pause, so a message sent meanwhile queues behind them instead of
+    // being pasted first; only the delivered ones are dropped (watchTick never runs twice at once).
+    const n = w.queued.length;
+    const text = w.queued.slice(0, n).join("\n\n");
     try {
       await Bun.sleep(1500); // let the TUI settle back to its input box
       // The session may have changed during the pause (a new turn, a picker, the kill switch).
       const now = findLive(key);
-      if (!now || !isReady(now.status) || switching.has(key) || killed()) {
-        w.queued.unshift(text);
-        saveQueues();
-        continue;
-      }
-      await pasteText(s.pane, text);
+      if (!now || !isReady(now.status) || switching.has(key) || killed()) continue;
+      await pasteText(now.pane, text);
+      w.queued = w.queued.slice(n);
+      saveQueues();
       w.since = Date.now();
       w.announced = false;
       log("followup_delivered", { session: key, chars: text.length });
-      emitWatch({ type: "delivered", session: s, text });
+      emitWatch({ type: "delivered", session: now, text });
     } catch (e) {
-      w.queued.unshift(text);
-      saveQueues();
       log("followup_deliver_failed", { session: key, error: (e as Error).message });
     }
   }

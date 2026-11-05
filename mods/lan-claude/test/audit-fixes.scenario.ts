@@ -105,6 +105,21 @@ await check("rereadAfterSleep", async () => {
 });
 dropQueue();
 
+await check("orderDuringPause", async () => {
+  setStatus("busy");
+  await core.sendToSession(key, "pesan lama", "web");
+  setStatus("idle");
+  clearLog();
+  const tick = core.watchTick();
+  await Bun.sleep(500); // inside the 1.5 s settle pause: the old text is not pasted yet
+  const r = await core.sendToSession(key, "pesan baru", "web");
+  const pastedDuringPause = pastes();
+  await tick;
+  const w = watchMod.watches.get(key);
+  return { result: r.result, pastedDuringPause, pastedAfter: pastes(), left: w?.queued ?? [] };
+});
+dropQueue();
+
 await check("killDeniesPending", async () => {
   const p = core.board.open("abcdef012345", "Bash", { command: "ls" });
   const waiting = core.board.wait(p.id); // the hook waits right after open

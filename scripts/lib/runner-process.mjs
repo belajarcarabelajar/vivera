@@ -5,6 +5,7 @@
 // runner so the runner stays under its size-gate ceiling.
 
 import { spawnSync } from 'node:child_process';
+import { runPlanCommand } from './remote-runner.mjs';
 
 // A step that overruns `step_timeout_s` must take its CHILDREN with it.
 //
@@ -51,7 +52,11 @@ export function reapGroup(pid, { log, why = 'timed-out' } = {}) {
 // Measured 2026-10-29: `bun run test` in repo bcb printed 1,483,368 bytes, past the 1 MiB default, and was killed with ENOBUFS.
 export const STEP_MAX_BUFFER = 256 * 1024 * 1024;
 
-export function run(cmd, timeoutMs, { log, maxBuffer = STEP_MAX_BUFFER } = {}) {
+export function run(cmd, timeoutMs, opts = {}) {
+  return runPlanCommand(cmd, (c) => runLocal(c, timeoutMs, opts));
+}
+
+function runLocal(cmd, timeoutMs, { log, maxBuffer = STEP_MAX_BUFFER } = {}) {
   const r = spawnSync(cmd, { shell: true, encoding: 'utf8', timeout: timeoutMs, detached: true, maxBuffer });
   const timedOut = !!(r.error && r.error.code === 'ETIMEDOUT');
   // Any other spawn error means the runner, not the step, ended the command, so

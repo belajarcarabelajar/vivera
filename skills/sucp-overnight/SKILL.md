@@ -24,7 +24,9 @@ Every line must hold. If one does not, STOP, name the line, and write nothing. A
 
 Collect this gate while the user is present, as one question-tool call through the Confirmation Protocol (header `Overnight`, options `Start the overnight run (Recommended)` and `Not yet`) once the six checks hold. After the user leaves, nothing is asked: a mid-run decision follows the Unattended Continuation Rule (section 3), and the debt-sweep question stays the last act (section 5), asked only when the harness has an interactive client.
 
-When every line holds, the first file the run writes is the handoff (path in section 5) with `Result: running`, the start time as ISO 8601 with its UTC offset, and `Last update: <time> <checklist item>`. A run that dies (usage limit, sleep, crash) then leaves a record on disk instead of nothing. A failed check still writes nothing.
+When every line holds, the first file the run writes is the handoff (path in section 5) with `Result: running`, the start time as ISO 8601 with its UTC offset, and `Last update: <time> <checklist item>`. A run that dies (sleep, crash, or a usage limit the harness does not wait out) then leaves a record on disk instead of nothing. A failed check still writes nothing.
+
+A usage limit is not always a death. Claude Code v2.1.234 or later, signed in with a claude.ai subscription, waits in the open interactive session and continues the task after the reset (`autoContinueAtUsageLimit`, default `true`, read from user or managed settings; a project settings file that sets it turns it off). It does not wait in `-p` runs, in Remote Control sessions, or for a reset more than 24 hours away, and after a host sleep longer than about 30 minutes it waits for Enter. So the host must stay awake through a reset window that can last hours, and a handoff whose `Last update` stopped moving may belong to a waiting session. Source: code.claude.com/docs/en/interactive-mode and settings-reference, read 2026-11-08; no overnight run here has hit the wait yet.
 
 ## 2. What the run may and may not do
 
@@ -80,6 +82,7 @@ The first line of the final message is the PR URL, or the word `none` and why.
 
 A handoff that still says `Result: running` with no live process is a stale handoff: `plan-status` flags it `stale` once `Last update` is older than two hours.
 
+0. Confirm no session still owns the run: `stale` fires after two hours, and a session waiting for a usage-limit reset (section 1) writes nothing for longer. A live `claude` process whose cwd is the session worktree means wait for it; never start a second run beside it.
 1. Run `bun ~/vivera/scripts/plan-status.mjs <plan.md>` and trust its computed block (task steps, current task, open gates, `stale`) over any summary. Read `Last update`: it names the last finished item.
 2. Re-run the runner on the plan. Steps already done report `SKIPPED-IDEMPOTENT`.
 3. Never re-dispatch an item already `[x]`; continue from the current task.

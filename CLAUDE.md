@@ -11,3 +11,9 @@ A scan of 3,135 session logs (10 days, about $10,978) found context length, suba
 - Output: cap reads and commands at the source (`offset` and `limit`, `rg -m`, tests to a scratch file plus `tail -40`) (L87).
 - Always-loaded text: one-task runbooks go to on-demand files with a 2-line pointer; keep `~/AGENTS.md` under 67k characters (L88).
 - Effort: default `high`; `xhigh` or `max` only for the one hard step (L89).
+
+# Compact instructions
+
+When compacting, keep: the active plan path and its open checklist items, the session worktree path and branch, the PR registry slot and PR number, every verification command with its exit code, the user's decisions and rejected options, and files edited but not yet committed. Drop file dumps and tool output already summarised.
+
+Measured 2026-11-08: a `# Compact instructions` section in CLAUDE.md steers manual `/compact` (A/B with a control, Haiku). Automatic compaction is not proven to read it.

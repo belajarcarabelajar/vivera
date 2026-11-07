@@ -8,7 +8,8 @@
 // Fail-closed (L98): any failure exits 1, which blocks only this removal. The
 // path must resolve to exactly `<root>/<seg>-wt/<seg>`, checked before any git
 // or filesystem call, so a bad payload can never reach `worktree remove -f -f`.
-// wt-new locks its worktrees, hence the double -f.
+// wt-new locks its worktrees, hence the double -f. A worktree with uncommitted or
+// untracked files, or a path through a symlink, is kept (exit 1).
 //
 // Env seam: VIVERA_WT_ROOT overrides the root (default /mnt/belajarcarabelajar).
 //
@@ -16,7 +17,7 @@
 // restore ~/.claude/settings.json.bak-20261108-worktree-overnight-hooks.
 
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 
 const SEG = /^[A-Za-z0-9._-]+$/;
@@ -59,6 +60,18 @@ function main() {
     return 1;
   }
   if (!existsSync(wt)) return 0;
+  // The check above is lexical; a symlink in the path could point git at a worktree elsewhere.
+  if (realpathSync(wt) !== wt) {
+    process.stderr.write(`worktree-remove: refusing ${wt}: the path goes through a symlink\n`);
+    return 1;
+  }
+  // `remove -f -f` discards uncommitted and untracked files, so a dirty worktree is kept.
+  const dirty = git('-C', wt, 'status', '--porcelain');
+  if (dirty.status !== 0) return 1;
+  if (dirty.stdout.trim()) {
+    process.stderr.write(`worktree-remove: kept ${wt}: uncommitted or untracked files (listed above)\n`);
+    return 1;
+  }
 
   const branch = (git('-C', wt, 'branch', '--show-current').stdout || '').trim();
   const common = git('-C', wt, 'rev-parse', '--path-format=absolute', '--git-common-dir');

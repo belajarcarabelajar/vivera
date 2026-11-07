@@ -14,7 +14,7 @@
 // tool call is affected. wt-new's own stdout and stderr both go to stderr,
 // because Claude Code reads stdout as the path.
 //
-// Env seams: WT_NEW (wt-new executable, default `wt-new` on PATH) and
+// Env seams: WT_NEW (wt-new executable, default ~/.local/bin/wt-new) and
 // VIVERA_WT_ROOT (worktree root, default /mnt/belajarcarabelajar).
 //
 // Revert: remove the WorktreeCreate entry from ~/.claude/settings.json, or

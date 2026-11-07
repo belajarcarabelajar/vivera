@@ -61,9 +61,9 @@ function errorLines(env) {
   return readFileSync(f, 'utf8').trim().split('\n').filter(Boolean);
 }
 
-test('marker present and StopFailure rate_limit sends one line with plan, event, type and handoff', () => {
+test('marker present and StopFailure error rate_limit sends one line with plan, event, type and handoff', () => {
   const env = setup();
-  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error_type: 'rate_limit' });
+  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error: 'rate_limit' });
   expect(r.status).toBe(0);
   expect(r.stdout).toBe('');
   const c = calls(env);
@@ -92,24 +92,46 @@ test('missing type falls back to unknown', () => {
   expect(calls(env)[0][0]).toBe('2026-11-08-demo-plan: StopFailure unknown (handoff /tmp/demo/handoff.md)');
 });
 
-test('message and error text never reach the notice line', () => {
+test('error text fields never reach the notice line', () => {
   const env = setup();
   const r = run(env, {
     session_id: 'sess-1',
     hook_event_name: 'StopFailure',
-    error_type: 'authentication_failed',
+    error: 'authentication_failed',
+    error_details: 'SECRET-DETAILS-401',
+    last_assistant_message: 'API Error: SECRET-TEXT-abc',
     message: 'SECRET-TOKEN-abc123',
-    error: 'SECRET-ERROR-xyz',
   });
   expect(r.status).toBe(0);
   const c = calls(env);
   expect(c.length).toBe(1);
-  expect(c[0][0]).not.toContain('SECRET');
+  expect(c[0][0]).toBe('2026-11-08-demo-plan: StopFailure authentication_failed (handoff /tmp/demo/handoff.md)');
 });
+
+test('an error value that is not an enum token is reported as unknown', () => {
+  const env = setup();
+  run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error: 'API Error: SECRET 429' });
+  expect(calls(env)[0][0]).toBe('2026-11-08-demo-plan: StopFailure unknown (handoff /tmp/demo/handoff.md)');
+});
+
+for (const input of [
+  { hook_event_name: 'Notification', notification_type: 'permission_prompt' },
+  { hook_event_name: 'Notification', notification_type: 'idle_prompt' },
+  { hook_event_name: 'Stop' },
+]) {
+  test(`${input.hook_event_name} ${input.notification_type ?? ''} sends nothing even with a marker`, () => {
+    const env = setup();
+    const r = run(env, { session_id: 'sess-1', ...input });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe('');
+    expect(calls(env).length).toBe(0);
+    expect(errorLines(env).length).toBe(0);
+  });
+}
 
 test('no marker means notify is not called, exit 0, no output', () => {
   const env = setup({ marker: false });
-  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error_type: 'rate_limit' });
+  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error: 'rate_limit' });
   expect(r.status).toBe(0);
   expect(r.stdout).toBe('');
   expect(calls(env).length).toBe(0);
@@ -121,7 +143,7 @@ for (const bad of ['../x', 'a/b', '..', '']) {
     const env = setup();
     // A marker at the traversal target would be read if the id were trusted.
     writeFileSync(path.join(path.dirname(env.dir), 'x'), 'plan=evil\nhandoff=/evil\n');
-    const r = run(env, { session_id: bad, hook_event_name: 'StopFailure', error_type: 'rate_limit' });
+    const r = run(env, { session_id: bad, hook_event_name: 'StopFailure', error: 'rate_limit' });
     expect(r.status).toBe(0);
     expect(r.stdout).toBe('');
     expect(calls(env).length).toBe(0);
@@ -141,7 +163,7 @@ test('bad JSON exits 0 and logs one timestamped error line', () => {
 
 test('notify exiting 1 still exits 0 and logs an error', () => {
   const env = setup({ stub: 'exit1' });
-  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error_type: 'overloaded' });
+  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error: 'overloaded' });
   expect(r.status).toBe(0);
   expect(r.stdout).toBe('');
   expect(calls(env).length).toBe(1);
@@ -150,7 +172,7 @@ test('notify exiting 1 still exits 0 and logs an error', () => {
 
 test('notify throwing still exits 0 and logs an error', () => {
   const env = setup({ stub: 'throws' });
-  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error_type: 'billing_error' });
+  const r = run(env, { session_id: 'sess-1', hook_event_name: 'StopFailure', error: 'billing_error' });
   expect(r.status).toBe(0);
   expect(r.stdout).toBe('');
   expect(errorLines(env).length).toBe(1);

@@ -7,7 +7,7 @@
 
 import { test, expect, afterAll } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -124,4 +124,28 @@ test('exits 1 on input that is not JSON', () => {
   const { root } = setup('badjson');
   const r = runHook(root, 'not json{');
   expect(r.status).toBe(1);
+});
+
+test('keeps a worktree with uncommitted or untracked files and exits 1', () => {
+  const { root, repo } = setup('dirty');
+  const wt = addWorktree(repo, root, 'dirty', 'feat/dirty');
+  writeFileSync(path.join(wt, 'untracked.txt'), 'work in progress\n');
+  const r = runHook(root, payload(wt));
+  expect(r.status).toBe(1);
+  expect(existsSync(path.join(wt, 'untracked.txt'))).toBe(true);
+  expect(branches(repo)).toContain('feat/dirty');
+  expect(r.stderr).toContain('untracked.txt');
+});
+
+test('refuses a <root>/<repo>-wt/<name> symlink that points at a worktree outside the root', () => {
+  const { root, repo } = setup('symlink');
+  const outside = path.join(tempDir('symlink-target'), 'wt');
+  git(repo, 'worktree', 'add', '-q', '-b', 'feat/outside', outside);
+  git(repo, 'worktree', 'lock', outside);
+  mkdirSync(path.join(root, 'repo-wt'));
+  const link = path.join(root, 'repo-wt', 'link');
+  symlinkSync(outside, link);
+  const r = runHook(root, payload(link));
+  expect(r.status).toBe(1);
+  expect(existsSync(outside)).toBe(true);
 });

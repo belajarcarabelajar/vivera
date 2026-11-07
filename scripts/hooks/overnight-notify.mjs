@@ -66,11 +66,24 @@ function readMarker(file) {
   return fields;
 }
 
+// Only these events notify, whatever matcher the settings entry carries.
+const QUOTA_TYPES = new Set(['quota_auto_resume_fired', 'quota_auto_resume_stale', 'quota_auto_resume_disabled']);
+// StopFailure `error` is an enum (rate_limit, overloaded, ...); anything else is reported as unknown so
+// no error text leaks. error_details and last_assistant_message carry that text and are never read.
+const ENUM_TOKEN = /^[a-z][a-z0-9_]{0,63}$/;
+
+export function noticeType(input) {
+  if (input.hook_event_name === 'StopFailure') {
+    return typeof input.error === 'string' && ENUM_TOKEN.test(input.error) ? input.error : 'unknown';
+  }
+  if (input.hook_event_name === 'Notification' && QUOTA_TYPES.has(input.notification_type)) {
+    return input.notification_type;
+  }
+  return null;
+}
+
 export function noticeLine(marker, input) {
-  const event = typeof input.hook_event_name === 'string' ? input.hook_event_name : 'unknown';
-  const kind = input.error_type ?? input.notification_type;
-  const type = typeof kind === 'string' && kind ? kind : 'unknown';
-  return `${marker.plan || 'unknown-plan'}: ${event} ${type} (handoff ${marker.handoff || 'unknown'})`;
+  return `${marker.plan || 'unknown-plan'}: ${input.hook_event_name} ${noticeType(input)} (handoff ${marker.handoff || 'unknown'})`;
 }
 
 function run(dir, stdinText) {
@@ -78,6 +91,7 @@ function run(dir, stdinText) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('input is not a JSON object');
   const id = input.session_id;
   if (typeof id !== 'string' || !SESSION_ID.test(id)) throw new Error(`rejected session_id ${JSON.stringify(id)}`);
+  if (noticeType(input) === null) return;
   const marker = readMarker(path.join(dir, id));
   if (!marker) return;
   // process.execPath is the bun running this hook; a hook shell's PATH may lack ~/.bun/bin.

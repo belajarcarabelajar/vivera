@@ -8,7 +8,7 @@ import { TARGETS } from './registry.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const role = (name) => fs.readFileSync(path.join(ROOT, 'agents', 'roles', `${name}.md`), 'utf8');
 
-const ALLOWED = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const ALLOWED = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 const timid = { sprite: 'timid', role: 'researcher', color: 'green' };
 const chef = { sprite: 'chef', role: 'implementer', color: 'red' };
 const read = (template, member = chef, extra = {}) => readTemplate(template, member, { allowedKeys: ALLOWED, target: 'cursor', ...extra });

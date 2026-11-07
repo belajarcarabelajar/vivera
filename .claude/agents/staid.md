@@ -6,6 +6,7 @@ tools: Read, Grep, Glob, Bash
 skills:
   - sucp-verify-deliver
 maxTurns: 30
+effort: high
 hooks:
   PreToolUse:
     - matcher: "Bash|Monitor"

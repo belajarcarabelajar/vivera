@@ -25,6 +25,7 @@ import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
 import { missingTestPaths } from './lib/test-paths.mjs';
+import { runPlanCommand } from './lib/remote-runner.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -300,7 +301,9 @@ export function sessionWorktree(sessions, planId) {
 // and has no exit status, which reads as UNREAD rather than a guessed state.
 const MAX_OUTPUT = 16 * 1024 * 1024;
 
-function bashRunner(cmd, { cwd, timeoutMs }) {
+const bashRunner = (c, o) => runPlanCommand(c, (x) => bashLocal(x, o));
+
+function bashLocal(cmd, { cwd, timeoutMs }) {
   // Own process group, so a timeout reaches the step's children and not only bash.
   const r = spawnSync('bash', ['-c', cmd], {
     cwd, timeout: timeoutMs, stdio: ['ignore', 'pipe', 'pipe'], detached: true, maxBuffer: MAX_OUTPUT,

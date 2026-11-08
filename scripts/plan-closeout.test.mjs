@@ -3,6 +3,7 @@
 // Guards for the close-out gap check behind `pr-registry state <session> merged`.
 // Local files only: no gh, no network. Every fixture lives in a temp directory.
 
+import './lib/local-runner-env.mjs';
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -11,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
 import { tickSteps } from './plan-mark-done.mjs';
+
 
 const { closeoutGaps } = closeout;
 
@@ -565,7 +567,7 @@ describe('closeout audit', () => {
 
 describe('closeout CLI', () => {
   const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
-  const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe' });
+  const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
 
   test('readiness CLI: unknown arguments print usage on stderr and exit 2', () => {
     const r = cli(['--bogus']);
@@ -830,7 +832,7 @@ describe('open step boxes', () => {
     writeFileSync(path.join(root, 'marker'), '');
     const file = path.join(root, 'plan.md');
     writeFileSync(file, text);
-    const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe' });
+    const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
     return { file, out: r.stdout.toString(), exit: r.exitCode };
   };
   const tickFor = (file) => `bun scripts/ultra-plan-runner.mjs ${file} --execute > runner.log; bun scripts/plan-mark-done.mjs ${file} --from runner.log`;

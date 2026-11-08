@@ -16,4 +16,4 @@ A scan of 3,135 session logs (10 days, about $10,978) found context length, suba
 
 When compacting, keep: the active plan path and its open checklist items, the session worktree path and branch, the PR registry slot and PR number, every verification command with its exit code, the user's decisions and rejected options, and files edited but not yet committed. Drop file dumps and tool output already summarised.
 
-Measured 2026-11-08: a `# Compact instructions` section in CLAUDE.md steers manual `/compact` (A/B with a control, Haiku). Automatic compaction is not proven to read it.
+Measured 2026-11-08: a `# Compact instructions` section in CLAUDE.md steers both manual `/compact` and automatic compaction (`trigger: auto` at a 100k window); A/B with a control, Haiku, n=1 each.

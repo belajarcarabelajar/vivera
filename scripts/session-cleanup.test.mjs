@@ -322,3 +322,68 @@ describe('CLI', () => {
     } finally { f.done(); }
   });
 });
+
+// Claude Code's own worktrees (branch worktree-<name>) next to a sucp session worktree.
+function nativeFixture() {
+  const f = fixture();
+  const wtA = path.join(f.dir, 'repo-wt', 'a');
+  const wtB = path.join(f.dir, 'repo-wt', 'b');
+  const wtX = path.join(f.dir, 'repo-wt', 'x');
+  git(f.repo, 'worktree', 'add', '-q', wtA, '-b', 'worktree-a', 'origin/main');
+  f.put(wtA, 'na.txt', 'a\n');
+  git(wtA, 'add', 'na.txt');
+  git(wtA, 'commit', '-q', '-m', 'native a');
+  git(wtA, 'push', '-q', 'origin', 'worktree-a:main');
+  git(f.repo, 'worktree', 'add', '-q', wtB, '-b', 'worktree-b', 'origin/main');
+  f.put(wtB, 'uncommitted.txt', 'wip\n');
+  git(f.repo, 'worktree', 'add', '-q', wtX, '-b', 'feat/x', 'origin/main');
+  return { ...f, wtA, wtB, wtX };
+}
+
+describe('CLI --native', () => {
+  test('removes a merged native worktree, keeps one with uncommitted work (exit 3), and leaves other branches alone', () => {
+    const f = nativeFixture();
+    try {
+      const r = cli('--native', '--repo', f.repo, '--base', 'main');
+      expect(r.code).toBe(3);
+      expect(existsSync(f.wtA)).toBe(false);
+      expect(branches(f.repo)).not.toContain('worktree-a');
+      expect(existsSync(f.wtB)).toBe(true);
+      expect(r.out).toMatch(/kept .*b:/);
+      expect(r.out).toContain('uncommitted.txt');
+      expect(existsSync(f.wtX)).toBe(true);
+      expect(existsSync(f.worktree)).toBe(true);
+      expect(r.out).not.toContain(f.wtX);
+      expect(existsSync(f.repo)).toBe(true);
+    } finally { f.done(); }
+  });
+
+  test('a dry run removes nothing', () => {
+    const f = nativeFixture();
+    try {
+      const r = cli('--native', '--repo', f.repo, '--dry-run');
+      expect(r.out).toContain('would remove');
+      expect(existsSync(f.wtA)).toBe(true);
+      expect(existsSync(f.wtB)).toBe(true);
+      expect(branches(f.repo)).toContain('worktree-a');
+    } finally { f.done(); }
+  });
+
+  test('no native worktrees: exit 0 with a message', () => {
+    const f = fixture();
+    try {
+      const r = cli('--native', '--repo', f.repo);
+      expect(r.code).toBe(0);
+      expect(r.out).toContain('no native worktrees');
+      expect(existsSync(f.worktree)).toBe(true);
+    } finally { f.done(); }
+  });
+
+  test('--native with --session or --worktree is a usage error', () => {
+    for (const r of [cli('--native', '--session', 'x'), cli('--native', '--worktree', '/tmp/x')]) {
+      expect(r.code).toBe(1);
+      expect(r.out).toContain('usage:');
+      expect(r.out).toContain('--native');
+    }
+  });
+});

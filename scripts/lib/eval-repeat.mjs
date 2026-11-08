@@ -73,6 +73,8 @@ export function baselineMap(data) {
   return new Map((data.scenarios ?? []).filter((s) => !s.skipped).map((s) => [s.id, {
     pass: Boolean(s.pass),
     invoke: s.invoke ?? false,
+    model: s.model ?? null,
+    advisor: s.advisor ?? null,
     pass_rate: typeof s.pass_rate === 'number' ? s.pass_rate : (s.pass ? 1 : 0),
     attempts: typeof s.attempts === 'number' ? s.attempts : null,
     flaky: isFlaky(s),

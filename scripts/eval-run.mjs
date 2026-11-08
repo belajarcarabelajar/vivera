@@ -11,6 +11,7 @@
 //                            [--out <file.json>] [--baseline <file.json>] [--keep]
 //                            [--no-invoke] [--no-sandbox] [--scenarios <dir>]
 //                            [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]
+//                            [--model <m>] [--advisor <m>]
 // The last three set the repeated attempts behind each verdict and the flaky rule:
 // scripts/lib/eval-repeat.mjs. Console and file output: scripts/lib/eval-run-report.mjs.
 //
@@ -33,9 +34,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { score } from './eval-score.mjs';
+import { deniedToolNames, score } from './eval-score.mjs';
 import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
 import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
+import { pairingArgs, pairingMismatch } from './lib/eval-pairing.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
@@ -48,7 +50,7 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop]';
+const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop] [--model <m>] [--advisor <m>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -62,9 +64,11 @@ const FIXTURE_GIT_ENV = {
 };
 
 class UsageError extends Error {}
+// Set once in main from --model and --advisor.
+let PAIRING = { model: null, advisor: null };
 
 function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, noEarlyStop: false, scenarios: path.join(ROOT, 'evals', 'scenarios') };
+  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, noEarlyStop: false, model: null, advisor: null, scenarios: path.join(ROOT, 'evals', 'scenarios') };
   const value = (i, flag) => {
     const v = argv[i + 1];
     if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
@@ -77,6 +81,7 @@ function parseArgs(argv) {
     else if (a === '--no-invoke') opts.noInvoke = true;
     else if (a === '--no-sandbox') opts.noSandbox = true;
     else if (a === '--no-early-stop') opts.noEarlyStop = true;
+    else if (a === '--model' || a === '--advisor') opts[a.slice(2)] = value(i++, a);
     else if (a === '--only') opts.only = value(i++, a).split(',').map((s) => s.trim()).filter(Boolean);
     else if (a === '--budget-usd') {
       opts.budget = Number(value(i++, a));
@@ -217,6 +222,7 @@ async function runClaude(scenario, dir, budget, invoke, root, bwrap, turn) {
     ...sessionFlags(turn.session),
     '--max-budget-usd', budget.toFixed(2),
     '--setting-sources', 'project,local',
+    ...pairingArgs(PAIRING),
   ];
   const run = bwrap ? sandboxCommand({ bwrap: bwrap.bin, runDir: bwrap.runDir, bin, args, env: childEnv(root) }) : { cmd: bin, argv: args, env: childEnv(root) };
   return runInGroup(run.cmd, run.argv, { cwd: dir, env: run.env, timeoutMs: RUN_TIMEOUT_S * 1000 });
@@ -238,19 +244,12 @@ function collectFacts(dir, initialSha, assertions) {
   return { statusPorcelain: status, initialFiles, files, commitMessages };
 }
 
-// Names only: the denied input is the agent's own text and stays out of the report.
-function deniedToolNames(events) {
-  const result = [...events].reverse().find((e) => e?.type === 'result');
-  const denials = Array.isArray(result?.permission_denials) ? result.permission_denials : [];
-  return denials.map((d) => d?.tool_name).filter((n) => typeof n === 'string');
-}
-
 async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, index, bwrap, attempt, evalsDir) {
   const started = Date.now();
   // A path naming the scenario tells the agent what is tested and leaks into scored commands.
   const nth = attempt ? `-${attempt + 1}` : '';
   const dest = path.join(runDir, `${String(index + 1).padStart(2, '0')}${nth}`, 'project');
-  const base = { id: scenario.id, invoke, turns: null, cost: 0, usage: null, permission_denials: [] };
+  const base = { id: scenario.id, invoke, model: PAIRING.model, advisor: PAIRING.advisor, turns: null, cost: 0, usage: null, permission_denials: [] };
   let initialSha;
   try {
     initialSha = buildFixture(scenario, fixturesDir, dest);
@@ -318,7 +317,8 @@ async function main(argv) {
   if (error) throw new UsageError(error);
   const invokeOf = (s) => (opts.noInvoke ? false : s.invoke ?? DEFAULT_INVOKE);
   const baseline = opts.baseline ? readBaseline(opts.baseline) : null;
-  const mismatch = baseline && invokeMismatch(baseline, scenarios, invokeOf);
+  PAIRING = { model: opts.model, advisor: opts.advisor };
+  const mismatch = baseline && (invokeMismatch(baseline, scenarios, invokeOf) || pairingMismatch(baseline, scenarios, PAIRING));
   if (mismatch) throw new UsageError(mismatch);
   const fixturesDir = path.join(path.dirname(opts.scenarios), 'fixtures');
   const date = localDate();

@@ -10,6 +10,15 @@
 // docs/code-plan/spikes/2026-10-19-headless-eval-spike.md: the question tool is
 // absent, so a gate is scored as "fixture unchanged plus a numbered options list".
 
+import { advisorUsage } from './lib/eval-pairing.mjs';
+
+// Names only: the denied input is the agent's own text and stays out of the report.
+export function deniedToolNames(events) {
+  const result = [...events].reverse().find((e) => e?.type === 'result');
+  const denials = Array.isArray(result?.permission_denials) ? result.permission_denials : [];
+  return denials.map((d) => d?.tool_name).filter((n) => typeof n === 'string');
+}
+
 export const ASSERTION_TYPES = Object.freeze([
   'fixture_unchanged',
   'fixture_changed',
@@ -83,7 +92,7 @@ export function parseStream(text) {
       subtype: resultEvent?.subtype ?? null,
       num_turns: resultEvent?.num_turns ?? null,
       total_cost_usd: resultEvent?.total_cost_usd ?? null,
-      usage: resultEvent?.usage ? { ...resultEvent.usage, tool_result_bytes: resultBytes } : null,
+      usage: resultEvent?.usage ? { ...resultEvent.usage, tool_result_bytes: resultBytes, ...advisorUsage(events, resultEvent) } : null,
     },
   };
 }

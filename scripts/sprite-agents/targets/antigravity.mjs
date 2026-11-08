@@ -7,7 +7,7 @@ import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../com
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
-const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 
 // The three names the subagents page uses in its example and its tools table.
 const TOOL_MAP = { Read: 'view_file', Grep: 'grep_search', Glob: 'grep_search', Bash: 'run_command' };
@@ -31,6 +31,7 @@ export function renderAntigravityAgent(template, member, { templateLabel = `agen
   // The agent file has no hooks, so the git guard can only be asked for in prose.
   assertGitGuardHooks(fm, { templateLabel, target: 'antigravity' });
   // maxTurns is dropped: the documented frontmatter has no such key.
+  // effort is dropped: no per-agent effort key is documented in this repository for Antigravity.
 
   const guard = proseGuard();
   const skill = skillLine(skills, 'from your skills');

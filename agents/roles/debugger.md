@@ -3,6 +3,7 @@ description: Isolates the root cause of one failing test or reproducible bug by 
 skills:
   - sucp-tdd-debug
 maxTurns: 40
+effort: high
 hooks:
   PreToolUse:
     - matcher: "Bash|Monitor"

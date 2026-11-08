@@ -6,6 +6,7 @@ tools: Read, Grep, Glob, Bash, mcp__tinyfish
 skills:
   - sucp-brainstorm
 maxTurns: 30
+effort: medium
 hooks:
   PreToolUse:
     - matcher: "Bash|Monitor"

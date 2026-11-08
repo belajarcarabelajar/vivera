@@ -5,7 +5,7 @@ import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../com
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
-const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 // A TOML multi-line literal string cannot hold these, and has no escape for them.
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 // Written above a read-only sprite's sandbox_mode. The role.rs and role_tests.rs claims were read
@@ -26,6 +26,7 @@ export function renderCodexAgent(template, member, { templateLabel = `agents/rol
   // Codex has no hooks in an agent file, so the git guard can only be asked for in prose.
   assertGitGuardHooks(fm, { templateLabel, target: 'codex' });
   // maxTurns is dropped: the subagents page lists no turn limit key.
+  // effort is dropped: no per-agent effort key is documented in this repository for Codex.
 
   const guard = proseGuard();
   const parts = [];

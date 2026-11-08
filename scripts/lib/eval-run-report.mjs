@@ -27,7 +27,7 @@ export function line(r, width) {
   const ci = r.attempts > 1 && wilson(r.passes, r.attempts);
   const tally = (ci ? `  passes=${r.passes}/${r.attempts} (95% CI ${ci.low.toFixed(2)}-${ci.high.toFixed(2)})` : '') + (r.flaky ? '  flaky' : '') + (r.confirmed === false ? '  unconfirmed' : '');
   const bytes = typeof r.usage?.tool_result_bytes === 'number' ? `  tool_result_bytes=${r.usage.tool_result_bytes}` : '';
-  const sub = r.usage?.advisor_calls_sub ? ` (+${r.usage.advisor_calls_sub} in subagents)` : '';
+  const sub = r.usage?.advisor_subagents ? ` advisor_subagents=${r.usage.advisor_subagents}` : '';
   const adv = r.advisor || r.usage?.advisor_calls || sub ? `  advisor_calls=${r.usage?.advisor_calls ?? 0}${sub}` : '';
   return `${id}  ${r.pass ? 'PASS' : 'FAIL'}${why}${tally}  turns=${r.turns ?? '-'}  ${r.cost == null ? 'cost unknown' : `$${money(r.cost)}`}${bytes}${adv}  ${r.seconds}s${r.fixture ? `  fixture=${r.fixture}` : ''}${r.stream ? `  stream=${r.stream}` : ''}`;
 }

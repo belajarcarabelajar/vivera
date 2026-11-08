@@ -6,18 +6,29 @@
 // is encrypted in the stream; the advisor's tokens are a separate `result.modelUsage` entry
 // under its own model ID, already inside `total_cost_usd`. Evidence: plan 2026-11-08-advisor-eval, T1.
 
+// stream-json forwards only some subagent events, so a subagent's advisor calls never show
+// as blocks; the hand-back the parent receives names the tools the subagent used.
+const HAND_BACK_TOOLS = /<tools-used-before-summary>([^<]*)<\/tools-used-before-summary>/;
+
+function handBackText(block) {
+  if (block?.type !== 'tool_result') return '';
+  return typeof block.content === 'string' ? block.content : (Array.isArray(block.content) ? block.content.map((c) => c?.text ?? '').join('\n') : '');
+}
+
 /**
  * Flat numeric keys, so the existing per-turn and per-attempt usage sums add them up:
- * advisor calls in the main session, advisor calls inside subagents, and cost per model ID.
+ * advisor calls in the main session (exact), subagents that consulted the advisor at least
+ * once (from their hand-back; the number of calls inside a subagent is not observable), and
+ * cost per model ID. An advisor on the main model's own family shares its cost entry.
  */
 export function advisorUsage(events, resultEvent) {
-  const out = { advisor_calls: 0, advisor_calls_sub: 0 };
+  const out = { advisor_calls: 0, advisor_subagents: 0 };
   for (const e of events) {
-    if (e?.type !== 'assistant' || !Array.isArray(e.message?.content)) continue;
+    if (!Array.isArray(e?.message?.content) || e.parent_tool_use_id != null) continue;
     for (const block of e.message.content) {
-      if (block?.type !== 'server_tool_use' || block.name !== 'advisor') continue;
-      if (e.parent_tool_use_id == null) out.advisor_calls += 1;
-      else out.advisor_calls_sub += 1;
+      if (e.type === 'assistant' && block?.type === 'server_tool_use' && block.name === 'advisor') out.advisor_calls += 1;
+      const used = e.type === 'user' && handBackText(block).match(HAND_BACK_TOOLS);
+      if (used && used[1].split(',').some((t) => t.trim() === 'advisor')) out.advisor_subagents += 1;
     }
   }
   for (const [model, u] of Object.entries(resultEvent?.modelUsage ?? {})) {

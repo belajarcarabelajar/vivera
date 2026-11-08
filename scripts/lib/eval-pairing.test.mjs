@@ -18,22 +18,29 @@ describe('advisorUsage', () => {
     const result = events.find((e) => e.type === 'result');
     expect(advisorUsage(events, result)).toEqual({
       advisor_calls: 1,
-      advisor_calls_sub: 0,
+      advisor_subagents: 0,
       'cost_usd:claude-sonnet-5-5': 0.0336775,
       'cost_usd:claude-opus-5-5': 0.087584,
     });
   });
 
-  test('counts a call made inside a subagent separately', () => {
+  // stream-json forwards only some subagent events, so a subagent's advisor call never shows as a
+  // block; the hand-back the parent receives lists the tools the subagent used (seen on 2.1.319).
+  test('counts subagents whose hand-back lists the advisor, not advisor blocks of other tools', () => {
+    const handBack = (tools) => ({
+      type: 'user', parent_tool_use_id: null,
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_agent', content: [{ type: 'text', text: `  <tools-used-before-summary>${tools}</tools-used-before-summary>\n  report` }] }] },
+    });
     const events = [
-      { type: 'assistant', parent_tool_use_id: 'toolu_agent', message: { content: [{ type: 'server_tool_use', name: 'advisor', input: {} }] } },
+      handBack('Bash, advisor'),
+      handBack('Read, Grep'),
       { type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'server_tool_use', name: 'web_search', input: {} }] } },
     ];
-    expect(advisorUsage(events, null)).toEqual({ advisor_calls: 0, advisor_calls_sub: 1 });
+    expect(advisorUsage(events, null)).toEqual({ advisor_calls: 0, advisor_subagents: 1 });
   });
 
   test('a run without the advisor records zero calls', () => {
-    expect(advisorUsage([{ type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } }], { modelUsage: {} })).toEqual({ advisor_calls: 0, advisor_calls_sub: 0 });
+    expect(advisorUsage([{ type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } }], { modelUsage: {} })).toEqual({ advisor_calls: 0, advisor_subagents: 0 });
   });
 });
 

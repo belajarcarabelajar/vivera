@@ -7,7 +7,10 @@
 // under its own model ID, already inside `total_cost_usd`. Evidence: plan 2026-11-08-advisor-eval, T1.
 
 // stream-json forwards only some subagent events, so a subagent's advisor calls never show
-// as blocks; the hand-back the parent receives names the tools the subagent used.
+// as blocks; the hand-back the parent receives names the tools the subagent used. Only the
+// result of an Agent call counts: a file or command output that prints the tag, or a
+// SendMessage resume of the same subagent, is not a new subagent. A background agent's
+// completion arrives as plain text later and is not counted (not observed on 2.1.319).
 const HAND_BACK_TOOLS = /<tools-used-before-summary>([^<]*)<\/tools-used-before-summary>/;
 
 function handBackText(block) {
@@ -17,17 +20,19 @@ function handBackText(block) {
 
 /**
  * Flat numeric keys, so the existing per-turn and per-attempt usage sums add them up:
- * advisor calls in the main session (exact), subagents that consulted the advisor at least
- * once (from their hand-back; the number of calls inside a subagent is not observable), and
+ * advisor calls in the main session (exact), Agent calls whose hand-back lists the advisor
+ * (the number of calls inside a subagent is not observable), and
  * cost per model ID. An advisor on the main model's own family shares its cost entry.
  */
 export function advisorUsage(events, resultEvent) {
   const out = { advisor_calls: 0, advisor_subagents: 0 };
+  const agentCalls = new Set();
   for (const e of events) {
     if (!Array.isArray(e?.message?.content) || e.parent_tool_use_id != null) continue;
     for (const block of e.message.content) {
       if (e.type === 'assistant' && block?.type === 'server_tool_use' && block.name === 'advisor') out.advisor_calls += 1;
-      const used = e.type === 'user' && handBackText(block).match(HAND_BACK_TOOLS);
+      if (e.type === 'assistant' && block?.type === 'tool_use' && block.name === 'Agent') agentCalls.add(block.id);
+      const used = e.type === 'user' && agentCalls.has(block?.tool_use_id) && handBackText(block).match(HAND_BACK_TOOLS);
       if (used && used[1].split(',').some((t) => t.trim() === 'advisor')) out.advisor_subagents += 1;
     }
   }

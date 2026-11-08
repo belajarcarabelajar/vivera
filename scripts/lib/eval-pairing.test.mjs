@@ -26,17 +26,29 @@ describe('advisorUsage', () => {
 
   // stream-json forwards only some subagent events, so a subagent's advisor call never shows as a
   // block; the hand-back the parent receives lists the tools the subagent used (seen on 2.1.319).
+  const call = (id, name) => ({ type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'tool_use', id, name, input: {} }] } });
+  const handBack = (id, tools) => ({
+    type: 'user', parent_tool_use_id: null,
+    message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text: `  <tools-used-before-summary>${tools}</tools-used-before-summary>\n  report` }] }] },
+  });
+
   test('counts subagents whose hand-back lists the advisor, not advisor blocks of other tools', () => {
-    const handBack = (tools) => ({
-      type: 'user', parent_tool_use_id: null,
-      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_agent', content: [{ type: 'text', text: `  <tools-used-before-summary>${tools}</tools-used-before-summary>\n  report` }] }] },
-    });
     const events = [
-      handBack('Bash, advisor'),
-      handBack('Read, Grep'),
+      call('toolu_a', 'Agent'), handBack('toolu_a', 'Bash, advisor'),
+      call('toolu_b', 'Agent'), handBack('toolu_b', 'Read, Grep'),
       { type: 'assistant', parent_tool_use_id: null, message: { content: [{ type: 'server_tool_use', name: 'web_search', input: {} }] } },
     ];
     expect(advisorUsage(events, null)).toEqual({ advisor_calls: 0, advisor_subagents: 1 });
+  });
+
+  // A file or command output that prints the tag, or a SendMessage resume of the same subagent,
+  // is not a new subagent: only results of an Agent call count (staid review F1, F2).
+  test('ignores the tag in results of tools other than Agent', () => {
+    const events = [
+      call('toolu_r', 'Read'), handBack('toolu_r', 'advisor'),
+      call('toolu_s', 'SendMessage'), handBack('toolu_s', 'Bash, advisor'),
+    ];
+    expect(advisorUsage(events, null)).toEqual({ advisor_calls: 0, advisor_subagents: 0 });
   });
 
   test('a run without the advisor records zero calls', () => {
@@ -66,7 +78,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-function setup() {
+function setup(scenario = {}) {
   const root = fs.mkdtempSync('/tmp/eval-pairing-');
   dirs.push(root);
   const scenDir = path.join(root, 'evals', 'scenarios');
@@ -77,6 +89,7 @@ function setup() {
   fs.writeFileSync(path.join(scenDir, 'gate-a.json'), JSON.stringify({
     id: 'gate-a', behaviour: 'b', fixture: 'tiny', max_turns: 4, permission_mode: 'dontAsk', invoke: false, prompt: 'ask',
     assertions: [{ type: 'fixture_unchanged' }, { type: 'final_options', min: 2 }],
+    ...scenario,
   }));
   const log = path.join(root, 'stub.log');
   const stub = path.join(root, 'claude-stub.sh');
@@ -117,6 +130,15 @@ describe('eval-run --model and --advisor', () => {
     const [s] = JSON.parse(fs.readFileSync(out, 'utf8')).scenarios;
     expect(s.model).toBeNull();
     expect(s.advisor).toBeNull();
+  });
+
+  // runClaude adds the flags on every call today; a change that sent them only with the first
+  // turn would leave a resumed turn on the default model (staid review F3).
+  test('every turn of a multi-turn scenario gets both flags', () => {
+    const ctx = setup({ prompt: undefined, assertions: [{ type: 'gate_count', max: 2 }], turns: [{ prompt: 'ask', assertions: [{ type: 'final_options', min: 2 }] }, { prompt: 'again', assertions: [{ type: 'final_options', min: 2 }] }] });
+    expect(run(ctx, '--model', 'sonnet', '--advisor', 'opus', '--out', path.join(ctx.root, 'out.json')).code).toBe(0);
+    expect(args(ctx).match(/^ARG --advisor$/gm)).toHaveLength(2);
+    expect(args(ctx).match(/^ARG --model$/gm)).toHaveLength(2);
   });
 
   test('a flag without a value is a usage error', () => {

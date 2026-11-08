@@ -41,7 +41,7 @@ import { USAGE, UsageError, parseArgs } from './lib/eval-args.mjs';
 import { initModel, pairingArgs, pairingMismatch } from './lib/eval-pairing.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
-import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
+import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, dropCredentials, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
 import { RefusedError, generateFixtures, generateProblem, safeRelative } from './lib/eval-hooks.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -325,8 +325,10 @@ async function main(argv) {
       console.log(line(done[done.length - 1], width));
     }
   } finally {
-    if (opts.keep) console.log(`kept fixtures in ${runDir}`);
-    else fs.rmSync(runDir, { recursive: true, force: true });
+    if (opts.keep) {
+      dropCredentials(runDir);
+      console.log(`kept fixtures in ${runDir} (credential copy removed)`);
+    } else fs.rmSync(runDir, { recursive: true, force: true });
   }
   if (!opts.keep) pruneStreamRuns(path.join(path.dirname(out), 'streams'));
 

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { bwrapArgs } from './eval-sandbox.mjs';
+import { bwrapArgs, dropCredentials } from './eval-sandbox.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'eval-run.mjs');
@@ -70,6 +70,34 @@ describe('eval-run sandbox', () => {
   test('without bwrap the runner warns and runs unsandboxed', () => {
     const r = runWith('/nonexistent/bwrap');
     expect([r.code, r.err.includes('bwrap not found'), r.log.includes('RUN')]).toEqual([0, true, true]);
+  });
+
+  test('--keep keeps the run dir and its config dir but not the credential copy', () => {
+    const r = runWith('fake', '--keep');
+    const runDir = path.dirname(path.dirname(r.log.match(/^RUN (.*)$/m)[1]));
+    expect(r.code).toBe(0);
+    const project = r.log.match(/^RUN (.*)$/m)[1];
+    expect([fs.existsSync(project), fs.existsSync(path.join(runDir, 'claude-config')), fs.existsSync(path.join(runDir, 'claude-config', '.credentials.json'))]).toEqual([true, true, false]);
+  });
+});
+
+describe('dropCredentials', () => {
+  test('removes only the credential copy from the run config dir', () => {
+    const runDir = fs.mkdtempSync('/tmp/eval-sandbox-drop-');
+    roots.push(runDir);
+    const cfg = path.join(runDir, 'claude-config');
+    fs.mkdirSync(cfg);
+    fs.writeFileSync(path.join(cfg, '.credentials.json'), 'fake-credentials');
+    fs.writeFileSync(path.join(cfg, 'settings.json'), '{}');
+    dropCredentials(runDir);
+    expect([fs.existsSync(path.join(cfg, '.credentials.json')), fs.existsSync(path.join(cfg, 'settings.json'))]).toEqual([false, true]);
+  });
+
+  test('is a no-op when the run never made a credential copy', () => {
+    const runDir = fs.mkdtempSync('/tmp/eval-sandbox-drop-');
+    roots.push(runDir);
+    expect(() => dropCredentials(runDir)).not.toThrow();
+    expect(() => dropCredentials(path.join(runDir, 'missing'))).not.toThrow();
   });
 });
 

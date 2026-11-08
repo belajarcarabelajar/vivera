@@ -282,3 +282,51 @@ describe('a home with every harness', () => {
     for (const id of ['codex', 'cursor', 'copilot']) expect(check.stdout).toContain(`[skip] ${id}: no skills target`);
   }, SLOW);
 });
+
+// gh 2.103.2 (observed on a Colab host, 2026-11-08) writes ~/.local/state/gh/device-id on any call,
+// `gh --version` included, unless telemetry is off: GH_TELEMETRY=0|false, or DO_NOT_TRACK=1|true when
+// GH_TELEMETRY is unset (gh help environment). This fake gh does the same, so the cases run on any
+// machine; tgrep is a no-op shim because tier full only needs it found.
+describe('a required tool with telemetry state', () => {
+  const fakeGh = (sb) => {
+    const file = path.join(sb.bin, 'gh');
+    fs.writeFileSync(
+      file,
+      [
+        '#!/bin/sh',
+        'case "${GH_TELEMETRY-unset}" in',
+        '  0 | false) off=1 ;;',
+        '  unset) case "${DO_NOT_TRACK:-}" in 1 | true) off=1 ;; esac ;;',
+        'esac',
+        'if [ -z "${off:-}" ]; then mkdir -p "$HOME/.local/state/gh" && echo fake > "$HOME/.local/state/gh/device-id"; fi',
+        'echo "gh version 2.103.2 (fake)"',
+        '',
+      ].join('\n'),
+    );
+    fs.chmodSync(file, 0o755);
+    shim(sb, 'tgrep');
+  };
+  // The user's own GH_TELEMETRY must not turn the probe's opt-out back on.
+  const userEnvs = [{}, { GH_TELEMETRY: 'log' }];
+
+  test('matrix: --dry-run --tier full leaves no gh state in HOME', () => {
+    for (const env of userEnvs) {
+      const sb = sandbox();
+      fakeGh(sb);
+      const r = sb.run(['--dry-run', '--tier', 'full'], { env });
+      expect({ env, status: r.status, stdout: r.stdout.includes('[OK] Prerequisite verified: gh') }).toEqual({ env, status: 0, stdout: true });
+      expect({ env, home: sb.snapshot() }).toEqual({ env, home: [] });
+    }
+  }, SLOW);
+
+  test('matrix: install --tier full then uninstall leaves no gh state in HOME', () => {
+    for (const env of userEnvs) {
+      const sb = sandbox();
+      fakeGh(sb);
+      expect({ env, status: sb.run(['--tier', 'full'], { env }).status }).toEqual({ env, status: 0 });
+      expect({ env, status: sb.run(['--tier', 'full', '--uninstall'], { env }).status }).toEqual({ env, status: 0 });
+      const left = sb.snapshot().filter((l) => l.split('|')[1] !== 'd');
+      expect({ env, left }).toEqual({ env, left: [] });
+    }
+  }, SLOW);
+});

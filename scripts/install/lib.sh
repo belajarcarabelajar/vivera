@@ -28,6 +28,10 @@ tool_available() {
 
 # A required tool: found, then asked for its version on a closed stdin. A tool that fails or prints
 # nothing on --version still counts as found, so a failure cannot abort the run under pipefail.
+# The probe runs with telemetry off: gh 2.103.2 writes ~/.local/state/gh/device-id on any call, --version
+# included, unless GH_TELEMETRY is 0 or false (it overrides DO_NOT_TRACK, so a user's own GH_TELEMETRY=log
+# must not win here). DO_NOT_TRACK=1 is the cross-tool opt-out. Without this, --dry-run is not pure and
+# --uninstall leaves gh's file behind.
 check_prereq() {
   local cmd="$1"
   local label="$2"
@@ -40,7 +44,7 @@ check_prereq() {
     exit 1
   fi
   local version
-  version="$("$cmd" --version </dev/null 2>&1 | head -n 1 || true)"
+  version="$(GH_TELEMETRY=0 DO_NOT_TRACK=1 "$cmd" --version </dev/null 2>&1 | head -n 1 || true)"
   # On macOS /usr/bin/git is a stub that only offers to install the developer tools; it is not git.
   if [ "$cmd" = "git" ]; then
     case "$version" in

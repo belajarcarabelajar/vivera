@@ -128,7 +128,8 @@ function resolveBin(bin, envPath = '') {
 /**
  * The bwrap command line for one claude run, and its env. claude's state goes to a
  * per-run config dir inside the run dir holding only a copy of the credentials, so
- * the host's ~/.claude and ~/.claude.json stay out of reach; the copy goes with the run dir.
+ * the host's ~/.claude and ~/.claude.json stay out of reach; dropCredentials removes
+ * the copy when the run ends, also under --keep.
  */
 export function sandboxCommand({ bwrap, runDir, bin, args, env, home = os.homedir() }) {
   const real = resolveBin(bin, env.PATH);
@@ -144,6 +145,11 @@ export function sandboxCommand({ bwrap, runDir, bin, args, env, home = os.homedi
   // its install cache is read-only there, so BUN_INSTALL_CACHE_DIR moves it into the run dir.
   const roBinds = [path.dirname(real), path.join(home, '.bun')];
   return { cmd: bwrap, argv: [...bwrapArgs({ runDir, home, roBinds }), real, ...args], env: { ...env, CLAUDE_CONFIG_DIR: configDir, BUN_INSTALL_CACHE_DIR: path.join(runDir, 'bun-cache') } };
+}
+
+/** Removes the credential copy sandboxCommand made, leaving the rest of the run dir for diagnosis. */
+export function dropCredentials(runDir) {
+  fs.rmSync(path.join(runDir, 'claude-config', '.credentials.json'), { force: true });
 }
 
 // With a baseline the gate asks "did anything get worse", so a scenario that

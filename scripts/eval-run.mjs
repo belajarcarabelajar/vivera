@@ -38,7 +38,7 @@ import { deniedToolNames, score } from './eval-score.mjs';
 import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
 import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, runRepeated } from './lib/eval-repeat.mjs';
 import { USAGE, UsageError, parseArgs } from './lib/eval-args.mjs';
-import { pairingArgs, pairingMismatch } from './lib/eval-pairing.mjs';
+import { initModel, pairingArgs, pairingMismatch } from './lib/eval-pairing.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
 import { DISALLOWED_TOOLS, EVAL_NOTE, runExitCode, allowedTools, childEnv, runInGroup, sandboxCommand, scratchRoot } from './lib/eval-sandbox.mjs';
@@ -250,6 +250,7 @@ async function runScenario(scenario, fixturesDir, runDir, budget, invoke, keep, 
     cost: run.timedOut && parsed.result.subtype == null ? null : Number(parsed.result.total_cost_usd) || 0,
     timed_out: run.timedOut,
     usage: parsed.result.usage,
+    model_id: initModel(parsed.events),
     permission_denials: deniedToolNames(parsed.events),
     seconds: Math.round((Date.now() - started) / 100) / 10,
     ...(stream ? { stream, fixture: dest } : failed ? { stream: failed } : {}),

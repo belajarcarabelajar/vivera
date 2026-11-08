@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { advisorUsage, pairingMismatch } from './eval-pairing.mjs';
+import { advisorUsage, initModel, pairingMismatch } from './eval-pairing.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(HERE, '..', 'eval-run.mjs');
@@ -56,8 +56,26 @@ describe('advisorUsage', () => {
   });
 });
 
+describe('initModel', () => {
+  test('reads the resolved model ID from the init event', () => {
+    expect(initModel(readStream(ADVISOR_STREAM))).toBe('claude-sonnet-5-5');
+  });
+
+  test('is null when the stream has no init event', () => {
+    expect(initModel([{ type: 'result' }])).toBeNull();
+  });
+});
+
 describe('pairingMismatch', () => {
   const scenarios = [{ id: 'a' }, { id: 'b' }];
+
+  // A baseline made without --model still records the model it ran on (model_id), so a run that
+  // names that full ID compares with it; an alias never does, since aliases move between releases.
+  test('a full model ID matches a baseline entry that recorded the same resolved ID', () => {
+    const baseline = new Map([['a', { model: null, model_id: 'claude-opus-5-5', advisor: null }]]);
+    expect(pairingMismatch(baseline, scenarios, { model: 'claude-opus-5-5', advisor: null })).toBeNull();
+    expect(pairingMismatch(baseline, scenarios, { model: 'opus', advisor: null })).toContain('baseline default/none');
+  });
 
   test('a baseline entry without the fields means the default model and no advisor', () => {
     const baseline = new Map([['a', { model: null, advisor: null }]]);
@@ -115,6 +133,7 @@ describe('eval-run --model and --advisor', () => {
     expect(args(ctx)).toContain('ARG --advisor\nARG opus\n');
     const [s] = JSON.parse(fs.readFileSync(out, 'utf8')).scenarios;
     expect(s.model).toBe('sonnet');
+    expect(s.model_id).toBe('claude-sonnet-5-5');
     expect(s.advisor).toBe('opus');
     expect(s.usage.advisor_calls).toBe(1);
     expect(s.usage['cost_usd:claude-opus-5-5']).toBeCloseTo(0.087584, 6);

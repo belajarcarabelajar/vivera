@@ -74,6 +74,7 @@ export function baselineMap(data) {
     pass: Boolean(s.pass),
     invoke: s.invoke ?? false,
     model: s.model ?? null,
+    model_id: s.model_id ?? null,
     advisor: s.advisor ?? null,
     pass_rate: typeof s.pass_rate === 'number' ? s.pass_rate : (s.pass ? 1 : 0),
     attempts: typeof s.attempts === 'number' ? s.attempts : null,

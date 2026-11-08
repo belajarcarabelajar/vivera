@@ -42,13 +42,24 @@ export function advisorUsage(events, resultEvent) {
   return out;
 }
 
+/** The model the run actually used, from the stream's init event (the alias resolved). */
+export function initModel(events) {
+  const init = events.find((e) => e?.type === 'system' && e.subtype === 'init');
+  return typeof init?.model === 'string' ? init.model : null;
+}
+
 const label = (p) => `${p.model ?? 'default'}/${p.advisor ?? 'none'}`;
+
+// A full model ID typed for this run also matches an entry that recorded that ID as the model it
+// ran on; an alias never does, because the version an alias names moves between releases.
+const same = (entry, pairing) => label(entry) === label(pairing)
+  || (pairing.model != null && entry.model_id === pairing.model && (entry.advisor ?? null) === (pairing.advisor ?? null));
 
 // A run on another model or advisor measures a different agent, so it never compares
 // with the baseline. A baseline entry without the fields predates them: default model, no advisor.
 export function pairingMismatch(baseline, scenarios, pairing) {
   const want = label(pairing);
-  const off = scenarios.filter((s) => baseline.has(s.id) && label(baseline.get(s.id)) !== want);
+  const off = scenarios.filter((s) => baseline.has(s.id) && !same(baseline.get(s.id), pairing));
   if (!off.length) return null;
   const s = off[0];
   return `baseline model/advisor differs for ${off.length} scenario(s), first ${s.id}: baseline ${label(baseline.get(s.id))}, this run ${want}`;

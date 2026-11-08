@@ -36,7 +36,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { deniedToolNames, score } from './eval-score.mjs';
 import { mergeParsed, runTurns, scoreTurns, sessionFlags, turnsOf, turnsProblem } from './lib/eval-turns.mjs';
-import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, parseCount, runRepeated } from './lib/eval-repeat.mjs';
+import { FLAKY_ATTEMPTS, baselineMap, invokeMismatch, runRepeated } from './lib/eval-repeat.mjs';
+import { USAGE, UsageError, parseArgs } from './lib/eval-args.mjs';
 import { pairingArgs, pairingMismatch } from './lib/eval-pairing.mjs';
 import { line, localDate, printComparison, printSummary, writeReport } from './lib/eval-run-report.mjs';
 import { keepFailedStream, pruneStreamRuns } from './lib/eval-stats.mjs';
@@ -50,7 +51,6 @@ const DEFAULT_INVOKE = 'super-ultra-code-plan';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);
-const USAGE = 'usage: eval-run.mjs [--list] [--only <id,id>] [--budget-usd <total>] [--out <file.json>] [--baseline <file.json>] [--keep] [--no-invoke] [--no-sandbox] [--scenarios <dir>] [--repeat <odd n>] [--confirm-flips <even k>] [--no-early-stop] [--model <m>] [--advisor <m>]';
 // The fixture repository must not depend on the host's git config: a global hook
 // or signing setup would change what the initial commit is, or fail it.
 const FIXTURE_GIT_ENV = {
@@ -63,41 +63,8 @@ const FIXTURE_GIT_ENV = {
   GIT_COMMITTER_EMAIL: 'eval@local',
 };
 
-class UsageError extends Error {}
 // Set once in main from --model and --advisor.
 let PAIRING = { model: null, advisor: null };
-
-function parseArgs(argv) {
-  const opts = { list: false, noInvoke: false, noSandbox: false, only: null, budget: 15, out: null, baseline: null, keep: false, repeat: 3, confirmFlips: 0, noEarlyStop: false, model: null, advisor: null, scenarios: path.join(ROOT, 'evals', 'scenarios') };
-  const value = (i, flag) => {
-    const v = argv[i + 1];
-    if (v === undefined || v.startsWith('--')) throw new UsageError(`${flag} needs a value`);
-    return v;
-  };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--list') opts.list = true;
-    else if (a === '--keep') opts.keep = true;
-    else if (a === '--no-invoke') opts.noInvoke = true;
-    else if (a === '--no-sandbox') opts.noSandbox = true;
-    else if (a === '--no-early-stop') opts.noEarlyStop = true;
-    else if (a === '--model' || a === '--advisor') opts[a.slice(2)] = value(i++, a);
-    else if (a === '--only') opts.only = value(i++, a).split(',').map((s) => s.trim()).filter(Boolean);
-    else if (a === '--budget-usd') {
-      opts.budget = Number(value(i++, a));
-      if (!Number.isFinite(opts.budget) || opts.budget <= 0) throw new UsageError('--budget-usd needs a positive number');
-    } else if (a === '--out') opts.out = path.resolve(value(i++, a));
-    else if (a === '--baseline') opts.baseline = path.resolve(value(i++, a));
-    else if (a === '--repeat' || a === '--confirm-flips') {
-      const r = a === '--repeat';
-      const n = parseCount(value(i++, a), r ? 1 : 0, r ? 1 : 0);
-      if (Number.isNaN(n)) throw new UsageError(`${a} needs ${r ? 'an odd' : 'an even'} whole number, at least ${r ? 1 : 0}`);
-      opts[r ? 'repeat' : 'confirmFlips'] = n;
-    } else if (a === '--scenarios') opts.scenarios = path.resolve(value(i++, a));
-    else throw new UsageError(`unknown argument: ${a}`);
-  }
-  return opts;
-}
 
 function validateScenario(s, file, skills) {
   const bad = (why) => new UsageError(`${file}: ${why}`);
@@ -300,7 +267,7 @@ function readBaseline(file) {
 }
 
 async function main(argv) {
-  const opts = parseArgs(argv);
+  const opts = parseArgs(argv, ROOT);
   let scenarios = loadScenarios(opts.scenarios);
   if (opts.only) {
     const known = new Set(scenarios.map((s) => s.id));

@@ -15,7 +15,7 @@ export const OPENCODE_COLORS = {
   cyan: '#00a2c7',
 };
 
-const OPENCODE_TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const OPENCODE_TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 
 // OpenCode has no hooks, so the git guard becomes shell permission rules. The
 // last matching rule wins and each command of a chain is matched on its own
@@ -55,6 +55,7 @@ export function renderOpenCodeAgent(template, member, { templateLabel = `agents/
   const { fm, body, description, readOnly, skills } = readTemplate(template, member, { allowedKeys: OPENCODE_TEMPLATE_KEYS, target: 'opencode', templateLabel });
   const guarded = assertGitGuardHooks(fm, { templateLabel, target: 'opencode' });
 
+  // effort is dropped: no per-agent effort key is documented in this repository for OpenCode.
   const permissions = guarded ? openCodeShellRules() : [];
   if (readOnly) permissions.push({ action: 'edit', resource: '*', effect: 'deny' });
 

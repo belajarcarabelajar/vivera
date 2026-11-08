@@ -5,6 +5,7 @@ color: purple
 skills:
   - sucp-tdd-debug
 maxTurns: 40
+effort: high
 hooks:
   PreToolUse:
     - matcher: "Bash|Monitor"

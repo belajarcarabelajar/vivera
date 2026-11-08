@@ -6,7 +6,7 @@ import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../com
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
-const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 const MAX_PROMPT = 30000;
 
 // Claude Code tool name to the Copilot alias that covers it.
@@ -38,6 +38,7 @@ export function renderCopilotAgent(template, member, { templateLabel = `agents/r
   const { fm, body, description, tools, skills } = readTemplate(template, member, { allowedKeys: TEMPLATE_KEYS, target: 'copilot', templateLabel });
   assertGitGuardHooks(fm, { templateLabel, target: 'copilot' });
   // maxTurns is dropped: Copilot has no such key.
+  // effort is dropped: no per-agent effort key is documented in this repository for Copilot.
 
   const guard = proseGuard();
   const skill = skillLine(skills, 'from your skills');

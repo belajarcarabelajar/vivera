@@ -124,7 +124,8 @@ and `antigravity-builtin` get none.
   YAML parser accepted it in every rendered Markdown file, and `agy` accepted a `#` comment in the frontmatter
   of its control agent. Cursor and Copilot were not run, so it is unverified there.
 - **Turn limit and phase skill.** `maxTurns` becomes `steps` on OpenCode and is dropped on the other four,
-  whose pages list no such key. Claude Code preloads the phase skill from `skills:`; elsewhere the first
+  whose pages list no such key. `effort` is Claude Code only and is dropped on all five other targets.
+  Claude Code preloads the phase skill from `skills:`; elsewhere the first
   line of the body tells the sprite to load it.
 - The key names and directories of Codex, Cursor, Copilot and Antigravity come from the vendors' documentation
   pages read on 2026-10-11, and each of those target files names its page and date in a comment at the top.

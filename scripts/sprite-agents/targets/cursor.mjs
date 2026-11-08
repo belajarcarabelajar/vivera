@@ -7,7 +7,7 @@ import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../com
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
-const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'hooks'];
+const TEMPLATE_KEYS = ['description', 'tools', 'skills', 'maxTurns', 'effort', 'hooks'];
 
 export function renderCursorAgent(template, member, { templateLabel = `agents/roles/${member.role}.md` } = {}) {
   // `tools` only decides readOnly here, since Cursor has no per-agent tool list.
@@ -15,6 +15,7 @@ export function renderCursorAgent(template, member, { templateLabel = `agents/ro
   // Cursor has no hooks in an agent file, so the git guard can only be asked for in prose.
   assertGitGuardHooks(fm, { templateLabel, target: 'cursor' });
   // maxTurns is dropped: Cursor has no such key.
+  // effort is dropped: no per-agent effort key is documented in this repository for Cursor.
 
   const guard = proseGuard();
   const skill = skillLine(skills, 'from your skills');

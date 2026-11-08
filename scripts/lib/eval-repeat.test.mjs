@@ -107,8 +107,8 @@ describe('isFlaky', () => {
 describe('baseline comparison', () => {
   test('an old baseline without pass_rate reads it from pass', () => {
     const b = baselineMap({ scenarios: [{ id: 'a', pass: true }, { id: 'b', pass: false, invoke: 'x' }, { id: 'c', pass: true, pass_rate: 0.67 }] });
-    expect(b.get('a')).toEqual({ pass: true, invoke: false, pass_rate: 1, attempts: null, flaky: false });
-    expect(b.get('b')).toEqual({ pass: false, invoke: 'x', pass_rate: 0, attempts: null, flaky: false });
+    expect(b.get('a')).toEqual({ pass: true, invoke: false, model: null, model_id: null, advisor: null, pass_rate: 1, attempts: null, flaky: false });
+    expect(b.get('b')).toEqual({ pass: false, invoke: 'x', model: null, model_id: null, advisor: null, pass_rate: 0, attempts: null, flaky: false });
     expect(b.get('c').pass_rate).toBe(0.67);
   });
 
@@ -119,7 +119,7 @@ describe('baseline comparison', () => {
       { id: 'short', pass: true, attempts: 3, pass_rate: 0.67 },
       { id: 'old', pass: true, pass_rate: 0.67 },
     ] });
-    expect(b.get('f')).toEqual({ pass: true, invoke: false, pass_rate: 0.8, attempts: 5, flaky: true });
+    expect(b.get('f')).toEqual({ pass: true, invoke: false, model: null, model_id: null, advisor: null, pass_rate: 0.8, attempts: 5, flaky: true });
     expect(b.get('s')).toMatchObject({ attempts: 5, flaky: false });
     expect(b.get('short')).toMatchObject({ attempts: 3, flaky: false });
     expect(b.get('old')).toMatchObject({ attempts: null, flaky: false });

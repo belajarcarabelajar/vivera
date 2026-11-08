@@ -240,6 +240,42 @@ describe('runCleanup', () => {
     } finally { f.done(); }
   });
 
+  test('a worktree wt-new locked is unlocked and removed: reading it proved the disk is mounted', () => {
+    const f = fixture();
+    try {
+      f.merge();
+      git(f.repo, 'worktree', 'lock', '--reason', 'wt-new: disk eksternal /mnt/x, jangan di-prune saat tidak ter-mount', f.worktree);
+      const r = runCleanup({ worktree: f.worktree, base: 'main', procCwds: [] });
+      expect(r.status).toBe('removed');
+      expect(existsSync(f.worktree)).toBe(false);
+      expect(r.lines.join('\n')).toMatch(/unlocked \(wt-new lock\)/);
+    } finally { f.done(); }
+  });
+
+  test('a lock from anyone else is a blocker: the worktree stays locked and in place', () => {
+    const f = fixture();
+    try {
+      f.merge();
+      git(f.repo, 'worktree', 'lock', '--reason', 'portable drive', f.worktree);
+      const r = runCleanup({ worktree: f.worktree, base: 'main', procCwds: [] });
+      expect(r.status).toBe('kept');
+      expect(r.lines.join('\n')).toMatch(/locked: portable drive/);
+      expect(existsSync(f.worktree)).toBe(true);
+      expect(git(f.repo, 'worktree', 'list', '--porcelain')).toMatch(/locked portable drive/);
+    } finally { f.done(); }
+  });
+
+  test('a wt-new lock on a worktree with a blocker stays in place', () => {
+    const f = fixture();
+    try {
+      git(f.repo, 'worktree', 'lock', '--reason', 'wt-new: disk eksternal /mnt/x', f.worktree);
+      f.put(f.worktree, 'a.txt', 'changed\n');
+      const r = runCleanup({ worktree: f.worktree, base: 'main', procCwds: [] });
+      expect(r.status).toBe('kept');
+      expect(git(f.repo, 'worktree', 'list', '--porcelain')).toMatch(/locked wt-new:/);
+    } finally { f.done(); }
+  });
+
   test('keeps an unmerged branch after removing its worktree, so no commit is lost', () => {
     const f = fixture();
     try {

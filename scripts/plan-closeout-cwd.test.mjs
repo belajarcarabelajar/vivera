@@ -3,6 +3,7 @@
 // Where readiness runs a plan's skip_if and what it does with a missing test file.
 // Split from plan-closeout.test.mjs, which is at its size ceiling. Temp dirs only.
 
+import './lib/local-runner-env.mjs';
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -11,8 +12,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
 
+
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
-const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe' });
+const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
 
 const dirs = [];
 afterEach(() => {

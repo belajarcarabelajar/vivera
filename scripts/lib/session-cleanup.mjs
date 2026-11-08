@@ -22,6 +22,13 @@ const TOOL_EXT = ['.pyc', '.tsbuildinfo'];
 // when git lists them as their own ignored entry (a gitignore pattern names them).
 const BUILD_NAMES = new Set(['dist', 'build', 'target', 'coverage', '.cache']);
 
+// The reason ~/.local/bin/wt-new gives `git worktree lock`.
+const WT_NEW_LOCK = 'wt-new:';
+
+function realOrSelf(p) {
+  try { return fs.realpathSync(p); } catch { return p; }
+}
+
 function git(cwd, args) {
   const r = spawnSync('git', ['-C', cwd, ...args], { encoding: 'utf8' });
   return { code: r.status, out: (r.stdout ?? '').trim(), err: (r.stderr ?? '').trim() };
@@ -136,10 +143,19 @@ function linksInto(file, root) {
 export function planCleanup({ worktree, procCwds = listProcCwds() }) {
   const wt = fs.realpathSync(worktree);
   if (fs.realpathSync(gitOk(wt, ['rev-parse', '--show-toplevel'])) !== wt) throw new Error(`${worktree} is not the top of a git worktree`);
-  const main = fs.realpathSync(gitOk(wt, ['worktree', 'list', '--porcelain']).split('\n')[0].replace(/^worktree /, ''));
+  const blocks = gitOk(wt, ['worktree', 'list', '--porcelain']).split('\n\n').map((b) => b.split('\n'));
+  const main = fs.realpathSync(blocks[0][0].replace(/^worktree /, ''));
   if (main === wt) throw new Error(`${worktree} is the main checkout, which is never removed`);
   const head = gitOk(wt, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  const plan = { worktree: wt, main, branch: head === 'HEAD' ? null : head, blockers: [], disposable: [], identical: [], salvage: [], conflicts: [] };
+  const entry = blocks.find((b) => b[0].startsWith('worktree ') && realOrSelf(b[0].slice('worktree '.length)) === wt) ?? [];
+  const lockLine = entry.find((l) => l === 'locked' || l.startsWith('locked '));
+  const lock = lockLine == null ? null : lockLine.slice('locked'.length).trim();
+  const plan = { worktree: wt, main, branch: head === 'HEAD' ? null : head, lock, blockers: [], disposable: [], identical: [], salvage: [], conflicts: [] };
+
+  // wt-new locks its worktrees so a prune while the external disk is unmounted
+  // does not drop them. Getting this far read the worktree, so the disk is
+  // mounted and that lock may go. Any other lock is someone's decision: kept.
+  if (lock != null && !lock.startsWith(WT_NEW_LOCK)) plan.blockers.push(`locked: ${lock || '(no reason given)'}`);
 
   if (!plan.branch) {
     const lost = gitOk(wt, ['rev-list', 'HEAD', '--not', '--branches', '--remotes', '--tags']).split('\n').filter(Boolean).length;
@@ -203,9 +219,15 @@ export function runCleanup({ worktree, base = 'main', dryRun = false, procCwds }
     return { status: 'dry-run', lines: [`would remove ${p.worktree}`, ...summary, branchLine] };
   }
   for (const f of p.salvage) copyEntry(path.join(p.worktree, f), path.join(p.main, f));
-  gitOk(p.main, ['worktree', 'remove', p.worktree]);
+  if (p.lock != null) gitOk(p.main, ['worktree', 'unlock', p.worktree]);
+  try {
+    gitOk(p.main, ['worktree', 'remove', p.worktree]);
+  } catch (err) {
+    if (p.lock != null) git(p.main, ['worktree', 'lock', '--reason', p.lock, p.worktree]);
+    throw err;
+  }
   gitOk(p.main, ['worktree', 'prune']);
-  const lines = [`removed ${p.worktree}`, ...summary];
+  const lines = [`removed ${p.worktree}`, ...(p.lock != null ? ['  unlocked (wt-new lock) before removal'] : []), ...summary];
   if (!p.branch) lines.push('  detached HEAD, no branch');
   else if (!branchMerged(p.main, p.branch, base)) lines.push(`  branch ${p.branch} kept: not in origin/${base}`);
   else {

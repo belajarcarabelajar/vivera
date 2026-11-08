@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import './lib/local-runner-env.mjs';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs, { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, rmSync, chmodSync, readFileSync, existsSync } from 'node:fs';
@@ -27,6 +28,7 @@ import { parseRunnerLog, classifyStatus } from './plan-mark-done.mjs';
 // have genuinely diverged. It is a historical record, not a second source of
 // truth: nothing in production depends on it.
 import { classifySpikeSkipIf } from './spike-skipif-classifier.mjs';
+
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER = path.join(ROOT, 'scripts', 'ultra-plan-runner.mjs');

@@ -10,7 +10,7 @@ A scan of 3,135 session logs (10 days, about $10,978) found context length, suba
 - Subagents: bundle chunks to 15+ turns each, inline for 3-step jobs, implementers to Sonnet only after a parity eval (L86).
 - Output: cap reads and commands at the source (`offset` and `limit`, `rg -m`, tests to a scratch file plus `tail -40`) (L87).
 - Always-loaded text: one-task runbooks go to on-demand files with a 2-line pointer; keep `~/AGENTS.md` under 67k characters (L88).
-- Effort: the model's default (5.5 models `medium`, most older ones `high`); raise only the one hard step with `ultrathink` (one turn) or `s` in `/effort` (session only), never a typed `/effort <level>` (it saves the default) or a whole-session `max` (L89).
+- Effort: the model's default (5.5 models and Fable 5.2 in Claude Code `medium`, Fable 5.2 API and most older ones `high`); raise to `high` on Fable 5.2 for hard coding, research, and unattended runs, or raise only the one hard step with `ultrathink` (one turn) or `s` in `/effort` (session only), never a typed `/effort <level>` (it saves the default) or a whole-session `max` (L89).
 
 # Compact instructions
 

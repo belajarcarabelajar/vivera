@@ -19,9 +19,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { num, readTranscriptSignals } from './lib/session-signals.mjs';
 
-// USD per million tokens: Anthropic list prices via the claude-api skill (model table cached 2026-10-06).
+// USD per million tokens: Anthropic list prices via the claude-api skill (model table cached 2026-11-09).
 const card = (input, output, cacheRead) => ({ input, output, cacheRead });
 export const PRICES = {
+  'claude-fable-5-2': card(8, 40, 0.2),
+  'claude-mythos-5-2': card(8, 40, 0.2),
   'claude-fable-5-1': card(10, 50, 0.25),
   'claude-mythos-5-1': card(10, 50, 0.25),
   'claude-fable-5': card(10, 50, 1),
@@ -31,13 +33,13 @@ export const PRICES = {
   'claude-opus-4-8': card(5, 25, 0.5),
   'claude-opus-4-7': card(5, 25, 0.5),
   'claude-opus-4-6': card(5, 25, 0.5),
-  'claude-sonnet-5-5': card(2, 10, 0.2),
+  'claude-sonnet-5-5': card(2, 10, 0.1),
   'claude-sonnet-5': card(2, 10, 0.2),
   'claude-sonnet-4-6': card(3, 15, 0.3),
   'claude-haiku-5-5': { ...card(0.1, 0.5, 0.01), long: { above: 100000, ...card(0.5, 2.5, 0.05) } },
   'claude-haiku-4-5': card(1, 5, 0.1),
 };
-export const PRICES_AS_OF = '2026-10-20';
+export const PRICES_AS_OF = '2026-11-09';
 const DAY_MS = 86400000;
 // Skill and agent names are printed, so anything that does not look like a name
 // is folded into one bucket rather than risk echoing free text.

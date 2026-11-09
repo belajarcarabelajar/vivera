@@ -110,4 +110,12 @@ describe("prompt flag guard", () => {
       expect(text).not.toContain("replace(/^-+\\s*/");
     }
   });
+
+  test("refine.ts runs Haiku 5.5 at medium effort, includes stop_details.category on refusal, and rejects max_tokens", () => {
+    const text = readFileSync(join(MOD, "src/refine.ts"), "utf8");
+    expect(text).toContain('effort: "medium"');
+    expect(text).not.toContain('effort: "high"');
+    expect(text).toContain("stop_details");
+    expect(text).toContain('response.stop_reason === "max_tokens" || !out');
+  });
 });

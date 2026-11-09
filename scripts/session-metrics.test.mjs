@@ -119,15 +119,17 @@ describe('readTranscript', () => {
   });
 });
 
-// Expected dollars are worked by hand from the 2026-10-20 list prices (USD per
+// Expected dollars are worked by hand from the 2026-11-09 list prices (USD per
 // million tokens), never recomputed with the script's own formula.
 describe('callCostUsd', () => {
   const split = (m5, h1) => ({ ephemeral_5m_input_tokens: m5, ephemeral_1h_input_tokens: h1 });
 
-  test('PRICES holds the 2026-10-20 list, dated by PRICES_AS_OF', () => {
+  test('PRICES holds the 2026-11-09 list, dated by PRICES_AS_OF', () => {
     const card = (input, output, cacheRead) => ({ input, output, cacheRead });
-    expect(PRICES_AS_OF).toBe('2026-10-20');
+    expect(PRICES_AS_OF).toBe('2026-11-09');
     expect(PRICES).toEqual({
+      'claude-fable-5-2': card(8, 40, 0.2),
+      'claude-mythos-5-2': card(8, 40, 0.2),
       'claude-fable-5-1': card(10, 50, 0.25),
       'claude-mythos-5-1': card(10, 50, 0.25),
       'claude-fable-5': card(10, 50, 1),
@@ -137,12 +139,19 @@ describe('callCostUsd', () => {
       'claude-opus-4-8': card(5, 25, 0.5),
       'claude-opus-4-7': card(5, 25, 0.5),
       'claude-opus-4-6': card(5, 25, 0.5),
-      'claude-sonnet-5-5': card(2, 10, 0.2),
+      'claude-sonnet-5-5': card(2, 10, 0.1),
       'claude-sonnet-5': card(2, 10, 0.2),
       'claude-sonnet-4-6': card(3, 15, 0.3),
       'claude-haiku-5-5': { ...card(0.1, 0.5, 0.01), long: { above: 100000, input: 0.5, output: 2.5, cacheRead: 0.05 } },
       'claude-haiku-4-5': card(1, 5, 0.1),
     });
+  });
+
+  test('Fable 5.2 and Sonnet 5.5 use their 2026-11-09 input, output, and cache-read rates', () => {
+    // Fable 5.2: 1000*8 + 5000*0.2 + 200*40 = 17000 per million.
+    expect(callCostUsd('claude-fable-5-2', u(1000, 0, 5000, 200))).toBeCloseTo(0.017, 12);
+    // Sonnet 5.5: 1000*2 + 5000*0.1 + 200*10 = 4500 per million.
+    expect(callCostUsd('claude-sonnet-5-5', u(1000, 0, 5000, 200))).toBeCloseTo(0.0045, 12);
   });
 
   test('a 5-minute cache write costs 1.25x input', () => {
@@ -221,7 +230,7 @@ describe('summarize', () => {
     expect(s.costUsd).toBe(0.024);
     expect(Object.entries(s.costUsdByModel)).toEqual([['claude-haiku-4-5', 0.012], ['claude-opus-5-5', 0.006], ['claude-sonnet-5', 0.006]]);
     expect(s.unpricedModels).toEqual({ 'mystery-model-9': 1 });
-    expect(s.pricesAsOf).toBe('2026-10-20');
+    expect(s.pricesAsOf).toBe('2026-11-09');
   });
 
   test('counts unpriced models named like Object.prototype keys exactly', () => {
@@ -302,7 +311,7 @@ describe('CLI', () => {
     expect(j.costUsd).toBe(0.0087);
     expect(Object.entries(j.costUsdByModel)).toEqual([['claude-opus-5-5', 0.0077], ['claude-haiku-4-5', 0.001]]);
     expect(j.unpricedModels).toEqual({});
-    expect(j.pricesAsOf).toBe('2026-10-20');
+    expect(j.pricesAsOf).toBe('2026-11-09');
     expect(j.notes).toEqual([]);
     expect(j.medianFirstCallContext).toEqual({ main: 1010, subagent: 503 });
     expect(j.startupPrefixShare).toBeCloseTo(1006 / 1105, 4);
@@ -346,7 +355,7 @@ describe('CLI', () => {
     expect(r.code).toBe(0);
     expect(r.out).not.toContain('cost-weighted');
     expect(r.out).toMatch(/API list-price equivalent, USD\s+0\.0087\n/);
-    expect(r.out).toMatch(/prices as of\s+2026-10-20\n/);
+    expect(r.out).toMatch(/prices as of\s+2026-11-09\n/);
     expect(r.out).toMatch(/per merged PR: API list-price USD\s+0\.0029\n/);
     expect(r.out).toMatch(/API list-price USD by model\n\s+claude-opus-5-5\s+0\.0077\n\s+claude-haiku-4-5\s+0\.001\n/);
     expect(r.out).toContain('note: 1 call(s) from models without a price (claude-future-9 x1)');

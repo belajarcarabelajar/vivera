@@ -44,7 +44,7 @@ test("parses the /model picker and finds the newest version for an alias", () =>
     "   Select model",
     "     1.  Default (recommended)  Opus 5.5 · Best for everyday, complex tasks",
     "     2.  Opus 5.5               For complex work and everyday tasks",
-    "     3.  Fable 5.1              For your toughest challenges",
+    "     3.  Fable 5.2              For your toughest challenges",
     "     4.  Sonnet 5.5             Most efficient for simpler tasks",
     "   ❯ 5.  Haiku 5.5 ✔            Fastest for quick answers",
     "     7.  Sonnet 5               Efficient for routine tasks",
@@ -55,6 +55,7 @@ test("parses the /model picker and finds the newest version for an alias", () =>
   expect(rows.find((r) => r.cursor)).toEqual({ index: 5, label: "Haiku 5.5", cursor: true });
   expect(pickerTarget(rows, "sonnet")?.index).toBe(4);
   expect(pickerTarget(rows, "opus")?.index).toBe(2);
+  expect(pickerTarget(rows, "fable")?.index).toBe(3);
   expect(pickerTarget(rows, "default")?.index).toBe(1);
   expect(rows.find((r) => r.index === 10)?.label).toBe("Opus 4.8");
   expect(pickerTarget(rows, "gpt")).toBeUndefined();

@@ -1,5 +1,5 @@
 // Turns a raw voice transcript (or typed text) into a clean Claude Code prompt and suggests a
-// working folder. Claude Haiku 5.5, effort high. The model never runs anything; the user reviews
+// working folder. Claude Haiku 5.5, effort medium. The model never runs anything; the user reviews
 // and edits the result on the phone before launch.
 //
 // The SDK and zod are loaded inside refine(), so importing this file (for the key lookup or sanitizePrompt)
@@ -57,7 +57,7 @@ export async function refine(transcript: string, folderLabels: string[]): Promis
   const response = await client.messages.parse({
     model: config.refineModel,
     max_tokens: 16000,
-    output_config: { effort: "high", format: zodOutputFormat(RefinedSchema) },
+    output_config: { effort: "medium", format: zodOutputFormat(RefinedSchema) },
     system: SYSTEM,
     messages: [
       {
@@ -66,8 +66,13 @@ export async function refine(transcript: string, folderLabels: string[]): Promis
       },
     ],
   });
-  if (response.stop_reason === "refusal") throw new Error("Haiku menolak merapikan teks ini");
+  if (response.stop_reason === "refusal") {
+    const cat = (response as { stop_details?: { category?: string } }).stop_details?.category;
+    throw new Error(cat ? `Haiku menolak merapikan teks ini (${cat})` : "Haiku menolak merapikan teks ini");
+  }
   const out = response.parsed_output;
-  if (!out) throw new Error(`Haiku tidak mengembalikan JSON yang valid (stop_reason ${response.stop_reason})`);
+  if (response.stop_reason === "max_tokens" || !out) {
+    throw new Error(`Haiku tidak mengembalikan JSON yang valid (stop_reason ${response.stop_reason})`);
+  }
   return { prompt: sanitizePrompt(out.prompt), folder: out.folder, note: out.note };
 }

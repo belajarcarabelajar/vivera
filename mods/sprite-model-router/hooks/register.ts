@@ -14,6 +14,9 @@ export const ROSTER: Record<string, string> = {
 // Roles that never edit files, so a wrong answer costs a re-check, not a broken tree.
 export const READ_ONLY_ROLES = new Set(['researcher', 'reviewer'])
 
+// Built-in Claude Code subagents that only explore/read and otherwise inherit the session model.
+export const READ_ONLY_BUILTINS = new Set(['Explore'])
+
 // Only ever routes down: a parent already on Sonnet or Haiku keeps its model.
 const EXPENSIVE_PARENT = /opus|fable/i
 
@@ -26,8 +29,8 @@ export const register: Register = (on, options) => {
     // agent or a teammate is someone else's decision.
     if (e.model || e.fork || e.resume || e.workflow || e.isTeammate) return next(e)
     const sprite = e.subagentType.trim()
-    const role = ROSTER[sprite]
-    if (!role || !READ_ONLY_ROLES.has(role)) return next(e)
+    const role = ROSTER[sprite] ?? (READ_ONLY_BUILTINS.has(sprite) ? 'built-in' : undefined)
+    if (!role || (role !== 'built-in' && !READ_ONLY_ROLES.has(role))) return next(e)
     if (!EXPENSIVE_PARENT.test(e.parentModel)) return next(e)
     $.ui.log(`${sprite} (${role}) → ${target}, parent ${e.parentModel}`)
     return next({ ...e, model: target })

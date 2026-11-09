@@ -49,7 +49,7 @@ export const ENUMS = {
   color: ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'pink', 'cyan'],
   memory: ['user', 'project', 'local'],
   effort: ['low', 'medium', 'high', 'xhigh', 'max'],
-  isolation: ['worktree'],
+  isolation: ['worktree', 'remote'],
 };
 
 // Returns [{ file, dangling }] sorted by path. A symlink to a file is scanned like

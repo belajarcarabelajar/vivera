@@ -336,20 +336,14 @@ describe('field value types', () => {
   });
 
   test.each([
-    'tools: Read, Grep',
+    'tools: Read, Grep', 'disallowedTools: Bash',
     'tools:\n  - Read\n  - Grep',
-    'disallowedTools: Bash',
-    'model: sonnet',
-    'permissionMode: acceptEdits',
-    'permissionMode: bypassPermissions',
-    'color: cyan',
-    'memory: project',
-    'background: true',
-    'omitClaudeMd: false',
-    'effort: xhigh',
-    'isolation: worktree',
-    'initialPrompt: start here',
-    'mcpServers:\n  - github',
+    'model: sonnet', 'color: cyan',
+    'permissionMode: acceptEdits', 'permissionMode: bypassPermissions',
+    'memory: project', 'effort: xhigh',
+    'background: true', 'omitClaudeMd: false',
+    'isolation: worktree', 'isolation: remote',
+    'initialPrompt: start here', 'mcpServers:\n  - github',
     'mcpServers:\n  github:\n    command: x',
     'experimental:\n  flag: true',
   ])('accepts %j', (line) => {

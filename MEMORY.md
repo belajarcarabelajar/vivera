@@ -11,7 +11,7 @@
 
 | Topic | File | Rules |
 |---|---|---|
-| Git and delivery | [docs/memory/git-and-delivery.md](docs/memory/git-and-delivery.md) | L8, L16, L17, L18, L19, L21, L22, L25, L28 |
+| Git and delivery | [docs/memory/git-and-delivery.md](docs/memory/git-and-delivery.md) | L8, L16, L17, L18, L19, L21, L22, L25, L28, L109 |
 | Gates and tests | [docs/memory/gates-and-tests.md](docs/memory/gates-and-tests.md) | L2, L9, L11, L13, L23, L24, L30, L32, L36, L37, L39, L42, L45, L54, L56, L59, L73, L74, L75, L76, L78, L79, L81, L84, L90, L97, L100, L108 |
 | Plans and approvals | [docs/memory/plans-and-approvals.md](docs/memory/plans-and-approvals.md) | L3, L20, L29, L31, L35, L41, L43, L44, L46, L47, L53, L55, L60, L65, L95, L106 |
 | Subagents | [docs/memory/subagents.md](docs/memory/subagents.md) | L6, L7, L38, L49, L50, L52, L63, L64, L69, L86, L96, L99, L102 |

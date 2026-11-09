@@ -34,7 +34,7 @@
   "scripts/skipif-registry-audit.mjs": 24126,
   "scripts/ultra-plan-runner.mjs": 60241,
   "scripts/ultra-plan-runner.test.mjs": 105973,
-  "scripts/validate-agents.test.mjs": 21143,
+  "scripts/validate-agents.test.mjs": 21140,
   "scripts/validate-lib.test.mjs": 27833,
   "scripts/validate-skill.mjs": 45320,
   "scripts/validate-skill.test.mjs": 21552,

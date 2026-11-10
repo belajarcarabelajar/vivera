@@ -100,8 +100,10 @@ export const PATTERNS = [
     // word character, so a bare `\b` before the key word never fired there.
     // The lookbehind lets a match start only where such a word starts: with a
     // plain `\b` the prefix group was retried at every hyphen of a long run.
+    // A start after a dash is refused only when a word sits right before it
+    // (`ab-ab`), so a CLI flag such as `--password=x` still starts a match.
     name: 'generic-secret-assignment',
-    re: /["']?(?<![A-Za-z0-9_-])(?:[A-Za-z0-9]+[_-])*(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
+    re: /["']?(?<![A-Za-z0-9_]-{0,2})(?:[A-Za-z0-9]+[_-])*(?:api[_-]?keys?|client[_-]?secret|secrets?|passwords?|passwd|token|auth[_-]?token|access[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\n]*"|'[^'\n]*'|\[[^\]\n]*\]|[^\s,;"'`)}\]]+)/gi,
   },
 ];
 

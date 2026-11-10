@@ -64,6 +64,17 @@ test('run[].retry outside the integers 0..10 is a validation error naming the ta
   assert.ok(!errors.some((e) => e.includes('retry')), JSON.stringify(errors));
 });
 
+// Audit 2026-11-09 r228-1--regresi-2: the per-step key overrides the default, so it gets the same ceiling.
+test('run[].timeout_s over a day is a validation error naming the task and step', () => {
+  for (const bad of [0, -1, '60', 86401, 3000000]) {
+    const { errors } = validatePlan(planWith({}, { timeout_s: bad }), null);
+    assert.ok(errors.some((e) => e.includes('task T1 run[0] timeout_s')),
+      `timeout_s=${bad} passed validation: ${JSON.stringify(errors)}`);
+  }
+  const { errors } = validatePlan(planWith({}, { timeout_s: 86400 }), null);
+  assert.ok(!errors.some((e) => e.includes('timeout_s')), JSON.stringify(errors));
+});
+
 // ---------- finding 116: a task id with regex syntax never throws ----------
 
 test('a task id outside [A-Za-z0-9._-] is a validation error, not a SyntaxError', () => {
@@ -118,6 +129,26 @@ test('a secret name with a prefix such as ANTHROPIC_API_KEY or DB_PASSWORD is ma
     const r = redact(s);
     assert.equal(r.text, '[REDACTED:generic-secret-assignment]', `${s} -> ${r.text}`);
   }
+});
+
+// Audit 2026-11-09 r228-1--regresi-1: the prefix lookbehind also refused a start right after `--`.
+test('a secret passed as a CLI flag such as --password=x or --token=x is masked', () => {
+  for (const flag of ['--password=x', '--token=x', '--api-key=x', '--client-secret=x', '-passwd=x', '--db-password=x']) {
+    const r = redact(`mysql ${flag} -h db`);
+    assert.ok(!/=x\b/.test(r.text) && r.counts['generic-secret-assignment'] === 1, `${flag} -> ${r.text}`);
+  }
+  assert.equal(redact('a-password=x').text, '[REDACTED:generic-secret-assignment]');
+});
+
+test('a 64 KB run of hyphen-led words is redacted in under 50 ms', () => {
+  const src = `import { redact } from ${JSON.stringify(path.join(ROOT, 'scripts', 'lib', 'redact.mjs'))};
+const text = '--ab-'.repeat(13000) + 'x';
+const t0 = performance.now();
+redact(text);
+console.log(JSON.stringify({ ms: performance.now() - t0 }));`;
+  const r = spawnSync(process.execPath, ['-e', src], { encoding: 'utf8', timeout: 5000 });
+  assert.equal(r.signal, null, 'redact ran past the 5 s kill timeout');
+  assert.ok(JSON.parse(r.stdout.trim()).ms < 50, r.stdout);
 });
 
 // The label prefix group must not make the pattern retry at every hyphen of a

@@ -36,8 +36,8 @@ export function validateRunnerNumbers(plan, errors) {
       if (step.retry !== undefined && !isRetry(step.retry)) {
         errors.push(`task ${t.id} run[${i}] retry ${retryRule}, got ${JSON.stringify(step.retry)}`);
       }
-      if (step.timeout_s !== undefined && !isStepTimeout(step.timeout_s)) {
-        errors.push(`task ${t.id} run[${i}] timeout_s must be a positive number of seconds, got ${JSON.stringify(step.timeout_s)}`);
+      if (step.timeout_s !== undefined && !(isStepTimeout(step.timeout_s) && step.timeout_s <= STEP_TIMEOUT_MAX_S)) {
+        errors.push(`task ${t.id} run[${i}] timeout_s must be a positive number of seconds up to ${STEP_TIMEOUT_MAX_S}, got ${JSON.stringify(step.timeout_s)}`);
       }
     });
   }

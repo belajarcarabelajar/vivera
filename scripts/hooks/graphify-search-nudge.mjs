@@ -6,8 +6,11 @@
 // rg/grep/fd/find/ag), it adds one line of context naming the graph and the
 // query command, unless that agent already queried the graph.
 //
-// One reminder per session and agent, tracked in a small state file, so the
-// nudge never turns into noise. The hook only adds context: it never prints a
+// The first search gets the reminder. If the agent keeps searching without
+// ever querying the graph, the reminder repeats after every REPEAT_EVERY
+// searches, at most MAX_REMINDERS times per session and agent (2026-11-11:
+// 14 days of transcripts showed 36 graph queries against 19,301 searches, so
+// a single early note was not enough). State lives in a small file. The hook only adds context: it never prints a
 // permission decision, and every failure path prints nothing and exits 0, so a
 // broken hook can never block or alter a tool call.
 
@@ -21,6 +24,8 @@ import { shellArg } from './graphify-session-start.mjs';
 const SEARCH_COMMANDS = new Set(['rg', 'grep', 'fd', 'find', 'ag']);
 const QUERY_SUBCOMMANDS = new Set(['query', 'path', 'explain']);
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+export const REPEAT_EVERY = 25;
+export const MAX_REMINDERS = 3;
 
 // Shell parsing is deliberately shallow: split on && || ; | and newlines, then
 // skip leading VAR=value words and one leading `timeout N`. Quotes are not
@@ -70,29 +75,53 @@ export function toolKind(input) {
   return 'other';
 }
 
-export function reminderText(graphPath) {
+export function reminderText(graphPath, nth = 1, searches = 0) {
+  const root = path.dirname(path.dirname(graphPath));
+  const lead =
+    nth > 1 ? `Reminder ${nth} of ${MAX_REMINDERS}: ${searches} searches since the last note and no graph query yet. ` : '';
   return (
+    lead +
     `This repository has a graphify knowledge graph at ${graphPath}. ` +
     'A query returns the nodes, files and relations that match a question in one call: ' +
     `\`graphify query "<question>" --graph ${shellArg(graphPath)}\`. ` +
     '`graphify path "A" "B"` and `graphify explain "X"` take the same --graph flag. ' +
-    'This note appears once per session and agent.'
+    `Over MCP, pass \`project_path: ${root}\` to query_graph; without it the server reads the global graph, which may not include this repository.`
   );
 }
 
+function remindersOf(state) {
+  if (Number.isInteger(state.reminders)) return state.reminders;
+  return state.reminded ? 1 : 0;
+}
+
+function dueForReminder(state) {
+  if (state.queried) return false;
+  const n = remindersOf(state);
+  if (n === 0) return true;
+  return n < MAX_REMINDERS && (state.searches ?? 0) + 1 >= REPEAT_EVERY;
+}
+
 function needsStatus(input, state) {
-  return toolKind(input) === 'search' && !state.queried && !state.reminded;
+  return toolKind(input) === 'search' && dueForReminder(state);
 }
 
 // Pure: returns the stdout line (or null) and the state to persist.
 export function decide(input, state, status) {
   const kind = toolKind(input);
   if (kind === 'query') return { output: null, nextState: { ...state, queried: true } };
-  if (kind === 'search' && !state.queried && !state.reminded && status?.kind === 'registered') {
+  if (kind !== 'search' || state.queried) return { output: null, nextState: state };
+  if (dueForReminder(state) && status?.kind === 'registered') {
+    const nth = remindersOf(state) + 1;
     const output = JSON.stringify({
-      hookSpecificOutput: { hookEventName: 'PreToolUse', additionalContext: reminderText(status.graphPath) },
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        additionalContext: reminderText(status.graphPath, nth, (state.searches ?? 0) + 1),
+      },
     });
-    return { output, nextState: { ...state, reminded: true } };
+    return { output, nextState: { ...state, reminded: true, reminders: nth, searches: 0 } };
+  }
+  if (remindersOf(state) > 0 && remindersOf(state) < MAX_REMINDERS) {
+    return { output: null, nextState: { ...state, searches: (state.searches ?? 0) + 1 } };
   }
   return { output: null, nextState: state };
 }

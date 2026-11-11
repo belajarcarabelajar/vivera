@@ -25,7 +25,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { decide, reminderText } from './graphify-search-nudge.mjs';
+import { decide, MAX_REMINDERS, reminderText, REPEAT_EVERY } from './graphify-search-nudge.mjs';
 import { shellArg } from './graphify-session-start.mjs';
 
 const HOOK = path.join(import.meta.dir, 'graphify-search-nudge.mjs');
@@ -356,4 +356,42 @@ test('decide stays silent when the state is already reminded or queried', () => 
   expect(decide(input, { queried: true }, REGISTERED).output).toBeNull();
   expect(decide(input, {}, { kind: 'unregistered' }).output).toBeNull();
   expect(decide(input, {}, null).output).toBeNull();
+});
+
+function searchRun(state, n) {
+  const input = { session_id: 's', cwd: '/r', tool_name: 'Grep', tool_input: {} };
+  const outputs = [];
+  for (let i = 0; i < n; i++) {
+    const r = decide(input, state, REGISTERED);
+    if (r.output) outputs.push(JSON.parse(r.output).hookSpecificOutput.additionalContext);
+    state = r.nextState;
+  }
+  return { outputs, state };
+}
+
+test('the reminder repeats after REPEAT_EVERY searches without a query, at most MAX_REMINDERS times', () => {
+  const { outputs } = searchRun({}, 1 + REPEAT_EVERY * (MAX_REMINDERS + 2));
+  expect(outputs.length).toBe(MAX_REMINDERS);
+  expect(outputs[0]).not.toContain('Reminder');
+  expect(outputs[1]).toContain(`Reminder 2 of ${MAX_REMINDERS}: ${REPEAT_EVERY} searches`);
+  const early = searchRun({}, REPEAT_EVERY);
+  expect(early.outputs.length).toBe(1);
+});
+
+test('a graph query stops further reminders', () => {
+  let { state } = searchRun({}, 3);
+  state = decide({ tool_name: 'mcp__graphify__query_graph', tool_input: {} }, state, REGISTERED).nextState;
+  expect(searchRun(state, REPEAT_EVERY * 3).outputs.length).toBe(0);
+});
+
+test('an old state file with only reminded: true still repeats later', () => {
+  const { outputs } = searchRun({ reminded: true }, REPEAT_EVERY);
+  expect(outputs.length).toBe(1);
+  expect(outputs[0]).toContain('Reminder 2');
+});
+
+test('the reminder names the repository root as the MCP project_path', () => {
+  const text = reminderText('/home/u/Proyek/app/graphify-out/graph.json');
+  expect(text).toContain('`project_path: /home/u/Proyek/app`');
+  expect(text).toContain('global graph');
 });

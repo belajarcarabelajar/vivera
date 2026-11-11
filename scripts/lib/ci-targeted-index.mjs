@@ -89,9 +89,10 @@ function readMarketplaceMods(root) {
 /** The suite tests a mods/ or workflow path selects: scripts/<mod>.test.mjs for a file in a
  * mod folder, that of every listed mod for the marketplace, scripts/workflows.test.mjs for
  * a .github/workflows file (GitHub runs the workflow, so its structure test is all a local
- * gate can check), scripts/<hook>.test.mjs for a .claude/hooks/<hook>.mjs script. Null when
- * one is missing, so the path stays unrecognized and forces the full list instead of going
- * untested. */
+ * gate can check), scripts/<hook>.test.mjs for a .claude/hooks/<hook>.mjs script plus every
+ * other test whose text contains that hook path (a plain substring match, since users name
+ * it inside shell commands and escaped strings). Null when an own test is missing, so the
+ * path stays unrecognized and forces the full list instead of going untested. */
 export function modTests(p, sources, marketplaceMods = []) {
   const mod = p.match(/^mods\/([^./][^/]*)\/./)?.[1];
   const mods = p === MARKETPLACE ? marketplaceMods : mod ? [mod] : [];
@@ -99,7 +100,10 @@ export function modTests(p, sources, marketplaceMods = []) {
   const hook = p.match(/^\.claude\/hooks\/([^./][^/]*)\.mjs$/)?.[1];
   if (hook) mods.push(hook);
   const tests = mods.map((m) => `scripts/${m}.test.mjs`);
-  return tests.length && tests.every((t) => t in sources) ? tests : null;
+  if (!tests.length || !tests.every((t) => t in sources)) return null;
+  if (!hook) return tests;
+  const users = Object.keys(sources).filter((f) => f.endsWith('.test.mjs') && !tests.includes(f) && sources[f].includes(p));
+  return [...tests, ...users];
 }
 
 export function buildIndex(root, files, mergeBase, untracked = []) {

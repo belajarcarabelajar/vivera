@@ -156,7 +156,7 @@ describe('local mode', () => {
   test('ignores same-origin links served by another Worker and resolves /_maudit/ assets', async () => {
     const dist = makeDist((t) => {
       t.pages['docs/index.html'].body.push(
-        '<a href="/workshop/">Workshop</a> <a href="/id/workshop/">Lokakarya</a> <a href="/">Home</a>',
+        '<a href="/1-on-1/">1-on-1</a> <a href="/id/1-on-1/">1-on-1</a> <a href="/">Home</a>',
         `<a href="/id/">Beranda</a> <a href="${SITE}/privacy/">Privacy</a>`,
         '<link rel="stylesheet" href="/_maudit/main.css">',
       );

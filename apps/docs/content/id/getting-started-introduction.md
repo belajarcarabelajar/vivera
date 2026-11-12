@@ -5,7 +5,7 @@ category: getting-started
 slug: introduction
 order: 1
 source: README.md
-source_hash: "8ace0ec53e79"
+source_hash: "08fb5a755fe2"
 ---
 
 <p align="center">
@@ -49,7 +49,7 @@ Jalankan `./install.sh --dry-run` lebih dulu untuk melihat apa yang akan dilakuk
 
 Setiap sprite adalah subagent bernama dengan satu peran tetap: Chef, Nappy, dan Hoggy mengimplementasikan, Timid dan Aqua meriset, Staid me-review, dan Bold men-debug. Potret, sifat di dalam game, dan peran mereka ada di [Harvest Sprites](/id/docs/reference/harvest-sprites/).
 
-Dokumentasi ini juga dipublikasikan di [vivera.belajarcarabelajar.com/docs](https://vivera.belajarcarabelajar.com/docs/), dan workshop tim memiliki halamannya sendiri di [vivera.belajarcarabelajar.com/workshop](https://vivera.belajarcarabelajar.com/workshop/).
+Dokumentasi ini juga dipublikasikan di [vivera.belajarcarabelajar.com/docs](https://vivera.belajarcarabelajar.com/docs/), dan sesi 1-on-1 memiliki halamannya sendiri di [vivera.belajarcarabelajar.com/1-on-1](https://vivera.belajarcarabelajar.com/1-on-1/).
 
 ## Panduan
 

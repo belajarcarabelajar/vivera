@@ -19,7 +19,7 @@
 //   - every internal href and src resolves to a file. Internal means it resolves
 //     (relative, root-relative, protocol-relative, or absolute) onto SITE_ORIGIN
 //     under /docs, /id/docs, or /_maudit/ (the crate's bundled CSS and JS). Other
-//     same-origin paths such as /workshop/ or /privacy/ are served by another
+//     same-origin paths such as /1-on-1/ or /privacy/ are served by another
 //     Worker and are not checked. Query and fragment are stripped; a path ending
 //     in / means index.html; an extensionless path also passes when
 //     <path>/index.html exists, because the static host redirects it there.
@@ -239,7 +239,7 @@ function isMauditPath(p) {
   return p.startsWith('/_maudit/');
 }
 
-// Other same-origin paths such as /workshop/ and /privacy/ belong to another Worker.
+// Other same-origin paths such as /1-on-1/ and /privacy/ belong to another Worker.
 function isSitePath(p) {
   return isDocsPath(p) || isMauditPath(p);
 }

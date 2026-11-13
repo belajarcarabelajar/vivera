@@ -29,8 +29,8 @@ try {
     try {
       if (typeof input.transcript_path === 'string') transcript = readTail(input.transcript_path)
     } catch {}
-    const target = process.env.CLAUDE_PLUGIN_OPTION_READONLYMODEL || 'sonnet'
-    const model = decide({ toolInput, parentModel: parentModelFrom(transcript), target })
+    const option = process.env.CLAUDE_PLUGIN_OPTION_READONLYMODEL || 'auto'
+    const model = decide({ toolInput, parentModel: parentModelFrom(transcript), option })
     if (model) {
       process.stdout.write(
         JSON.stringify({

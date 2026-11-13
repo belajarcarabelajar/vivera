@@ -1,14 +1,17 @@
 {
   "name": "sprite-model-router",
-  "version": "0.2.0",
-  "description": "Runs vivera's read-only Harvest Sprites (researchers, reviewer) on a smaller model when the parent runs on Opus or Fable",
+  "version": "0.3.0",
+  "description": "Runs vivera's read-only agents on smaller models when the parent runs on Opus or Fable: researcher and reviewer sprites on Sonnet, the built-in Explore on Haiku",
   "userConfig": {
     "readOnlyModel": {
       "type": "string",
-      "title": "Read-only sprite model",
-      "description": "Model for researcher and reviewer sprites when the parent runs on Opus or Fable; off leaves every sprite on the parent's model",
-      "default": "sonnet",
-      "options": ["sonnet", "haiku", "off"]
+      "title": "Read-only agent routing",
+      "description": "auto sends researcher and reviewer sprites to Sonnet and the built-in Explore to Haiku when the parent runs on Opus or Fable; off leaves every agent on the parent's model",
+      "default": "auto",
+      "options": [
+        "auto",
+        "off"
+      ]
     }
   }
 }

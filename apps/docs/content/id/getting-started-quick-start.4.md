@@ -40,12 +40,12 @@ untuk researcher dan reviewer adalah kontrak, bukan batasan yang ditegakkan.
 Sprite tidak memuat baris `model:`, karena lima harness lain tidak punya terjemahannya, sehingga di
 Claude Code setiap sprite berjalan dengan model parent. Mod opsional `mods/sprite-model-router` mengubah
 itu lewat command hook `PreToolUse` pada `Agent`: saat parent berjalan di Opus atau Fable, sprite read-only (`timid`, `aqua`,
-`staid`) dan `Explore` bawaan mulai di Sonnet, sedangkan implementer, debugger, agent bawaan lain, fork, run yang dilanjutkan,
+`staid`) mulai di Sonnet dan `Explore` bawaan, yang hanya mencari dan membaca, mulai di Haiku, sedangkan implementer, debugger, agent bawaan lain, fork, run yang dilanjutkan,
 teammate, dan panggilan yang mengirim `model` sendiri tetap memakai modelnya. Mod ini tidak pernah
 menaikkan model. Pasang sekali dengan `claude plugin marketplace add ~/vivera/mods` dan
 `claude plugin install sprite-model-router@vivera-mods`; Claude Code lalu membacanya dari folder ini,
-sehingga edit di sini berlaku setelah `/reload-plugins`. `readOnlyModel` di `/config` memilih `sonnet`,
-`haiku`, atau `off` (kill switch). `scripts/sprite-model-router.test.mjs` gagal saat roster-nya menyimpang dari
+sehingga edit di sini berlaku setelah `/reload-plugins`. `readOnlyModel` di `/config` bernilai `auto`
+(peta itu) atau `off` (kill switch). `scripts/sprite-model-router.test.mjs` gagal saat roster-nya menyimpang dari
 `agents/crew.json`, dan menjalankan tes Bun milik mod. Kedua mod memakai command hook, bukan modul hook JavaScript,
 karena Code Mode Claude Code tidak mau menyala selama hook JavaScript sebuah mod memeriksa panggilan tool.
 

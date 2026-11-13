@@ -26,6 +26,7 @@ export const BUILTIN_MODEL: Record<string, string> = {
 const EXPENSIVE_PARENT = /opus|fable/i
 
 // PreToolUse input has no model field; the transcript's last assistant entry carries it.
+// Code Mode also writes assistant entries with model <synthetic> for tool calls inside a script; skip those.
 export function parentModelFrom(transcriptText: string): string | null {
   const lines = transcriptText.split('\n')
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -34,7 +35,7 @@ export function parentModelFrom(transcriptText: string): string | null {
     try {
       const entry = JSON.parse(line)
       const model = entry?.type === 'assistant' ? entry.message?.model : undefined
-      if (typeof model === 'string' && model !== '') return model
+      if (typeof model === 'string' && model !== '' && !model.startsWith('<')) return model
     } catch {}
   }
   return null

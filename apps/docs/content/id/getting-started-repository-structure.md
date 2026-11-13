@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "66ff408bc68b"
+source_hash: "31a9de36ef0d"
 ---
 
 <a id="repository-structure"></a>
@@ -38,7 +38,7 @@ vivera/
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
 ├── mods/                                        # Claude Code mods, a local marketplace (vivera-mods)
 │   ├── lan-claude/                              # Phone control of local sessions over the LAN (not in the marketplace)
-│   ├── sprite-model-router/                     # PreToolUse hook on Agent: read-only sprites on Sonnet under an Opus parent
+│   ├── sprite-model-router/                     # PreToolUse hook on Agent: under an Opus parent, read-only sprites on Sonnet, Explore on Haiku
 │   └── telegram-ask/                            # AskUserQuestion mirrored to Telegram: command hooks plus a bridge daemon
 ├── .githooks/
 │   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh

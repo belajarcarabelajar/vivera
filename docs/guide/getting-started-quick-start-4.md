@@ -39,11 +39,11 @@ rule of the researcher and the reviewer is a contract, not an enforced limit.
 The sprites carry no `model:` line, because the other five harnesses have no translation for it, so in
 Claude Code every sprite runs on the parent's model. The optional mod `mods/sprite-model-router` changes
 that with a `PreToolUse` command hook on `Agent`: when the parent runs on Opus or Fable, the read-only sprites (`timid`, `aqua`,
-`staid`) and the built-in `Explore` start on Sonnet, while the implementers, the debugger, other built-in agents, forks, resumed runs,
+`staid`) start on Sonnet and the built-in `Explore`, which only searches and reads, starts on Haiku, while the implementers, the debugger, other built-in agents, forks, resumed runs,
 teammates, and any call that passes its own `model` keep theirs. It never routes up. Install it once with
 `claude plugin marketplace add ~/vivera/mods` and `claude plugin install sprite-model-router@vivera-mods`;
 Claude Code then reads it from this folder, so an edit here takes effect after `/reload-plugins`.
-`readOnlyModel` in `/config` picks `sonnet`, `haiku`, or `off` (the kill switch). `scripts/sprite-model-router.test.mjs` fails when its roster drifts
+`readOnlyModel` in `/config` is `auto` (that map) or `off` (the kill switch). `scripts/sprite-model-router.test.mjs` fails when its roster drifts
 from `agents/crew.json`, and runs the mod's own Bun tests. Both mods use command hooks, not a JavaScript hooks module,
 because Claude Code Code Mode does not start while a mod's JavaScript hooks check tool calls.
 

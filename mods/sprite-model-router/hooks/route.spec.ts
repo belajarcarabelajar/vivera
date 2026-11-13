@@ -58,11 +58,15 @@ function routedModel(run: Run): string | null {
 
 describe('read-only sprites under an Opus or Fable parent', () => {
   // The generated sprite names are wrapped in U+00A0 (docs/guide/getting-started-quick-start-4.md).
-  for (const sprite of ['aqua', 'timid', 'staid', 'Explore', ' aqua ', ' aqua ']) {
-    test(`${JSON.stringify(sprite)} runs on sonnet by default`, () => {
+  for (const sprite of ['aqua', 'timid', 'staid', ' aqua ', ' aqua ']) {
+    test(`${JSON.stringify(sprite)} runs on sonnet`, () => {
       expect(routedModel(runHook(agent({ subagent_type: sprite })))).toBe('sonnet')
     })
   }
+
+  test('the built-in Explore, which only searches and reads, runs on haiku', () => {
+    expect(routedModel(runHook(agent({ subagent_type: 'Explore' })))).toBe('haiku')
+  })
 
   test('updatedInput keeps every other tool_input field', () => {
     const input = agent({ subagent_type: 'aqua', run_in_background: true })
@@ -70,10 +74,14 @@ describe('read-only sprites under an Opus or Fable parent', () => {
     expect(out.hookSpecificOutput.updatedInput).toEqual({ ...input, model: 'sonnet' })
   })
 
-  test('the haiku option routes them to haiku', () => {
-    expect(routedModel(runHook(agent({ subagent_type: 'timid' }), { option: 'haiku' }))).toBe('haiku')
-    expect(routedModel(runHook(agent({ subagent_type: 'Explore' }), { option: 'haiku' }))).toBe('haiku')
-  })
+  // 0.2.0 offered sonnet and haiku for every read-only agent; a value left in settings must not override the map.
+  for (const option of ['auto', 'sonnet', 'haiku', '']) {
+    test(`readOnlyModel ${JSON.stringify(option)} keeps the per-agent map`, () => {
+      expect(routedModel(runHook(agent({ subagent_type: 'timid' }), { option }))).toBe('sonnet')
+      expect(routedModel(runHook(agent({ subagent_type: 'staid' }), { option }))).toBe('sonnet')
+      expect(routedModel(runHook(agent({ subagent_type: 'Explore' }), { option }))).toBe('haiku')
+    })
+  }
 
   test('a Fable parent counts as expensive too', () => {
     expect(routedModel(runHook(agent({ subagent_type: 'staid' }), { models: ['claude-fable-5-2'] }))).toBe('sonnet')
@@ -123,6 +131,7 @@ describe('everything else is left alone', () => {
 
   test('readOnlyModel off is a kill switch', () => {
     expect(routedModel(runHook(agent({ subagent_type: 'aqua' }), { option: 'off' }))).toBeNull()
+    expect(routedModel(runHook(agent({ subagent_type: 'Explore' }), { option: 'off' }))).toBeNull()
   })
 
   test('a missing transcript file means an unknown parent', () => {

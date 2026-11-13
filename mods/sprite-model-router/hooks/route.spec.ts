@@ -92,6 +92,12 @@ describe('read-only sprites under an Opus or Fable parent', () => {
     expect(routedModel(runHook(agent({ subagent_type: 'aqua' }), { models: [OPUS, 'claude-sonnet-5-5'] }))).toBeNull()
   })
 
+  // Code Mode writes a <synthetic> assistant entry for each tool call inside a script; it is not the parent's model.
+  test('a <synthetic> entry after the parent model is skipped', () => {
+    expect(routedModel(runHook(agent({ subagent_type: 'aqua' }), { models: [OPUS, '<synthetic>', '<synthetic>'] }))).toBe('sonnet')
+    expect(routedModel(runHook(agent({ subagent_type: 'Explore' }), { models: [OPUS, '<synthetic>'] }))).toBe('haiku')
+  })
+
   test('an assistant entry after more than 1 MiB of other lines is still found', () => {
     const path = bigTranscript({ before: OPUS, after: OPUS })
     expect(routedModel(runHook(agent({ subagent_type: 'aqua' }), { transcriptPath: path }))).toBe('sonnet')
@@ -122,6 +128,7 @@ describe('everything else is left alone', () => {
     ['a Sonnet parent (never routes up)', { subagent_type: 'aqua' }, ['claude-sonnet-5-5']],
     ['a Haiku parent (never routes up)', { subagent_type: 'aqua' }, ['claude-haiku-5-5']],
     ['an unknown parent (no assistant entry yet)', { subagent_type: 'aqua' }, []],
+    ['only <synthetic> entries (parent model unknown)', { subagent_type: 'aqua' }, ['<synthetic>']],
   ]
   for (const [name, fields, models] of kept) {
     test(name, () => {

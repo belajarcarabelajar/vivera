@@ -1,6 +1,6 @@
 {
   "name": "sprite-model-router",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Runs vivera's read-only agents on smaller models when the parent runs on Opus or Fable: researcher and reviewer sprites on Sonnet, the built-in Explore on Haiku",
   "userConfig": {
     "readOnlyModel": {

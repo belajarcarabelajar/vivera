@@ -180,16 +180,3 @@ vivera/
     ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep (scans code for defer: markers), plan closeout decision, learning harvest
     └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
-
-TinyFish is documented inside the master skill itself, in the
-`Web Evidence & Retrieval` (TinyFish) section: the four-rung escalation ladder
-(`search` → `fetch_content` → `run_web_automation` → `create_browser_session`),
-the parameter sets that matter, the run-management and cost rules, and the
-gotchas. It used to ship as a separate vendored skill (use-tinyfish,
-deployed by a now-removed `install.sh` §6b); that split is retired because two
-sources of truth had drifted, and the CLI-only copy never described the MCP
-tools an agent actually calls. One master skill, one set of rules.
-
-The skill installs through `skills/super-ultra-code-plan/`, which is a set of symlinks into
-the repo root rather than a copy. The master file stays single-sourced, and
-`render-diagrams.sh` skips symlinked files so the same diagram is never rendered twice.

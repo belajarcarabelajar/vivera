@@ -1,4 +1,4 @@
-// Auto mode and default permission mode: belum terbukti (probes ran in bypass).
+// Auto mode: belum terbukti (live probes 2026-11-13 ran in bypass and in default mode, both routed).
 // PreToolUse command hook on the Agent tool. Claude Code 2.1.323 Code Mode refuses a
 // plugin whose JavaScript hooks module registers agent.spawn; command hooks are allowed.
 import { closeSync, fstatSync, openSync, readSync } from 'node:fs'

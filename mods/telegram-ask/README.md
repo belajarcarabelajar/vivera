@@ -11,7 +11,7 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
   - `PostToolUse` on `AskUserQuestion` (`ask.ts posttool`): the terminal answered first, so it posts `/resolve` `{ by: "terminal", answers }` for the pending state, which also ends the still running `permission` hook.
   - `Stop` (`ask.ts stop`): resolves every ask of this session still on file as `cancelled` (Esc stops the `permission` hook without a `PostToolUse`). SIGTERM, SIGINT or a vanished parent do the same from inside the `permission` hook.
   - Every failure (bridge offline, refused, three dropped `/wait` in a row, unknown id) exits 0 with no output, so the dialog works as before.
-- **Belum terbukti:** auto mode and the default permission mode; every live probe of these hooks ran in bypass mode.
+- **Belum terbukti:** auto mode (Code Mode in auto mode refuses code after a hook changed a call). Live probes on 2026-11-13 passed in bypass mode and in the default permission mode.
 - `bridge/`: the daemon (Bun). One bridge serves every session on the machine and polls its bot with `getUpdates`. API over a Unix socket: `POST /ask`, `GET /wait/:id` (25 s long-poll), `POST /resolve/:id`, `POST /update` (updates forwarded by another poller, see below), `POST /notify` (see Notify).
 - `deploy/telegram-ask-bridge.service`: the systemd user unit. `deploy/forwarded.conf.example`: a drop-in for the forwarded setup.
 

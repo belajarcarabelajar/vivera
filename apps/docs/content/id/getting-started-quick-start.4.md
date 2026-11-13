@@ -39,15 +39,15 @@ untuk researcher dan reviewer adalah kontrak, bukan batasan yang ditegakkan.
 
 Sprite tidak memuat baris `model:`, karena lima harness lain tidak punya terjemahannya, sehingga di
 Claude Code setiap sprite berjalan dengan model parent. Mod opsional `mods/sprite-model-router` mengubah
-itu di `agent.spawn`: saat parent berjalan di Opus atau Fable, sprite read-only (`timid`, `aqua`,
-`staid`) mulai di Sonnet, sedangkan implementer, debugger, agent bawaan, fork, run yang dilanjutkan,
+itu lewat command hook `PreToolUse` pada `Agent`: saat parent berjalan di Opus atau Fable, sprite read-only (`timid`, `aqua`,
+`staid`) dan `Explore` bawaan mulai di Sonnet, sedangkan implementer, debugger, agent bawaan lain, fork, run yang dilanjutkan,
 teammate, dan panggilan yang mengirim `model` sendiri tetap memakai modelnya. Mod ini tidak pernah
 menaikkan model. Pasang sekali dengan `claude plugin marketplace add ~/vivera/mods` dan
 `claude plugin install sprite-model-router@vivera-mods`; Claude Code lalu membacanya dari folder ini,
 sehingga edit di sini berlaku setelah `/reload-plugins`. `readOnlyModel` di `/config` memilih `sonnet`,
-`haiku`, atau `off` (kill switch), dan setiap spawn yang di-routing mencatat satu baris
-`sprite-model-router:`. `scripts/sprite-model-router.test.mjs` gagal saat roster-nya menyimpang dari
-`agents/crew.json`, dan menjalankan tes milik mod lewat `claude plugin test`.
+`haiku`, atau `off` (kill switch). `scripts/sprite-model-router.test.mjs` gagal saat roster-nya menyimpang dari
+`agents/crew.json`, dan menjalankan tes Bun milik mod. Kedua mod memakai command hook, bukan modul hook JavaScript,
+karena Code Mode Claude Code tidak mau menyala selama hook JavaScript sebuah mod memeriksa panggilan tool.
 
 Mod opsional kedua, `mods/telegram-ask`, mencerminkan setiap dialog `AskUserQuestion` ke chat Telegram,
 sehingga gate persetujuan bisa dijawab dari ponsel. Dialog terminal tetap terbuka di sampingnya dan jawaban
@@ -55,7 +55,7 @@ pertama yang menang. Daemon bridge kecil (`telegram-ask-bridge.service`, unit sy
 melakukan polling pada bot Telegram miliknya sendiri untuk mengambil jawaban. Opsional: bila Snipset desktop sudah
 melakukan polling pada bot yang sama, Snipset yang meneruskan update ke bridge.
 Cara pasang, log, dan revert ada di `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs`
-menjalankan tes Bun milik bridge dan `claude plugin test` milik mod.
+menjalankan tes Bun milik bridge dan milik hook mod.
 
 Hal-hal yang mudah keliru:
 

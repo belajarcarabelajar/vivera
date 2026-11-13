@@ -1,6 +1,6 @@
 {
   "name": "telegram-ask",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Mirrors every AskUserQuestion dialog to Telegram through a local bridge; the first answer, terminal or Telegram, wins",
   "userConfig": {
     "socketPath": {

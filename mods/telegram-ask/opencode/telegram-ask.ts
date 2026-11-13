@@ -1,7 +1,7 @@
 // mods/telegram-ask/opencode/telegram-ask.ts
 //
 // The OpenCode half of telegram-ask. The Claude Code half is mods/telegram-ask
-// (hooks/register.ts); both talk to the same bridge daemon
+// (command hooks in hooks/hooks.json, run by hooks/ask.ts); both talk to the same bridge daemon
 // (systemd user unit telegram-ask-bridge.service, Unix socket
 // $XDG_RUNTIME_DIR/vivera-telegram-ask.sock), so one bot serves both harnesses.
 //

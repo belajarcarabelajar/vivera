@@ -38,14 +38,14 @@ rule of the researcher and the reviewer is a contract, not an enforced limit.
 
 The sprites carry no `model:` line, because the other five harnesses have no translation for it, so in
 Claude Code every sprite runs on the parent's model. The optional mod `mods/sprite-model-router` changes
-that at `agent.spawn`: when the parent runs on Opus or Fable, the read-only sprites (`timid`, `aqua`,
-`staid`) start on Sonnet, while the implementers, the debugger, built-in agents, forks, resumed runs,
+that with a `PreToolUse` command hook on `Agent`: when the parent runs on Opus or Fable, the read-only sprites (`timid`, `aqua`,
+`staid`) and the built-in `Explore` start on Sonnet, while the implementers, the debugger, other built-in agents, forks, resumed runs,
 teammates, and any call that passes its own `model` keep theirs. It never routes up. Install it once with
 `claude plugin marketplace add ~/vivera/mods` and `claude plugin install sprite-model-router@vivera-mods`;
 Claude Code then reads it from this folder, so an edit here takes effect after `/reload-plugins`.
-`readOnlyModel` in `/config` picks `sonnet`, `haiku`, or `off` (the kill switch), and each routed spawn
-logs one `sprite-model-router:` line. `scripts/sprite-model-router.test.mjs` fails when its roster drifts
-from `agents/crew.json`, and runs the mod's own tests through `claude plugin test`.
+`readOnlyModel` in `/config` picks `sonnet`, `haiku`, or `off` (the kill switch). `scripts/sprite-model-router.test.mjs` fails when its roster drifts
+from `agents/crew.json`, and runs the mod's own Bun tests. Both mods use command hooks, not a JavaScript hooks module,
+because Claude Code Code Mode does not start while a mod's JavaScript hooks check tool calls.
 
 A second optional mod, `mods/telegram-ask`, mirrors every `AskUserQuestion` dialog to a Telegram chat, so
 an approval gate can be answered from a phone. The terminal dialog stays open beside it and the first answer
@@ -53,7 +53,7 @@ wins. A small bridge daemon (`telegram-ask-bridge.service`, a systemd user unit)
 its own Telegram bot for the answers. Optionally, when Snipset desktop already polls the same bot, Snipset
 forwards the updates to the bridge instead.
 Install, logs, and revert are in `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs` runs the
-bridge's Bun tests and the mod's `claude plugin test`.
+Bun tests of the bridge and of the mod's hooks.
 
 Things that are easy to get wrong:
 

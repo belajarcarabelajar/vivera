@@ -6,7 +6,12 @@ Spec: `docs/code-plan/specs/2026-10-23-telegram-ask-design.md` (local, gitignore
 
 ## Parts
 
-- `hooks/register.ts`: the mod. A `tool.call` hook on `AskUserQuestion` runs `next(e)` (the dialog) and, beside it, posts the question to the bridge and long-polls for the answer. Returning `{ result }` while `next(e)` is pending aborts the dialog.
+- `hooks/hooks.json` + `hooks/ask.ts`: the mod, as command hooks (no JavaScript hooks module: Claude Code 2.1.323 Code Mode refuses a plugin whose module hooks tool calls). Bun runs `ask.ts` (found on `PATH`, else `~/.bun/bin/bun`); pure logic is in `hooks/ask-core.ts`.
+  - `PermissionRequest` on `AskUserQuestion` (`ask.ts permission`, timeout 24 h) fires while the terminal dialog is open. It posts the question to the bridge, writes a state file `$XDG_RUNTIME_DIR/vivera-telegram-ask/state/<key>.json` (key = sha256 of the session id and the questions), and long-polls `/wait`. A Telegram answer prints an `allow` decision whose `updatedInput.answers` closes the dialog with that answer.
+  - `PostToolUse` on `AskUserQuestion` (`ask.ts posttool`): the terminal answered first, so it posts `/resolve` `{ by: "terminal", answers }` for the pending state, which also ends the still running `permission` hook.
+  - `Stop` (`ask.ts stop`): resolves every ask of this session still on file as `cancelled` (Esc stops the `permission` hook without a `PostToolUse`). SIGTERM, SIGINT or a vanished parent do the same from inside the `permission` hook.
+  - Every failure (bridge offline, refused, three dropped `/wait` in a row, unknown id) exits 0 with no output, so the dialog works as before.
+- **Belum terbukti:** auto mode (Code Mode in auto mode refuses code after a hook changed a call). Live probes on 2026-11-13 passed in bypass mode and in the default permission mode.
 - `bridge/`: the daemon (Bun). One bridge serves every session on the machine and polls its bot with `getUpdates`. API over a Unix socket: `POST /ask`, `GET /wait/:id` (25 s long-poll), `POST /resolve/:id`, `POST /update` (updates forwarded by another poller, see below), `POST /notify` (see Notify).
 - `deploy/telegram-ask-bridge.service`: the systemd user unit. `deploy/forwarded.conf.example`: a drop-in for the forwarded setup.
 
@@ -101,9 +106,9 @@ The drop-in sets `TELEGRAM_ASK_POLL=0`; the bridge then logs `polling off (updat
 ## Logs and failure
 
 - `journalctl --user -u telegram-ask-bridge -f`: ask ids and counts only, never question text, answers, or the token.
-- Bridge stopped or crashed: the dialog shows `telegram-ask: bridge offline` and works as before. A pending ask is lost when the bridge restarts; its buttons then answer "Pertanyaan ini sudah selesai".
+- Bridge stopped or crashed: the dialog works as before, with no notice (a command hook cannot print while the dialog is open). A pending ask is lost when the bridge restarts; its buttons then answer "Pertanyaan ini sudah selesai".
 - There is no answer deadline while the session waits: a question stays answerable from Telegram for hours, and a `✏️ Lainnya` tap keeps taking your next text as long as its question is open. An ask is dropped about 2 minutes after its session stops polling the bridge (terminal closed or killed); its buttons then answer "Pertanyaan ini sudah selesai".
-- `telegram-ask: not sent to Telegram (<status>)` under the dialog: the bridge is up but refused the question; the terminal dialog works as usual.
+- Bridge up but refusing the question: no notice either; the terminal dialog works as usual. The bridge log shows `ask <id> send failed` when Telegram refused the message.
 - Exit 2 at start: a missing env file, key, or socket path, or `another bridge is already listening on <path>` (the unit does not restart on it). A socket file nobody answers on is replaced. The log line names the missing file or key, never a value.
 - `getUpdates 409` in the log: another program polls the same bot; use the forwarded setup above.
 
@@ -111,11 +116,11 @@ The drop-in sets `TELEGRAM_ASK_POLL=0`; the bridge then logs `polling off (updat
 
 ```bash
 bun test ./mods/telegram-ask/bridge/          # bridge, Bun tests named *.spec.ts
-claude plugin test mods/telegram-ask          # the hook, *.test.ts
-bun test scripts/telegram-ask.test.mjs        # all of the above plus the OpenCode plugin, as the repository suite runs them
+bun test ./mods/telegram-ask/hooks/           # the command hooks against a fake bridge on a Unix socket
+bun test scripts/telegram-ask.test.mjs        # all of the above plus the OpenCode plugin and claude plugin validate, as the repository suite runs them
 ```
 
-The bridge tests end in `.spec.ts` because `claude plugin test` runs every `*.test.ts` under the mod and refuses a `bun:test` import. `mods/telegram-ask/opencode/` therefore carries no test file: the suite test asserts there that the plugin module loads, exports `id` and `setup`, keeps the bridge socket file name and the shared `TELEGRAM_ASK_SOCKET` override, and never names `ctx.tool` in code.
+The tests end in `.spec.ts` because `claude plugin test` runs every `*.test.ts` under the mod and refuses a `bun:test` import. `mods/telegram-ask/opencode/` carries only its spec; the suite test also asserts there that the plugin module loads, exports `id` and `setup`, keeps the bridge socket file name and the shared `TELEGRAM_ASK_SOCKET` override, and never names `ctx.tool` in code.
 
 ## Revert
 

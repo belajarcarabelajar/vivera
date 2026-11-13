@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "21ea7b371a22"
+source_hash: "187e9651c69b"
 ---
 
 <a id="repository-structure"></a>
@@ -37,7 +37,7 @@ vivera/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
 ├── mods/                                        # Claude Code mods, a local marketplace (vivera-mods)
-│   └── sprite-model-router/                     # agent.spawn hook: read-only sprites on Sonnet under an Opus parent
+│   └── sprite-model-router/                     # PreToolUse hook on Agent: read-only sprites on Sonnet under an Opus parent
 ├── .githooks/
 │   └── pre-commit                               # Blocking file size gate first, then a non-blocking graphify refresh
 ├── .github/

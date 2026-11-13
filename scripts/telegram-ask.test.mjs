@@ -1,10 +1,10 @@
 // scripts/telegram-ask.test.mjs
 //
-// mods/telegram-ask has two halves with two test runners. The bridge daemon's
-// tests are Bun tests named *.spec.ts, because `claude plugin test` runs every
-// *.test.ts under the mod and refuses a bun:test import. The race hook's tests
-// run only under `claude plugin test`. Neither sits under scripts/, so
-// `bun run test` would never see them; this file runs both.
+// mods/telegram-ask keeps its Bun tests (bridge, command hooks, OpenCode plugin)
+// next to the code as *.spec.ts, outside scripts/, so `bun run test` would never
+// see them; this file runs them. The *.spec.ts name also keeps them out of
+// `claude plugin test`, which runs every *.test.ts under a mod and refuses a
+// bun:test import.
 
 import { test, expect } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -14,13 +14,22 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dir, '..');
 const MOD = join(ROOT, 'mods/telegram-ask');
 
-test('bridge tests are named *.spec.ts so claude plugin test skips them', () => {
+test('bridge, hook and plugin tests are named *.spec.ts so claude plugin test skips them', () => {
   const names = readdirSync(join(MOD, 'bridge'));
   expect(names.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
   expect(names.filter((n) => n.endsWith('.spec.ts')).sort()).toEqual(['audit-fixes.spec.ts', 'format.spec.ts', 'markdown.spec.ts', 'notify.spec.ts', 'server-updates.spec.ts', 'server.spec.ts']);
   const plugin = readdirSync(join(MOD, 'opencode'));
   expect(plugin.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
   expect(plugin.filter((n) => n.endsWith('.spec.ts'))).toEqual(['telegram-ask.spec.ts']);
+  const hooks = readdirSync(join(MOD, 'hooks'));
+  expect(hooks.filter((n) => n.endsWith('.test.ts'))).toEqual([]);
+  expect(hooks.filter((n) => n.endsWith('.spec.ts'))).toEqual(['ask.spec.ts']);
+});
+
+test('the mod has no JavaScript hooks module, which Code Mode refuses', () => {
+  const hooks = JSON.parse(readFileSync(join(MOD, 'hooks/hooks.json'), 'utf8'));
+  expect(hooks.modules).toBeUndefined();
+  expect(readdirSync(join(MOD, 'hooks'))).not.toContain('register.ts');
 });
 
 test('the systemd unit runs the bridge from the main checkout', () => {
@@ -61,18 +70,15 @@ test('the OpenCode plugin and the bridge name the same socket file and override'
   expect(bridgeSocket).toContain('TELEGRAM_ASK_SOCKET');
 });
 
-test('the bridge and OpenCode plugin tests pass', () => {
-  const run = spawnSync(process.execPath, ['test', './mods/telegram-ask/bridge/', './mods/telegram-ask/opencode/'], { cwd: ROOT, encoding: 'utf8', timeout: 100_000 });
+test('the bridge, hook and OpenCode plugin tests pass', () => {
+  const run = spawnSync(process.execPath, ['test', './mods/telegram-ask/bridge/', './mods/telegram-ask/hooks/', './mods/telegram-ask/opencode/'], { cwd: ROOT, encoding: 'utf8', timeout: 100_000 });
   expect(run.status, run.stdout + run.stderr).toBe(0);
   expect(run.stdout + run.stderr).toMatch(/\b0 fail\b/);
 }, 120_000);
 
 const claude = spawnSync('sh', ['-c', 'command -v claude'], { encoding: 'utf8' }).stdout.trim();
 
-test.skipIf(!claude)('the mod passes claude plugin validate and claude plugin test', () => {
+test.skipIf(!claude)('the mods pass claude plugin validate', () => {
   const validate = spawnSync(claude, ['plugin', 'validate', join(ROOT, 'mods')], { encoding: 'utf8' });
   expect(validate.status, validate.stdout + validate.stderr).toBe(0);
-  const run = spawnSync(claude, ['plugin', 'test', MOD], { encoding: 'utf8', timeout: 60_000 });
-  expect(run.status, run.stdout + run.stderr).toBe(0);
-  expect(run.stdout + run.stderr).toMatch(/\b0 fail\b/);
 }, 90_000);

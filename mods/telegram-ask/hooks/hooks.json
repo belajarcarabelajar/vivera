@@ -1,1 +1,39 @@
-{ "modules": ["./register.ts"] }
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(command -v bun || echo \"$HOME/.bun/bin/bun\")\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ask.ts\" permission",
+            "timeout": 86400
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(command -v bun || echo \"$HOME/.bun/bin/bun\")\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ask.ts\" posttool",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(command -v bun || echo \"$HOME/.bun/bin/bun\")\" \"${CLAUDE_PLUGIN_ROOT}/hooks/ask.ts\" stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

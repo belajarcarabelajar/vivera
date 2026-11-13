@@ -42,7 +42,7 @@ pub struct PageView<'a> {
 pub struct Ui {
     pub title_suffix: &'static str,
     pub brand_href: &'static str,
-    pub workshop_href: &'static str,
+    pub one_on_one_href: &'static str,
     pub switch_label: &'static str,
     pub search: &'static str,
     pub menu: &'static str,
@@ -59,7 +59,7 @@ pub fn ui(lang: Lang) -> Ui {
         Lang::En => Ui {
             title_suffix: "Vivera Docs",
             brand_href: "https://vivera.belajarcarabelajar.com/",
-            workshop_href: "/workshop/",
+            one_on_one_href: "/1-on-1/",
             switch_label: "Bahasa Indonesia",
             search: "Search",
             menu: "Menu",
@@ -73,7 +73,7 @@ pub fn ui(lang: Lang) -> Ui {
         Lang::Id => Ui {
             title_suffix: "Dokumentasi Vivera",
             brand_href: "https://vivera.belajarcarabelajar.com/id/",
-            workshop_href: "/id/workshop/",
+            one_on_one_href: "/id/1-on-1/",
             switch_label: "English",
             search: "Cari",
             menu: "Menu",
@@ -122,7 +122,7 @@ pub fn render(view: &PageView) -> Markup {
                 header class="site-header" {
                     a class="brand" href=(ui.brand_href) { "Vivera" }
                     nav class="site-nav" aria-label=(ui.site_nav_label) {
-                        a href=(ui.workshop_href) { "Workshop" }
+                        a href=(ui.one_on_one_href) { "1-on-1" }
                         a href="https://github.com/belajarcarabelajar/vivera" { "GitHub" }
                     }
                     a class="lang-switch" href=(view.twin_path) hreflang=(other) lang=(other) { (ui.switch_label) }

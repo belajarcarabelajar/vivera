@@ -119,6 +119,16 @@ function lineOf(dir, rel, needle) {
 }
 
 describe('local mode', () => {
+  test('passes a tree that holds the docs/version.json stamp the build writes', async () => {
+    const dist = makeDist((t) => {
+      t.files['docs/version.json'] = '{"commit": "0123456789abcdef0123456789abcdef01234567", "built_at": "2026-11-15T00:00:00Z"}\n';
+    });
+    expect(fs.existsSync(path.join(dist, 'docs', 'version.json'))).toBe(true);
+    const r = await run([dist]);
+    expect(r.stdout).toContain('6 pages');
+    expect(r.code).toBe(0);
+  });
+
   test('passes a complete bilingual tree with query, fragment, relative, and external links', async () => {
     const r = await run([makeDist()]);
     expect(r.stdout).toContain('6 pages');

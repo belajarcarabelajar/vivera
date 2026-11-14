@@ -1,32 +1,58 @@
 #!/usr/bin/env bash
 # Build, test and deploy the docs site on the VPS, because nothing compiles on
 # this laptop.
-# Usage: scripts/docs-remote.sh test | build | deploy [--dry-run]
+# Usage: scripts/docs-remote.sh test | build [--local] | deploy [--dry-run] [--local]
 #   test     sync the working tree and run the crate tests
-#   build    build the site from the exact HEAD commit and check it
+#   build    build the site from the exact HEAD commit, stamp it with
+#            docs/version.json (commit, built_at), and check it
 #   deploy   build, then wrangler deploy; a real deploy needs
 #            VIVERA_DOCS_DEPLOY_ACK=I_UNDERSTAND_THIS_CHANGES_LIVE
 #            The live check is retried VIVERA_DOCS_LIVE_ATTEMPTS times (default
 #            10), VIVERA_DOCS_LIVE_INTERVAL seconds apart (default 20).
+#   --local  run every step on this host instead of over ssh (a CI runner is
+#            the build host). ~/cloudflare/.env is never read: a real deploy
+#            needs the Cloudflare token in VIVERA_DOCS_CF_TOKEN, which is
+#            removed from the environment and handed to the wrangler commands
+#            only. CLOUDFLARE_ACCOUNT_ID passes through as is.
+# VIVERA_DOCS_TARGET_DIR sets the cargo target dir in both modes (default
+# /root/.cache/vivera-docs-target).
 # Exit: 0 ok, 1 failure, 2 usage error.
 set -euo pipefail
 
-usage() { echo "usage: scripts/docs-remote.sh test | build | deploy [--dry-run]" >&2; exit 2; }
+usage() { echo "usage: scripts/docs-remote.sh test | build [--local] | deploy [--dry-run] [--local]" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 MODE="$1"
 shift
 DRY_RUN=0
+LOCAL=0
 case "$MODE" in
-  test | build) [ $# -eq 0 ] || usage ;;
-  deploy)
-    if [ $# -eq 1 ] && [ "$1" = --dry-run ]; then
-      DRY_RUN=1
-    elif [ $# -ne 0 ]; then
-      usage
-    fi
+  test) [ $# -eq 0 ] || usage ;;
+  build | deploy)
+    for arg in "$@"; do
+      case "$arg" in
+        --local)
+          [ "$LOCAL" -eq 0 ] || usage
+          LOCAL=1
+          ;;
+        --dry-run)
+          { [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ]; } || usage
+          DRY_RUN=1
+          ;;
+        *) usage ;;
+      esac
+    done
     ;;
   *) usage ;;
 esac
+
+# Taken out of the environment before anything runs, so bun install scripts,
+# cargo build scripts and pagefind cannot read it; only wrangler gets it back.
+CF_TOKEN=
+export -n CF_TOKEN
+if [ "$LOCAL" -eq 1 ]; then
+  CF_TOKEN="${VIVERA_DOCS_CF_TOKEN:-}"
+  unset VIVERA_DOCS_CF_TOKEN CLOUDFLARE_API_TOKEN
+fi
 
 # New Worker routes take up to a few minutes to propagate after wrangler deploy.
 LIVE_ATTEMPTS="${VIVERA_DOCS_LIVE_ATTEMPTS:-10}"
@@ -47,13 +73,18 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 # Each run gets its own directory on the shared VPS, so concurrent sessions do
 # not clobber each other; the cargo target dir stays shared because cargo locks it.
 WORK_DIR=
-TARGET_DIR=/root/.cache/vivera-docs-target
+TARGET_DIR="${VIVERA_DOCS_TARGET_DIR:-/root/.cache/vivera-docs-target}"
 LIVE_URL=https://vivera.belajarcarabelajar.com/docs/
 DEPLOY_ACK=I_UNDERSTAND_THIS_CHANGES_LIVE
 # Pinned to the release whose `rollback --message ... --yes` flags were checked.
 WRANGLER=wrangler@4.151.1
 # Sourced on the VPS only; set -a exports the token to wrangler without printing it.
 CF_ENV='set -a; . ~/cloudflare/.env; set +a'
+# An empty CF_ENV would leave "cd x; ; bunx", a bash syntax error.
+if [ "$LOCAL" -eq 1 ]; then
+  HOST=localhost
+  CF_ENV=':'
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SSH_OPTS=(-o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o ConnectTimeout=30)
 LOG="${VIVERA_DOCS_LOG_DIR:-/tmp}/vivera-docs-remote-${MODE}-${STAMP}.log"
@@ -85,16 +116,37 @@ if [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ] && [ "${VIVERA_DOCS_DEPLOY_ACK:-
   exit 1
 fi
 
+if [ "$LOCAL" -eq 1 ] && [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ] && [ -z "$CF_TOKEN" ]; then
+  echo "deploy: refused, a real --local deploy needs the Cloudflare token in VIVERA_DOCS_CF_TOKEN."
+  exit 1
+fi
+
 if [ ! -f "$ROOT/apps/docs/Cargo.toml" ]; then
   echo "apps/docs/Cargo.toml missing"
   exit 1
 fi
 
 # Non-interactive ssh as root does not source the profile that puts cargo on PATH.
+# Single quotes on purpose: $HOME and $PATH expand in the shell that runs it.
+# shellcheck disable=SC2016
+PRELUDE='export PATH="$HOME/.cargo/bin:$HOME/.bun/bin:$PATH"; set -eu; '
 remote() {
-  # shellcheck disable=SC2029
-  ssh "${SSH_OPTS[@]}" "$HOST" \
-    "export PATH=\"\$HOME/.cargo/bin:\$HOME/.bun/bin:\$PATH\"; set -eu; $1"
+  if [ "$LOCAL" -eq 1 ]; then
+    bash -c "$PRELUDE$1"
+  else
+    # shellcheck disable=SC2029
+    ssh "${SSH_OPTS[@]}" "$HOST" "$PRELUDE$1"
+  fi
+}
+
+# The token rides in the environment of this one bash process, never in its
+# arguments, where ps would show it.
+remote_wrangler() {
+  if [ "$LOCAL" -eq 1 ] && [ -n "$CF_TOKEN" ]; then
+    CLOUDFLARE_API_TOKEN="$CF_TOKEN" bash -c "$PRELUDE$1"
+  else
+    remote "$1"
+  fi
 }
 
 make_work_dir() {
@@ -170,21 +222,35 @@ run_build() {
 
   echo "build: search index and site check"
   remote "cd $WORK_DIR/apps/docs && bunx pagefind@1.5.2 --site dist --output-path dist/docs/pagefind"
+  write_version_stamp
   remote "cd $WORK_DIR && bun scripts/docs-site-check.mjs apps/docs/dist"
   echo "build: ok"
+}
+
+# The work dir is a git archive without .git, so the SHA comes from ROOT.
+write_version_stamp() {
+  local sha built_at
+  sha="$(git -C "$ROOT" rev-parse HEAD)"
+  if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "build: unexpected HEAD: $sha"
+    exit 1
+  fi
+  built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "build: version stamp $sha"
+  remote "cd $WORK_DIR/apps/docs && printf '%s\n' '{\"commit\": \"$sha\", \"built_at\": \"$built_at\"}' > dist/docs/version.json"
 }
 
 run_deploy() {
   run_build
   echo "deploy: wrangler dry run"
-  remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy --dry-run"
+  remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy --dry-run"
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "deploy: dry run only, nothing changed on the live site"
     return
   fi
 
   echo "deploy: wrangler deploy"
-  remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy"
+  remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy"
   echo "deploy: live check $LIVE_URL"
   local live_rc=0 rollback_rc=0 list_rc=0 count=0
   live_check_with_retries || live_rc=$?
@@ -199,7 +265,7 @@ run_deploy() {
     echo "rollback: skipped, could not list deployments (exit $list_rc); check with wrangler deployments list and roll back by hand"
   elif [ "$count" -gt 1 ]; then
     echo "deploy: $count deployments listed, rolling back"
-    remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER rollback --message \"smoke failed\" --yes" || rollback_rc=$?
+    remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER rollback --message \"smoke failed\" --yes" || rollback_rc=$?
     echo "rollback: exit $rollback_rc"
   else
     echo "rollback: skipped, nothing to roll back to because this is the first deployment of the Worker"
@@ -227,7 +293,7 @@ live_check_with_retries() {
 # wrangler rollback needs an earlier deployment; on the first one it only fails.
 deployment_count() {
   local listed
-  listed="$(remote "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deployments list --json")" || return
+  listed="$(remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deployments list --json")" || return
   # Each deployment object has one top-level "id"; its versions use "version_id".
   { grep -o '"id":' <<<"$listed" || true; } | wc -l | tr -d ' '
 }

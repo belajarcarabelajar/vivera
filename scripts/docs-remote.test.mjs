@@ -1,159 +1,30 @@
 // scripts/docs-remote.test.mjs
 //
-// Drives scripts/docs-remote.sh through its command line with stub `ssh`,
-// `rsync`, `git` and `bun` on PATH. Each stub appends one line per call to a
-// shared log, so the order of calls across stubs is observable. No network, no
-// VPS, no real deploy.
+// Drives scripts/docs-remote.sh in VPS mode through its command line with the
+// stubs from scripts/lib/docs-remote-stubs.mjs on PATH. The --local tests live in
+// scripts/docs-remote-local.test.mjs.
 
-import { test, expect, beforeEach, afterEach } from 'bun:test';
+import { test, expect } from 'bun:test';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import {
+  ACK,
+  HEAD_SHA,
+  LIVE_URL,
+  REAL_WRANGLER_DEPLOY,
+  ROOT,
+  SCRIPT,
+  callLog,
+  calls,
+  expectInOrder,
+  installHarness,
+  run,
+  runDirs,
+  sshCalls,
+  tmp,
+} from './lib/docs-remote-stubs.mjs';
 
-const ROOT = path.resolve(import.meta.dir, '..');
-const SCRIPT = path.join(ROOT, 'scripts', 'docs-remote.sh');
-const REAL_GIT = Bun.which('git');
-const BASH = Bun.which('bash');
-const ACK = 'I_UNDERSTAND_THIS_CHANGES_LIVE';
-const LIVE_URL = 'https://vivera.belajarcarabelajar.com/docs/';
-
-const STUBS = {
-  ssh: `#!/usr/bin/env bash
-cmd="\${!#}"
-bytes=$(wc -c | tr -d ' ')
-printf 'ssh\\t%s\\t%s\\n' "$bytes" "\${cmd//$'\\n'/ }" >> "$STUB_LOG"
-if [ -n "\${STUB_SSH_FAIL_MATCH:-}" ] && [[ "$cmd" == *"$STUB_SSH_FAIL_MATCH"* ]]; then
-  echo "stub ssh: failing on purpose" >&2
-  exit 1
-fi
-if [[ "$cmd" == *"mktemp -d "* ]]; then
-  mktemp -u "\${cmd##*mktemp -d }"
-fi
-# Same shape as wrangler 4.151.1 \`deployments list --json\` (JSON.stringify(list, null, 2)).
-if [[ "$cmd" == *"deployments list --json"* ]]; then
-  n="\${STUB_DEPLOYMENTS:-2}"
-  printf '['
-  for ((k = 1; k <= n; k++)); do
-    [ "$k" -eq 1 ] || printf ','
-    printf '\\n  {\\n    "id": "dep-%s",\\n    "source": "wrangler",\\n    "versions": [\\n      {\\n        "version_id": "ver-%s",\\n        "percentage": 100\\n      }\\n    ]\\n  }' "$k" "$k"
-  done
-  printf '\\n]\\n'
-fi
-exit 0
-`,
-  rsync: `#!/usr/bin/env bash
-printf 'rsync\\t%s\\n' "$*" >> "$STUB_LOG"
-exit 0
-`,
-  git: `#!/usr/bin/env bash
-args=("$@")
-i=0
-while [ "$i" -lt "\${#args[@]}" ]; do
-  case "\${args[$i]}" in -C|-c) i=$((i + 2)) ;; *) break ;; esac
-done
-case "\${args[$i]:-}" in
-  status)
-    printf 'git\\tstatus\\n' >> "$STUB_LOG"
-    [ -z "\${STUB_GIT_STATUS:-}" ] || printf '%s\\n' "$STUB_GIT_STATUS"
-    exit 0 ;;
-  archive)
-    printf 'git\\t%s\\n' "\${args[*]:$i}" >> "$STUB_LOG"
-    printf 'STUB-TAR'
-    exit 0 ;;
-esac
-exec "$STUB_REAL_GIT" "$@"
-`,
-  bun: `#!/usr/bin/env bash
-printf 'bun\\t%s\\n' "$*" >> "$STUB_LOG"
-case " $* " in *" --live "*)
-  # STUB_LIVE_EXITS is one exit code per live check; the last one repeats.
-  if [ -n "\${STUB_LIVE_EXITS:-}" ]; then
-    read -r -a codes <<< "$STUB_LIVE_EXITS"
-    n=$(grep -c -e ' --live ' "$STUB_LOG")
-    [ "$n" -le "\${#codes[@]}" ] || n="\${#codes[@]}"
-    exit "\${codes[$((n - 1))]}"
-  fi
-  exit "\${STUB_LIVE_EXIT:-0}" ;;
-esac
-exit 0
-`,
-  sleep: `#!/usr/bin/env bash
-printf 'sleep\\t%s\\n' "$*" >> "$STUB_LOG"
-exit 0
-`,
-};
-
-let tmp;
-let bin;
-let callLog;
-
-beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-remote-test-'));
-  bin = path.join(tmp, 'bin');
-  fs.mkdirSync(bin);
-  for (const [name, body] of Object.entries(STUBS)) {
-    fs.writeFileSync(path.join(bin, name), body, { mode: 0o755 });
-  }
-  callLog = path.join(tmp, 'calls.log');
-  fs.writeFileSync(callLog, '');
-});
-
-afterEach(() => {
-  fs.rmSync(tmp, { recursive: true, force: true });
-});
-
-function run(args, env = {}, script = SCRIPT) {
-  const base = { ...process.env };
-  delete base.VIVERA_DOCS_DEPLOY_ACK;
-  delete base.VIVERA_VPS;
-  const proc = Bun.spawnSync([BASH, script, ...args], {
-    cwd: ROOT,
-    stdin: 'ignore',
-    env: {
-      ...base,
-      PATH: `${bin}:${process.env.PATH}`,
-      STUB_LOG: callLog,
-      STUB_REAL_GIT: REAL_GIT,
-      VIVERA_DOCS_LOG_DIR: tmp,
-      ...env,
-    },
-  });
-  return {
-    code: proc.exitCode,
-    out: proc.stdout.toString() + proc.stderr.toString(),
-  };
-}
-
-function calls() {
-  return fs
-    .readFileSync(callLog, 'utf8')
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => {
-      const [tool, ...rest] = line.split('\t');
-      if (tool === 'ssh') return { tool, bytes: Number(rest[0]), text: rest.slice(1).join('\t') };
-      return { tool, bytes: 0, text: rest.join('\t') };
-    });
-}
-
-const sshCalls = () => calls().filter((c) => c.tool === 'ssh');
-const RUN_DIR = /\/tmp\/vivera-docs-[a-z]+-\d{8}T\d{6}Z-[A-Za-z0-9]{6}/g;
-
-// The mktemp template itself also matches RUN_DIR (XXXXXX), so its call is skipped.
-function runDirs(seq) {
-  const found = seq.filter((c) => !c.text.includes('mktemp')).flatMap((c) => c.text.match(RUN_DIR) ?? []);
-  return [...new Set(found)];
-}
-const REAL_WRANGLER_DEPLOY = /bunx wrangler@4\.151\.1 deploy(?!\s+--dry-run)/;
-
-function expectInOrder(haystack, markers) {
-  let from = 0;
-  for (const marker of markers) {
-    const at = haystack.indexOf(marker, from);
-    expect({ marker, found: at >= 0 }).toEqual({ marker, found: true });
-    from = at + marker.length;
-  }
-}
+installHarness();
 
 test('an unknown mode exits 2 and the usage names every mode', () => {
   const r = run(['bogus']);
@@ -395,4 +266,24 @@ test('test mode still refuses a missing apps/docs/Cargo.toml before any ssh', ()
   expect(r.code).toBe(1);
   expect(r.out).toContain('apps/docs/Cargo.toml missing');
   expect(calls().filter((c) => c.tool === 'ssh' || c.tool === 'rsync')).toEqual([]);
+});
+
+test('VIVERA_DOCS_TARGET_DIR overrides the cargo target dir over ssh', () => {
+  const r = run(['build'], { VIVERA_DOCS_TARGET_DIR: '/srv/vivera-docs-target' });
+  expect(r.code).toBe(0);
+  const maudit = sshCalls().find((c) => c.text.includes('maudit build'));
+  expect(maudit.text).toContain('CARGO_TARGET_DIR=/srv/vivera-docs-target');
+});
+
+
+test('a build over ssh writes the version stamp with the full HEAD SHA between pagefind and the site check', () => {
+  const r = run(['build'], { STUB_HEAD_SHA: HEAD_SHA });
+  expect(r.code).toBe(0);
+  const seq = sshCalls().map((c) => c.text);
+  const stampAt = seq.findIndex((t) => t.includes('dist/docs/version.json'));
+  expect(stampAt).toBeGreaterThan(seq.findIndex((t) => t.includes('bunx pagefind@1.5.2')));
+  expect(stampAt).toBeLessThan(seq.findIndex((t) => t.includes('bun scripts/docs-site-check.mjs apps/docs/dist')));
+  expect(seq[stampAt]).toContain(`"commit": "${HEAD_SHA}"`);
+  expect(seq[stampAt]).not.toContain('wrangler');
+  expect(seq[stampAt]).not.toContain('mktemp');
 });

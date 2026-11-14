@@ -287,3 +287,24 @@ test('a build over ssh writes the version stamp with the full HEAD SHA between p
   expect(seq[stampAt]).not.toContain('wrangler');
   expect(seq[stampAt]).not.toContain('mktemp');
 });
+
+test.each([
+  ['unset', undefined],
+  ['empty', ''],
+])('VPS mode with VIVERA_VPS %s refuses before any ssh because vps-bcb is Snipset-only', (_name, value) => {
+  const r = run(['build'], { VIVERA_VPS: value });
+  expect(r.code).toBe(1);
+  expect(r.out).toContain('vps-bcb is Snipset-only since 2026-11-14');
+  expect(r.out).toContain('--local');
+  expect(r.out).toContain('VIVERA_VPS');
+  expect(calls()).toEqual([]);
+});
+
+test('VPS mode with VIVERA_VPS set runs the old flow over ssh to that host', () => {
+  const r = run(['test'], { VIVERA_VPS: 'docs-builder' });
+  expect(r.code).toBe(0);
+  expect(sshCalls().length).toBeGreaterThan(0);
+  const sync = calls().find((c) => c.tool === 'rsync');
+  expect(sync.text).toMatch(/docs-builder:\/tmp\/vivera-docs-test-/);
+  expect(r.out).toContain('work dir: docs-builder:/tmp/vivera-docs-test-');
+});

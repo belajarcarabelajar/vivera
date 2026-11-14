@@ -20,6 +20,8 @@
 #            needs the Cloudflare token in VIVERA_DOCS_CF_TOKEN, which is
 #            removed from the environment and handed to the wrangler commands
 #            only. CLOUDFLARE_ACCOUNT_ID passes through as is.
+# VPS mode (no --local) needs VIVERA_VPS: vps-bcb is Snipset-only since
+# 2026-11-14, so there is no default host.
 # VIVERA_DOCS_TARGET_DIR sets the cargo target dir in both modes (default
 # /root/.cache/vivera-docs-target).
 # Exit: 0 ok, 1 failure, 2 usage error.
@@ -85,7 +87,12 @@ if [ "$DEPLOYS" -eq 1 ]; then
   fi
 fi
 
-HOST="${VIVERA_VPS:-vps-bcb}"
+HOST="${VIVERA_VPS:-}"
+if [ "$LOCAL" -eq 0 ] && [ -z "$HOST" ]; then
+  echo "refused: vps-bcb is Snipset-only since 2026-11-14, so VPS mode has no default host."
+  echo "Use --local (as the docs-deploy workflow does), or set VIVERA_VPS to a host that may build vivera."
+  exit 1
+fi
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 # Each run gets its own directory on the shared VPS, so concurrent sessions do
 # not clobber each other; the cargo target dir stays shared because cargo locks it.

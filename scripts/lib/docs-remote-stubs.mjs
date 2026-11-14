@@ -123,6 +123,8 @@ export function installHarness() {
   });
 }
 
+const dropUndefined = (env) => Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined));
+
 export function run(args, env = {}, script = SCRIPT) {
   const base = { ...process.env };
   delete base.VIVERA_DOCS_DEPLOY_ACK;
@@ -130,14 +132,16 @@ export function run(args, env = {}, script = SCRIPT) {
   const proc = Bun.spawnSync([BASH, script, ...args], {
     cwd: ROOT,
     stdin: 'ignore',
-    env: {
+    env: dropUndefined({
       ...base,
       PATH: `${bin}:${process.env.PATH}`,
       STUB_LOG: callLog,
       STUB_REAL_GIT: REAL_GIT,
       VIVERA_DOCS_LOG_DIR: tmp,
+      // VPS mode needs an explicit host; a test passes undefined to leave it unset.
+      VIVERA_VPS: 'vps-bcb',
       ...env,
-    },
+    }),
   });
   return {
     code: proc.exitCode,

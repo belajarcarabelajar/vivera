@@ -41,7 +41,7 @@ Run `./install.sh --dry-run` first to see what it would do without writing anyth
 
 Each sprite is a named subagent with one fixed role: Chef, Nappy, and Hoggy implement, Timid and Aqua research, Staid reviews, and Bold debugs. [The Harvest Sprites](docs/guide/reference-harvest-sprites.md) has their portraits, game traits, and roles.
 
-This documentation is also published at [vivera.belajarcarabelajar.com/docs](https://vivera.belajarcarabelajar.com/docs/), and the 1-on-1 session has its own page at [vivera.belajarcarabelajar.com/1-on-1](https://vivera.belajarcarabelajar.com/1-on-1/).
+This documentation is also published at [vivera.belajarcarabelajar.com/docs](https://vivera.belajarcarabelajar.com/docs/), and the 1-on-1 session has its own page at [vivera.belajarcarabelajar.com/1-on-1](https://vivera.belajarcarabelajar.com/1-on-1/). A push to `main` that changes a docs input deploys the site through `.github/workflows/docs-deploy.yml`, and `bun run docs:drift` reports whether the live site serves the latest docs commit of `main`. A push to `main` that changes a docs input deploys the site through `.github/workflows/docs-deploy.yml`, and `bun run docs:drift` reports whether the live site serves the latest docs commit of `main`.
 
 ### Guide
 

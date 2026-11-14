@@ -68,7 +68,7 @@ A code block in a docs page can be a copy of a source file. The copy stays in th
 
 ## Platform Matrix
 
-`.github/workflows/platforms.yml` runs the installer suites on the platforms this machine does not have. Like the other workflows it has no automatic trigger; run it by hand with `gh workflow run platforms.yml` and follow it with `gh run watch`. GitHub only offers it once the file is on the default branch.
+`.github/workflows/platforms.yml` runs the installer suites on the platforms this machine does not have. Like the other workflows except `docs-deploy.yml`, it has no automatic trigger; run it by hand with `gh workflow run platforms.yml` and follow it with `gh run watch`. GitHub only offers it once the file is on the default branch.
 
 | Job | Runner | What it proves |
 |---|---|---|
@@ -76,4 +76,4 @@ A code block in a docs page can be a copy of a source file. The copy stays in th
 | `macos` | `macos-latest` with `/bin/bash` 3.2 first on `PATH` | the `install-*` and `prereq` suites, and `install.sh --dry-run`, under the bash macOS ships |
 | `docker` | `ubuntu-latest` | the `Dockerfile` builds and `install.sh --check` passes inside the image |
 
-`bun test scripts/workflows.test.mjs` asserts that every workflow stays dispatch-only.
+`bun test scripts/workflows.test.mjs` asserts that every workflow stays dispatch-only, except `docs-deploy.yml`: a push to `main` that changes a docs input builds and deploys this docs site on a hosted runner (owner decision 2026-11-15; vivera is public, so the runner costs no minutes). `bun run docs:drift` reports whether the live site serves the latest docs commit of `main`.

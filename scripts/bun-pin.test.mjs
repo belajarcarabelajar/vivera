@@ -23,6 +23,7 @@ const SOURCES = [
   ['Dockerfile', [IMAGE]],
   ['.github/workflows/ci.yml', [ACTION]],
   ['.github/workflows/platforms.yml', [ACTION]],
+  ['.github/workflows/docs-deploy.yml', [ACTION]],
   ['docs/guide/getting-started-quick-start-1.md', [IMAGE, PROSE]],
   ['docs/guide/getting-started-repository-structure-1.md', [IMAGE]],
   ['apps/docs/content/id/getting-started-quick-start.md', [IMAGE, PROSE]],

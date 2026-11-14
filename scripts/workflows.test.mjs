@@ -9,10 +9,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
+import { DOCS_INPUTS } from './docs-drift.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR = path.join(ROOT, '.github', 'workflows');
 const PLATFORMS = path.join(DIR, 'platforms.yml');
+const DOCS_DEPLOY = path.join(DIR, 'docs-deploy.yml');
+// The one workflow with an automatic trigger: docs-deploy.yml (owner decision 2026-11-15, plan
+// 2026-11-15-docs-autodeploy). vivera is public, so standard hosted runners cost no minutes.
+const AUTO_TRIGGER = ['docs-deploy.yml'];
 
 // The yaml package parses YAML 1.2 (core schema), so a bare `on:` key stays the string "on". A parser in
 // YAML 1.1 mode would turn it into the boolean key `true`; that key is read too, so such a file still has
@@ -36,12 +41,12 @@ const workflowFiles = () =>
     .filter((f) => /\.ya?ml$/.test(f))
     .sort();
 
-describe('every workflow is dispatch-only', () => {
+describe('every workflow but docs-deploy.yml is dispatch-only', () => {
   test('the directory holds the known workflows, platforms.yml among them', () => {
     expect(workflowFiles()).toEqual(expect.arrayContaining(['ci.yml', 'release.yml', 'platforms.yml']));
   });
 
-  for (const file of workflowFiles()) {
+  for (const file of workflowFiles().filter((f) => !AUTO_TRIGGER.includes(f))) {
     test(`${file} parses and its only trigger is workflow_dispatch`, () => {
       const doc = parse(fs.readFileSync(path.join(DIR, file), 'utf8'));
       expect(Object.keys(doc)).toContain('on');
@@ -120,5 +125,70 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
     const run = steps.findIndex((r) => /docker run\b/.test(r) && r.includes('./install.sh --check'));
     expect(build).toBeGreaterThanOrEqual(0);
     expect(run).toBeGreaterThan(build);
+  });
+});
+
+describe('docs-deploy.yml deploys the docs site when a docs input reaches main', () => {
+  const load = () => parse(fs.readFileSync(DOCS_DEPLOY, 'utf8'));
+  const job = () => Object.values(load().jobs ?? {})[0];
+  const steps = () => job().steps;
+  const deployIndex = () => steps().findIndex((s) => /scripts\/docs-remote\.sh deploy --local\b/.test(s.run ?? ''));
+
+  test('docs-deploy: the only automatic-trigger exception is this file', () => {
+    expect(AUTO_TRIGGER).toEqual(['docs-deploy.yml']);
+    expect(workflowFiles()).toContain('docs-deploy.yml');
+  });
+
+  test('docs-deploy: triggers are push to main filtered to exactly DOCS_INPUTS, plus workflow_dispatch', () => {
+    const doc = load();
+    expect(triggerNames(doc).sort()).toEqual(['push', 'workflow_dispatch']);
+    expect(doc.on.push.branches).toEqual(['main']);
+    expect(doc.on.push['paths-ignore']).toBeUndefined();
+    expect([...doc.on.push.paths].sort()).toEqual([...DOCS_INPUTS].sort());
+  });
+
+  test('docs-deploy: read-only token, one job in environment docs-production, a timeout, no cancelled deploys', () => {
+    const doc = load();
+    expect(doc.permissions).toEqual({ contents: 'read' });
+    expect(doc.concurrency.group).toBeTruthy();
+    expect(doc.concurrency['cancel-in-progress']).toBe(false);
+    expect(Object.keys(doc.jobs)).toHaveLength(1);
+    expect(job()['runs-on']).toBe('ubuntu-latest');
+    expect(job().environment).toBe('docs-production');
+    expect(job()['timeout-minutes']).toBeGreaterThan(0);
+    expect(job()['timeout-minutes']).toBeLessThanOrEqual(60);
+  });
+
+  test('docs-deploy: the checkout keeps no credentials', () => {
+    const co = steps().find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
+    expect(co?.with?.['persist-credentials']).toBe(false);
+  });
+
+  test('docs-deploy: the Cloudflare token is in the env of the deploy step only', () => {
+    const doc = load();
+    const i = deployIndex();
+    expect(i).toBeGreaterThanOrEqual(0);
+    const deploy = steps()[i];
+    expect(deploy.env.VIVERA_DOCS_CF_TOKEN).toBe('${{ secrets.VIVERA_DOCS_CF_TOKEN }}');
+    expect(deploy.env.VIVERA_DOCS_DEPLOY_ACK).toBe('I_UNDERSTAND_THIS_CHANGES_LIVE');
+    expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe('${{ vars.CLOUDFLARE_ACCOUNT_ID }}');
+    expect(deploy.env.VIVERA_DOCS_TARGET_DIR).toBeTruthy();
+    // No other place in the file may read a secret: not the workflow env, not the job env, not another step.
+    const others = { ...doc, jobs: { x: { ...job(), steps: steps().filter((_, k) => k !== i) } } };
+    expect(JSON.stringify(others)).not.toContain('secrets.');
+  });
+
+  test('docs-deploy: after the deploy, the live stamp must equal the pushed commit', () => {
+    const i = deployIndex();
+    const drift = steps().findIndex((s) => (s.run ?? '').includes('bun scripts/docs-drift.mjs --expect ${{ github.sha }}'));
+    expect(drift).toBeGreaterThan(i);
+    expect(JSON.stringify(steps()[drift])).not.toContain('secrets.');
+  });
+
+  test('docs-deploy: header names the decision date, kill switch and revert', () => {
+    const text = fs.readFileSync(DOCS_DEPLOY, 'utf8');
+    expect(text).toContain('2026-11-15');
+    expect(text).toContain('gh workflow disable docs-deploy.yml');
+    expect(text).toContain('git rm .github/workflows/docs-deploy.yml');
   });
 });

@@ -32,6 +32,11 @@ name: CI Validation
 #
 # Nothing else in this file has to change. To delete the workflow outright:
 # `git rm .github/workflows/ci.yml`.
+#
+# One named exception to this policy: docs-deploy.yml deploys the docs site on
+# a push to main that changes a docs input (owner decision 2026-11-15; vivera is
+# public, so standard hosted runners use no paid minutes). Its header holds the
+# kill switch and the revert.
 # ---------------------------------------------------------------------------
 
 on:

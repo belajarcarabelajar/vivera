@@ -130,9 +130,9 @@ describe('platforms.yml proves the installers on real Windows, macOS and Docker'
 
 describe('docs-deploy.yml deploys the docs site when a docs input reaches main', () => {
   const load = () => parse(fs.readFileSync(DOCS_DEPLOY, 'utf8'));
-  const job = () => Object.values(load().jobs ?? {})[0];
-  const steps = () => job().steps;
-  const deployIndex = () => steps().findIndex((s) => /scripts\/docs-remote\.sh deploy --local\b/.test(s.run ?? ''));
+  const jobs = () => load().jobs ?? {};
+  const runs = (job) => job.steps.map((s) => s.run ?? '');
+  const SHA = /@[0-9a-f]{40}$/;
 
   test('docs-deploy: the only automatic-trigger exception is this file', () => {
     expect(AUTO_TRIGGER).toEqual(['docs-deploy.yml']);
@@ -147,42 +147,68 @@ describe('docs-deploy.yml deploys the docs site when a docs input reaches main',
     expect([...doc.on.push.paths].sort()).toEqual([...DOCS_INPUTS].sort());
   });
 
-  test('docs-deploy: read-only token, one job in environment docs-production, a timeout, no cancelled deploys', () => {
+  test('docs-deploy: read-only token, one deploy at a time and never cancelled, two jobs with timeouts', () => {
     const doc = load();
     expect(doc.permissions).toEqual({ contents: 'read' });
     expect(doc.concurrency.group).toBeTruthy();
     expect(doc.concurrency['cancel-in-progress']).toBe(false);
-    expect(Object.keys(doc.jobs)).toHaveLength(1);
-    expect(job()['runs-on']).toBe('ubuntu-latest');
-    expect(job().environment).toBe('docs-production');
-    expect(job()['timeout-minutes']).toBeGreaterThan(0);
-    expect(job()['timeout-minutes']).toBeLessThanOrEqual(60);
+    expect(Object.keys(jobs()).sort()).toEqual(['build', 'deploy']);
+    for (const job of Object.values(jobs())) {
+      expect(job['runs-on']).toBe('ubuntu-latest');
+      expect(job['timeout-minutes']).toBeGreaterThan(0);
+      expect(job['timeout-minutes']).toBeLessThanOrEqual(60);
+      const co = job.steps.find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
+      expect(co?.with?.['persist-credentials']).toBe(false);
+    }
   });
 
-  test('docs-deploy: the checkout keeps no credentials', () => {
-    const co = steps().find((s) => String(s.uses ?? '').startsWith('actions/checkout@'));
-    expect(co?.with?.['persist-credentials']).toBe(false);
+  test('docs-deploy: the build job holds no secret and no environment, builds with --local and uploads the site', () => {
+    const build = jobs().build;
+    expect(build.environment).toBeUndefined();
+    expect(JSON.stringify(build)).not.toContain('secrets.');
+    const b = runs(build).findIndex((r) => /scripts\/docs-remote\.sh build --local\b/.test(r));
+    expect(b).toBeGreaterThanOrEqual(0);
+    const out = build.steps[b].env?.VIVERA_DOCS_OUT;
+    expect(out).toBeTruthy();
+    const up = build.steps.findIndex((s) => String(s.uses ?? '').startsWith('actions/upload-artifact@'));
+    expect(up).toBeGreaterThan(b);
+    expect(build.steps[up].with.path).toBe(out);
+    expect(build.steps[up].with['if-no-files-found']).toBe('error');
   });
 
-  test('docs-deploy: the Cloudflare token is in the env of the deploy step only', () => {
+  test('docs-deploy: the deploy job needs the build, runs in docs-production, pins every action by commit, and never builds', () => {
+    const deploy = jobs().deploy;
+    expect([deploy.needs].flat()).toEqual(['build']);
+    expect(deploy.environment).toBe('docs-production');
+    for (const s of deploy.steps.filter((s) => s.uses)) expect(s.uses).toMatch(SHA);
+    const text = runs(deploy).join('\n');
+    expect(text).not.toMatch(/bun install|cargo|docs-gen|pagefind|docs-remote\.sh (build|deploy)\b/);
+    const dl = deploy.steps.find((s) => String(s.uses ?? '').startsWith('actions/download-artifact@'));
+    const up = jobs().build.steps.find((s) => String(s.uses ?? '').startsWith('actions/upload-artifact@'));
+    expect(dl.with.name).toBe(up.with.name);
+    expect(dl.with.path).toBe('apps/docs/dist');
+  });
+
+  test('docs-deploy: the Cloudflare token is in the env of the ship step only', () => {
     const doc = load();
-    const i = deployIndex();
+    const deploy = jobs().deploy;
+    const i = runs(deploy).findIndex((r) => /scripts\/docs-remote\.sh ship --local\b/.test(r));
     expect(i).toBeGreaterThanOrEqual(0);
-    const deploy = steps()[i];
-    expect(deploy.env.VIVERA_DOCS_CF_TOKEN).toBe('${{ secrets.VIVERA_DOCS_CF_TOKEN }}');
-    expect(deploy.env.VIVERA_DOCS_DEPLOY_ACK).toBe('I_UNDERSTAND_THIS_CHANGES_LIVE');
-    expect(deploy.env.CLOUDFLARE_ACCOUNT_ID).toBe('${{ vars.CLOUDFLARE_ACCOUNT_ID }}');
-    expect(deploy.env.VIVERA_DOCS_TARGET_DIR).toBeTruthy();
-    // No other place in the file may read a secret: not the workflow env, not the job env, not another step.
-    const others = { ...doc, jobs: { x: { ...job(), steps: steps().filter((_, k) => k !== i) } } };
-    expect(JSON.stringify(others)).not.toContain('secrets.');
+    const ship = deploy.steps[i];
+    expect(ship.env.VIVERA_DOCS_CF_TOKEN).toBe('${{ secrets.VIVERA_DOCS_CF_TOKEN }}');
+    expect(ship.env.VIVERA_DOCS_DEPLOY_ACK).toBe('I_UNDERSTAND_THIS_CHANGES_LIVE');
+    expect(ship.env.CLOUDFLARE_ACCOUNT_ID).toBe('${{ vars.CLOUDFLARE_ACCOUNT_ID }}');
+    // No other place in the file may read a secret: not the workflow env, not a job env, not another step.
+    const rest = { ...doc, jobs: { ...doc.jobs, deploy: { ...deploy, steps: deploy.steps.filter((_, k) => k !== i) } } };
+    expect(JSON.stringify(rest)).not.toContain('secrets.');
   });
 
-  test('docs-deploy: after the deploy, the live stamp must equal the pushed commit', () => {
-    const i = deployIndex();
-    const drift = steps().findIndex((s) => (s.run ?? '').includes('bun scripts/docs-drift.mjs --expect ${{ github.sha }}'));
-    expect(drift).toBeGreaterThan(i);
-    expect(JSON.stringify(steps()[drift])).not.toContain('secrets.');
+  test('docs-deploy: after the ship, the live stamp must equal the pushed commit, with retries', () => {
+    const deploy = jobs().deploy;
+    const r = runs(deploy);
+    const ship = r.findIndex((x) => x.includes('docs-remote.sh ship --local'));
+    const drift = r.findIndex((x) => /bun scripts\/docs-drift\.mjs --expect \$\{\{ github\.sha \}\} --attempts [1-9]/.test(x));
+    expect(drift).toBeGreaterThan(ship);
   });
 
   test('docs-deploy: header names the decision date, kill switch and revert', () => {

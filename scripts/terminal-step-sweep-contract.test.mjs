@@ -67,6 +67,21 @@ describe('T1 core rule', () => {
   });
 });
 
+describe('F follow-ups', () => {
+  test('F2 the overnight run parks the terminal task', () => {
+    expect(readRepoFile('skills/sucp-overnight/SKILL.md')).toContain('terminal task');
+  });
+
+  test('F1 the README names the terminal-task exception', () => {
+    const line = readRepoFile('README.md').split('\n').find((l) => l.startsWith('- **Verification is the last gate, not the last step.**'));
+    expect(line).toContain('terminal task');
+  });
+
+  test('F3 the task template shows the terminal marker', () => {
+    expect(readRepoFile('skills/sucp-plan/references/02-plan-templates.md')).toContain('(terminal)');
+  });
+});
+
 describe('T2 mirrors', () => {
   const MIRRORS = [
     'templates/follow-up-injection-template.md',

@@ -92,6 +92,8 @@ tasks:
 Task template:
 ```
 ### Task N: [Component Name]
+
+> A task whose output is costly to redo or visible outside the repository (full render, deploy, publish) ends its heading with `(terminal)`, for example `### Task T9: Full render (terminal)`, and depends on every other task (`sucp-debt-sweep` reference 06).
 **Files:**
 - Create: exact/path/to/file
 - Modify: exact/path/to/existing:line-range

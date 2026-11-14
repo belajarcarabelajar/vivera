@@ -101,6 +101,11 @@ describe('R review fixes', () => {
     expect(lineWith('skills/sucp-debt-sweep/references/04-stars-anti-patterns.md', 'accDescr: Once the plan is done')).toContain('terminal task');
   });
 
+  test('R4 the follow-up template diagram names the terminal exception', () => {
+    expect(lineWith('templates/follow-up-injection-template.md', 'accDescr: Harvest debt candidates')).toContain('terminal task');
+    expect(lineWith('templates/follow-up-injection-template.md', 'First --> Ask[')).toContain('terminal task');
+  });
+
   test('R3 the terminal task carries a real skip_if and no run[]', () => {
     const ref = readRepoFile(REF);
     for (const term of ['no `run[]`', 'NEEDS-HUMAN', 'runs the render or deploy again']) {

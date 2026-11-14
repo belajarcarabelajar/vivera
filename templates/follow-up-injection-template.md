@@ -92,11 +92,11 @@ Mandatory: readiness runs before the follow-ups call, the question rides in that
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question, execute the selected items through the full pipeline, then re-sweep once and write any new debt they created to the backlog. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question (with a terminal task, Close plan is its own call after that task), execute the selected items through the full pipeline, then re-sweep once and write any new debt they created to the backlog. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
     Rank --> First["Readiness verdict\nshown in the chat"]
-    First --> Ask["One call: multi-select groups\nplus the Close plan question"]
+    First --> Ask["One call: multi-select groups\nplus the Close plan question\n(terminal task: Close plan after it)"]
     Ask -->|"User selects"| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]

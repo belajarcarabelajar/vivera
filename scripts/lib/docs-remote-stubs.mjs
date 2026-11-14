@@ -203,6 +203,9 @@ exit 0
 `,
   bunx: `#!/usr/bin/env bash
 printf 'bunx\\t%s${ENV_FMT}\\n' "$*" ${ENV_ARGS} >> "$STUB_LOG"
+if [[ "$*" == wrangler@* ]]; then
+  printf 'wrangler-cwd\\t%s\\t%s\\n' "$PWD" "$(ls wrangler.json dist/docs/version.json 2>/dev/null | tr '\\n' ' ')" >> "$STUB_LOG"
+fi
 if [[ "$*" == *"deployments list --json"* ]]; then
   for ((k = 1; k <= \${STUB_DEPLOYMENTS:-2}; k++)); do printf '{"id": "dep-%s"}\\n' "$k"; done
 fi
@@ -214,7 +217,7 @@ exit 0
 `,
 };
 
-export function runLocal(args, env = {}) {
+export function runLocal(args, env = {}, script = SCRIPT) {
   const home = path.join(tmp, 'home');
   const src = path.join(tmp, 'src');
   fs.mkdirSync(path.join(src, 'apps', 'docs', 'static', 'generated'), { recursive: true });
@@ -228,7 +231,7 @@ export function runLocal(args, env = {}) {
   const base = Object.fromEntries(
     Object.entries(process.env).filter(([k]) => !k.startsWith('CLOUDFLARE_') && !k.startsWith('VIVERA_')),
   );
-  const proc = Bun.spawnSync([BASH, SCRIPT, ...args], {
+  const proc = Bun.spawnSync([BASH, script, ...args], {
     cwd: ROOT,
     stdin: 'ignore',
     env: {
@@ -259,3 +262,21 @@ export const envOf = (c) =>
 export const steps = () => calls().map((c) => `${c.tool} ${argsOf(c)}`);
 export const isWrangler = (c) => c.tool === 'bunx' && argsOf(c).startsWith('wrangler@4.151.1 ');
 export const noRemote = () => calls().filter((c) => c.tool === 'ssh' || c.tool === 'rsync');
+
+// A checkout copy for ship: the workflow downloads the build artifact into
+// apps/docs/dist, so the fixture holds one stamped with stamp.
+export function shipRepo({ stamp = HEAD_SHA, dist = true } = {}) {
+  const repo = path.join(tmp, 'repo');
+  const docs = path.join(repo, 'apps', 'docs');
+  fs.mkdirSync(path.join(repo, 'scripts'), { recursive: true });
+  fs.mkdirSync(docs, { recursive: true });
+  fs.copyFileSync(SCRIPT, path.join(repo, 'scripts', 'docs-remote.sh'));
+  fs.writeFileSync(path.join(docs, 'Cargo.toml'), '[package]\n');
+  fs.writeFileSync(path.join(docs, 'wrangler.json'), '{"name": "vivera-docs"}\n');
+  if (dist) {
+    fs.mkdirSync(path.join(docs, 'dist', 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(docs, 'dist', 'docs', 'index.html'), '<!doctype html>\n');
+    fs.writeFileSync(path.join(docs, 'dist', 'docs', 'version.json'), `{"commit": "${stamp}", "built_at": "2026-11-15T00:00:00Z"}\n`);
+  }
+  return path.join(repo, 'scripts', 'docs-remote.sh');
+}

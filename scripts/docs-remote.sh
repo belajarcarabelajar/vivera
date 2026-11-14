@@ -2,13 +2,19 @@
 # Build, test and deploy the docs site on the VPS, because nothing compiles on
 # this laptop.
 # Usage: scripts/docs-remote.sh test | build [--local] | deploy [--dry-run] [--local]
+#                              | ship --local [--dry-run]
 #   test     sync the working tree and run the crate tests
 #   build    build the site from the exact HEAD commit, stamp it with
-#            docs/version.json (commit, built_at), and check it
+#            docs/version.json (commit, built_at), and check it. With --local,
+#            VIVERA_DOCS_OUT=<dir> (empty or absent) receives a copy of the
+#            checked dist.
 #   deploy   build, then wrangler deploy; a real deploy needs
 #            VIVERA_DOCS_DEPLOY_ACK=I_UNDERSTAND_THIS_CHANGES_LIVE
 #            The live check is retried VIVERA_DOCS_LIVE_ATTEMPTS times (default
 #            10), VIVERA_DOCS_LIVE_INTERVAL seconds apart (default 20).
+#   ship     local only: deploy a dist built elsewhere (apps/docs/dist, whose
+#            docs/version.json commit must equal HEAD) with the deploy half
+#            only: no bun install, cargo or docs-gen. Same ack and token rules.
 #   --local  run every step on this host instead of over ssh (a CI runner is
 #            the build host). ~/cloudflare/.env is never read: a real deploy
 #            needs the Cloudflare token in VIVERA_DOCS_CF_TOKEN, which is
@@ -19,7 +25,7 @@
 # Exit: 0 ok, 1 failure, 2 usage error.
 set -euo pipefail
 
-usage() { echo "usage: scripts/docs-remote.sh test | build [--local] | deploy [--dry-run] [--local]" >&2; exit 2; }
+usage() { echo "usage: scripts/docs-remote.sh test | build [--local] | deploy [--dry-run] [--local] | ship --local [--dry-run]" >&2; exit 2; }
 [ $# -ge 1 ] || usage
 MODE="$1"
 shift
@@ -27,7 +33,7 @@ DRY_RUN=0
 LOCAL=0
 case "$MODE" in
   test) [ $# -eq 0 ] || usage ;;
-  build | deploy)
+  build | deploy | ship)
     for arg in "$@"; do
       case "$arg" in
         --local)
@@ -35,7 +41,7 @@ case "$MODE" in
           LOCAL=1
           ;;
         --dry-run)
-          { [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ]; } || usage
+          { [ "$MODE" != build ] && [ "$DRY_RUN" -eq 0 ]; } || usage
           DRY_RUN=1
           ;;
         *) usage ;;
@@ -44,6 +50,17 @@ case "$MODE" in
     ;;
   *) usage ;;
 esac
+if [ "$MODE" = ship ] && [ "$LOCAL" -eq 0 ]; then
+  usage
+fi
+DEPLOYS=0
+if [ "$MODE" = deploy ] || [ "$MODE" = ship ]; then
+  DEPLOYS=1
+fi
+OUT_DIR=
+if [ "$MODE" = build ] && [ "$LOCAL" -eq 1 ]; then
+  OUT_DIR="${VIVERA_DOCS_OUT:-}"
+fi
 
 # Taken out of the environment before anything runs, so bun install scripts,
 # cargo build scripts and pagefind cannot read it; only wrangler gets it back.
@@ -57,7 +74,7 @@ fi
 # New Worker routes take up to a few minutes to propagate after wrangler deploy.
 LIVE_ATTEMPTS="${VIVERA_DOCS_LIVE_ATTEMPTS:-10}"
 LIVE_INTERVAL="${VIVERA_DOCS_LIVE_INTERVAL:-20}"
-if [ "$MODE" = deploy ]; then
+if [ "$DEPLOYS" -eq 1 ]; then
   if [[ ! "$LIVE_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
     echo "VIVERA_DOCS_LIVE_ATTEMPTS must be a positive integer, got: $LIVE_ATTEMPTS" >&2
     exit 2
@@ -110,13 +127,13 @@ finish() {
 trap finish EXIT
 echo "log: $LOG"
 
-if [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ] && [ "${VIVERA_DOCS_DEPLOY_ACK:-}" != "$DEPLOY_ACK" ]; then
+if [ "$DEPLOYS" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] && [ "${VIVERA_DOCS_DEPLOY_ACK:-}" != "$DEPLOY_ACK" ]; then
   echo "deploy: refused, a real deploy changes the live site."
   echo "Set VIVERA_DOCS_DEPLOY_ACK=$DEPLOY_ACK to deploy, or pass --dry-run."
   exit 1
 fi
 
-if [ "$LOCAL" -eq 1 ] && [ "$MODE" = deploy ] && [ "$DRY_RUN" -eq 0 ] && [ -z "$CF_TOKEN" ]; then
+if [ "$LOCAL" -eq 1 ] && [ "$DEPLOYS" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] && [ -z "$CF_TOKEN" ]; then
   echo "deploy: refused, a real --local deploy needs the Cloudflare token in VIVERA_DOCS_CF_TOKEN."
   exit 1
 fi
@@ -200,6 +217,10 @@ require_clean() {
 }
 
 run_build() {
+  if [ -n "$OUT_DIR" ] && [ -e "$OUT_DIR" ] && { [ ! -d "$OUT_DIR" ] || [ -n "$(ls -A -- "$OUT_DIR")" ]; }; then
+    echo "build: VIVERA_DOCS_OUT must be an empty or absent directory: $OUT_DIR"
+    exit 1
+  fi
   require_clean
   make_work_dir
   echo "upload: git archive $(git -C "$ROOT" rev-parse --short HEAD) -> $HOST:$WORK_DIR"
@@ -224,6 +245,11 @@ run_build() {
   remote "cd $WORK_DIR/apps/docs && bunx pagefind@1.5.2 --site dist --output-path dist/docs/pagefind"
   write_version_stamp
   remote "cd $WORK_DIR && bun scripts/docs-site-check.mjs apps/docs/dist"
+  if [ -n "$OUT_DIR" ]; then
+    mkdir -p -- "$OUT_DIR"
+    cp -R -- "$WORK_DIR/apps/docs/dist/." "$OUT_DIR/"
+    echo "build: dist copied to $OUT_DIR"
+  fi
   echo "build: ok"
 }
 
@@ -242,6 +268,33 @@ write_version_stamp() {
 
 run_deploy() {
   run_build
+  deploy_built
+}
+
+# The workflow builds in a job that never holds the token and hands the dist to
+# this one, so ship runs no bun install, cargo build or docs-gen. It works on a
+# copy because cleanup removes WORK_DIR.
+run_ship() {
+  local dist="$ROOT/apps/docs/dist" head stamped
+  if [ ! -f "$dist/docs/version.json" ]; then
+    echo "ship: $dist/docs/version.json missing; put the build artifact in apps/docs/dist first"
+    exit 1
+  fi
+  head="$(git -C "$ROOT" rev-parse HEAD)"
+  stamped="$(sed -n 's/.*"commit": *"\([0-9a-f]*\)".*/\1/p' "$dist/docs/version.json")"
+  if [ "$stamped" != "$head" ]; then
+    echo "ship: the dist was built from ${stamped:-an unknown commit}, which does not match HEAD $head"
+    exit 1
+  fi
+  make_work_dir
+  mkdir -p "$WORK_DIR/apps/docs"
+  cp -R -- "$ROOT/apps/docs/wrangler.json" "$dist" "$WORK_DIR/apps/docs/"
+  echo "ship: dist of $stamped copied to $WORK_DIR"
+  deploy_built
+}
+
+# The deploy half shared by deploy and ship: dry run, deploy, live check, rollback.
+deploy_built() {
   echo "deploy: wrangler dry run"
   remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy --dry-run"
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -302,4 +355,5 @@ case "$MODE" in
   test) run_test ;;
   build) run_build ;;
   deploy) run_deploy ;;
+  ship) run_ship ;;
 esac

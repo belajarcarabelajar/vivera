@@ -20,6 +20,7 @@ import {
   isWrangler,
   noRemote,
   runLocal,
+  shipRepo,
   steps,
   tmp,
 } from './lib/docs-remote-stubs.mjs';
@@ -120,4 +121,75 @@ test.each([
   expect(wrangler.map(argsOf)).toEqual(['wrangler@4.151.1 deploy --dry-run']);
   expect(envOf(wrangler[0]).cf).toBe('UNSET');
   expect(calls().some((c) => argsOf(c).includes('--live'))).toBe(false);
+});
+
+test('build --local with VIVERA_DOCS_OUT copies the built dist with docs/version.json', () => {
+  const out = path.join(tmp, 'out');
+  const r = runLocal(['build', '--local'], { VIVERA_DOCS_OUT: out });
+  expect(r.code).toBe(0);
+  expect(calls().length).toBeGreaterThan(0);
+  expect(JSON.parse(fs.readFileSync(path.join(out, 'docs', 'version.json'), 'utf8')).commit).toBe(HEAD_SHA);
+  expect(fs.existsSync(path.join(out, 'docs', 'generated', 'diagram.svg'))).toBe(true);
+});
+
+test('build --local refuses a non-empty VIVERA_DOCS_OUT before any step', () => {
+  const out = path.join(tmp, 'out');
+  fs.mkdirSync(out);
+  fs.writeFileSync(path.join(out, 'old.html'), 'old\n');
+  const r = runLocal(['build', '--local'], { VIVERA_DOCS_OUT: out });
+  expect(r.code).toBe(1);
+  expect(r.out).toContain('VIVERA_DOCS_OUT');
+  expect(calls()).toEqual([]);
+});
+
+const SHIP_ENV = { VIVERA_DOCS_DEPLOY_ACK: ACK, VIVERA_DOCS_CF_TOKEN: 'fake-docs-token' };
+const notWrangler = (c) =>
+  c.tool === 'cargo' || (c.tool === 'bun' && !argsOf(c).includes(' --live ')) || (c.tool === 'bunx' && !isWrangler(c));
+
+test('ship --local deploys the downloaded dist from a work dir with wrangler only, and only wrangler sees the token', () => {
+  const script = shipRepo();
+  const r = runLocal(['ship', '--local'], { ...SHIP_ENV, CLOUDFLARE_API_TOKEN: 'outer-token-must-vanish' }, script);
+  expect(r.code).toBe(0);
+  expect(calls().length).toBeGreaterThan(0);
+  expect(noRemote()).toEqual([]);
+  expect(calls().filter(notWrangler)).toEqual([]);
+  expectInOrder(steps().join('\n'), [
+    'bunx wrangler@4.151.1 deploy --dry-run',
+    'bunx wrangler@4.151.1 deploy\n',
+    `docs-site-check.mjs --live ${LIVE_URL}`,
+  ]);
+  const cwds = calls().filter((c) => c.tool === 'wrangler-cwd');
+  expect(cwds).toHaveLength(2);
+  for (const c of cwds) {
+    expect(c.text).toMatch(/^\/tmp\/vivera-docs-ship-\d{8}T\d{6}Z-[A-Za-z0-9]{6}\/apps\/docs\t/);
+    expect(c.text).toContain('dist/docs/version.json wrangler.json');
+  }
+  for (const c of calls().filter(isWrangler)) expect(envOf(c).cf).toBe('fake-docs-token');
+  for (const c of calls().filter((c) => c.tool === 'bun')) expect(envOf(c)).toMatchObject({ cf: 'UNSET', vd: 'UNSET' });
+  expect(fs.existsSync(path.join(path.dirname(script), '..', 'apps', 'docs', 'dist', 'docs', 'version.json'))).toBe(true);
+});
+
+test('ship --local --dry-run needs no token and only dry-runs wrangler', () => {
+  const r = runLocal(['ship', '--local', '--dry-run'], {}, shipRepo());
+  expect(r.code).toBe(0);
+  expect(calls().filter(isWrangler).map(argsOf)).toEqual(['wrangler@4.151.1 deploy --dry-run']);
+  expect(calls().filter(notWrangler)).toEqual([]);
+});
+
+test.each([
+  ['a missing dist', { dist: false }, {}, 'apps/docs/dist'],
+  ['a stamp that differs from HEAD', { stamp: 'f'.repeat(40) }, {}, 'does not match HEAD'],
+  ['a real ship without a token', {}, { VIVERA_DOCS_CF_TOKEN: '' }, 'VIVERA_DOCS_CF_TOKEN'],
+])('ship --local refuses %s before any wrangler call', (_name, repo, env, message) => {
+  const r = runLocal(['ship', '--local'], { ...SHIP_ENV, ...env }, shipRepo(repo));
+  expect(r.code).toBe(1);
+  expect(r.out).toContain(message);
+  expect(calls().filter((c) => c.tool === 'bun' || c.tool === 'bunx')).toEqual([]);
+});
+
+test('ship without --local is a usage error before any step (ship is local only)', () => {
+  const r = runLocal(['ship'], SHIP_ENV, shipRepo());
+  expect(r.code).toBe(2);
+  expect(r.out).toContain('ship --local [--dry-run]');
+  expect(calls()).toEqual([]);
 });

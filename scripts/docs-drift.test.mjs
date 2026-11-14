@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DOCS_INPUTS, main } from './docs-drift.mjs';
+import { includedPaths } from './lib/docs-include.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dir, '..');
 const BASE = 'https://docs.example.test';
@@ -65,10 +66,10 @@ function stampFetch(body, { status = 200 } = {}) {
   return { fetch, calls };
 }
 
-async function run(args, { fetch, root = repo } = {}) {
+async function run(args, { fetch, root = repo, sleep = async () => {} } = {}) {
   const out = [];
   const err = [];
-  const code = await main(args, { fetch, root, out: (s) => out.push(s), err: (s) => err.push(s) });
+  const code = await main(args, { fetch, root, sleep, out: (s) => out.push(s), err: (s) => err.push(s) });
   return { code, out: out.join('\n'), err: err.join('\n'), all: [...out, ...err].join('\n') };
 }
 
@@ -169,8 +170,49 @@ describe('--expect mode needs no git history', () => {
   });
 });
 
+function sequenceFetch(answers) {
+  const calls = [];
+  const fetch = async (url) => {
+    const a = answers[Math.min(calls.length, answers.length - 1)];
+    calls.push(String(url));
+    return a === 404 ? new Response('Not Found', { status: 404 }) : new Response(JSON.stringify(stamp(a)));
+  };
+  return { fetch, calls };
+}
+
+describe('--expect retries with --attempts and --interval', () => {
+  test('a mismatch, then no stamp, then a match within the attempts: exit 0', async () => {
+    const { fetch, calls } = sequenceFetch([sha.base, 404, sha.links]);
+    const sleeps = [];
+    const r = await run(['--expect', sha.links, '--attempts', '5', '--interval', '7', '--url', BASE], { fetch, root: empty, sleep: async (ms) => sleeps.push(ms) });
+    expect(r.code).toBe(0);
+    expect(calls).toHaveLength(3);
+    expect(sleeps).toEqual([7000, 7000]);
+  });
+
+  test('always a mismatch: exit 1 after exactly N fetches', async () => {
+    const { fetch, calls } = sequenceFetch([sha.base]);
+    const sleeps = [];
+    const r = await run(['--expect', sha.links, '--attempts', '3', '--url', BASE], { fetch, root: empty, sleep: async (ms) => sleeps.push(ms) });
+    expect(r.code).toBe(1);
+    expect(calls).toHaveLength(3);
+    expect(sleeps).toEqual([10000, 10000]);
+  });
+
+  test('without --attempts there is one fetch and no sleep', async () => {
+    const { fetch, calls } = sequenceFetch([sha.base, sha.links]);
+    const sleeps = [];
+    const r = await run(['--expect', sha.links, '--url', BASE], { fetch, root: empty, sleep: async (ms) => sleeps.push(ms) });
+    expect(r.code).toBe(1);
+    expect(calls).toHaveLength(1);
+    expect(sleeps).toEqual([]);
+  });
+});
+
 describe('usage errors exit 2 before any fetch', () => {
-  for (const args of [['--bogus'], ['--ref'], ['--url', 'not a url'], ['--expect', 'xyz'], ['--ref', '--url'], ['extra']]) {
+  for (const args of [['--bogus'], ['--ref'], ['--url', 'not a url'], ['--expect', 'xyz'], ['--ref', '--url'], ['extra'],
+    ['--expect', 'a'.repeat(40), '--attempts', '0'], ['--expect', 'a'.repeat(40), '--attempts', 'x'], ['--expect', 'a'.repeat(40), '--attempts', '1.5'],
+    ['--expect', 'a'.repeat(40), '--interval', 'soon'], ['--attempts', '3']]) {
     test(`args ${JSON.stringify(args)}`, async () => {
       const { fetch, calls } = stampFetch(stamp(sha.base));
       const r = await run(args, { fetch });
@@ -205,7 +247,13 @@ describe('DOCS_INPUTS', () => {
     for (const p of ['diagrams/x.svg', 'apps/docs/src/main.rs', 'scripts/lib/docs-gen-links.mjs', 'scripts/docs-gen.mjs', 'scripts/lib/docs-include.mjs']) {
       expect([p, matched(p)]).toEqual([p, true]);
     }
-    expect(matched('scripts/ci-targeted.mjs')).toBe(false);
+    expect(matched('scripts/eval-run.mjs')).toBe(false);
+  });
+
+  test('covers every repository path the real docs sources include (docs-include markers)', () => {
+    const included = includedPaths(REPO_ROOT);
+    expect(included.length).toBeGreaterThan(0);
+    expect(included.filter((p) => !matched(p))).toEqual([]);
   });
 
   test('every literal entry names a real file, except the workflow another task adds', () => {

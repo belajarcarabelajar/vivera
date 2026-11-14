@@ -9,10 +9,13 @@
 //
 // Usage:
 //   bun scripts/docs-drift.mjs [--ref origin/main] [--url <base>]
-//   bun scripts/docs-drift.mjs --expect <sha> [--url <base>]
+//   bun scripts/docs-drift.mjs --expect <sha> [--attempts N] [--interval S] [--url <base>]
 //
 // Default mode lists docs-input commits in <live>..<ref>. --expect compares the
 // stamp's commit with <sha> only and needs no git history (CI checks out depth 1).
+// With --attempts N (default 1) it refetches after a mismatch or a missing stamp,
+// sleeping --interval S seconds (default 10) between tries, because a fresh
+// deploy can take a while to reach every edge.
 //
 // Exit 0 in sync (or stamp equals --expect), 1 drift, a different stamp, or no
 // stamp (404, or an answer that is not a valid stamp), 2 usage error, network
@@ -25,11 +28,12 @@ import path from 'node:path';
 export const DEFAULT_URL = 'https://vivera.belajarcarabelajar.com';
 export const DEFAULT_REF = 'origin/main';
 const FETCH_TIMEOUT_MS = 15_000;
-const USAGE = 'usage: bun scripts/docs-drift.mjs [--ref <ref>] [--url <base>] [--expect <sha>]';
+const USAGE = 'usage: bun scripts/docs-drift.mjs [--ref <ref>] [--url <base>] [--expect <sha> [--attempts N] [--interval S]]';
 const SHA = /^[0-9a-f]{40}$/;
 
-// GitHub Actions paths-filter globs. sourceFiles() in scripts/lib/docs-gen-files.mjs
-// reads page sources from apps/docs/pages.json; the test checks they are all here.
+// GitHub Actions paths-filter globs. The test checks that they cover every page
+// source in apps/docs/pages.json and every includedPaths() target
+// (scripts/lib/docs-include.mjs): a changed include region fails docs-gen --check.
 export const DOCS_INPUTS = [
   '.github/workflows/docs-deploy.yml',
   'README.md',
@@ -40,6 +44,7 @@ export const DOCS_INPUTS = [
   'docs/guide/**',
   'docs/vivera-glossary.md',
   'package.json',
+  'scripts/ci-targeted.mjs',
   'scripts/docs-gen.mjs',
   'scripts/docs-remote.sh',
   'scripts/docs-site-check.mjs',
@@ -58,7 +63,7 @@ class NetError extends Error {}
 class NoStamp extends Error {}
 
 export function parseArgs(args) {
-  const opts = { ref: DEFAULT_REF, url: DEFAULT_URL, expect: null, help: false };
+  const opts = { ref: DEFAULT_REF, url: DEFAULT_URL, expect: null, attempts: null, interval: null, help: false };
   const take = (i, flag) => {
     const v = args[i + 1];
     if (v === undefined || v.startsWith('-')) throw new UsageError(`${flag} needs a value`);
@@ -70,6 +75,8 @@ export function parseArgs(args) {
     else if (a === '--ref') opts.ref = take(i++, a);
     else if (a === '--url') opts.url = take(i++, a);
     else if (a === '--expect') opts.expect = take(i++, a).toLowerCase();
+    else if (a === '--attempts') opts.attempts = take(i++, a);
+    else if (a === '--interval') opts.interval = take(i++, a);
     else throw new UsageError(`unknown argument: ${a}`);
   }
   let base;
@@ -81,6 +88,11 @@ export function parseArgs(args) {
   if (base.protocol !== 'http:' && base.protocol !== 'https:') throw new UsageError(`not an http(s) URL: ${opts.url}`);
   opts.url = base.href.replace(/\/+$/, '');
   if (opts.expect !== null && !/^[0-9a-f]{7,40}$/.test(opts.expect)) throw new UsageError(`--expect needs a hex commit sha: ${opts.expect}`);
+  if (opts.expect === null && (opts.attempts !== null || opts.interval !== null)) throw new UsageError('--attempts and --interval need --expect');
+  if (opts.attempts !== null && !/^[1-9][0-9]*$/.test(opts.attempts)) throw new UsageError(`--attempts needs a positive integer: ${opts.attempts}`);
+  if (opts.interval !== null && !/^[0-9]+(\.[0-9]+)?$/.test(opts.interval)) throw new UsageError(`--interval needs a number of seconds: ${opts.interval}`);
+  opts.attempts = opts.attempts === null ? 1 : Number(opts.attempts);
+  opts.interval = opts.interval === null ? 10 : Number(opts.interval);
   return opts;
 }
 
@@ -119,6 +131,7 @@ export async function main(args, deps = {}) {
   const root = deps.root ?? path.resolve(import.meta.dir, '..');
   const out = deps.out ?? ((s) => console.log(s));
   const err = deps.err ?? ((s) => console.error(s));
+  const sleep = deps.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   let opts;
   try {
     opts = parseArgs(args);
@@ -132,30 +145,44 @@ export async function main(args, deps = {}) {
     return 0;
   }
 
-  let stamp;
-  try {
-    stamp = await readStamp(fetchImpl, opts.url);
-  } catch (e) {
-    if (e instanceof NoStamp) {
-      err(`docs-drift: the live site has no stamp (${e.message}); it predates the stamped build or the deploy failed`);
-      return 1;
+  const fetchStamp = async () => {
+    try {
+      return { stamp: await readStamp(fetchImpl, opts.url) };
+    } catch (e) {
+      if (e instanceof NoStamp) {
+        err(`docs-drift: the live site has no stamp (${e.message}); it predates the stamped build or the deploy failed`);
+        return { code: 1 };
+      }
+      if (e instanceof NetError) {
+        err(`docs-drift: ${e.message}`);
+        return { code: 2 };
+      }
+      throw e;
     }
-    if (e instanceof NetError) {
-      err(`docs-drift: ${e.message}`);
-      return 2;
-    }
-    throw e;
-  }
-  const live = stamp.commit;
+  };
 
   if (opts.expect !== null) {
-    if (live.startsWith(opts.expect)) {
-      out(`docs-drift: live ${live.slice(0, 12)} equals the expected commit`);
-      return 0;
+    for (let attempt = 1; ; attempt++) {
+      const got = await fetchStamp();
+      if (got.code === 2) return 2;
+      if (got.stamp) {
+        const live = got.stamp.commit;
+        if (live.startsWith(opts.expect)) {
+          out(`docs-drift: live ${live.slice(0, 12)} equals the expected commit`);
+          return 0;
+        }
+        out(`docs-drift: live ${live.slice(0, 12)} differs from the expected ${opts.expect.slice(0, 12)}`);
+      }
+      if (attempt >= opts.attempts) return 1;
+      out(`docs-drift: attempt ${attempt}/${opts.attempts} did not match; retrying in ${opts.interval}s`);
+      await sleep(opts.interval * 1000);
     }
-    out(`docs-drift: live ${live.slice(0, 12)} differs from the expected ${opts.expect.slice(0, 12)}`);
-    return 1;
   }
+
+  const got = await fetchStamp();
+  if (!got.stamp) return got.code;
+  const stamp = got.stamp;
+  const live = stamp.commit;
 
   const head = git(root, ['rev-parse', '--verify', '--quiet', '--end-of-options', `${opts.ref}^{commit}`]);
   if (!head.ok) {

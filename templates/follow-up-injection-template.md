@@ -1,6 +1,6 @@
 # Session-Close Debt Sweep & Follow-Up Injection — Template
 
-> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
+> Use after the approved plan is `Done 100%` and the verification gate is green. A terminal task (marked `(terminal)`: render, deploy, publish) is the exception: it stays open, and runs once after the selected follow-ups land (`sucp-debt-sweep` reference 06). The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Check | Evidence | Status |
 |---|---|---|
-| Plan tasks all `Done 100%` (or `Blocked`/`DEFERRED` with a reason) | Task checklist in `docs/code-plan/plans/<plan>.md` | Pending |
+| Plan tasks all `Done 100%` (or `Blocked`/`DEFERRED` with a reason), except a terminal task | Task checklist in `docs/code-plan/plans/<plan>.md` | Pending |
 | Verification gate green (fresh command, exit 0, 0 failures/errors/warnings) | `[Command] → [Exit 0] → [Log] → [Verdict]` | Pending |
 | Final diff audited, temp files purged, git hygiene done | `git status`, `git diff` | Pending |
 | Blocked items excluded from candidates, each with its unblock condition | Error Ledger | Pending |

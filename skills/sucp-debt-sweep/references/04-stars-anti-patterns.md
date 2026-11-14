@@ -21,7 +21,7 @@ The meter line during the sweep (`sucp-rules`, Output) is one star per debt the 
 flowchart TD
     accTitle: Session-close debt sweep and follow-up injection
     accDescr: Once the plan is done at one hundred percent, harvested debt is ranked into three to five follow-ups and the readiness verdict is shown. One question-tool call asks the follow-ups and the Close plan gate together. Selected follow-ups run as real work and are swept once more, with anything new written to the backlog; then readiness is re-run, and Mark Complete applies only if it is still READY, otherwise the plan records why it stays open. The graphify sync runs last.
-    Gate["Plan tasks Done 100%\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
+    Gate["Plan tasks Done 100%\nexcept a terminal task\n+ verification evidence green"] --> Harvest["Harvest debt candidates\nshortcuts, review findings,\nmissing tests/docs, TODOs,\nwarnings, gaps"]
     Harvest --> Rank["Classify NOW vs LATER\nrank by risk x blast radius x cost\ndefault 3-5 items"]
     Rank --> Readiness["6.5.5 steps 1-3: --readiness\nshow verdict and open items"]
     Readiness --> Ask["One question-tool call:\nFollow-ups multi-select\n+ Close plan gate"]

@@ -174,7 +174,7 @@ flowchart TD
 - [ ] Partner / Human approval received for this plan before implementation begins.
 
 ## 8. Session-Close Debt Sweep & Follow-Up Backlog
-> Runs when every task above is `Done 100%`. Filled with `templates/follow-up-injection-template.md`.
+> Runs when every task above is `Done 100%`, except a terminal task, which runs once after the sweep. Filled with `templates/follow-up-injection-template.md`.
 
 | # | Follow-up (outcome + path + finish line) | Class | `defer: <ceiling>, <upgrade-trigger>` | Status |
 |---|---|---|---|---|

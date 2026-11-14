@@ -176,6 +176,12 @@ describe('docs-deploy.yml deploys the docs site when a docs input reaches main',
     expect(build.steps[up].with['if-no-files-found']).toBe('error');
   });
 
+  test('docs-deploy: every action in both jobs is pinned by commit', () => {
+    for (const job of Object.values(jobs())) {
+      for (const s of job.steps.filter((s) => s.uses)) expect(s.uses).toMatch(SHA);
+    }
+  });
+
   test('docs-deploy: the deploy job needs the build, runs in docs-production, pins every action by commit, and never builds', () => {
     const deploy = jobs().deploy;
     expect([deploy.needs].flat()).toEqual(['build']);

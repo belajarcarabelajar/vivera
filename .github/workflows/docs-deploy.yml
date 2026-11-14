@@ -18,7 +18,7 @@ name: Docs deploy
 # can read its parent's environment through /proc:
 #   build   no secret, no environment. docs-remote.sh build --local runs
 #           docs-gen, cargo, pagefind and the site check, and the built site is
-#           uploaded as an artifact.
+#           uploaded as an artifact. Its actions are pinned by commit too.
 #   deploy  environment docs-production (secret VIVERA_DOCS_CF_TOKEN, variable
 #           CLOUDFLARE_ACCOUNT_ID). Runs no build: docs-remote.sh ship --local
 #           checks that the artifact's stamp is this commit, then runs only
@@ -65,13 +65,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      # checkout v7, setup-bun v2, rust-cache v2, upload-artifact v7, pinned 2026-11-15: a retagged
+      # action here could change the site that the deploy job ships.
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: '1.4.4'
 
@@ -80,7 +82,7 @@ jobs:
         run: rustc --version && cargo --version
 
       - name: Cache the docs crate build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
         with:
           workspaces: apps/docs -> target
 
@@ -92,7 +94,7 @@ jobs:
         run: scripts/docs-remote.sh build --local
 
       - name: Upload the built site
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: docs-dist
           path: ${{ runner.temp }}/docs-dist

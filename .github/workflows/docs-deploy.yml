@@ -1,0 +1,137 @@
+name: Docs deploy
+
+# ---------------------------------------------------------------------------
+# The one workflow with an automatic trigger (owner decision 2026-11-15, plan
+# 2026-11-15-docs-autodeploy). Every other workflow stays dispatch-only under
+# the 2026-09-28 policy in ci.yml. vivera is a public repository, and standard
+# GitHub-hosted runners in public repositories use no paid minutes (GitHub
+# Actions billing docs, read 2026-11-15).
+#
+# What it does: a push to main that changes a docs input (the paths below, the
+# same list as DOCS_INPUTS in scripts/docs-drift.mjs, checked by
+# scripts/workflows.test.mjs) builds the docs site and deploys it to the Worker
+# vivera-docs. The last step fails unless the live /docs/version.json names the
+# pushed commit.
+#
+# Two jobs, because the Cloudflare token can edit every Worker on the account
+# (Cloudflare does not scope Workers Scripts Edit to one Worker) and a process
+# can read its parent's environment through /proc:
+#   build   no secret, no environment. docs-remote.sh build --local runs
+#           docs-gen, cargo, pagefind and the site check, and the built site is
+#           uploaded as an artifact. Its actions are pinned by commit too.
+#   deploy  environment docs-production (secret VIVERA_DOCS_CF_TOKEN, variable
+#           CLOUDFLARE_ACCOUNT_ID). Runs no build: docs-remote.sh ship --local
+#           checks that the artifact's stamp is this commit, then runs only
+#           wrangler (dry run, deploy, rollback) and the live check. Its actions
+#           are pinned by commit.
+#
+# Kill switch: gh workflow disable docs-deploy.yml (gh workflow enable to undo).
+# Revert: git rm .github/workflows/docs-deploy.yml, then delete the
+# docs-production environment and revoke the token in the Cloudflare dashboard.
+# Check by hand at any time: git fetch origin && bun run docs:drift
+# ---------------------------------------------------------------------------
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/docs-deploy.yml'
+      - 'README.md'
+      - 'apps/docs/**'
+      - 'bun.lock'
+      - 'diagrams/**'
+      - 'docs/graphify-integration.md'
+      - 'docs/guide/**'
+      - 'docs/vivera-glossary.md'
+      - 'package.json'
+      - 'scripts/ci-targeted.mjs'
+      - 'scripts/docs-gen.mjs'
+      - 'scripts/docs-remote.sh'
+      - 'scripts/docs-site-check.mjs'
+      - 'scripts/lib/docs-gen-*.mjs'
+      - 'scripts/lib/docs-include.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time, and a running deploy is never cancelled halfway.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # checkout v7, setup-bun v2, rust-cache v2, upload-artifact v7, pinned 2026-11-15: a retagged
+      # action here could change the site that the deploy job ships.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.4.4'
+
+      # The runner image ships rustup with a stable toolchain; apps/docs needs edition 2024.
+      - name: Show the Rust toolchain
+        run: rustc --version && cargo --version
+
+      - name: Cache the docs crate build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+        with:
+          workspaces: apps/docs -> target
+
+      - name: Build the docs site
+        env:
+          VIVERA_DOCS_TARGET_DIR: ${{ github.workspace }}/apps/docs/target
+          VIVERA_DOCS_OUT: ${{ runner.temp }}/docs-dist
+          VIVERA_DOCS_LOG_DIR: ${{ runner.temp }}
+        run: scripts/docs-remote.sh build --local
+
+      - name: Upload the built site
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: docs-dist
+          path: ${{ runner.temp }}/docs-dist
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: docs-production
+    timeout-minutes: 15
+    steps:
+      # checkout v7, download-artifact v7, setup-bun v2, pinned 2026-11-15.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Download the built site
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: docs-dist
+          path: apps/docs/dist
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.4.4'
+
+      - name: Deploy the built site
+        env:
+          VIVERA_DOCS_DEPLOY_ACK: I_UNDERSTAND_THIS_CHANGES_LIVE
+          VIVERA_DOCS_CF_TOKEN: ${{ secrets.VIVERA_DOCS_CF_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          VIVERA_DOCS_LOG_DIR: ${{ runner.temp }}
+        run: scripts/docs-remote.sh ship --local
+
+      - name: Check the live site serves this commit
+        run: bun scripts/docs-drift.mjs --expect ${{ github.sha }} --attempts 6 --interval 10

@@ -5,7 +5,7 @@ category: tooling
 slug: validation
 order: 8
 source: README.md#Validation & Quality Checks
-source_hash: "83ec951775d8"
+source_hash: "9ca2a5357a0c"
 ---
 
 <a id="validation--quality-checks"></a>
@@ -81,7 +81,7 @@ Sebuah blok kode di halaman docs bisa merupakan salinan file sumber. Salinannya 
 <a id="platform-matrix"></a>
 ## Matriks Platform
 
-`.github/workflows/platforms.yml` menjalankan suite installer di platform yang tidak dimiliki mesin ini. Seperti workflow lain, workflow ini tidak punya pemicu otomatis; jalankan secara manual dengan `gh workflow run platforms.yml` dan pantau dengan `gh run watch`. GitHub baru menawarkannya setelah file itu ada di branch default.
+`.github/workflows/platforms.yml` menjalankan suite installer di platform yang tidak dimiliki mesin ini. Seperti workflow lain kecuali `docs-deploy.yml`, workflow ini tidak punya pemicu otomatis; jalankan secara manual dengan `gh workflow run platforms.yml` dan pantau dengan `gh run watch`. GitHub baru menawarkannya setelah file itu ada di branch default.
 
 | Job | Runner | Yang dibuktikan |
 |---|---|---|
@@ -89,4 +89,4 @@ Sebuah blok kode di halaman docs bisa merupakan salinan file sumber. Salinannya 
 | `macos` | `macos-latest` dengan `/bin/bash` 3.2 paling depan di `PATH` | suite `install-*` dan `prereq`, serta `install.sh --dry-run`, di bawah bash bawaan macOS |
 | `docker` | `ubuntu-latest` | `Dockerfile` berhasil di-build dan `install.sh --check` lulus di dalam image |
 
-`bun test scripts/workflows.test.mjs` memastikan setiap workflow tetap hanya bisa dijalankan manual (dispatch-only).
+`bun test scripts/workflows.test.mjs` memastikan setiap workflow tetap hanya bisa dijalankan manual (dispatch-only), kecuali `docs-deploy.yml`: push ke `main` yang mengubah input docs membangun dan men-deploy situs docs ini di runner GitHub (keputusan pemilik 2026-11-15; vivera publik, jadi runner tidak memakai menit berbayar). `bun run docs:drift` melaporkan apakah situs live sudah menyajikan commit docs terbaru di `main`.

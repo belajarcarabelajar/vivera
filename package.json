@@ -17,6 +17,7 @@
     "copy:check": "bun scripts/check-copy-rules.mjs",
     "secrets:check": "bun scripts/check-secrets.mjs",
     "docs:include": "bun scripts/docs-include.mjs --check",
+    "docs:drift": "bun scripts/docs-drift.mjs",
     "design:check": "bun scripts/check-design-tells.mjs",
     "dups:check": "bun scripts/check-duplicate-defs.mjs",
     "size:check": "bun scripts/check-file-size.mjs",

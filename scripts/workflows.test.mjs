@@ -209,12 +209,14 @@ describe('docs-deploy.yml deploys the docs site when a docs input reaches main',
     expect(JSON.stringify(rest)).not.toContain('secrets.');
   });
 
-  test('docs-deploy: after the ship, the live stamp must equal the pushed commit, with retries', () => {
+  test('docs-deploy: the ship step verifies through the Cloudflare API and no step fetches the live site', () => {
     const deploy = jobs().deploy;
-    const r = runs(deploy);
-    const ship = r.findIndex((x) => x.includes('docs-remote.sh ship --local'));
-    const drift = r.findIndex((x) => /bun scripts\/docs-drift\.mjs --expect \$\{\{ github\.sha \}\} --attempts [1-9]/.test(x));
-    expect(drift).toBeGreaterThan(ship);
+    const i = runs(deploy).findIndex((r) => /scripts\/docs-remote\.sh ship --local\b/.test(r ?? ''));
+    expect(deploy.steps[i].env.VIVERA_DOCS_LIVE_CHECK).toBe('api');
+    // Bot Fight Mode challenges GitHub's IPs, so an HTTP fetch of the site from the runner only sees 403.
+    const all = Object.values(jobs()).flatMap((j) => runs(j)).filter(Boolean).join('\n');
+    expect(all).not.toMatch(/docs-drift|docs-site-check|--live|curl|wget/);
+    expect(JSON.stringify(load())).not.toContain('vivera.belajarcarabelajar.com');
   });
 
   test('docs-deploy: header names the decision date, kill switch and revert', () => {
@@ -222,5 +224,7 @@ describe('docs-deploy.yml deploys the docs site when a docs input reaches main',
     expect(text).toContain('2026-11-15');
     expect(text).toContain('gh workflow disable docs-deploy.yml');
     expect(text).toContain('git rm .github/workflows/docs-deploy.yml');
+    expect(text).toContain('Bot Fight Mode');
+    expect(text).toContain('bun run docs:drift');
   });
 });

@@ -22,6 +22,11 @@
 #            only. CLOUDFLARE_ACCOUNT_ID passes through as is.
 # VPS mode (no --local) needs VIVERA_VPS: vps-bcb is Snipset-only since
 # 2026-11-14, so there is no default host.
+# VIVERA_DOCS_LIVE_CHECK=http|api picks how a deploy is verified (default
+# http: crawl $LIVE_URL). api asks Cloudflare instead, through wrangler
+# deployments status, whether the version this deploy printed serves 100% of
+# traffic. The workflow uses api because the zone's Bot Fight Mode answers 403
+# to GitHub's runner IPs (2026-11-15, run 43634327155, rolled back a good deploy).
 # VIVERA_DOCS_TARGET_DIR sets the cargo target dir in both modes (default
 # /root/.cache/vivera-docs-target).
 # Exit: 0 ok, 1 failure, 2 usage error.
@@ -76,6 +81,11 @@ fi
 # New Worker routes take up to a few minutes to propagate after wrangler deploy.
 LIVE_ATTEMPTS="${VIVERA_DOCS_LIVE_ATTEMPTS:-10}"
 LIVE_INTERVAL="${VIVERA_DOCS_LIVE_INTERVAL:-20}"
+LIVE_CHECK="${VIVERA_DOCS_LIVE_CHECK:-http}"
+if [ "$LIVE_CHECK" != http ] && [ "$LIVE_CHECK" != api ]; then
+  echo "VIVERA_DOCS_LIVE_CHECK must be http or api, got: $LIVE_CHECK" >&2
+  exit 2
+fi
 if [ "$DEPLOYS" -eq 1 ]; then
   if [[ ! "$LIVE_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
     echo "VIVERA_DOCS_LIVE_ATTEMPTS must be a positive integer, got: $LIVE_ATTEMPTS" >&2
@@ -310,10 +320,26 @@ deploy_built() {
   fi
 
   echo "deploy: wrangler deploy"
-  remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy"
-  echo "deploy: live check $LIVE_URL"
-  local live_rc=0 rollback_rc=0 list_rc=0 count=0
-  live_check_with_retries || live_rc=$?
+  local live_rc=0 rollback_rc=0 list_rc=0 count=0 deploy_out deploy_rc=0 version_id
+  if [ "$LIVE_CHECK" = http ]; then
+    remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy"
+    echo "deploy: live check $LIVE_URL"
+    retry_live_check http_live_check || live_rc=$?
+  else
+    # Captured to read the version id, then printed so the log keeps it.
+    deploy_out="$(remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deploy" 2>&1)" || deploy_rc=$?
+    printf '%s\n' "$deploy_out"
+    [ "$deploy_rc" -eq 0 ] || exit 1
+    # wrangler 4.151.1 ends a deploy with logger.log("Current Version ID:", versionId).
+    version_id="$(grep -oE 'Current Version ID: [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' <<<"$deploy_out" | tail -n 1 | sed 's/.*: //' || true)"
+    if [ -z "$version_id" ]; then
+      echo "deploy: no version id in the wrangler deploy output, so the deploy cannot be verified"
+      live_rc=1
+    else
+      echo "deploy: live check through the Cloudflare API, version $version_id"
+      retry_live_check api_live_check "$version_id" || live_rc=$?
+    fi
+  fi
   if [ "$live_rc" -eq 0 ]; then
     echo "deploy: ok, live check passed"
     return
@@ -335,11 +361,11 @@ deploy_built() {
   exit 1
 }
 
-live_check_with_retries() {
+retry_live_check() {
   local attempt=1 rc
   while :; do
     rc=0
-    bun "$ROOT/scripts/docs-site-check.mjs" --live "$LIVE_URL" || rc=$?
+    "$@" || rc=$?
     echo "live check: attempt $attempt/$LIVE_ATTEMPTS exit $rc"
     if [ "$rc" -eq 0 ] || [ "$attempt" -ge "$LIVE_ATTEMPTS" ]; then
       return "$rc"
@@ -348,6 +374,25 @@ live_check_with_retries() {
     sleep "$LIVE_INTERVAL"
     attempt=$((attempt + 1))
   done
+}
+
+http_live_check() {
+  bun "$ROOT/scripts/docs-site-check.mjs" --live "$LIVE_URL"
+}
+
+# wrangler 4.151.1 deployments status --json prints the latest deployment as
+# JSON.stringify(deployment, null, 2), with versions[].version_id and
+# versions[].percentage. Passes only when the one version listed is ours at 100.
+api_live_check() {
+  local status ids pcts
+  status="$(remote_wrangler "cd $WORK_DIR/apps/docs; $CF_ENV; bunx $WRANGLER deployments status --json")" || return
+  ids="$({ grep -oE '"version_id": *"[^"]*"' <<<"$status" || true; } | sed 's/.*: *"//; s/"$//')"
+  pcts="$({ grep -oE '"percentage": *[0-9.]+' <<<"$status" || true; } | sed 's/.*: *//')"
+  if [ "$ids" = "$1" ] && [ "$pcts" = 100 ]; then
+    return 0
+  fi
+  echo "live check: version $1 does not serve 100% of traffic; status lists [$(tr '\n' ' ' <<<"$ids")] at [$(tr '\n' ' ' <<<"$pcts")] percent"
+  return 1
 }
 
 # wrangler rollback needs an earlier deployment; on the first one it only fails.

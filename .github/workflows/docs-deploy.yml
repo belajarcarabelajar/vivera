@@ -10,8 +10,11 @@ name: Docs deploy
 # What it does: a push to main that changes a docs input (the paths below, the
 # same list as DOCS_INPUTS in scripts/docs-drift.mjs, checked by
 # scripts/workflows.test.mjs) builds the docs site and deploys it to the Worker
-# vivera-docs. The last step fails unless the live /docs/version.json names the
-# pushed commit.
+# vivera-docs. The ship step verifies the deploy through the Cloudflare API
+# (VIVERA_DOCS_LIVE_CHECK=api: the new version serves 100% of traffic), not over
+# HTTP: the zone's Bot Fight Mode challenges GitHub's runner IPs, so every HTTP
+# check from here got 403 (2026-11-15, run 43634327155). The HTTP crawl and
+# `bun run docs:drift` run from a residential machine after a deploy instead.
 #
 # Two jobs, because the Cloudflare token can edit every Worker on the account
 # (Cloudflare does not scope Workers Scripts Edit to one Worker) and a process
@@ -22,7 +25,7 @@ name: Docs deploy
 #   deploy  environment docs-production (secret VIVERA_DOCS_CF_TOKEN, variable
 #           CLOUDFLARE_ACCOUNT_ID). Runs no build: docs-remote.sh ship --local
 #           checks that the artifact's stamp is this commit, then runs only
-#           wrangler (dry run, deploy, rollback) and the live check. Its actions
+#           wrangler (dry run, deploy, the API check, rollback). Its actions
 #           are pinned by commit.
 #
 # Kill switch: gh workflow disable docs-deploy.yml (gh workflow enable to undo).
@@ -131,7 +134,5 @@ jobs:
           VIVERA_DOCS_CF_TOKEN: ${{ secrets.VIVERA_DOCS_CF_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           VIVERA_DOCS_LOG_DIR: ${{ runner.temp }}
+          VIVERA_DOCS_LIVE_CHECK: api
         run: scripts/docs-remote.sh ship --local
-
-      - name: Check the live site serves this commit
-        run: bun scripts/docs-drift.mjs --expect ${{ github.sha }} --attempts 6 --interval 10

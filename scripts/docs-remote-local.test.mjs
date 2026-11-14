@@ -21,6 +21,8 @@ import {
   noRemote,
   runLocal,
   shipRepo,
+  statusJson,
+  VERSION_ID,
   steps,
   tmp,
 } from './lib/docs-remote-stubs.mjs';
@@ -191,5 +193,53 @@ test('ship without --local is a usage error before any step (ship is local only)
   const r = runLocal(['ship'], SHIP_ENV, shipRepo());
   expect(r.code).toBe(2);
   expect(r.out).toContain('ship --local [--dry-run]');
+  expect(calls()).toEqual([]);
+});
+
+const API = { ...SHIP_ENV, VIVERA_DOCS_LIVE_CHECK: 'api', VIVERA_DOCS_LIVE_INTERVAL: '0' };
+const isLiveHttp = (c) => c.tool === 'bun' && argsOf(c).includes(' --live ');
+const wranglerSteps = () => calls().filter(isWrangler).map((c) => argsOf(c).replace('wrangler@4.151.1 ', ''));
+
+test('ship --local with VIVERA_DOCS_LIVE_CHECK=api passes when deployments status shows the new version at 100%, with no HTTP check', () => {
+  const r = runLocal(['ship', '--local'], { ...API, STUB_STATUS_JSON: statusJson([[VERSION_ID, 100]]) }, shipRepo());
+  expect(r.code).toBe(0);
+  expect(calls().length).toBeGreaterThan(0);
+  expect(wranglerSteps()).toEqual(['deploy --dry-run', 'deploy', 'deployments status --json']);
+  for (const c of calls().filter(isWrangler)) expect(envOf(c).cf).toBe('fake-docs-token');
+  expect(calls().filter(isLiveHttp)).toEqual([]);
+  expect(r.out).toContain(`Current Version ID: ${VERSION_ID}`);
+  expect(r.out).toContain('live check: attempt 1/10 exit 0');
+});
+
+test.each([
+  ['another version at 100%', [['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', 100]]],
+  ['a split with the new version at 50%', [[VERSION_ID, 50], ['aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee', 50]]],
+])('ship --local api check retries, then rolls back and exits 1 when status shows %s', (_name, versions) => {
+  const r = runLocal(['ship', '--local'], { ...API, VIVERA_DOCS_LIVE_ATTEMPTS: '2', STUB_STATUS_JSON: statusJson(versions) }, shipRepo());
+  expect(r.code).toBe(1);
+  expect(wranglerSteps()).toEqual([
+    'deploy --dry-run',
+    'deploy',
+    'deployments status --json',
+    'deployments status --json',
+    'deployments list --json',
+    'rollback --message smoke failed --yes',
+  ]);
+  expect(calls().filter(isLiveHttp)).toEqual([]);
+  expect(r.out).toContain('rollback: exit 0');
+});
+
+test('ship --local api check rolls back and exits 1 when the deploy output names no version id', () => {
+  const r = runLocal(['ship', '--local'], { ...API, STUB_NO_VERSION_ID: '1' }, shipRepo());
+  expect(r.code).toBe(1);
+  expect(r.out).toContain('no version id');
+  expect(wranglerSteps()).toEqual(['deploy --dry-run', 'deploy', 'deployments list --json', 'rollback --message smoke failed --yes']);
+  expect(calls().filter(isLiveHttp)).toEqual([]);
+});
+
+test('deploy --local refuses an unknown VIVERA_DOCS_LIVE_CHECK with exit 2 before any step', () => {
+  const r = runLocal(['deploy', '--local', '--dry-run'], { VIVERA_DOCS_LIVE_CHECK: 'ping' });
+  expect(r.code).toBe(2);
+  expect(r.out).toContain('VIVERA_DOCS_LIVE_CHECK');
   expect(calls()).toEqual([]);
 });

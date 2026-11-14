@@ -127,7 +127,7 @@ This file is the orchestrator. The phase rules live in separate skills, and each
 | Step 3: Writing plans (architectural path) and visual implementation map | `sucp-plan` | After the human approves the design |
 | Step 4: TDD and systematic debugging | `sucp-tdd-debug` | Before the first RED test or bug reproduction |
 | Step 5: ✅ Verification, professional engineering gates, PR delivery | `sucp-verify-deliver` | Before any completion claim or PR |
-| Step 6: Session-close debt sweep, learning harvest, and plan closeout decision | `sucp-debt-sweep` | After the plan is Done 100% and the evidence gate is green |
+| Step 6: Session-close debt sweep, learning harvest, and plan closeout decision | `sucp-debt-sweep` | After the plan is Done 100% and the evidence gate is green; with a terminal task (render, deploy, publish), before that task |
 | Overnight run (user leaves, plan to verified PR) | `sucp-overnight` | After the plan is Approved and the user says they are leaving. Loaded in addition to the phase skills, never instead of them |
 
 - Load the phase skill before entering its phase. Do not reconstruct its rules from memory.

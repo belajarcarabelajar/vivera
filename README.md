@@ -10,7 +10,7 @@ A skill pipeline that guides AI coding agents through the whole software enginee
 
 - **Four gated components.** Brainstorming → Writing Plans → TDD → Verification, with a human approval gate between each one, plus a **Deep Research** path that runs only when a decision depends on information the codebase does not contain. The sub-agent pipeline that carries out the work is mandatory, not a recommendation.
 - **One source of truth.** `Super Ultra Code Plan Implementation.md` keeps contextual invariants, safety constraints, and human-approval gates in view for the whole run.
-- **Verification is the last gate, not the last step.** Once the plan is `Done 100%` and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them as multi-select checkboxes in the harness's own prompt widget. The session ends with zero unexamined coding debt.
+- **Verification is the last gate, not the last step.** Once the plan is `Done 100%` (except a terminal task such as a render or deploy, which runs once after the sweep) and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them as multi-select checkboxes in the harness's own prompt widget. The session ends with zero unexamined coding debt.
 
 ### Install
 

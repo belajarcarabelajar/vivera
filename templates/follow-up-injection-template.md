@@ -1,6 +1,6 @@
 # Session-Close Debt Sweep & Follow-Up Injection — Template
 
-> Use after the approved plan is `Done 100%` and the verification gate is green. The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
+> Use after the approved plan is `Done 100%` and the verification gate is green. A terminal task (marked `(terminal)`: render, deploy, publish) is the exception: it stays open, and runs once after the selected follow-ups land (`sucp-debt-sweep` reference 06). The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Check | Evidence | Status |
 |---|---|---|
-| Plan tasks all `Done 100%` (or `Blocked`/`DEFERRED` with a reason) | Task checklist in `docs/code-plan/plans/<plan>.md` | Pending |
+| Plan tasks all `Done 100%` (or `Blocked`/`DEFERRED` with a reason), except a terminal task | Task checklist in `docs/code-plan/plans/<plan>.md` | Pending |
 | Verification gate green (fresh command, exit 0, 0 failures/errors/warnings) | `[Command] → [Exit 0] → [Log] → [Verdict]` | Pending |
 | Final diff audited, temp files purged, git hygiene done | `git status`, `git diff` | Pending |
 | Blocked items excluded from candidates, each with its unblock condition | Error Ledger | Pending |
@@ -76,7 +76,7 @@ Did executing a selected item create new debt in the surface it touched? List ne
 
 ## 7. Plan Closeout Decision
 
-Mandatory: readiness runs before the follow-ups call, the question rides in that call, and the answer is applied after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
+Mandatory: readiness runs before the follow-ups call, the question rides in that call (with a terminal task, readiness and the question come after that task, in their own call), and the answer is applied after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
 
 | Field | Value |
 |---|---|
@@ -84,7 +84,7 @@ Mandatory: readiness runs before the follow-ups call, the question rides in that
 | Readiness command | `bun scripts/plan-closeout.mjs --readiness <plan.md>` |
 | Verdict and exit code | `READY` 0 / `NOT-READY` 1 / `NEEDS-HUMAN` 3 |
 | Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, each open `NOW` backlog row, each open task step box (`open step boxes: N`), and each other open box (`other open boxes: M`) |
-| Question asked | `Close plan`, in the same call as `Follow-ups`: Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise); applied after the selected follow-ups land, and Mark Complete only if a re-run of readiness is still `READY` |
+| Question asked | `Close plan`, in the same call as `Follow-ups` (with a terminal task, its own call after that task): Mark Complete (Recommended only on `READY`), Keep it open (first and recommended otherwise); applied after the selected follow-ups land, and Mark Complete only if a re-run of readiness is still `READY` |
 | Answer | `Mark Complete` / `Keep it open` / dismissed / parked in the handoff (unattended run) |
 | Evidence | Readiness output recorded in the plan; `plan-publish.mjs` and `plan-issue-sync.mjs` exit codes when completed |
 | Resulting status | `Complete`, or unchanged with a `## Closeout status` section (verdict, what remains, the trigger that reopens the question; `pending` when dismissed or parked) |
@@ -92,11 +92,11 @@ Mandatory: readiness runs before the follow-ups call, the question rides in that
 ```mermaid
 flowchart TD
     accTitle: Debt sweep cycle for a finished plan
-    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question, execute the selected items through the full pipeline, then re-sweep once and write any new debt they created to the backlog. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
+    accDescr: Harvest debt candidates, classify and rank them, inject one question-tool call of multi-select groups together with the Close plan question (with a terminal task, Close plan is its own call after that task), execute the selected items through the full pipeline, then re-sweep once and write any new debt they created to the backlog. The readiness verdict then drives the Close plan gate, which marks the plan Complete or records a closeout status section.
     Gate["Plan Done 100%\nverification green"] --> Harvest["Harvest candidates from\nshortcuts, reviews, TODOs,\nmissing tests/docs, gaps"]
     Harvest --> Rank["Classify NOW/LATER\nrank by risk x blast radius x cost\ndefault 3-5"]
     Rank --> First["Readiness verdict\nshown in the chat"]
-    First --> Ask["One call: multi-select groups\nplus the Close plan question"]
+    First --> Ask["One call: multi-select groups\nplus the Close plan question\n(terminal task: Close plan after it)"]
     Ask -->|"User selects"| Reopen["Re-open plan to In Progress\nadd follow-up tasks"]
     Ask -->|"User declines"| Backlog["Write LATER items to backlog\nwith defer markers"]
     Reopen --> Exec["Chunk, fan out subagents,\nTDD, verify, diff audit, commit"]

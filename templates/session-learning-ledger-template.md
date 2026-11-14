@@ -16,7 +16,7 @@
 - **Session:** [session id or slug]
 - **Plan file:** [path, e.g. `docs/code-plan/plans/<plan>.md`]
 - **Written at:** [ISO timestamp]
-- **Preconditions:** Plan `Done 100%`, verification gate green (same gate as the debt sweep).
+- **Preconditions:** Plan `Done 100%` except a terminal task, verification gate green (same gate as the debt sweep).
 
 ---
 

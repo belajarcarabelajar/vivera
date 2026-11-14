@@ -20,4 +20,4 @@
 | Definition of Done | Every applicable gate and acceptance criterion is complete, evidenced, and traceable |
 | Build/deployment | Relevant build/package/deploy check when the deliverable includes it |
 | Documentation/configuration | References, examples, and configuration behavior match the implementation |
-| Session close / debt sweep | Every noticed-but-unclosed item classified `NOW`/`LATER`, 3-5 ranked follow-ups injected as one question-tool call of multi-select groups, each selection executed with fresh evidence or explicitly deferred with a `defer:` marker |
+| Session close / debt sweep | Every noticed-but-unclosed item classified `NOW`/`LATER`, 3-5 ranked follow-ups injected as one question-tool call of multi-select groups, each selection executed with fresh evidence or explicitly deferred with a `defer:` marker; with a terminal task, the sweep runs before it |

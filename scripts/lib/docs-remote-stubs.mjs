@@ -210,6 +210,15 @@ printf 'bunx\\t%s${ENV_FMT}\\n' "$*" ${ENV_ARGS} >> "$STUB_LOG"
 if [[ "$*" == wrangler@* ]]; then
   printf 'wrangler-cwd\\t%s\\t%s\\n' "$PWD" "$(ls wrangler.json dist/docs/version.json 2>/dev/null | tr '\\n' ' ')" >> "$STUB_LOG"
 fi
+# A real deploy prints wrangler 4.151.1's "Current Version ID: <uuid>" line
+# unless STUB_NO_VERSION_ID is set; deployments status answers STUB_STATUS_JSON.
+if [[ "$*" == *" deploy" ]]; then
+  echo "Uploaded vivera-docs"
+  [ -n "\${STUB_NO_VERSION_ID:-}" ] || echo "Current Version ID: \${STUB_VERSION_ID:-0f1e2d3c-4b5a-4968-8776-655443322110}"
+fi
+if [[ "$*" == *"deployments status --json"* ]]; then
+  printf '%s\n' "\${STUB_STATUS_JSON:-}"
+fi
 if [[ "$*" == *"deployments list --json"* ]]; then
   for ((k = 1; k <= \${STUB_DEPLOYMENTS:-2}; k++)); do printf '{"id": "dep-%s"}\\n' "$k"; done
 fi
@@ -284,3 +293,21 @@ export function shipRepo({ stamp = HEAD_SHA, dist = true } = {}) {
   }
   return path.join(repo, 'scripts', 'docs-remote.sh');
 }
+
+export const VERSION_ID = '0f1e2d3c-4b5a-4968-8776-655443322110';
+
+// The shape wrangler 4.151.1 prints for deployments status --json:
+// JSON.stringify(latestDeployment, null, 2).
+export const statusJson = (versions) =>
+  JSON.stringify(
+    {
+      id: 'dep-1',
+      source: 'wrangler',
+      strategy: 'percentage',
+      author_email: 'owner@example.com',
+      created_on: '2026-11-15T00:00:00.000000Z',
+      versions: versions.map(([version_id, percentage]) => ({ version_id, percentage })),
+    },
+    null,
+    2,
+  );

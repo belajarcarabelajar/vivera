@@ -82,6 +82,34 @@ describe('F follow-ups', () => {
   });
 });
 
+describe('R review fixes', () => {
+  const lineWith = (rel, start) => {
+    const line = readRepoFile(rel).split('\n').find((l) => l.trimStart().startsWith(start));
+    if (!line) throw new Error(`${rel}: no line starting with ${start}`);
+    return line;
+  };
+
+  test('R1 6.5.5 step 4 and its run order name the terminal exception', () => {
+    expect(lineWith(SWEEP, '4. **Ask the `Close plan` gate**')).toContain('terminal task');
+    expect(lineWith(SWEEP, 'This step is mandatory, including when')).toContain('terminal task');
+  });
+
+  test('R2 the Close plan mirrors name the terminal exception', () => {
+    expect(lineWith('templates/follow-up-injection-template.md', 'Mandatory: readiness runs before the follow-ups call')).toContain('terminal task');
+    expect(lineWith('templates/follow-up-injection-template.md', '| Question asked | `Close plan`')).toContain('terminal task');
+    expect(lineWith('skills/sucp-rules/references/07-completion-confirmation.md', '| Plan closeout (Step 6) |')).toContain('terminal task');
+    expect(lineWith('skills/sucp-debt-sweep/references/04-stars-anti-patterns.md', 'accDescr: Once the plan is done')).toContain('terminal task');
+  });
+
+  test('R3 the terminal task carries a real skip_if and no run[]', () => {
+    const ref = readRepoFile(REF);
+    for (const term of ['no `run[]`', 'NEEDS-HUMAN', 'runs the render or deploy again']) {
+      expect({ term, found: ref.includes(term) }).toEqual({ term, found: true });
+    }
+    expect(readRepoFile('skills/sucp-plan/SKILL.md')).toContain('no `run[]`');
+  });
+});
+
 describe('T2 mirrors', () => {
   const MIRRORS = [
     'templates/follow-up-injection-template.md',

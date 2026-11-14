@@ -13,7 +13,7 @@
 //
 // Default mode lists docs-input commits in <live>..<ref>. --expect compares the
 // stamp's commit with <sha> only and needs no git history (CI checks out depth 1).
-// With --attempts N (default 1) it refetches after a mismatch or a missing stamp,
+// With --attempts N (default 1) it refetches after a mismatch, a missing stamp or a network error,
 // sleeping --interval S seconds (default 10) between tries, because a fresh
 // deploy can take a while to reach every edge.
 //
@@ -164,7 +164,6 @@ export async function main(args, deps = {}) {
   if (opts.expect !== null) {
     for (let attempt = 1; ; attempt++) {
       const got = await fetchStamp();
-      if (got.code === 2) return 2;
       if (got.stamp) {
         const live = got.stamp.commit;
         if (live.startsWith(opts.expect)) {
@@ -173,7 +172,8 @@ export async function main(args, deps = {}) {
         }
         out(`docs-drift: live ${live.slice(0, 12)} differs from the expected ${opts.expect.slice(0, 12)}`);
       }
-      if (attempt >= opts.attempts) return 1;
+      // A network error right after a deploy is retried like a mismatch; it stays exit 2 when it is the last answer.
+      if (attempt >= opts.attempts) return got.code === 2 ? 2 : 1;
       out(`docs-drift: attempt ${attempt}/${opts.attempts} did not match; retrying in ${opts.interval}s`);
       await sleep(opts.interval * 1000);
     }

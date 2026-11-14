@@ -199,6 +199,29 @@ describe('--expect retries with --attempts and --interval', () => {
     expect(sleeps).toEqual([10000, 10000]);
   });
 
+  test('a network error, then a 503, then a match within the attempts: exit 0', async () => {
+    const answers = ['throw', 503, sha.links];
+    const calls = [];
+    const fetch = async (url) => {
+      const a = answers[Math.min(calls.length, answers.length - 1)];
+      calls.push(String(url));
+      if (a === 'throw') throw new Error('connection reset');
+      if (a === 503) return new Response('busy', { status: 503 });
+      return new Response(JSON.stringify(stamp(a)));
+    };
+    const r = await run(['--expect', sha.links, '--attempts', '4', '--interval', '1', '--url', BASE], { fetch, root: empty, sleep: async () => {} });
+    expect(r.code).toBe(0);
+    expect(calls).toHaveLength(3);
+  });
+
+  test('a network error on every attempt: exit 2 after exactly N fetches', async () => {
+    const calls = [];
+    const fetch = async (url) => { calls.push(String(url)); throw new Error('connection reset'); };
+    const r = await run(['--expect', sha.links, '--attempts', '3', '--url', BASE], { fetch, root: empty, sleep: async () => {} });
+    expect(r.code).toBe(2);
+    expect(calls).toHaveLength(3);
+  });
+
   test('without --attempts there is one fetch and no sleep', async () => {
     const { fetch, calls } = sequenceFetch([sha.base, sha.links]);
     const sleeps = [];

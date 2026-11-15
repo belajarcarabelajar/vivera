@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { decide, NUDGE_SOURCE } from "../opencode/vivera-plugin.ts";
+import { decideNudge, NUDGE_SOURCE } from "../opencode/vivera-plugin.ts";
 import plugin from "../opencode/vivera-plugin.ts";
 import { REASON } from "../.claude/hooks/require-exit-code.mjs";
 
@@ -10,29 +10,40 @@ const assistant = (id, text) => ({ id, type: "assistant", content: [{ type: "tex
 const claim = assistant("a1", "Done. 12 tests pass, 0 fail.");
 const base = { session: { id: "ses1" }, background: false, nudged: new Set() };
 
-describe("decide", () => {
+describe("decideNudge", () => {
   test("nudges a pass claim without an exit code in a sucp session", () => {
-    expect(decide({ ...base, items: [skill, user, claim] })).toEqual({ messageID: "a1", reason: REASON });
+    expect(decideNudge({ ...base, items: [skill, user, claim] })).toEqual({ messageID: "a1", reason: REASON });
   });
   test("lets a pass claim with exit 0 through", () => {
-    expect(decide({ ...base, items: [skill, user, assistant("a1", "bun test exit 0, 12 pass, 0 fail")] })).toBeNull();
+    expect(decideNudge({ ...base, items: [skill, user, assistant("a1", "bun test exit 0, 12 pass, 0 fail")] })).toBeNull();
   });
   test("ignores a session where the sucp skill is not active", () => {
-    expect(decide({ ...base, items: [user, claim] })).toBeNull();
+    expect(decideNudge({ ...base, items: [user, claim] })).toBeNull();
   });
   test("ignores a child session", () => {
-    expect(decide({ ...base, session: { id: "ses2", parentID: "ses1" }, items: [skill, user, claim] })).toBeNull();
+    expect(decideNudge({ ...base, session: { id: "ses2", parentID: "ses1" }, items: [skill, user, claim] })).toBeNull();
   });
   test("ignores a background idle", () => {
-    expect(decide({ ...base, background: true, items: [skill, user, claim] })).toBeNull();
+    expect(decideNudge({ ...base, background: true, items: [skill, user, claim] })).toBeNull();
   });
   test("never nudges the same assistant message twice", () => {
-    expect(decide({ ...base, nudged: new Set(["a1"]), items: [skill, user, claim] })).toBeNull();
+    expect(decideNudge({ ...base, nudged: new Set(["a1"]), items: [skill, user, claim] })).toBeNull();
   });
   test("never nudges the rewrite that answers its own nudge", () => {
     const nudge = { id: "n1", type: "synthetic", text: REASON, metadata: { source: NUDGE_SOURCE } };
-    expect(decide({ ...base, items: [skill, user, claim, nudge, assistant("a2", "All 12 tests pass.")] })).toBeNull();
+    expect(decideNudge({ ...base, items: [skill, user, claim, nudge, assistant("a2", "All 12 tests pass.")] })).toBeNull();
   });
+});
+
+test("never nudges a rewrite turn that ran a tool between the nudge and the final answer", () => {
+  const nudge = { id: "n1", type: "synthetic", text: REASON, metadata: { source: NUDGE_SOURCE } };
+  const items = [skill, user, claim, nudge, assistant("a2", "Rerunning."), { id: "t1", type: "tool" }, assistant("a3", "All 12 tests pass.")];
+  expect(decideNudge({ ...base, items })).toBeNull();
+});
+test("checks again after the user writes a new message", () => {
+  const nudge = { id: "n1", type: "synthetic", text: REASON, metadata: { source: NUDGE_SOURCE } };
+  const items = [skill, user, claim, nudge, assistant("a2", "bun test exit 0"), { id: "u2", type: "user", text: "now the lint" }, assistant("a3", "Lint passes.")];
+  expect(decideNudge({ ...base, items })).toEqual({ messageID: "a3", reason: REASON });
 });
 
 describe("single source", () => {
@@ -66,7 +77,7 @@ describe("plugin wiring", () => {
     return { ctx, calls, fire: (e) => idle(e) };
   }
   test("adds one synthetic message tagged with its source on a matching idle, and none on the next idle", async () => {
-    const { ctx, calls, fire } = fakeCtx([skill, user, claim]);
+    const { ctx, calls, fire } = fakeCtx([skill, user, assistant(crypto.randomUUID(), "Done. 12 tests pass, 0 fail.")]);
     await plugin.setup(ctx);
     await fire({ sessionID: "ses1", background: false });
     await fire({ sessionID: "ses1", background: false });

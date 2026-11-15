@@ -117,7 +117,9 @@ test('the first search in a registered repository prints one reminder naming the
   const text = contextOf(r.stdout);
   expect(text).toContain(graphPathOf(root));
   expect(text).toContain(`graphify query "<question>" --graph ${graphPathOf(root)}`);
-  expect(text.length).toBeLessThan(600);
+  // The temp root embeds TMPDIR, so measure the wording with the root swapped for a fixed placeholder.
+  const wording = text.split(root).join('<root>');
+  expect(wording.length).toBeLessThan(600);
   expect(text).not.toContain('\u2014');
   expect(text).not.toMatch(/MANDATORY|You MUST/);
 });

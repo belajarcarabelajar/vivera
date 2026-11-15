@@ -15,7 +15,8 @@
 // because Claude Code reads stdout as the path.
 //
 // Env seams: WT_NEW (wt-new executable, default ~/.local/bin/wt-new) and
-// VIVERA_WT_ROOT (worktree root, default /mnt/belajarcarabelajar).
+// VIVERA_WT_ROOT (worktree root, default /mnt/belajarcarabelajar/wt, where every
+// worktree lives since 2026-11-16).
 //
 // Revert: remove the WorktreeCreate entry from ~/.claude/settings.json, or
 // restore ~/.claude/settings.json.bak-20261108-worktree-overnight-hooks.
@@ -50,7 +51,7 @@ const common = spawnSync('git', ['-C', cwd, 'rev-parse', '--path-format=absolute
 if (common.status !== 0) fail(`not a git repository: ${cwd}: ${common.stderr.trim()}`);
 const repo = path.basename(path.dirname(common.stdout.trim()));
 
-const root = process.env.VIVERA_WT_ROOT || '/mnt/belajarcarabelajar';
+const root = process.env.VIVERA_WT_ROOT || '/mnt/belajarcarabelajar/wt';
 const dest = path.join(root, `${repo}-wt`, name);
 
 // Absolute default: a hook's PATH may lack ~/.local/bin.

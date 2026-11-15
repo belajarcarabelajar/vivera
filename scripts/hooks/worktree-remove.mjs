@@ -11,7 +11,8 @@
 // wt-new locks its worktrees, hence the double -f. A worktree with uncommitted or
 // untracked files, or a path through a symlink, is kept (exit 1).
 //
-// Env seam: VIVERA_WT_ROOT overrides the root (default /mnt/belajarcarabelajar).
+// Env seam: VIVERA_WT_ROOT overrides the root (default /mnt/belajarcarabelajar/wt,
+// where every worktree lives since 2026-11-16).
 //
 // Revert: remove the WorktreeRemove entry from ~/.claude/settings.json, or
 // restore ~/.claude/settings.json.bak-20261108-worktree-overnight-hooks.
@@ -53,7 +54,7 @@ function main() {
     process.stderr.write('worktree-remove: stdin is not JSON\n');
     return 1;
   }
-  const root = process.env.VIVERA_WT_ROOT || '/mnt/belajarcarabelajar';
+  const root = process.env.VIVERA_WT_ROOT || '/mnt/belajarcarabelajar/wt';
   const wt = allowedPath(input?.worktree_path, root);
   if (!wt) {
     process.stderr.write(`worktree-remove: refusing path outside ${root}/<repo>-wt/<name>\n`);

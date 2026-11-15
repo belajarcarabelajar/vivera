@@ -18,10 +18,11 @@
 //
 // No runtime import from "@opencode/plugin": the package is not installed where the plugin loads.
 //
-// Install (one machine): cp opencode/vivera-plugin.ts ~/.config/opencode/plugins/vivera.ts is NOT enough,
-// because the import below is relative; install from the repository with
-//   opencode plugin add belajarcarabelajar/vivera
-// Revert: opencode plugin remove vivera (or delete the entry from the OpenCode plugin config).
+// Install: opencode plugin add belajarcarabelajar/vivera (a Git specifier; a local path is refused).
+// Measured 2026-11-15 in an isolated HOME: a git+file specifier of this branch shows up in /api/plugin
+// as id "vivera", status "active". Copying this file alone into ~/.config/opencode/plugins does not
+// work, because the import above is relative to the repository.
+// Revert: opencode plugin remove <the specifier you added>.
 
 import { check } from "../.claude/hooks/require-exit-code.mjs"
 

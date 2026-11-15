@@ -33,6 +33,17 @@ describe("decideNudge", () => {
     const nudge = { id: "n1", type: "synthetic", text: REASON, metadata: { source: NUDGE_SOURCE } };
     expect(decideNudge({ ...base, items: [skill, user, claim, nudge, assistant("a2", "All 12 tests pass.")] })).toBeNull();
   });
+  test("returns null for a pass claim on an assistant item without an id", () => {
+    const noId = { type: "assistant", content: [{ type: "text", text: "Done. 12 tests pass, 0 fail." }] };
+    expect(decideNudge({ ...base, items: [skill, user, noId] })).toBeNull();
+  });
+  test("returns null when the session is null", () => {
+    expect(decideNudge({ ...base, session: null, items: [skill, user, claim] })).toBeNull();
+  });
+  test("a synthetic item from another source between the user and the answer does not suppress the nudge", () => {
+    const foreign = { id: "x1", type: "synthetic", text: "some other plugin's note" };
+    expect(decideNudge({ ...base, items: [skill, user, foreign, claim] })).toEqual({ messageID: "a1", reason: REASON });
+  });
 });
 
 test("never nudges a rewrite turn that ran a tool between the nudge and the final answer", () => {
@@ -90,5 +101,20 @@ describe("plugin wiring", () => {
     await plugin.setup(ctx);
     await fire({ sessionID: "ses1", background: false });
     expect(calls.synthetic).toHaveLength(0);
+  });
+  test("a session context that is not an array adds no synthetic message and does not throw", async () => {
+    // An array-like that Array methods accept but Array.isArray rejects, so dropping the guard would nudge
+    // instead of failing inside the catch.
+    const arrayLike = Object.assign(Object.create(Array.prototype), {
+      0: skill, 1: user, 2: assistant(crypto.randomUUID(), "Done. 12 tests pass, 0 fail."), length: 3,
+    });
+    expect(Array.isArray(arrayLike)).toBe(false);
+    for (const value of [arrayLike, null, undefined, "items", { items: [skill, user, claim] }]) {
+      const { ctx, calls, fire } = fakeCtx([]);
+      ctx.session.context = async () => value;
+      await plugin.setup(ctx);
+      await expect(fire({ sessionID: "ses1", background: false })).resolves.toBeUndefined();
+      expect(calls.synthetic).toHaveLength(0);
+    }
   });
 });

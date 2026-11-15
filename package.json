@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "Ultimate All-in-One AI Coding Agent Skill Pipeline",
   "type": "module",
+  "exports": {
+    ".": "./opencode/vivera-plugin.ts",
+    "./server": "./opencode/vivera-plugin.ts"
+  },
   "author": "Iwan Kurniawan",
   "repository": {
     "type": "git",

@@ -61,7 +61,8 @@ export const SNIPPET_CONTRACTS = {
     'the first file you write is the handoff',
     'A failed entry check still writes nothing',
     'merge into the base branch',
-    'no follow-up executes unselected',
+    'EVERY ELIGIBLE FOLLOW-UP RUNS WITHOUT A QUESTION',
+    'follow-ups: ask',
     // The NEVER list and the retry budget replace a human overnight.
     'NEVER, WHATEVER HAPPENS DURING THE NIGHT',
     'none of this relaxes the NEVER list below',

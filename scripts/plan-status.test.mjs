@@ -198,6 +198,11 @@ describe('overnight handoff and the stale handoff flag', () => {
     expect(s.overnight).toEqual({ result: 'running', last_update: '2026-01-02T01:00:00+07:00 T2 Step 1', stale: true });
   });
 
+  test('a handoff that names its PR but keeps running first is still stale when it stops moving (overnight follow-ups)', () => {
+    const s = planStatus(PLAN, { handoff: handoff('running, PR #12 opened, follow-ups in progress', '2026-01-02T01:00:00+07:00 F1 Step 2'), now: new Date(NOW), staleHours: 2 });
+    expect(s.overnight.stale).toBe(true);
+  });
+
   test('a running handoff updated 1 hour ago is not stale', () => {
     const s = planStatus(PLAN, { handoff: handoff('running', '2026-01-02T05:00:00+07:00 T2 Step 1'), now: new Date(NOW), staleHours: 2 });
     expect(s.overnight.stale).toBe(false);

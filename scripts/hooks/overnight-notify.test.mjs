@@ -177,3 +177,28 @@ test('notify throwing still exits 0 and logs an error', () => {
   expect(r.stdout).toBe('');
   expect(errorLines(env).length).toBe(1);
 });
+
+function clear(env, id) {
+  return spawnSync('bun', [HOOK, '--clear', id], { encoding: 'utf8', env: { ...process.env, VIVERA_OVERNIGHT_DIR: env.dir, NOTIFY_TS: env.notify }, timeout: 30_000 });
+}
+
+test('--clear removes this session marker without rm, exit 0 (rm-tmp-guard refuses rm under ~/.local/state)', () => {
+  const env = setup();
+  const r = clear(env, 'sess-1');
+  expect(r.status).toBe(0);
+  expect(existsSync(path.join(env.dir, 'sess-1'))).toBe(false);
+});
+
+test('--clear with a missing marker still exits 0', () => {
+  const env = setup({ marker: false });
+  expect(clear(env, 'sess-1').status).toBe(0);
+});
+
+test('--clear refuses a session id that is not a plain token and deletes nothing', () => {
+  const env = setup();
+  writeFileSync(path.join(env.dir, '..', 'keep'), 'x');
+  const r = clear(env, '../keep');
+  expect(r.status).toBe(2);
+  expect(existsSync(path.join(env.dir, '..', 'keep'))).toBe(true);
+  expect(existsSync(path.join(env.dir, 'sess-1'))).toBe(true);
+});

@@ -12,7 +12,9 @@
 // line in <dir>/errors.log.
 //
 // Marker: <dir>/<session_id>, written by the sucp-overnight entry gate and
-// removed when it closes the handoff. Lines:
+// removed when it closes the handoff with `bun <this file> --clear <session_id>`
+// (a plain rm under ~/.local/state is refused by the rm-tmp-guard hook on the
+// owner's machine; --clear exits 2 for an id that is not a plain token). Lines:
 //   plan=<plan id>
 //   handoff=<handoff file path>
 // No marker means the session is not an overnight run. The session id is
@@ -28,7 +30,7 @@
 // ~/.claude/settings.json.bak-20261108-worktree-overnight-hooks.
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -104,7 +106,16 @@ function run(dir, stdinText) {
   if (r.status !== 0) throw new Error(`notify exited ${r.status ?? r.signal}: ${(r.stderr || '').slice(0, 200)}`);
 }
 
-if (import.meta.main) {
+/** Removes this session's marker; a missing marker is fine. Returns the exit code. */
+export function clearMarker(dir, id) {
+  if (typeof id !== 'string' || !SESSION_ID.test(id)) return 2;
+  rmSync(path.join(dir, id), { force: true });
+  return 0;
+}
+
+if (import.meta.main && process.argv[2] === '--clear') {
+  process.exitCode = clearMarker(stateDir(), process.argv[3]);
+} else if (import.meta.main) {
   const dir = stateDir();
   try {
     run(dir, await Bun.stdin.text());

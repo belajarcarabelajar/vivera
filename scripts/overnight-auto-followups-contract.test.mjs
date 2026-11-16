@@ -44,7 +44,7 @@ describe('overnight skill', () => {
 
   test('the overnight marker stays until the follow-ups are done', () => {
     const text = readRepoFile(OVERNIGHT);
-    expectTerms(text, ['Keep the overnight marker until']);
+    expectTerms(text, ['Keep the overnight marker until', 'keep the word `running` first']);
     expect(text).not.toContain('no follow-up executes unselected');
   });
 });

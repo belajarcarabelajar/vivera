@@ -34,6 +34,7 @@ tasks:
     depends_on: [T1]
     impacts: ["path/to/file2.ts consumers - rg 'from .*file1' src/ ; none: bun test path/to/file2.test.ts"]
     files: { create: [path/to/file2.ts], modify: [], test: [path/to/file2.test.ts] }
+    files_root: "/abs/path/to/other/repo"   # optional; this task's relative files resolve here, not in the runner's cwd
     idempotency_key: "T2:path/to/file2.ts"
     skip_if: "bun test path/to/file2.test.ts"
     verify_exit: 0

@@ -4,7 +4,7 @@
 // enforces idempotent skips, and aggregates failures into an Error Ledger.
 // No MCP, no external packages — runs under Bun only.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // The publisher's own freshness verdict, IMPORTED rather than re-derived. Two
@@ -20,6 +20,7 @@ import { validateImpacts } from './lib/plan-impacts.mjs';
 import { validateTraceability } from './lib/plan-traceability.mjs';
 import { isStepTimeout, validateRunnerNumbers } from './lib/plan-runner-numbers.mjs';
 import { escapeRe } from './lib/escape-re.mjs';
+import { filePrecondition, filePostcondition, validateFilesRoot } from './lib/files-root.mjs';
 
 export { reapGroup } from './lib/runner-process.mjs';
 
@@ -67,7 +68,7 @@ export const RUNNER_CONTRACT_KEYS = [
   'tasks[].id', 'tasks[].depends_on', 'tasks[].skip_if', 'tasks[].run',
   'tasks[].run[].cmd', 'tasks[].run[].expect_exit', 'tasks[].run[].retry',
   'tasks[].run[].loop_until', 'tasks[].run[].timeout_s',
-  'tasks[].files', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
+  'tasks[].files', 'tasks[].files_root', 'tasks[].verify_exit', 'tasks[].idempotency_key', 'tasks[].impacts',
 ];
 
 // A `skip_if` that only proves a string is present in a file is not an
@@ -587,6 +588,7 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
   }
   try { topoSort(plan.tasks || []); } catch (e) { errors.push(e.message); }
   validateRunnerNumbers(plan, errors);
+  validateFilesRoot(plan, errors);
 
   // Execution-hook contract. A task is machine-runnable only when it declares
   // `run[]`. A task with no `run[]` is handed to the agent as prose, which is
@@ -720,41 +722,7 @@ export function validatePlan(plan, body, { frontmatter } = {}) {
   return { errors, warnings };
 }
 
-// ---------- Declared files as a checked claim ----------
-//
-// A plan that names its files is making a falsifiable claim: "this task touches
-// these paths and nothing else." Checking it is cheap and catches two real
-// defects. A path in `modify`/`test` that does not exist means the plan is
-// describing a codebase that is not there, and a path in `create` that still
-// does not exist after the steps ran means the task did not do what it said.
-//
-// `create` is deliberately NOT required to be absent beforehand. A task whose
-// file already exists is usually one being re-run, and failing it for that
-// would make idempotency impossible. What matters is the end state.
-function filePrecondition(t, dir) {
-  const files = t.files;
-  if (!files || typeof files !== 'object') return null;
-  const missing = [];
-  for (const group of ['modify', 'test']) {
-    for (const f of files[group] || []) {
-      if (typeof f !== 'string' || f === '') continue;
-      if (!existsSync(path.resolve(dir, f))) missing.push(`${group}: ${f}`);
-    }
-  }
-  return missing.length ? missing : null;
-}
-
-function filePostcondition(t, dir) {
-  const files = t.files;
-  if (!files || typeof files !== 'object') return null;
-  const missing = [];
-  for (const f of files.create || []) {
-    if (typeof f !== 'string' || f === '') continue;
-    if (!existsSync(path.resolve(dir, f))) missing.push(`create: ${f}`);
-  }
-  return missing.length ? missing : null;
-}
-
+// Declared files: `filePrecondition`, `filePostcondition` in lib/files-root.mjs.
 // `idempotency_key` is written as "<task id>:<something>". Checking it against
 // `files` was the obvious idea and it is wrong.
 //

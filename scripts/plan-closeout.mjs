@@ -26,6 +26,7 @@ import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } fro
 import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
 import { missingTestPaths } from './lib/test-paths.mjs';
 import { runPlanCommand } from './lib/remote-runner.mjs';
+import { defaultCwd, rereadAtMain } from './lib/readiness-main.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -345,12 +346,6 @@ function parseArgs(argv) {
   return opts;
 }
 
-function defaultCwd(planFile) {
-  const dir = path.dirname(planFile);
-  if (dir.endsWith(path.join('docs', 'code-plan', 'plans'))) return path.resolve(dir, '..', '..', '..');
-  return process.cwd();
-}
-
 function readinessCli(opts) {
   const planFile = path.resolve(opts.plan);
   let text;
@@ -384,7 +379,7 @@ function readinessCli(opts) {
     }
   }
   const onOutput = logDir ? (id, r) => writeTaskLog(logDir, id, r) : undefined;
-  const tasks = taskReadiness(text, { run: bashRunner, cwd, timeoutMs, onOutput });
+  const tasks = rereadAtMain(taskReadiness(text, { run: bashRunner, cwd, timeoutMs, onOutput }), { sessions: reg?.sessions, planId: path.basename(planFile, '.md'), cwd, run: bashRunner, timeoutMs });
   const openNow = openNowRows(extractFrontmatter(text).body);
   for (const t of tasks) {
     console.log(`${t.id}\t${t.state}\t${t.skipIf}${t.missing ? `\tmissing: ${t.missing.join(', ')}` : ''}`);

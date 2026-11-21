@@ -33,16 +33,17 @@ function sizeOf(file) {
 }
 
 // One message per files.modify path at or above 90% of its limit; paths resolve
-// against `dir` the way the runner resolves `files`.
+// against the task's absolute files_root, else `dir`, the way the runner resolves `files`.
 export function sizeGateWarnings(plan, dir = process.cwd()) {
-  const ceilings = readCeilings(dir);
   const out = [];
   for (const t of plan?.tasks || []) {
+    const root = typeof t?.files_root === 'string' && path.isAbsolute(t.files_root.trim()) ? t.files_root.trim() : dir;
+    const ceilings = readCeilings(root);
     for (const f of t?.files?.modify || []) {
       if (typeof f !== 'string' || f === '') continue;
-      const bytes = sizeOf(path.resolve(dir, f));
+      const bytes = sizeOf(path.resolve(root, f));
       if (bytes === null) continue;
-      const rel = path.relative(dir, path.resolve(dir, f)).split(path.sep).join('/');
+      const rel = path.relative(root, path.resolve(root, f)).split(path.sep).join('/');
       const ceiling = Number.isInteger(ceilings[rel]) ? ceilings[rel] : null;
       const limit = ceiling ?? LIMIT_BYTES;
       if (bytes < limit * SHARE) continue;

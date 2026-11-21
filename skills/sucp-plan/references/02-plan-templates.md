@@ -37,6 +37,7 @@ tasks:
   - id: T2
     depends_on: [T1]
     files: { create: [exact/path2.ext], modify: [], test: [exact/path2.test.ext] }
+    files_root: "/abs/path/to/other/repo"   # optional; this task's relative files resolve here, not in the runner's cwd
     idempotency_key: "T2:exact/path2.ext"
     skip_if: "<verification command>"
     verify_exit: 0

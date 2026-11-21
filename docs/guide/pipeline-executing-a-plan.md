@@ -58,7 +58,7 @@ provably linear function, and a best-of-N retry still went flaky once the suite 
 both implementations timed back to back on the same input, alternating order, so a
 GC pause lands on both and cancels in the quotient.
 
-`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 25 keys the runner reads (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using AST/frontmatter comparison in ~1 second, bypassing the headless Mermaid browser rendering.
+`bun run contract:check` (`scripts/check-runner-contract.mjs`) verifies that `templates/implementation-plan-template.md` and the master skill plan header declare all 26 keys the runner reads (`tasks[].run[].cmd`, `tasks[].run[].loop_until`, `tasks[].skip_if`, `tasks[].impacts`, etc.) using AST/frontmatter comparison in ~1 second, bypassing the headless Mermaid browser rendering.
 
 The visual map check is the part that catches a lying plan. Every task heading must have a
 matching node in the Mermaid block, and every `depends_on` edge must match a Mermaid edge

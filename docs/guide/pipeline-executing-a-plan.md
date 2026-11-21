@@ -8,7 +8,7 @@ Bun only.
 ```bash
 bun run plan:check docs/code-plan/plans/<plan>.md   # validate the DAG and the visual map
 bun run plan:run   docs/code-plan/plans/<plan>.md   # same, then execute the tasks
-bun run contract:check                              # fast structural check for all 25 runner keys (~1s)
+bun run contract:check                              # fast structural check for all 26 runner keys (~1s)
 bun run audit:skipif                                # tally & audit skip_if predicates across registry
 ```
 

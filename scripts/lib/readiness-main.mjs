@@ -44,8 +44,10 @@ export function rereadAtMain(rows, { sessions = [], planId, cwd, run, timeoutMs,
       return !r.timedOut && r.exit === 0 ? { id: t.id, state: 'DONE', skipIf: t.skipIf } : t;
     });
   } finally {
-    gitExit(cwd, 'worktree', 'remove', '--force', dir);
+    // remove --force drops this worktree's metadata; a repo-wide prune would also drop
+    // other unlocked worktrees whose folders are missing, so it runs only when remove failed.
+    const removed = gitExit(cwd, 'worktree', 'remove', '--force', dir) === 0;
     rmSync(dir, { recursive: true, force: true });
-    gitExit(cwd, 'worktree', 'prune');
+    if (!removed) gitExit(cwd, 'worktree', 'prune');
   }
 }

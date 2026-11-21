@@ -107,6 +107,18 @@ describe('readiness after every session of the plan landed', () => {
     assert.equal(r.exitCode, 0, out + r.stderr.toString());
   });
 
+  test('another worktree whose folder is gone keeps its metadata: the re-read prunes nothing repo-wide', () => {
+    const f = fixture(ANCESTOR, merged);
+    const stray = path.join(f.root, 'stray');
+    git(f.main, 'worktree', 'add', '-q', '--detach', stray, 'main');
+    rmSync(stray, { recursive: true, force: true });
+    const r = cli(['--readiness', f.plan, '--registry', f.registry, '--timeout-s', '30']);
+    const out = r.stdout.toString();
+    assert.equal(mainLine(out).length, 1, out);
+    assert.ok(git(f.main, 'worktree', 'list', '--porcelain').includes(stray), 'the stray worktree metadata was pruned');
+    assertRemoved(f, out);
+  });
+
   test('work only on an unmerged branch stays OPEN at origin/main', () => {
     const f = fixture(SIDE_FILE, merged);
     const r = cli(['--readiness', f.plan, '--registry', f.registry, '--timeout-s', '30']);

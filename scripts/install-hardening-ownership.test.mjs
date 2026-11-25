@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 import {
   AGENTS,
   MASTER,
@@ -116,7 +117,7 @@ describe('H1: a destination inside this checkout is never touched', () => {
 });
 
 describe('H2: only this repo and the legacy ai-skills items count as ours', () => {
-  const LEGACY = [MASTER, 'skills/vivera-plan', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
+  const LEGACY = [OLD_AI_SKILLS_MASTER, 'skills/vivera-plan', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
   const classify = (sb, dest) => lib(sb, 'classify_dest', dest, path.join(sb.repo, MASTER));
 
   test('H2: every legacy form of the old repo is ours-stale, dangling or live', () => {
@@ -171,7 +172,7 @@ describe('H2: only this repo and the legacy ai-skills items count as ours', () =
 
   test('H2: legacy links on this machine are still repointed with no backup', () => {
     const sb = sandbox();
-    link(sb, `/x/ai-skills/${MASTER}`, `.config/ai/${MASTER}`);
+    link(sb, `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`, `.config/ai/${MASTER}`);
     link(sb, '/x/ai-skills/skills/vivera/SKILL.md', `${PKG}/SKILL.md`);
     link(sb, '/x/ai-skills/templates', `${PKG}/templates`);
     const r = sb.run(['--update']);

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MASTER = 'VIVERA.md';
@@ -102,7 +102,7 @@ describe('uninstall: removing links and directories', () => {
 
   test('a dangling link into the old ai-skills repo is removed as one of ours', () => {
     const sb = sandbox();
-    link(sb, `/x/ai-skills/${MASTER}`, `.config/ai/${MASTER}`);
+    link(sb, `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`, `.config/ai/${MASTER}`);
     const r = uninstall(sb);
     expect(r.status).toBe(0);
     expect(exists(sb, `.config/ai/${MASTER}`)).toBe(false);

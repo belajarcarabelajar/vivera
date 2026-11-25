@@ -20,6 +20,8 @@ export const ALLOW = [
   // The one line that tells a reader the old names.
   'README.md',
   // The installer's legacy list, which prunes installs made under the old names, and its test.
+  'scripts/install/lib.sh',
+  'scripts/lib/install-sandbox.mjs',
   'scripts/install/targets.sh',
   'scripts/install/windows-ops.ps1',
   'scripts/install-legacy-names.test.mjs',

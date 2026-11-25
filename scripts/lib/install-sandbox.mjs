@@ -28,6 +28,9 @@ const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 // Repo-relative paths copied into the sandbox repo. The two optional entries
 // appear in later tasks; every other entry must exist or the copy throws.
+// The master file's name in the old ai-skills repo, which links into that repo still carry (before VIVERA.md).
+export const OLD_AI_SKILLS_MASTER = 'Super Ultra Code Plan Implementation.md';
+
 export const INSTALL_PAYLOAD = [
   'install.sh',
   'scripts/install',

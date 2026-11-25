@@ -249,3 +249,23 @@ describe.skipIf(!pwsh)('install.ps1: a copy install made under the old skill nam
     expect({ agents: oldEntries(sb, AGENTS), ai: oldEntries(sb, AI) }).toEqual({ agents: [], ai: [] });
   });
 });
+
+describe('a link into the old ai-skills repo under the old master name', () => {
+  // Before vivera the skills lived in a repo named ai-skills, whose master file had the old name. Such a link
+  // is the installer's own, so --update removes it rather than moving it aside as a foreign file.
+  test('--update removes it without a .vivera-bak backup, and --check is then CURRENT', () => {
+    const sb = sandbox();
+    const old = `/x/ai-skills/${OLD_MASTER}`;
+    link(sb, old, `${AI}/${OLD_MASTER}`);
+    link(sb, old, `${CLAUDE}/${OLD_PACKAGE}/SKILL.md`);
+    const r = sb.run(['--update', ...ONLY]);
+    expect(r.status).toBe(0);
+    const backups = [AI, CLAUDE, `${CLAUDE}/${OLD_PACKAGE}`]
+      .filter((d) => fs.existsSync(at(sb, d)))
+      .flatMap((d) => fs.readdirSync(at(sb, d)).filter((n) => n.includes('.vivera-bak')).map((n) => `${d}/${n}`));
+    expect(backups).toEqual([]);
+    expect(oldEntries(sb, AI)).toEqual([]);
+    expect(oldEntries(sb, CLAUDE)).toEqual([]);
+    expect(sb.run(['--check', ...ONLY]).stdout).toContain('check: CURRENT');
+  });
+});

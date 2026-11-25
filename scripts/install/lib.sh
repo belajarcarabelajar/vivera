@@ -377,15 +377,15 @@ classify_link() {
       return 0
       ;;
   esac
-  # The items the old ai-skills repo linked, and nothing else under that name.
+  # The items the old ai-skills repo linked (its master file had the name used before VIVERA.md), and nothing else.
   case "$target" in
-    */ai-skills/"VIVERA.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
+    */ai-skills/"Super Ultra Code Plan Implementation.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
       echo "ours-stale"
       return 0
       ;;
   esac
   case "$resolved" in
-    */ai-skills/"VIVERA.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
+    */ai-skills/"Super Ultra Code Plan Implementation.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
       echo "ours-stale"
       return 0
       ;;

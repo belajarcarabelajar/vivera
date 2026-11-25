@@ -8,7 +8,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 
 const MASTER = 'VIVERA.md';
 const PKG = '.agents/skills/vivera';
@@ -63,7 +63,7 @@ test('check: on a bare HOME every link is [missing], the count is reported, and 
 test('check: a link into the old ai-skills repo is named [dangling], and a normal install makes it pass', () => {
   const sb = sandbox();
   const dest = at(sb, `${PKG}/SKILL.md`);
-  const old = `/x/ai-skills/${MASTER}`;
+  const old = `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`;
   link(sb, old, `${PKG}/SKILL.md`);
   const r = sb.run(['--check']);
   expect(r.status).toBe(1);

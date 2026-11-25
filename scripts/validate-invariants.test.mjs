@@ -132,7 +132,7 @@ test('the gate fails when an invariant sentence is deleted from every skill file
     const files = [
       'VIVERA.md',
       ...fs.readdirSync(path.join(tmp, 'skills'), { recursive: true })
-        .filter((rel) => rel.endsWith('.md') && !rel.startsWith('vivera'))
+        .filter((rel) => rel.endsWith('.md') && rel.split(path.sep)[0] !== 'vivera')
         .map((rel) => path.join('skills', rel)),
     ];
     const originals = new Map(files.map((rel) => [rel, fs.readFileSync(path.join(tmp, rel), 'utf8')]));

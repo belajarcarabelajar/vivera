@@ -196,7 +196,7 @@ test('a second sync on the same day keeps the first backup and reports it', () =
 
 // ---------- finding 198: sync.sh never clobbers a local edit ----------
 
-const FILE_NAME = 'Super Ultra Code Plan Implementation.md';
+const FILE_NAME = 'VIVERA.md';
 
 function syncSandbox(destContent) {
   const tmp = tmpDir('sync-sh-');

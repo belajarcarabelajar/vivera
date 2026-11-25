@@ -59,7 +59,7 @@ test('does NOT flag a legitimate mention of a tool name', () => {
   // supported harnesses, plus a mermaid node reading `🤖 Subagents execute`.
   // A gate that flags those is a gate people learn to ignore.
   const legitimate = [
-    '| Claude Code | `~/.claude/skills/super-ultra-code-plan/` | Conditional |',
+    '| Claude Code | `~/.claude/skills/vivera/` | Conditional |',
     '| Copilot | not wired | - |',
     'In OpenCode that tool is `todowrite`; in Claude Code it is `TodoWrite`.',
     '    SubWork["🤖 Subagents execute\\nin isolated workspaces"]',

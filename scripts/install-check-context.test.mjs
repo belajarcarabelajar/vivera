@@ -145,7 +145,7 @@ test('context rows: a problem prints a [draft] gh issue create command that inst
   expect(body).toContain(`OS: ${uname}`);
   expect(body).toContain(`bun: ${sandboxBunVersion(sb)}`);
   expect(body).toMatch(/^harnesses detected: ai-config agents/m);
-  expect(body).toContain('[missing] ~/.agents/skills/super-ultra-code-plan/SKILL.md');
+  expect(body).toContain('[missing] ~/.agents/skills/vivera/SKILL.md');
   expect(body).not.toContain(sb.home);
   // The draft sits after the rows and before the verdict.
   const lines = r.stdout.split('\n');

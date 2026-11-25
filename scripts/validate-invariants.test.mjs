@@ -35,8 +35,8 @@ describe('INVARIANTS', () => {
   test('an invariant is found after its sentence moves to a references file', () => {
     const root = tmpRoot('vivera-inv-');
     write(root, MASTER_NAME, '# orchestrator\n');
-    write(root, 'skills/sucp-rules/SKILL.md', '# rules index\n');
-    write(root, 'skills/sucp-rules/references/07-x.md', `Some prose. ${sample.text}. More prose.\n`);
+    write(root, 'skills/vivera-rules/SKILL.md', '# rules index\n');
+    write(root, 'skills/vivera-rules/references/07-x.md', `Some prose. ${sample.text}. More prose.\n`);
     const missing = checkInvariants(readSkillCorpus(root), [sample]);
     fs.rmSync(root, { recursive: true, force: true });
     expect(missing).toEqual([]);
@@ -45,8 +45,8 @@ describe('INVARIANTS', () => {
   test('an invariant fails when its sentence is removed from every file', () => {
     const root = tmpRoot('vivera-inv-');
     write(root, MASTER_NAME, '# orchestrator\n');
-    write(root, 'skills/sucp-rules/SKILL.md', '# rules index\n');
-    write(root, 'skills/sucp-rules/references/07-x.md', 'The sentence is gone.\n');
+    write(root, 'skills/vivera-rules/SKILL.md', '# rules index\n');
+    write(root, 'skills/vivera-rules/references/07-x.md', 'The sentence is gone.\n');
     const missing = checkInvariants(readSkillCorpus(root), [sample]);
     fs.rmSync(root, { recursive: true, force: true });
     expect(missing).toEqual([sample]);
@@ -130,9 +130,9 @@ test('the gate fails when an invariant sentence is deleted from every skill file
     const sentence = 'A dismissed question is not an approval';
     const missing = `Skill invariant missing: dismissal is not approval: "${sentence}"`;
     const files = [
-      'Super Ultra Code Plan Implementation.md',
+      'VIVERA.md',
       ...fs.readdirSync(path.join(tmp, 'skills'), { recursive: true })
-        .filter((rel) => rel.endsWith('.md') && !rel.startsWith('super-ultra-code-plan'))
+        .filter((rel) => rel.endsWith('.md') && !rel.startsWith('vivera'))
         .map((rel) => path.join('skills', rel)),
     ];
     const originals = new Map(files.map((rel) => [rel, fs.readFileSync(path.join(tmp, rel), 'utf8')]));
@@ -144,7 +144,7 @@ test('the gate fails when an invariant sentence is deleted from every skill file
     assert.ok(without.out.includes(missing), `the failure must name the invariant\n${without.out.slice(-600)}`);
 
     for (const [rel, text] of originals) fs.writeFileSync(path.join(tmp, rel), text.replaceAll(sentence, ''));
-    fs.appendFileSync(path.join(tmp, 'skills', 'sucp-rules', 'references', '09-anti-patterns.md'), `\n${sentence}.\n`);
+    fs.appendFileSync(path.join(tmp, 'skills', 'vivera-rules', 'references', '09-anti-patterns.md'), `\n${sentence}.\n`);
     const moved = runGateWithoutMmdc(tmp, noMmdc);
     assert.ok(!moved.out.includes(missing), `the sentence in a references file must satisfy the invariant\n${moved.out.slice(-600)}`);
     assert.match(moved.out, /Skill invariants present/);

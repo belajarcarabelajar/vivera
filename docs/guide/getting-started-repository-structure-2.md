@@ -7,7 +7,7 @@ deployed by a now-removed `install.sh` §6b); that split is retired because two
 sources of truth had drifted, and the CLI-only copy never described the MCP
 tools an agent actually calls. One master skill, one set of rules.
 
-The skill installs through `skills/super-ultra-code-plan/`, which is a set of symlinks into
+The skill installs through `skills/vivera/`, which is a set of symlinks into
 the repo root rather than a copy. The master file stays single-sourced, and
 `render-diagrams.sh` skips symlinked files so the same diagram is never rendered twice.
 

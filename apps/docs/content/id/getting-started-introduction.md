@@ -17,7 +17,7 @@ source_hash: "4b8ada89f5e7"
 Pipeline skill yang memandu agent coding AI melalui seluruh siklus hidup rekayasa perangkat lunak: **Ide -> Desain -> Plan -> Gerbang Persetujuan Manusia -> TDD -> Debugging Sistematis -> Orkestrasi Subagent -> Verifikasi -> Penyelesaian -> Debt Sweep Penutupan Sesi (penyisiran utang)**.
 
 - **Empat komponen bergerbang.** Brainstorming → Penulisan Plan → TDD → Verifikasi, dengan gerbang persetujuan manusia di antara setiap komponen, ditambah jalur **Deep Research** yang hanya berjalan ketika sebuah keputusan bergantung pada informasi yang tidak ada di codebase. Pipeline sub-agent yang menjalankan pekerjaan ini wajib, bukan sekadar rekomendasi.
-- **Satu sumber kebenaran.** `Super Ultra Code Plan Implementation.md` menjaga invarian kontekstual, batasan keamanan, dan gerbang persetujuan manusia tetap terlihat sepanjang run.
+- **Satu sumber kebenaran.** `VIVERA.md` menjaga invarian kontekstual, batasan keamanan, dan gerbang persetujuan manusia tetap terlihat sepanjang run.
 - **Verifikasi adalah gerbang terakhir, bukan langkah terakhir.** Setelah plan berstatus `Done 100%` (kecuali task terminal seperti render atau deploy, yang dijalankan sekali setelah sweep) dan buktinya hijau, agent memanen setiap item dari sesi itu yang sempat diperhatikan tetapi belum ditutup, memeringkat 3-5 tindak lanjut yang bisa diselesaikan saat itu juga, lalu menanyakannya sebagai kotak centang multi-select di widget prompt milik harness sendiri. Sesi berakhir tanpa utang coding yang belum diperiksa.
 
 ## Instalasi

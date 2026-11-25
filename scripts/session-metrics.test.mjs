@@ -47,7 +47,7 @@ function fixture() {
     ]),
     asst('2026-10-10T10:01:00.000Z', 'm2', u(5, 200, 1000, 20), [
       { type: 'tool_use', id: 'tu2', name: 'AskUserQuestion', input: { questions: [SECRET] } },
-      { type: 'tool_use', id: 'tu3', name: 'Skill', input: { skill: 'sucp-rules' } },
+      { type: 'tool_use', id: 'tu3', name: 'Skill', input: { skill: 'vivera-rules' } },
     ], 'claude-opus-5-5'),
   ]);
   const subDir = path.join(proj, 'sess-a', 'subagents');
@@ -104,7 +104,7 @@ describe('readTranscript', () => {
     expect(t.calls[0].usage.output_tokens).toBe(50);
     expect(t.calls[0].tools).toEqual(['Agent']);
     expect(t.calls[1].tools).toEqual(['AskUserQuestion', 'Skill']);
-    expect(t.calls[1].skills).toEqual(['sucp-rules']);
+    expect(t.calls[1].skills).toEqual(['vivera-rules']);
     expect(t.firstTs).toBe('2026-10-10T10:00:00.000Z');
     expect(t.lastTs).toBe('2026-10-10T10:01:00.000Z');
   });
@@ -317,7 +317,7 @@ describe('CLI', () => {
     expect(j.startupPrefixShare).toBeCloseTo(1006 / 1105, 4);
     expect(j.subagentsByType).toEqual({ chef: 1 });
     expect(j.askUserQuestion).toBe(1);
-    expect(j.skills).toEqual({ 'sucp-rules': 1 });
+    expect(j.skills).toEqual({ 'vivera-rules': 1 });
     expect(j.mergedPrs).toBe(2);
     expect(j.escapes).toBe(1);
     // 8665 per million over 2 merged PRs is 0.0043325.

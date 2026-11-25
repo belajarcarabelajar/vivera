@@ -42,13 +42,13 @@ describe('T4 docs', () => {
   });
 
   test('the debt sweep no longer says every hook path exits 0', () => {
-    const sweep = readRepoFile('skills/sucp-debt-sweep/SKILL.md');
+    const sweep = readRepoFile('skills/vivera-sweep/SKILL.md');
     expect(sweep).not.toContain('every path exits 0');
     expect(sweep).toContain('size gate');
   });
 
-  test('the sucp-plan File-size trigger names the mechanical gate', () => {
-    const line = readRepoFile('skills/sucp-plan/SKILL.md').split('\n').find((l) => l.startsWith('File-size trigger:'));
+  test('the vivera-plan File-size trigger names the mechanical gate', () => {
+    const line = readRepoFile('skills/vivera-plan/SKILL.md').split('\n').find((l) => l.startsWith('File-size trigger:'));
     expect(line).toBeDefined();
     expect(line).toContain('bun run size:check');
   });

@@ -9,7 +9,7 @@
 //   P1  the "is this a checkout of its own" test compared two spellings of the same path (Git Bash prints
 //       C:/..., bash pwd -P prints /c/...);
 //   P2  a bare "${array[@]}" is an unbound variable on bash before 4.4 when the array is empty;
-//   P3  a plain file named sucp-<tab>x was reported as an unusual stale phase dir.
+//   P3  a plain file named vivera-<tab>x was reported as an unusual stale phase dir.
 // Every run uses the sandbox from scripts/lib/install-sandbox.mjs; the bash functions under test are also
 // called straight in a clean shell with the sandbox PATH.
 
@@ -18,9 +18,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertSandbox, makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const SKILLS = '.agents/skills';
-const PKG = `${SKILLS}/super-ultra-code-plan`;
+const PKG = `${SKILLS}/vivera`;
 const STAMP = '20260101T000000Z';
 const MARKER = '.vivera-managed';
 
@@ -48,7 +48,7 @@ const names = (sb) => sb.snapshot(sb.root).map((l) => l.split('|')[0]);
 // A backup is one entry named ...vivera-bak-...; a backed-up directory counts once, not file by file.
 const backups = (sb) => names(sb).filter((n) => n.split('/').pop().includes('.vivera-bak-'));
 const leftovers = (sb) => names(sb).filter((n) => n.split('/').pop().includes('.vivera-tmp-'));
-const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
+const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('vivera-')).sort();
 const outdate = (sb) => {
   const dir = path.join(sb.repo, 'templates');
   fs.appendFileSync(path.join(dir, fs.readdirSync(dir).sort()[0]), '\nnew line\n');
@@ -238,7 +238,7 @@ describe('D3: a copy is made beside its destination and renamed into place only 
     const sb = sandbox();
     const real = fs.readlinkSync(path.join(sb.bin, 'cp'));
     write(sb, `${PKG}/SKILL.md`, 'my own edit\n');
-    cpShim(sb, { dest: '/super-ultra-code-plan/SKILL.md' });
+    cpShim(sb, { dest: '/vivera/SKILL.md' });
     const killed = sb.run(ARGS);
     expect(killed.status).not.toBe(0);
     expect(read(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}`)).toBe('my own edit\n');
@@ -260,7 +260,7 @@ describe('D3: a copy is made beside its destination and renamed into place only 
     const sb = sandbox();
     const real = fs.readlinkSync(path.join(sb.bin, 'cp'));
     write(sb, `${PKG}/templates/mine.md`, 'my own template\n');
-    cpShim(sb, { dest: '/super-ultra-code-plan/templates', dir: true });
+    cpShim(sb, { dest: '/vivera/templates', dir: true });
     const killed = sb.run(ARGS);
     expect(killed.status).not.toBe(0);
 
@@ -279,7 +279,7 @@ describe('D3: a copy is made beside its destination and renamed into place only 
   test('D3: a copy that fails (not killed) puts the user file back and leaves no temporary copy', () => {
     const sb = sandbox();
     write(sb, `${PKG}/SKILL.md`, 'my own edit\n');
-    cpShim(sb, { dest: '/super-ultra-code-plan/SKILL.md', kill: false });
+    cpShim(sb, { dest: '/vivera/SKILL.md', kill: false });
     const r = sb.run(ARGS);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('your file was put back');
@@ -290,7 +290,7 @@ describe('D3: a copy is made beside its destination and renamed into place only 
   test('D3: a directory copy that fails (not killed) puts the user directory back and leaves no temporary copy', () => {
     const sb = sandbox();
     write(sb, `${PKG}/templates/mine.md`, 'my own template\n');
-    cpShim(sb, { dest: '/super-ultra-code-plan/templates', dir: true, kill: false });
+    cpShim(sb, { dest: '/vivera/templates', dir: true, kill: false });
     const r = sb.run(ARGS);
     expect(r.status).toBe(1);
     expect(r.stderr).toContain('your file was put back');
@@ -317,7 +317,7 @@ describe('D3: a copy is made beside its destination and renamed into place only 
   test('D3: --uninstall also removes the leftover of a killed first install, so the package dir can go', () => {
     const sb = sandbox();
     const real = fs.readlinkSync(path.join(sb.bin, 'cp'));
-    cpShim(sb, { dest: '/super-ultra-code-plan/SKILL.md' });
+    cpShim(sb, { dest: '/vivera/SKILL.md' });
     expect(sb.run(ARGS).status).not.toBe(0);
     expect(leftovers(sb).length).toBe(1);
     unshim(sb, real);
@@ -431,8 +431,8 @@ describe('P2: no bare "${array[@]}" in the files of this chunk', () => {
   }
 });
 
-describe('P3: a plain file or a symlink named sucp-<tab>x is not an unusual stale phase dir', () => {
-  const ODD = 'sucp-\tx';
+describe('P3: a plain file or a symlink named vivera-<tab>x is not an unusual stale phase dir', () => {
+  const ODD = 'vivera-\tx';
   const ARGS = ['--update', '--tier', 'minimal', '--only', 'agents'];
 
   test('P3: a plain file with a tab in its name is ignored, so the run does not end "left alone"', () => {
@@ -450,8 +450,8 @@ describe('P3: a plain file or a symlink named sucp-<tab>x is not an unusual stal
     const sb = sandbox();
     fs.mkdirSync(at(sb, SKILLS), { recursive: true });
     fs.mkdirSync(at(sb, 'elsewhere'));
-    fs.symlinkSync(at(sb, 'elsewhere'), at(sb, `${SKILLS}/sucp-\tdir`));
-    fs.symlinkSync('/nonexistent', at(sb, `${SKILLS}/sucp-\tdangling`));
+    fs.symlinkSync(at(sb, 'elsewhere'), at(sb, `${SKILLS}/vivera-\tdir`));
+    fs.symlinkSync('/nonexistent', at(sb, `${SKILLS}/vivera-\tdangling`));
     const r = sb.run(ARGS);
     expect(r.status).toBe(0);
     expect(r.stdout).not.toContain('unusual name');

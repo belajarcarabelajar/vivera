@@ -17,8 +17,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const MASTER = 'VIVERA.md';
+const PKG = '.agents/skills/vivera';
 const DEST = `${PKG}/SKILL.md`;
 const ARGS = ['--copy', '--only', 'agents'];
 

@@ -15,8 +15,8 @@ import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
 import { loadTierTable, requiredAt, TIERS } from './lib/prereq.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const MASTER = 'VIVERA.md';
+const PKG = '.agents/skills/vivera';
 const SLOW = 120_000;
 
 const has = (tool) => Bun.which(tool) !== null;

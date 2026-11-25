@@ -12,7 +12,7 @@ A plain `./install.sh` runs the `standard` tier (see Prerequisites) and does thi
 
 | Step | What it does |
 |---|---|
-| Links the skills | The skill package (`SKILL.md`, the seven `sucp-*` phase skills, `templates/`, `examples/` and the two Mermaid configs) is linked into each target with absolute paths into this checkout, so keep the checkout where it is. `--copy` copies the files instead. |
+| Links the skills | The skill package (`SKILL.md`, the seven `vivera-*` phase skills, `templates/`, `examples/` and the two Mermaid configs) is linked into each target with absolute paths into this checkout, so keep the checkout where it is. `--copy` copies the files instead. |
 | Picks the targets | `~/.config/ai` and `~/.agents/skills` always. Every other harness only when it is detected (its directory under your home, or its CLI on `PATH`, `~/.local/bin` or `~/.bun/bin`; the table below names the directory and the CLI of each target, and the CLI is looked for in all three places for every row) or named with `--only ID,ID`. A bare home gets just those two. |
 | Renders the sprite agents | The seven Harvest Sprite subagent files are generated, not linked, for each detected harness among Claude Code, OpenCode, Codex, Cursor, Copilot and Antigravity. This needs `bun`, so tier `minimal` skips it. |
 | Enables the git hook | Sets `core.hooksPath=.githooks` in this checkout when it has its own `.git`, whether or not `graphify` is installed, because the hook carries the file size gate. Undo it with `git -C <checkout> config --unset core.hooksPath`. |
@@ -55,8 +55,8 @@ replace the archive can replace the checksum.
 `install` and `details` on an isolated home. The packaging works: validation passed and 8 skills were
 listed. It was parked for three reasons:
 
-- The master skill loads its phase skills by bare name (`sucp-rules`, `sucp-plan`) and stops if one cannot
-  be loaded. The docs show plugin skills with the plugin name as a prefix (`/vivera:sucp-rules`). Whether the
+- The master skill loads its phase skills by bare name (`vivera-rules`, `vivera-plan`) and stops if one cannot
+  be loaded. The docs show plugin skills with the plugin name as a prefix (`/vivera:vivera-rules`). Whether the
   model's Skill tool accepts the bare name is not documented, and no live session was run, so it is
   unverified.
 - The fallback path `~/vivera/skills/<name>/SKILL.md` does not exist on a machine that has only the plugin.
@@ -113,7 +113,7 @@ The tools, from `scripts/install/tiers.tsv`:
   (`scripts/render-diagrams.sh` and the Mermaid part of `scripts/validate-skill.mjs`): `mmdc` from
   `@mermaid-js/mermaid-cli` starts with `#!/usr/bin/env node`, and `package.json` asks for Node >= 22.13.0.
   The only lockfile is `bun.lock`.
-- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited. `tgrep` is required only at tier `full`: at `standard` install.sh prints one warning when it is missing (none at `minimal`) and the skill's search rule (`skills/sucp-rules/SKILL.md`) accepts `rg` or `tgrep`, so `rg` alone satisfies it.
+- **`ripgrep` (`rg`) & `tgrep`**: Primary code search uses `rg` (v15.2+ direct binary with smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) is used for trigram-indexed search in indexed repositories and shell pipe filtering. Raw GNU `grep` is strictly prohibited. `tgrep` is required only at tier `full`: at `standard` install.sh prints one warning when it is missing (none at `minimal`) and the skill's search rule (`skills/vivera-rules/SKILL.md`) accepts `rg` or `tgrep`, so `rg` alone satisfies it.
 
 ## Platform matrix
 

@@ -12,9 +12,9 @@ import { fileURLToPath } from 'node:url';
 import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const STAMP = '20260101T000000Z';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const PKG = '.agents/skills/vivera';
 
 const open = [];
 afterEach(() => {

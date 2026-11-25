@@ -13,7 +13,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The regression these lock.
 //
 // On 2026-10-16 the Snipset website carried 31 decorative left stripes while the
-// "colored left stripe" tell had been prose in sucp-rules all along. The owner
+// "colored left stripe" tell had been prose in vivera-rules all along. The owner
 // found the first one in a screenshot of a CTA card. So the tests below assert
 // three things: the rule is still written down and names this gate, the gate
 // catches the exact stripe that shipped plus every other shape of it, and it stays
@@ -287,7 +287,7 @@ test('a directory argument is walked, skipping node_modules and build output', (
 });
 
 test('the rule is still written down in the master skill and names this gate', () => {
-  const skill = readSkillText(ROOT, 'skills/sucp-rules/SKILL.md');
+  const skill = readSkillText(ROOT, 'skills/vivera-rules/SKILL.md');
   assert.match(skill, /colored left stripe/, 'the named tell left the master skill');
   assert.match(skill, /check-design-tells\.mjs/, 'the master skill no longer points at the gate');
   const guide = fs.readFileSync(path.join(ROOT, 'docs/guide/tooling-trigger-snippets-1.md'), 'utf8');

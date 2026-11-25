@@ -87,7 +87,7 @@ describe('fileKind', () => {
       'apps/x/a.test.ts': 'test',
       'scripts/foo.mjs': 'code',
       'a.js': 'code', 'a.cjs': 'code', 'a.ts': 'code', 'a.sh': 'code', 'a.py': 'code', 'a.rs': 'code',
-      'skills/sucp-rules/SKILL.md': 'skill',
+      'skills/vivera-rules/SKILL.md': 'skill',
       'README.md': 'markdown',
       'docs/guide.md': 'markdown',
       'a.json': 'data', 'a.yaml': 'data', 'a.yml': 'data', 'a.tsv': 'data', 'a.csv': 'data',
@@ -413,7 +413,7 @@ describe('repo exemptions', () => {
     expect(attr(p)).toBe('unset');
   });
 
-  test.each(['README.md', 'skills/sucp-rules/SKILL.md', 'scripts/ci-targeted.mjs'])('%s is still checked (control)', (p) => {
+  test.each(['README.md', 'skills/vivera-rules/SKILL.md', 'scripts/ci-targeted.mjs'])('%s is still checked (control)', (p) => {
     expect(attr(p)).toBe('unspecified');
   });
 });

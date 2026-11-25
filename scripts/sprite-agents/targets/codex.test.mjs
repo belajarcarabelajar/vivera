@@ -151,18 +151,18 @@ describe('codex target', () => {
     });
 
     test('words the skill line as best effort and never says the harness loads it', () => {
-      const inner = Bun.TOML.parse(render(tpl('\nBody.\n', 'skills:\n  - sucp-tdd-debug\n'))).developer_instructions;
+      const inner = Bun.TOML.parse(render(tpl('\nBody.\n', 'skills:\n  - vivera-tdd\n'))).developer_instructions;
       const line = inner.split('\n')[0];
-      expect(line).toContain('Load the `sucp-tdd-debug` skill if it is available to you');
+      expect(line).toContain('Load the `vivera-tdd` skill if it is available to you');
       expect(line).toContain('the user can also name it with a $ mention');
       expect(line).not.toContain('by naming it with a $ mention');
       expect(line).not.toMatch(/preload|automatic|harness loads|codex loads/i);
     });
 
     test('puts the skill line, the guard, and the body in that order, one blank line apart', () => {
-      const text = render(tpl('\nBody.\n', 'skills:\n  - sucp-tdd-debug\n'));
+      const text = render(tpl('\nBody.\n', 'skills:\n  - vivera-tdd\n'));
       const inner = Bun.TOML.parse(text).developer_instructions;
-      expect(inner).toBe(`${skillLine(['sucp-tdd-debug'], SKILL_HOW)}\n\n${proseGuard().paragraph}\n\nBody.\n`);
+      expect(inner).toBe(`${skillLine(['vivera-tdd'], SKILL_HOW)}\n\n${proseGuard().paragraph}\n\nBody.\n`);
     });
 
     test('leaves the skill line out when the template names no skill', () => {

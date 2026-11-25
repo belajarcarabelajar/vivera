@@ -4,7 +4,7 @@
 // installer payload, and a PATH made only of symlinks to a named tool list.
 //
 // Why a copy of the repo and not the repo itself: install.sh writes into its own
-// checkout (step 7 relinks skills/super-ultra-code-plan, step 8 sets
+// checkout (step 7 relinks skills/vivera, step 8 sets
 // core.hooksPath in that repo's git config). Running the real tree would change
 // the checkout under test, so the copy has no .git unless a test asks for one.
 //
@@ -43,7 +43,7 @@ export const INSTALL_PAYLOAD = [
   'mermaid.config.json',
   'mermaid.dark.config.json',
   'package.json',
-  'Super Ultra Code Plan Implementation.md',
+  'VIVERA.md',
 ];
 const OPTIONAL_PAYLOAD = new Set(['scripts/install', 'scripts/sprite-agents']);
 
@@ -96,7 +96,7 @@ function resolveReal(p) {
 // repo has one. Read from the sandbox repo so a test never hard-codes which phase has references.
 export function phaseEntries(repo) {
   const skills = path.join(repo, 'skills');
-  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('sucp-')).sort();
+  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('vivera-')).sort();
   return phases.flatMap((p) => [`${p}/SKILL.md`, ...(fs.existsSync(path.join(skills, p, 'references')) ? [`${p}/references`] : [])]);
 }
 

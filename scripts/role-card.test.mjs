@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROLES_DIR = path.join(ROOT, 'agents', 'roles');
-const PHASE_SKILLS = ['sucp-brainstorm', 'sucp-plan', 'sucp-tdd-debug', 'sucp-verify-deliver', 'sucp-debt-sweep', 'sucp-overnight'];
+const PHASE_SKILLS = ['vivera-brainstorm', 'vivera-plan', 'vivera-tdd', 'vivera-ship', 'vivera-sweep', 'vivera-overnight'];
 const CARD_LIMIT = 1500;
 
 const roleFiles = fs.readdirSync(ROLES_DIR).filter((f) => f.endsWith('.md')).sort();
@@ -68,10 +68,10 @@ describe('phase skill line 8', () => {
   for (const skill of PHASE_SKILLS) {
     const line = fs.readFileSync(path.join(ROOT, 'skills', skill, 'SKILL.md'), 'utf8').split('\n')[7];
 
-    test(`${skill} sends only the orchestrating agent to sucp-rules`, () => {
-      expect(line.startsWith('> Part of `super-ultra-code-plan`.')).toBe(true);
-      expect(line).not.toContain('Read `sucp-rules` too');
-      expect(line).toContain('The orchestrating agent reads `sucp-rules` too; a subagent follows the Rules card of its role instead.');
+    test(`${skill} sends only the orchestrating agent to vivera-rules`, () => {
+      expect(line.startsWith('> Part of `vivera`.')).toBe(true);
+      expect(line).not.toContain('Read `vivera-rules` too');
+      expect(line).toContain('The orchestrating agent reads `vivera-rules` too; a subagent follows the Rules card of its role instead.');
     });
   }
 });

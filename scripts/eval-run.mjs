@@ -47,7 +47,7 @@ import { RefusedError, generateFixtures, generateProblem, safeRelative } from '.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // EVAL_SCENARIO_TIMEOUT_S exists for the tests, which need a run killed in seconds.
 const RUN_TIMEOUT_S = Number(process.env.EVAL_SCENARIO_TIMEOUT_S) > 0 ? Number(process.env.EVAL_SCENARIO_TIMEOUT_S) : 300;
-const DEFAULT_INVOKE = 'super-ultra-code-plan';
+const DEFAULT_INVOKE = 'vivera';
 // One ceiling for every run: a per-scenario figure the model can see made it skip work to save money.
 const RUN_CEILING_USD = 2;
 const PERMISSION_MODES = new Set(['dontAsk', 'default', 'acceptEdits', 'plan']);

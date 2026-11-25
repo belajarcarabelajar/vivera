@@ -15,9 +15,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const SKILLS = '.agents/skills';
-const PKG = `${SKILLS}/super-ultra-code-plan`;
+const PKG = `${SKILLS}/vivera`;
 const STAMP = '20260101T000000Z';
 const MARKER = '.vivera-managed';
 
@@ -134,8 +134,8 @@ describe('F2 and F6: pruning a stale managed phase dir', () => {
   test('digest: a stale dir whose SKILL.md was edited is kept with a KEEP line, an untouched one is pruned', () => {
     const sb = sandbox();
     expect(sb.run(['--copy']).status).toBe(0);
-    const edited = stale(sb, 'sucp-edited', 'old text\nmy edit\n', 'old text\n');
-    const pristine = stale(sb, 'sucp-pristine', 'old text\n', 'old text\n');
+    const edited = stale(sb, 'vivera-edited', 'old text\nmy edit\n', 'old text\n');
+    const pristine = stale(sb, 'vivera-pristine', 'old text\n', 'old text\n');
     const r = sb.run(['--update', '--copy']);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(`[KEEP] ${edited} (modified copy of a skill this checkout no longer has)`);
@@ -149,11 +149,11 @@ describe('F2 and F6: pruning a stale managed phase dir', () => {
     test(`digest: a stale dir whose SKILL.md is a directory does not stop the prunes after it (${mode.join('') || 'link mode'})`, () => {
       const sb = sandbox();
       expect(sb.run(mode).status).toBe(0);
-      const odd = at(sb, `${SKILLS}/sucp-a`);
+      const odd = at(sb, `${SKILLS}/vivera-a`);
       fs.mkdirSync(`${odd}/SKILL.md`, { recursive: true });
       fs.writeFileSync(`${odd}/SKILL.md/inner.txt`, 'x');
       fs.writeFileSync(`${odd}/${MARKER}`, `source=${sb.repo}\n`);
-      const later = stale(sb, 'sucp-b', 'old text\n', 'old text\n');
+      const later = stale(sb, 'vivera-b', 'old text\n', 'old text\n');
       const r = sb.run(['--update', ...mode]);
       expect(r.status).toBe(0);
       expect(r.stdout).toContain(`[KEEP] ${odd} (modified copy of a skill this checkout no longer has)`);
@@ -176,7 +176,7 @@ describe('F2 and F6: pruning a stale managed phase dir', () => {
   })();
   test.skipIf(!holdsNewlineNames)('digest: a stale dir whose name holds a newline is skipped, and files in the working dir survive', () => {
     const sb = sandbox();
-    const odd = at(sb, `${SKILLS}/sucp-x\n..`);
+    const odd = at(sb, `${SKILLS}/vivera-x\n..`);
     fs.mkdirSync(odd, { recursive: true });
     fs.writeFileSync(`${odd}/SKILL.md`, 'old');
     fs.writeFileSync(`${odd}/${MARKER}`, `source=${sb.repo}\n`);
@@ -196,12 +196,12 @@ describe('F3: a copy that stopped early does not turn the installer own files in
   test('digest: a phase dir that is a file stops --copy with a message, and the re-run makes no backup', () => {
     const sb = sandbox();
     fs.mkdirSync(at(sb, SKILLS), { recursive: true });
-    fs.writeFileSync(at(sb, `${SKILLS}/sucp-rules`), 'a file where a dir belongs');
+    fs.writeFileSync(at(sb, `${SKILLS}/vivera-rules`), 'a file where a dir belongs');
     const first = sb.run(['--copy']);
     expect(first.status).toBe(1);
     expect(first.stderr).toContain('[FAIL]');
     expect(exists(sb, `${PKG}/SKILL.md`)).toBe(false);
-    fs.rmSync(at(sb, `${SKILLS}/sucp-rules`));
+    fs.rmSync(at(sb, `${SKILLS}/vivera-rules`));
     const again = sb.run(['--copy']);
     expect(again.status).toBe(0);
     expect(again.stdout).not.toContain('[BACKUP]');
@@ -268,11 +268,11 @@ describe('F8 and F9: honest completion and a clear failure', () => {
   test('digest: an entry left alone behind a symlinked dir is said in the last line, not "complete"', () => {
     const sb = sandbox();
     const other = path.join(sb.root, 'other');
-    fs.mkdirSync(path.join(other, 'super-ultra-code-plan'), { recursive: true });
-    fs.writeFileSync(path.join(other, 'super-ultra-code-plan/SKILL.md'), 'their file');
+    fs.mkdirSync(path.join(other, 'vivera'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'vivera/SKILL.md'), 'their file');
     fs.mkdirSync(at(sb, '.claude'), { recursive: true });
     fs.symlinkSync(other, at(sb, '.claude/skills'));
-    const pkg = at(sb, '.claude/skills/super-ultra-code-plan');
+    const pkg = at(sb, '.claude/skills/vivera');
     const r = sb.run([]);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(`[SKIP] ${pkg}/SKILL.md is reached through a symlinked directory; left alone`);
@@ -281,7 +281,7 @@ describe('F8 and F9: honest completion and a clear failure', () => {
     expect(r.stdout).not.toContain('Vivera farm planted');
     const last = r.stdout.trim().split('\n').pop();
     expect(last).toBe('==> Vivera finished with 1 entry left alone (see the [SKIP] lines above)');
-    expect(fs.readFileSync(path.join(other, 'super-ultra-code-plan/SKILL.md'), 'utf8')).toBe('their file');
+    expect(fs.readFileSync(path.join(other, 'vivera/SKILL.md'), 'utf8')).toBe('their file');
     expect(sb.run(['--check']).status).toBe(1);
   });
 

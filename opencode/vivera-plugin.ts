@@ -1,6 +1,6 @@
 // opencode/vivera-plugin.ts
 //
-// OpenCode half of the sucp rule "every passing claim names its evidence". The Claude Code half is the
+// OpenCode half of the Vivera rule "every passing claim names its evidence". The Claude Code half is the
 // Stop hook .claude/hooks/require-exit-code.mjs; both use its check(), so the patterns live in one file.
 //
 // How it works (read from the OpenCode 2.2.7 binary and measured in an isolated HOME, 2026-11-15):
@@ -12,7 +12,7 @@
 //
 // Difference from Claude Code: OpenCode cannot hold the message back, so the first answer stays
 // visible and the rewrite follows it. Only top-level, non-background sessions where the
-// super-ultra-code-plan skill is active are checked, mirroring the skill-scoped Stop hook.
+// vivera skill is active are checked, mirroring the skill-scoped Stop hook.
 // One nudge per assistant message, and never a nudge for the answer to a nudge (the Claude hook's
 // stop_hook_active). Every error lets the turn end untouched.
 //
@@ -27,7 +27,7 @@
 import { check } from "../.claude/hooks/require-exit-code.mjs"
 
 export const NUDGE_SOURCE = "vivera-exit-code"
-const SKILL = "super-ultra-code-plan"
+const SKILL = "vivera"
 
 type Item = { id?: string; type?: string; skill?: string; name?: string; text?: string; content?: { type?: string; text?: string }[]; metadata?: { source?: string } }
 type Input = { items: Item[]; session: { id?: string; parentID?: string } | null | undefined; background?: boolean; nudged: Set<string> }

@@ -7,7 +7,7 @@
 
 ---
 
-## Task Group: vivera repo (super-ultra-code-plan skill maintenance)
+## Task Group: vivera repo (vivera skill maintenance)
 
 | Topic | File | Rules |
 |---|---|---|

@@ -395,7 +395,7 @@ describe('install.ps1: the target table matches scripts/install/targets.sh', () 
       const rel = backslash(bashDirs[id] ?? '');
       expect({ id, rel, ok: row(id).includes(`Rel = '${rel}'`) }).toEqual({ id, rel, ok: true });
     }
-    expect(ps1).toContain('.gemini\\antigravity-cli\\builtin\\skills\\super-ultra-code-plan');
+    expect(ps1).toContain('.gemini\\antigravity-cli\\builtin\\skills\\vivera');
   });
 
   test('each target is detected by the same directories and CLIs, and the baseline targets always', () => {
@@ -437,13 +437,13 @@ describe('install.ps1: markers, backups, entries, tags, and exit codes match the
 
   test('the entries are the ones package_entries makes', () => {
     const entries = body(libSh, 'package_entries');
-    for (const name of ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'sucp-*']) {
+    for (const name of ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'vivera-*']) {
       expect({ name, bash: entries.includes(name) }).toEqual({ name, bash: true });
       expect({ name, ps1: code.includes(`'${name}'`) }).toEqual({ name, ps1: true });
     }
-    expect(code).toContain("'Super Ultra Code Plan Implementation.md'");
+    expect(code).toContain("'VIVERA.md'");
     expect(code).toContain("'skills'");
-    expect(targetsSh).toContain('Super Ultra Code Plan Implementation.md');
+    expect(targetsSh).toContain('VIVERA.md');
   });
 
   test('the check tags and summary lines are the bash ones', () => {

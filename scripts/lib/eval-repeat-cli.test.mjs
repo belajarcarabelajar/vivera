@@ -111,7 +111,7 @@ describe('eval-run --repeat and --confirm-flips', () => {
   test('an unconfirmed scenario is no regression against the baseline but still exits 1 like a skip', () => {
     const ctx = setup({ flaky: 'PFP' });
     const baseline = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'flaky', pass: true, invoke: 'super-ultra-code-plan' }] }));
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'flaky', pass: true, invoke: 'vivera' }] }));
     const r = run(ctx, '--baseline', baseline, '--repeat', '3', '--budget-usd', '2.2');
     expect(runs(ctx)).toEqual(['RUN flaky 1 cap=2.00', 'RUN flaky 2 cap=2.00']);
     expect([r.code, r.out.includes('regression'), r.out.includes('1 unconfirmed')]).toEqual([1, false, true]);
@@ -120,7 +120,7 @@ describe('eval-run --repeat and --confirm-flips', () => {
   test('a baseline majority pass that now fails twice is a regression printed with both rates', () => {
     const ctx = setup({ gate: 'FFP' });
     const baseline = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate', pass: true, invoke: 'super-ultra-code-plan' }] }));
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate', pass: true, invoke: 'vivera' }] }));
     const r = run(ctx, '--baseline', baseline, '--repeat', '1', '--confirm-flips', '2');
     expect(r.code).toBe(1);
     expect(runs(ctx)).toHaveLength(2);
@@ -130,7 +130,7 @@ describe('eval-run --repeat and --confirm-flips', () => {
   test('with a baseline, a single pass that flips a baseline fail is rerun and is no improvement', () => {
     const ctx = setup({ 'a-flip': 'PFF', 'b-new': 'FPP' });
     const baseline = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'a-flip', pass: false, invoke: 'super-ultra-code-plan' }] }));
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'a-flip', pass: false, invoke: 'vivera' }] }));
     const r = run(ctx, '--baseline', baseline, '--repeat', '1', '--confirm-flips', '2');
     expect(runs(ctx).map((l) => l.split(' ').slice(0, 3).join(' '))).toEqual(['RUN a-flip 1', 'RUN a-flip 2', 'RUN a-flip 3', 'RUN b-new 1', 'RUN b-new 2', 'RUN b-new 3']);
     expect([r.code, r.out.includes('improvement')]).toEqual([0, false]);
@@ -148,7 +148,7 @@ describe('eval-run --repeat and --confirm-flips', () => {
 describe('eval-run flaky scenarios and --no-early-stop', () => {
   const flakyBaseline = (ctx, pass_rate) => {
     const file = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(file, JSON.stringify({ scenarios: [{ id: 'wobbly', pass: true, invoke: 'super-ultra-code-plan', attempts: 5, pass_rate }] }));
+    fs.writeFileSync(file, JSON.stringify({ scenarios: [{ id: 'wobbly', pass: true, invoke: 'vivera', attempts: 5, pass_rate }] }));
     return file;
   };
 
@@ -202,7 +202,7 @@ describe('eval-run flaky scenarios and --no-early-stop', () => {
   test('a baseline entry that failed all five runs takes the normal path: one agreeing attempt, no flaky tally', () => {
     const ctx = setup({ dead: 'FFFFF' });
     const file = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(file, JSON.stringify({ scenarios: [{ id: 'dead', pass: false, invoke: 'super-ultra-code-plan', attempts: 5, pass_rate: 0 }] }));
+    fs.writeFileSync(file, JSON.stringify({ scenarios: [{ id: 'dead', pass: false, invoke: 'vivera', attempts: 5, pass_rate: 0 }] }));
     const r = run(ctx, '--baseline', file, '--repeat', '1', '--confirm-flips', '2');
     expect(runs(ctx)).toHaveLength(1);
     expect(report(ctx, 'dead').flaky).toBeUndefined();

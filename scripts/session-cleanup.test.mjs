@@ -359,7 +359,7 @@ describe('CLI', () => {
   });
 });
 
-// Claude Code's own worktrees (branch worktree-<name>) next to a sucp session worktree.
+// Claude Code's own worktrees (branch worktree-<name>) next to a vivera session worktree.
 function nativeFixture() {
   const f = fixture();
   const wtA = path.join(f.dir, 'repo-wt', 'a');

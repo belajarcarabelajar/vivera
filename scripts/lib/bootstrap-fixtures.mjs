@@ -206,7 +206,7 @@ export function expectUntouched(sb, dest) {
 
 export function expectInstalled(sb, dest) {
   const tree = path.join(dest, TAG);
-  const skill = path.join(sb.home, '.agents/skills/super-ultra-code-plan/SKILL.md');
+  const skill = path.join(sb.home, '.agents/skills/vivera/SKILL.md');
   expect(fs.lstatSync(skill).isSymbolicLink()).toBe(true);
   expect(fs.readlinkSync(skill).startsWith(`${tree}/`)).toBe(true);
   expect(fs.existsSync(skill)).toBe(true);

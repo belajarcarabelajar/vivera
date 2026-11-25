@@ -12,9 +12,13 @@ const ROOT = path.resolve(import.meta.dir, '..');
 const OLD = 'sucp|super[- ]ultra[- ]code[- ]plan';
 
 export const ALLOW = [
-  'scripts/install-legacy-names.test.mjs',
-  'scripts/install/targets.sh',
-  'scripts/install/windows-ops.ps1',
+  // History: rules that cite the plan that amended them, by its old plan ID.
+  'docs/memory/gates-and-tests.md',
+  'docs/memory/subagents.md',
+  'docs/memory/tools-and-environment.md',
+  'scripts/vivera-practice-contract.test.mjs',
+  // The one line that tells a reader the old names.
+  'README.md',
   'scripts/legacy-skill-names.test.mjs',
 ].sort();
 

@@ -15,12 +15,12 @@ target_ids() {
 target_skills_dir() {
   case "$1" in
     ai-config) echo "$HOME/.config/ai" ;;
-    agents) echo "$HOME/.agents/skills/super-ultra-code-plan" ;;
-    antigravity) echo "$HOME/.gemini/config/skills/super-ultra-code-plan" ;;
-    antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/super-ultra-code-plan" ;;
-    antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/super-ultra-code-plan" ;;
-    opencode) echo "$HOME/.config/opencode/skills/super-ultra-code-plan" ;;
-    claude) echo "$HOME/.claude/skills/super-ultra-code-plan" ;;
+    agents) echo "$HOME/.agents/skills/vivera" ;;
+    antigravity) echo "$HOME/.gemini/config/skills/vivera" ;;
+    antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/vivera" ;;
+    antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/vivera" ;;
+    opencode) echo "$HOME/.config/opencode/skills/vivera" ;;
+    claude) echo "$HOME/.claude/skills/vivera" ;;
     codex | cursor | copilot) echo "" ;;
     *) return 1 ;;
   esac
@@ -59,7 +59,7 @@ target_entries() {
   local dir
   dir="$(target_skills_dir "$id")"
   case "$(target_kind "$id")" in
-    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/Super Ultra Code Plan Implementation.md" ;;
+    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/VIVERA.md" ;;
     package) package_entries "$dir" ;;
     none) ;;
   esac
@@ -112,7 +112,7 @@ select_targets() {
 }
 
 # The phase-skill dirs of a package target that this checkout no longer has, one per line. A phase
-# skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness. Only a sucp-*
+# skill that left skills/ leaves its <skills dir>/vivera-<name>/ behind in every harness. Only a vivera-*
 # entry that is a real directory is considered, and only when it is the installer's own: it carries a
 # .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
 # ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
@@ -126,7 +126,7 @@ stale_phase_dirs() {
     return 0
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
-  for entry in "$parent"/sucp-*; do
+  for entry in "$parent"/vivera-*; do
     if [ ! -d "$entry" ] || [ -L "$entry" ]; then
       continue
     fi
@@ -155,7 +155,7 @@ stale_phase_dirs() {
   done
 }
 
-# One "[SKIP] <name>: unusual name" line for every sucp-* dir of a package target whose name holds a
+# One "[SKIP] <name>: unusual name" line for every vivera-* dir of a package target whose name holds a
 # newline or a tab: it is left alone, because nothing that reads names a line at a time can be trusted
 # with it.
 report_unusual_stale_names() {
@@ -165,7 +165,7 @@ report_unusual_stale_names() {
     return 0
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
-  for entry in "$parent"/sucp-*; do
+  for entry in "$parent"/vivera-*; do
     # Only a real directory is a phase dir, as in stale_phase_dirs: a file or a link of that name is not.
     if [ ! -d "$entry" ] || [ -L "$entry" ]; then
       continue
@@ -267,8 +267,8 @@ install_targets() {
 
   # Retired 2026-10-01: the vendored `use-tinyfish` skill is gone.
   #     TinyFish is now documented inline in the master skill
-  #     ("Super Ultra Code Plan Implementation.md", section
-  #     "Web Evidence & Retrieval — TinyFish"), so the whole super-ultra-code-plan
+  #     ("VIVERA.md", section
+  #     "Web Evidence & Retrieval — TinyFish"), so the whole vivera
   #     package carries the escalation ladder wherever it is deployed. A separate
   #     skill created drift: two sources of truth documenting different tool
   #     surfaces, and the CLI copy never described the MCP tools agents actually call.
@@ -281,7 +281,7 @@ install_targets() {
   #     empty dirs. They are symlinks into this repo, so removing the target breaks
   #     them without touching real content.
 
-  # Retired 2026-10-11: the `gemini-cli` target (~/.gemini/skills/super-ultra-code-plan, detected by a
+  # Retired 2026-10-11: the `gemini-cli` target (~/.gemini/skills/vivera, detected by a
   #     `gemini` on PATH) is gone. Google stopped serving Gemini CLI to free, AI Pro and Ultra accounts
   #     on 2026-06-18 and replaced it with Antigravity CLI (`agy`), which the antigravity-cli target
   #     already covers (~/.gemini/antigravity-cli/skills). Gemini CLI lives on only under a Code Assist
@@ -290,7 +290,7 @@ install_targets() {
   #     Revert: restore the four `gemini-cli` lines in this file and the row in install.ps1 from git
   #     history at the commit before this one, then re-run ./install.sh. Cleanup for an already-deployed
   #     copy: this installer no longer lists the link, so --uninstall and --check skip it; remove it by
-  #     hand with `rm -f` on the symlinks under ~/.gemini/skills/super-ultra-code-plan/ and `rmdir` the
+  #     hand with `rm -f` on the symlinks under ~/.gemini/skills/vivera/ and `rmdir` the
   #     empty dirs. They are symlinks into this repo, so removing them touches no real content.
 }
 
@@ -300,18 +300,18 @@ install_selfcheck() {
   if [ "${COPY_MODE:-false}" = true ]; then
     echo "[SKIP] internal repo links: copy mode"
   elif [ "$DRY_RUN" = true ]; then
-    echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/super-ultra-code-plan"
-    echo "[DRY-RUN]   - SKILL.md -> ../../Super Ultra Code Plan Implementation.md"
+    echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/vivera"
+    echo "[DRY-RUN]   - SKILL.md -> ../../VIVERA.md"
     echo "[DRY-RUN]   - templates -> ../../templates"
     echo "[DRY-RUN]   - examples -> ../../examples"
     echo "[DRY-RUN]   - mermaid.config.json -> ../../mermaid.config.json"
     echo "[DRY-RUN]   - mermaid.dark.config.json -> ../../mermaid.dark.config.json"
   else
-    local package_dir="$REPO_DIR/skills/super-ultra-code-plan"
+    local package_dir="$REPO_DIR/skills/vivera"
     local entry name relative_target
     # name|relative target, in the order the dry-run block above lists them.
     local internal_links=(
-      "SKILL.md|../../Super Ultra Code Plan Implementation.md"
+      "SKILL.md|../../VIVERA.md"
       "templates|../../templates"
       "examples|../../examples"
       "mermaid.config.json|../../mermaid.config.json"

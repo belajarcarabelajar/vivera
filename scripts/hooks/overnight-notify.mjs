@@ -1,7 +1,7 @@
 // scripts/hooks/overnight-notify.mjs
 //
 // Claude Code StopFailure and Notification (quota_auto_resume_*) hook. During
-// an unattended sucp-overnight run it sends the owner one Telegram line through
+// an unattended vivera-overnight run it sends the owner one Telegram line through
 // the telegram-ask bridge, so a run stopped by a rate limit, an outage, or a
 // stale quota auto-resume is seen before morning. Every other session stays
 // silent.
@@ -11,7 +11,7 @@
 // unreadable marker, notify non-zero, crash or timeout) become one ISO-stamped
 // line in <dir>/errors.log.
 //
-// Marker: <dir>/<session_id>, written by the sucp-overnight entry gate and
+// Marker: <dir>/<session_id>, written by the vivera-overnight entry gate and
 // removed when it closes the handoff with `bun <this file> --clear <session_id>`
 // (a plain rm under ~/.local/state is refused by the rm-tmp-guard hook on the
 // owner's machine; --clear exits 2 for an id that is not a plain token). Lines:

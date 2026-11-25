@@ -50,8 +50,8 @@ describe('runPlanCommand', () => {
   test('runner unset or empty: the command runs locally and the runner is never called', () => {
     const f = fakeRunner();
     for (const value of [undefined, '', '   ']) {
-      const env = { ...process.env, SUCP_REMOTE_RUNNER: value };
-      if (value === undefined) delete env.SUCP_REMOTE_RUNNER;
+      const env = { ...process.env, VIVERA_REMOTE_RUNNER: value };
+      if (value === undefined) delete env.VIVERA_REMOTE_RUNNER;
       const r = runPlanCommand(CMD, exec(f.dir, env), env);
       assert.equal(r.exit, 0);
       assert.equal(r.stdout, "it's ok\n");
@@ -61,7 +61,7 @@ describe('runPlanCommand', () => {
 
   test('runner set: the runner receives bash -c and the command unchanged, quotes and && included', () => {
     const f = fakeRunner();
-    const env = { ...process.env, SUCP_REMOTE_RUNNER: `${f.bin} --` };
+    const env = { ...process.env, VIVERA_REMOTE_RUNNER: `${f.bin} --` };
     const r = runPlanCommand(CMD, exec(f.dir, env), env);
     assert.deepEqual(f.calls(), [['--', 'bash', '-c', CMD]]);
     assert.equal(r.exit, 0);
@@ -70,7 +70,7 @@ describe('runPlanCommand', () => {
 
   test('runner exits with the fallback code: the command reruns locally once and that result is used', () => {
     const f = fakeRunner();
-    const env = { ...process.env, SUCP_REMOTE_RUNNER: f.bin, SUCP_REMOTE_RUNNER_FALLBACK_EXIT: '3', FAKE_RUNNER_EXIT: '3' };
+    const env = { ...process.env, VIVERA_REMOTE_RUNNER: f.bin, VIVERA_REMOTE_RUNNER_FALLBACK_EXIT: '3', FAKE_RUNNER_EXIT: '3' };
     const r = runPlanCommand('echo local >> ran.txt; exit 7', exec(f.dir, env), env);
     assert.equal(f.calls().length, 1);
     assert.equal(r.exit, 7);
@@ -79,7 +79,7 @@ describe('runPlanCommand', () => {
 
   test('runner fails with another code: that exit is returned and nothing runs locally', () => {
     const f = fakeRunner();
-    const env = { ...process.env, SUCP_REMOTE_RUNNER: f.bin, SUCP_REMOTE_RUNNER_FALLBACK_EXIT: '3', FAKE_RUNNER_EXIT: '5' };
+    const env = { ...process.env, VIVERA_REMOTE_RUNNER: f.bin, VIVERA_REMOTE_RUNNER_FALLBACK_EXIT: '3', FAKE_RUNNER_EXIT: '5' };
     const r = runPlanCommand('echo local >> ran.txt', exec(f.dir, env), env);
     assert.equal(r.exit, 5);
     assert.equal(existsSync(path.join(f.dir, 'ran.txt')), false);
@@ -87,7 +87,7 @@ describe('runPlanCommand', () => {
 
   test('fallback unset: the runner exit is returned even when it is the code a fallback would catch', () => {
     const f = fakeRunner();
-    const env = { ...process.env, SUCP_REMOTE_RUNNER: f.bin, FAKE_RUNNER_EXIT: '3' };
+    const env = { ...process.env, VIVERA_REMOTE_RUNNER: f.bin, FAKE_RUNNER_EXIT: '3' };
     const r = runPlanCommand('echo local >> ran.txt', exec(f.dir, env), env);
     assert.equal(r.exit, 3);
     assert.equal(existsSync(path.join(f.dir, 'ran.txt')), false);
@@ -95,17 +95,17 @@ describe('runPlanCommand', () => {
 });
 
 describe('ultra-plan-runner step execution', () => {
-  test('run() sends the step through SUCP_REMOTE_RUNNER when it is set', () => {
+  test('run() sends the step through VIVERA_REMOTE_RUNNER when it is set', () => {
     const f = fakeRunner();
-    const saved = process.env.SUCP_REMOTE_RUNNER;
-    process.env.SUCP_REMOTE_RUNNER = f.bin;
+    const saved = process.env.VIVERA_REMOTE_RUNNER;
+    process.env.VIVERA_REMOTE_RUNNER = f.bin;
     try {
       const r = run(`echo "a b" && echo 'c'`, 10000);
       assert.equal(r.exit, 0);
       assert.equal(r.stdout, 'a b\nc\n');
       assert.deepEqual(f.calls(), [['bash', '-c', `echo "a b" && echo 'c'`]]);
     } finally {
-      if (saved === undefined) delete process.env.SUCP_REMOTE_RUNNER; else process.env.SUCP_REMOTE_RUNNER = saved;
+      if (saved === undefined) delete process.env.VIVERA_REMOTE_RUNNER; else process.env.VIVERA_REMOTE_RUNNER = saved;
     }
   });
 });

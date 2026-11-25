@@ -87,7 +87,7 @@ function consumersOf(relFile, tracked) {
  * Most of these have no importer, which is exactly why an import-only scan
  * called them empty. Each one has a reader, and the reader is the blast radius:
  *
- *  - the master skill file is symlinked into `skills/super-ultra-code-plan/` and
+ *  - the master skill file is symlinked into `skills/vivera/` and
  *    is what an agent loads, so a task that edits it changes what every future
  *    session does
  *  - `snippets/*.md` are pushed into the Snipset database by `sync-snippets.mjs`
@@ -96,7 +96,7 @@ function consumersOf(relFile, tracked) {
  *  - the gate scripts themselves are run by `bun run ci`
  */
 function isGateOrConsumer(relFile) {
-  if (relFile === 'Super Ultra Code Plan Implementation.md') return true;
+  if (relFile === 'VIVERA.md') return true;
   if (relFile.startsWith('snippets/') || relFile.startsWith('templates/')) return true;
   if (relFile.startsWith('skills/')) return true;
   return [
@@ -146,7 +146,7 @@ function entryFor(relFile, consumers) {
   if (isGateOrConsumer(relFile)) {
     const reader = relFile.startsWith('snippets/') ? 'pushed to the Snipset database by sync-snippets.mjs and asserted by validate-skill.mjs'
       : relFile.startsWith('templates/') ? 'asserted by validate-skill.mjs and quoted by agents following the plan'
-      : relFile === 'Super Ultra Code Plan Implementation.md' ? 'symlinked as the skill an agent loads, so it decides what every future session does'
+      : relFile === 'VIVERA.md' ? 'symlinked as the skill an agent loads, so it decides what every future session does'
       : 'a gate, a published contract, or a manifest read by the pipeline';
     return `${surface} - no importer, but it has a reader: ${reader} - ${evidenceFor(relFile)}`;
   }

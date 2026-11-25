@@ -134,7 +134,7 @@ cd <repo> && bun <vivera>/scripts/check-design-tells.mjs --diff origin/main
 ```
 
 It exists because on 2026-10-16 the Snipset website still carried 31 decorative
-left stripes while the tell had been prose in `sucp-rules` all along: a 4px accent
+left stripes while the tell had been prose in `vivera-rules` all along: a 4px accent
 `border-left` on the closing CTA card of every solutions page (23 inline
 `style=""` attributes, EN and ID), on the compare page's TCO card, on every
 testimonial card (a 4px gradient `::before`), on two terminal demo boxes, and on

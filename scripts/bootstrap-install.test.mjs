@@ -164,7 +164,7 @@ describe('bootstrap: other refusals', () => {
     const { sb, base } = setup();
     const r = boot(sb, ['--ref', TAG, '--dest', 'rel-dest', ...MINIMAL], { base });
     expect(r.status).toBe(0);
-    const skill = path.join(sb.home, '.agents/skills/super-ultra-code-plan/SKILL.md');
+    const skill = path.join(sb.home, '.agents/skills/vivera/SKILL.md');
     expect(path.isAbsolute(fs.readlinkSync(skill))).toBe(true);
     // The script's working directory is HOME, and bash reports it by its physical path.
     expect(fs.readlinkSync(skill).startsWith(`${path.join(fs.realpathSync(sb.home), 'rel-dest', TAG)}/`)).toBe(true);

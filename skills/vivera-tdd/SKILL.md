@@ -1,0 +1,136 @@
+---
+name: vivera-tdd
+description: Phase skill for vivera Step 4 (test-driven development and systematic debugging). Covers the RED-GREEN-REFACTOR iron law and the bug isolation loop. Load only from vivera, before the first failing test or bug reproduction.
+---
+
+# TDD and Systematic Debugging
+
+> Part of `vivera`. The orchestrating agent reads `vivera-rules` too; a subagent follows the Rules card of its role instead. Next phase: `vivera-ship`.
+
+## 4️⃣ Test-Driven Development (Iron Law)
+> **Component 3: Test loop:** RED → GREEN → REFACTOR, repeated for each behavior, executed inside subagents (see Delegation & Execution for chunking, proportional fan-out, and the gather & synthesize loop).
+
+```
+NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
+```
+Code before test → delete, restart. No "reference", no "adapt", no exceptions, except the owner-requested test-later mode in 4.2.
+Cycle: RED (one minimal failing test) → verify fails for right reason → GREEN (minimal code to pass) → verify passes, no regressions → REFACTOR (clean up, stay green) → repeat.
+| Quality | Good | Bad |
+|---|---|---|
+| Minimal | One behavior per test | "and" in test name |
+| Clear | Name describes behavior | test('test1') |
+| Shows intent | Demonstrates desired API | Obscures intended behavior |
+Exceptions require explicit human approval, asked through the Confirmation Protocol (header `TDD waiver`): throwaway prototypes, generated code, documentation/configuration-only work, and visual-only changes. Every exception still needs an appropriate verification method. The owner-requested test-later mode (4.2) is approved through the `Design` or `Plan` gate instead.
+Red flags (stop, restart): code before test (outside 4.2), test passes immediately, can't explain failure, "just this once", "keep as reference", sunk-cost argument, "spirit not ritual" argument.
+
+- **Seams first.** Before the first RED test, list the seams under test, each with one line on what it catches and what it misses. The seams come from the approved Design or Spec, so this adds no gate; a seam found mid-task is recorded in the plan before its test is written.
+- **Public interfaces.** Tests drive behavior through public interfaces, so a refactor that keeps behavior keeps them green.
+- **Mock only at system boundaries:** external APIs, time, randomness, and sometimes the database or filesystem. Never mock your own modules. Inject boundary dependencies and give each external operation its own function, so each mock returns one shape without branching. This is a different rule from the Strict No-Mocking Invariant in `vivera-rules`, which is about the agent's own tool use (mock interfaces, fake tool outputs, or simulated MCP standing in for a real tool), not about test doubles at a boundary inside a test suite.
+- **Domain terms.** When the target repository has a `GLOSSARY.md`, test names use its terms.
+
+| Anti-pattern | Tell | Instead |
+|---|---|---|
+| Implementation-coupled | Mocks internal collaborators, tests private methods, or checks a side channel such as a direct database query; breaks on a refactor that keeps behavior | Assert through the public interface |
+| Tautological | Expected value is computed the way the code computes it, so the test cannot disagree | Take the expected value from an independent source of truth: a known-good literal, a worked example, or the spec |
+| Horizontal slicing | All tests first, then all code; the tests pin an imagined shape | Vertical slices: one RED, GREEN, REFACTOR cycle per behavior |
+
+```mermaid
+stateDiagram-v2
+    accTitle: Test-driven development cycle
+    accDescr: RED to GREEN to REFACTOR, looping back to RED when a test passes immediately or to GREEN when a regression appears, until every behavior is covered and verified.
+    [*] --> RED : Write one minimal failing test
+    RED --> RED : Test passes immediately? Rewrite — too weak
+    RED --> GREEN : Test fails for right reason
+    GREEN --> GREEN : Regressions? Fix before continuing
+    GREEN --> REFACTOR : All tests pass
+    REFACTOR --> RED : Next behavior — repeat cycle
+    REFACTOR --> [*] : All behaviors covered & verified
+
+    state RED {
+        direction LR
+        [*] --> WriteTest
+        WriteTest --> RunTest
+        RunTest --> ConfirmFail : Exit non-zero
+    }
+    state GREEN {
+        direction LR
+        [*] --> MinimalCode
+        MinimalCode --> RunAll
+        RunAll --> ConfirmPass : Exit 0, 0 regressions
+    }
+    state REFACTOR {
+        direction LR
+        [*] --> CleanUp
+        CleanUp --> RunAll2
+        RunAll2 --> StayGreen : Exit 0
+    }
+```
+
+## 4.1 Systematic Debugging (Iron Law of Bug Isolation)
+> **Diagnostic loop:** FEEDBACK LOOP → REPRODUCE → DIAGNOSE (RCA) → SMALLEST SAFE FIX → REGRESSION PROOF & CLEANUP.
+
+```
+NO BUG FIX WITHOUT A MINIMAL REPRODUCING FAILING TEST AND ROOT CAUSE ISOLATION
+```
+Shotgun debugging, speculative edits, and fixing symptoms without root cause isolation are strictly prohibited.
+Redact every secret in commands, output, and captured artifacts you show: write `<REDACTED>` in its place and keep credentials in environment variables.
+
+**Phase 0: Build the Feedback Loop.** This is where most of the debugging effort goes.
+```
+NO HYPOTHESIS WITHOUT A RED-CAPABLE FEEDBACK LOOP
+```
+- **Done when** you can name one command, already run once with its output shown, that is red-capable (it drives the real code path and asserts the user's exact symptom, so it goes red on this bug and green once fixed), deterministic, fast (seconds, not minutes), and agent-runnable without a human.
+- **Construction ladder**, try in this order:
+  1. A failing test at a seam that reaches the bug.
+  2. An HTTP script against a running dev server.
+  3. A CLI call on a fixture, with stdout diffed against a known-good snapshot.
+  4. A headless browser script asserting on DOM, console, or network.
+  5. A replayed captured trace (request, payload, or event log) run through the code path in isolation.
+  6. A throwaway harness that reaches the bug path through a minimal slice of the system.
+  7. A property or fuzz loop, for output that is only sometimes wrong.
+  8. A bisection harness between two known states, driven by `git bisect run`.
+  9. A differential loop: one input through two versions or two configs, outputs diffed.
+  10. A human-in-the-loop script, last resort, that still captures the output for the agent.
+- **Tighten the loop:** make it faster (cached setup, narrower scope), sharpen the signal (assert the exact symptom, not "did not crash"), and make it more deterministic (pinned time, seeded randomness, isolated filesystem and network).
+- **Non-deterministic bugs:** a clean repro is not the goal; raise the reproduction rate (loop the trigger, parallelise, add stress, narrow timing windows) until failures are frequent enough to debug.
+- **No loop possible:** stop, list what was tried, and ask through the Confirmation Protocol (header `Blocked`) for access to an environment that reproduces it, a redacted captured artifact, or permission for temporary instrumentation. Form no hypothesis meanwhile.
+
+1. Phase 1 — Reproduce Deterministically:
+   - Write a minimal failing test or deterministic reproducer command before touching production code.
+   - Confirm failure matches the reported bug symptoms exactly.
+   - Minimise: cut inputs, callers, config, and steps one at a time, rerunning the loop after each cut, until every remaining element is load-bearing (removing any one turns the loop green).
+2. Phase 2 — Diagnose & Isolate Root Cause:
+   - Before testing any idea, write 3 to 5 ranked, falsifiable hypotheses, each with its prediction ("if X is the cause, changing Y makes the bug vanish"). A hypothesis without a prediction is sharpened or dropped.
+   - Show the ranked list in chat and keep working; the user may re-rank it, but it is not a question-tool gate.
+   - Probe one variable at a time, each probe tied to one prediction: debugger first, then targeted logs at the boundaries that separate hypotheses. Tag every debug log with a unique `[DEBUG-xxxx]` prefix.
+   - For a performance regression, measure a baseline before bisecting (timing harness, profiler, query plan).
+   - Hypothesis subagents (`bold`) are dispatched only after Phase 0 has a red-capable command, and each one receives that command.
+   - Trace call stack, state transitions, and variable boundaries to identify the exact flaw.
+   - Articulate the root cause clearly: what invariant was violated and why.
+3. Phase 3 — Smallest Safe Localized Fix:
+   - Apply the most focused, surgical patch that eliminates the root cause.
+   - Strictly avoid unsolicited refactoring, cleanup of adjacent code, or changing unrelated interfaces.
+   - Write the regression test before the fix, at a correct seam: one that exercises the bug pattern as it occurs at the real call site. A seam too shallow to show the bug gives false confidence, and no correct seam is itself a finding, recorded for the debt sweep. Fixing without a regression test is a TDD exception, asked through the `TDD waiver` gate; the Phase 0 loop then stands as the proof of the fix.
+   - A red forced by mutating code or a fixture counts only after a diff against a pristine copy proves the mutation landed.
+   - **Spiral stop.** Three fix attempts in a row that leave the Phase 0 command failing the same way end the fix loop. Count your own attempts and the attempts the user made and reported before the session. A fourth patch to the same spot is shotgun debugging. Write down the belief the three attempts had in common; it is usually that the loop runs the code being edited, when it actually loads another module, a build output, a cache, a config, or a pinned version. Check that belief with a probe that changes no product code, such as printing which file the loop resolves. A probe that breaks the belief sends you back to Phase 1 to correct the reproducer before the next fix. A belief no probe can reach, because the failure only happens where the agent cannot run anything, is the No loop possible case of Phase 0.
+4. Phase 4 — Regression Proof & Verification:
+   - Run the reproduction test to prove GREEN status.
+   - Execute the targeted test suite to confirm 0 regressions across existing functionality.
+   - Re-run the Phase 0 loop on the original, unminimised scenario.
+   - Clean up: grep the files the diff touches for the session's own tag (`[DEBUG-a4f2]`, never the bare prefix, which also matches this skill and the log template) and reach zero hits, then move a throwaway harness under `docs/code-plan/spikes/<spike-id>/` or delete it.
+   - The confirmed hypothesis goes into the commit message or the PR body, so the reason for the fix outlives the session.
+
+
+## 4.2 Test-Later Mode (feature work, owner's request only)
+> **Order:** CODE → BUILD AND SHOW → MANUAL CHECK → TESTS FROM THE OWNER'S NOTES → RED AGAINST THE BASE → Step 5 unchanged.
+
+The owner sometimes wants to see the result (a render, a preview, a build, a CLI run) and judge it by hand before any test exists. This mode moves the tests to the end of the change. It never removes them: the pull request is not opened, and never merged, before they pass.
+
+- **Trigger.** Only the owner's own words ("kilat", "test belakangan", "test later", "lihat hasilnya dulu"). The agent never picks this mode itself, not even to save time. The design shown at the `Design` gate (or the plan at the `Plan` gate) carries a line `Mode: test-later`, and the plan file, when there is one, carries the same line. Approving that gate approves the mode; no `TDD waiver` is asked.
+- **Scope.** Feature work on the Bounded or Architectural path. Not a bug fix (4.1 already starts from a reproduction), and not an overnight run (`vivera-overnight` refuses the plan): with nobody to do the manual check, the mode has no gate.
+- **1. Code.** Implement the approved checklist without RED/GREEN cycles. Each implementer contract says `Mode: test-later`, so the implementer card's test-first line yields to it. Fan-out, the parent diff audit, and git ownership in `vivera-rules` are unchanged.
+- **2. Build and show.** Run the build, render, preview, or deploy-preview command the repository declares, and show the artifact in chat: a screenshot, a preview URL, the rendered file, or the command output. Never only the command that produced it.
+- **3. Manual check.** Ask through the Confirmation Protocol (header `Manual check`). Each thing the owner reports, right or wrong, becomes a numbered acceptance criterion (`MC1`, `MC2`, ...) in the owner's words: under `## Manual check` in the plan, or in the chat checklist and the PR body when the work has no plan file. A wrong result loops back to step 1 and is shown again.
+- **4. Tests from the notes.** Write one test per `MC` item through the public interface, in test files separate from the implementation, with the expected value taken from the owner's observation, never read back from the code (the Tautological anti-pattern in section 4). An `MC` item no test can reach (a pure look-and-feel judgment) stays as manual evidence and is named in the PR body.
+- **5. RED against the base (parent only, no subagent edits in flight).** Never `git stash`: the stash is shared by every worktree of the repository. Create a detached scratch worktree (a throwaway under `/tmp`, not a session worktree) at the session's base commit: `git worktree add --detach /tmp/<session>-red <base-sha>`. Link in the gitignored dependencies the tests need (`node_modules` and whatever the repository's own rules list), and copy in the new test files and any fixture or helper they read. Run them there. Each new test must fail at its assertion, and the run must report at least one test; an older test in a file the change extended is expected to pass and is not counted. A failure to import a module the change creates proves the module is new, not the behavior: for those tests, break the behavior in a scratch copy of the implementation instead, one mutation per `MC` item, and diff it against the pristine copy so the mutation is proven to have landed (4.1, Phase 3). A missing dependency or fixture is a broken setup, not a red: fix the setup and rerun. A test that passes against the base is too weak: rewrite it. Then run the same tests in the session worktree (green), remove each link by absolute path, and `git worktree remove --force /tmp/<session>-red`.
+- **Delivery.** Step 5 is unchanged. The PR body lists the `MC` items, the test for each, and the red run against the base with its exit codes. "Tests in a follow-up" is not this mode: the tests are part of this pull request.

@@ -4,20 +4,20 @@ import { decideNudge, NUDGE_SOURCE } from "../opencode/vivera-plugin.ts";
 import plugin from "../opencode/vivera-plugin.ts";
 import { REASON } from "../.claude/hooks/require-exit-code.mjs";
 
-const skill = { id: "s1", type: "skill", skill: "super-ultra-code-plan", name: "super-ultra-code-plan", text: "..." };
+const skill = { id: "s1", type: "skill", skill: "vivera", name: "vivera", text: "..." };
 const user = { id: "u1", type: "user", text: "run the tests" };
 const assistant = (id, text) => ({ id, type: "assistant", content: [{ type: "text", text }] });
 const claim = assistant("a1", "Done. 12 tests pass, 0 fail.");
 const base = { session: { id: "ses1" }, background: false, nudged: new Set() };
 
 describe("decideNudge", () => {
-  test("nudges a pass claim without an exit code in a sucp session", () => {
+  test("nudges a pass claim without an exit code in a vivera session", () => {
     expect(decideNudge({ ...base, items: [skill, user, claim] })).toEqual({ messageID: "a1", reason: REASON });
   });
   test("lets a pass claim with exit 0 through", () => {
     expect(decideNudge({ ...base, items: [skill, user, assistant("a1", "bun test exit 0, 12 pass, 0 fail")] })).toBeNull();
   });
-  test("ignores a session where the sucp skill is not active", () => {
+  test("ignores a session where the vivera skill is not active", () => {
     expect(decideNudge({ ...base, items: [user, claim] })).toBeNull();
   });
   test("ignores a child session", () => {

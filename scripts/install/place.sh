@@ -367,7 +367,7 @@ place_entry() {
   fi
 }
 
-# Links inside this repo's own skills/super-ultra-code-plan use relative targets so a moved
+# Links inside this repo's own skills/vivera use relative targets so a moved
 # checkout keeps working. Nothing there is the user's, so there is no backup: skip when already
 # right, otherwise replace.
 place_repo_link() {
@@ -417,7 +417,7 @@ link_skill_package() {
     if [ "${COPY_MODE:-false}" = true ]; then
       echo "[DRY-RUN] Would copy the skill package into: $target_skill_dir"
       echo "[DRY-RUN]   - SKILL.md, templates, examples, the mermaid configs and the exit-code hook, each with a .vivera-managed marker"
-      echo "[DRY-RUN]   - phase skills -> $sibling_dir/sucp-*/SKILL.md"
+      echo "[DRY-RUN]   - phase skills -> $sibling_dir/vivera-*/SKILL.md"
     else
       echo "[DRY-RUN] Would configure skill package in: $target_skill_dir"
       echo "[DRY-RUN]   - SKILL.md -> $MASTER_FILE"
@@ -426,7 +426,7 @@ link_skill_package() {
       echo "[DRY-RUN]   - mermaid.config.json -> $REPO_DIR/mermaid.config.json"
       echo "[DRY-RUN]   - mermaid.dark.config.json -> $REPO_DIR/mermaid.dark.config.json"
       echo "[DRY-RUN]   - require-exit-code.mjs -> $REPO_DIR/.claude/hooks/require-exit-code.mjs"
-      echo "[DRY-RUN]   - phase skills -> $sibling_dir/sucp-*/SKILL.md"
+      echo "[DRY-RUN]   - phase skills -> $sibling_dir/vivera-*/SKILL.md"
     fi
   fi
 

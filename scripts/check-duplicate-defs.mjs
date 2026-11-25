@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // scripts/check-duplicate-defs.mjs
 //
-// Rung 2 of the Simplicity Ladder (skills/sucp-rules/SKILL.md, "Codebase reuse")
+// Rung 2 of the Simplicity Ladder (skills/vivera-rules/SKILL.md, "Codebase reuse")
 // says to reuse a helper that already lives in the repository before writing a new
 // one. That rung is prose, and the debt sweep finds duplicate helpers by hand. This
 // gate turns the mechanical part of it into a check at the diff: a top-level

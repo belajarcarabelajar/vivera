@@ -306,7 +306,7 @@ managed_state() {
 
 # True when <dest> is a file of this checkout itself: its directory, with every symlink resolved, is
 # the repo or lies under it. That happens when a harness dir is a symlink into the repo (for example
-# ~/.claude/skills/sucp-rules -> <repo>/skills/sucp-rules), and then the "destination" is the source.
+# ~/.claude/skills/vivera-rules -> <repo>/skills/vivera-rules), and then the "destination" is the source.
 # A directory that does not exist is not inside anything.
 dest_in_repo() {
   local dest="$1"
@@ -379,13 +379,13 @@ classify_link() {
   esac
   # The items the old ai-skills repo linked, and nothing else under that name.
   case "$target" in
-    */ai-skills/"Super Ultra Code Plan Implementation.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
+    */ai-skills/"VIVERA.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
       echo "ours-stale"
       return 0
       ;;
   esac
   case "$resolved" in
-    */ai-skills/"Super Ultra Code Plan Implementation.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
+    */ai-skills/"VIVERA.md" | */ai-skills/skills/* | */ai-skills/templates | */ai-skills/examples | */ai-skills/mermaid.config.json | */ai-skills/mermaid.dark.config.json)
       echo "ours-stale"
       return 0
       ;;
@@ -476,7 +476,7 @@ package_entries() {
   printf '%s\t%s\n' "$MASTER_FILE" "$dir/SKILL.md"
   # Phase skills are siblings of the orchestrator, so each harness discovers
   # them by name and the orchestrator can load them with the skill tool.
-  for phase_dir in "$REPO_DIR"/skills/sucp-*; do
+  for phase_dir in "$REPO_DIR"/skills/vivera-*; do
     phase_name="$(basename "$phase_dir")"
     printf '%s\t%s\n' "$phase_dir/SKILL.md" "$sibling_dir/$phase_name/SKILL.md"
     if [ -d "$phase_dir/references" ]; then

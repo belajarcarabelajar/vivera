@@ -13,7 +13,7 @@ import { makeSandbox } from './lib/install-sandbox.mjs';
 import { parseTierTable, requiredAt, TIERS } from './lib/prereq.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const SKIP_SPRITES = '[SKIP] sprite agents: tier minimal needs no bun';
 const SKIP_HOOKS = '[SKIP] git hooks: tier minimal needs no git';
 const rows = parseTierTable(fs.readFileSync(path.join(WORKTREE, 'scripts/install/tiers.tsv'), 'utf8'));
@@ -41,8 +41,8 @@ test('tier: minimal with no git and no bun links the skills but skips sprites an
   expect(r.stdout).toContain(SKIP_SPRITES);
   expect(r.stdout).toContain(SKIP_HOOKS);
   expect(isLink(sb, `.config/ai/${MASTER}`)).toBe(true);
-  expect(isLink(sb, '.agents/skills/super-ultra-code-plan/SKILL.md')).toBe(true);
-  expect(isLink(sb, '.claude/skills/super-ultra-code-plan/SKILL.md')).toBe(true);
+  expect(isLink(sb, '.agents/skills/vivera/SKILL.md')).toBe(true);
+  expect(isLink(sb, '.claude/skills/vivera/SKILL.md')).toBe(true);
   expect(fs.existsSync(path.join(sb.home, '.config/opencode/agents'))).toBe(false);
   expect(fs.existsSync(path.join(sb.home, '.claude/agents'))).toBe(false);
 });

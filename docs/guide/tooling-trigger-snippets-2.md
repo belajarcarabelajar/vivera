@@ -14,7 +14,7 @@ contaminating the others. The PR delivery variant adds derived isolation, parent
 the PR body contract (`--body-file`), and topological batch merge. The PR review variant enforces
 line-anchored review contracts and gates merging behind green local checks and a `correct` verdict.
 
-All 16 snippets (six entry points and ten command snippets) carry one identical `CONFIRMATIONS:` paragraph right after the `PROGRESS METER:` paragraph, because a session started from a snippet never loads `sucp-rules`, and a test in [`scripts/sync-snippets.test.mjs`](../../scripts/sync-snippets.test.mjs) fails if one is missing, duplicated, or drifts. The Snipset database copy only catches up when the user runs `bun run snippets:push`.
+All 16 snippets (six entry points and ten command snippets) carry one identical `CONFIRMATIONS:` paragraph right after the `PROGRESS METER:` paragraph, because a session started from a snippet never loads `vivera-rules`, and a test in [`scripts/sync-snippets.test.mjs`](../../scripts/sync-snippets.test.mjs) fails if one is missing, duplicated, or drifts. The Snipset database copy only catches up when the user runs `bun run snippets:push`.
 
 ## Keeping the database in sync
 

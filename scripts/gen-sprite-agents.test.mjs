@@ -12,7 +12,7 @@ const TEMPLATE = [
   '---',
   'description: Implements one chunk of an approved plan, test first.',
   'skills:',
-  '  - sucp-tdd-debug',
+  '  - vivera-tdd',
   'maxTurns: 40',
   'hooks:',
   '  PreToolUse:',
@@ -72,7 +72,7 @@ describe('renderAgent', () => {
     expect(fm.name).toBe(' chef ');
     expect(fm.color).toBe('red');
     expect(fm.description).toBe('Chef, a Harvest Sprite on the implementer crew. Implements one chunk of an approved plan, test first.');
-    expect(fm.skills).toEqual(['sucp-tdd-debug']);
+    expect(fm.skills).toEqual(['vivera-tdd']);
     expect(fm.maxTurns).toBe(40);
   });
 
@@ -198,7 +198,7 @@ describe('renderOpenCodeAgent', () => {
 
   test('tells the agent to load its phase skill, since OpenCode has no skill preload', () => {
     const out = renderOpenCodeAgent(TEMPLATE, chef);
-    expect(out).toContain('Load the `sucp-tdd-debug` skill');
+    expect(out).toContain('Load the `vivera-tdd` skill');
     expect(out.endsWith('You own exactly one chunk.\n')).toBe(true);
   });
 

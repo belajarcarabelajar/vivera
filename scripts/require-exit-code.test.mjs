@@ -12,7 +12,7 @@ import { check } from "../.claude/hooks/require-exit-code.mjs";
 
 const ROOT = path.join(import.meta.dir, "..");
 const HOOK = path.join(ROOT, ".claude", "hooks", "require-exit-code.mjs");
-const MASTER = path.join(ROOT, "Super Ultra Code Plan Implementation.md");
+const MASTER = path.join(ROOT, "VIVERA.md");
 
 // The final message of a failing evidence-exit-code-cited run: pass counts, no exit code.
 const OBSERVED_FAIL = "Done. Added `multiply(a, b)` to math.mjs with a test in math.test.mjs. `bun test`: 4 passed, 0 failed.";
@@ -114,7 +114,7 @@ describe("orchestrator frontmatter", () => {
 
   const scratch = () => fs.mkdtempSync(path.join(os.tmpdir(), "require-exit-code-"));
   const install = (skillsDir) => {
-    const dir = path.join(skillsDir, "super-ultra-code-plan");
+    const dir = path.join(skillsDir, "vivera");
     fs.mkdirSync(dir, { recursive: true });
     fs.copyFileSync(HOOK, path.join(dir, "require-exit-code.mjs"));
   };

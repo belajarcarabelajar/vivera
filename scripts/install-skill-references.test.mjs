@@ -13,9 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { makeSandbox } from './lib/install-sandbox.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const REF_TEXT = 'reference fixture\n';
-const PHASE_REL = '.agents/skills/sucp-rules';
+const PHASE_REL = '.agents/skills/vivera-rules';
 
 const put = (file, text) => {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -30,7 +30,7 @@ afterEach(() => {
 function shSandbox() {
   const sb = makeSandbox({ tools: ['git', 'bun'] });
   open.push(sb);
-  put(path.join(sb.repo, 'skills', 'sucp-rules', 'references', '01-x.md'), REF_TEXT);
+  put(path.join(sb.repo, 'skills', 'vivera-rules', 'references', '01-x.md'), REF_TEXT);
   return sb;
 }
 
@@ -85,9 +85,9 @@ function psFixture() {
   const chk = path.join(base, 'chk');
   const home = path.join(base, 'h');
   put(path.join(chk, MASTER), 'master\n');
-  put(path.join(chk, 'skills', 'sucp-a', 'SKILL.md'), 'skill a\n');
-  put(path.join(chk, 'skills', 'sucp-a', 'references', '01-x.md'), REF_TEXT);
-  put(path.join(chk, 'skills', 'sucp-b', 'SKILL.md'), 'skill b\n');
+  put(path.join(chk, 'skills', 'vivera-a', 'SKILL.md'), 'skill a\n');
+  put(path.join(chk, 'skills', 'vivera-a', 'references', '01-x.md'), REF_TEXT);
+  put(path.join(chk, 'skills', 'vivera-b', 'SKILL.md'), 'skill b\n');
   put(path.join(chk, 'templates', 't.md'), 'template\n');
   put(path.join(chk, 'examples', 'e.md'), 'example\n');
   put(path.join(chk, 'mermaid.config.json'), '{}\n');
@@ -115,10 +115,10 @@ describe.skipIf(!shell)('install.ps1 ships a phase skill references/ directory',
     const fx = psFixture();
     const inst = psRun(fx, []);
     expect({ code: inst.code, err: inst.err }).toEqual({ code: 0, err: '' });
-    const placed = path.join(fx.skills, 'sucp-a', 'references', '01-x.md');
+    const placed = path.join(fx.skills, 'vivera-a', 'references', '01-x.md');
     expect(fs.existsSync(placed)).toBe(true);
     expect(fs.readFileSync(placed, 'utf8')).toBe(REF_TEXT);
-    expect(fs.existsSync(path.join(fx.skills, 'sucp-b', 'references'))).toBe(false);
+    expect(fs.existsSync(path.join(fx.skills, 'vivera-b', 'references'))).toBe(false);
     const chk = psRun(fx, ['-Check']);
     expect({ code: chk.code, err: chk.err }).toEqual({ code: 0, err: '' });
     expect(chk.out).toContain('check: CURRENT');

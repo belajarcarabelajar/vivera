@@ -30,7 +30,7 @@ done
   echo "ENV memory=$CLAUDE_CODE_DISABLE_AUTO_MEMORY mcp=$ENABLE_CLAUDEAI_MCP_SERVERS"
   echo "TMPDIR $TMPDIR"
   env | cut -d= -f1 | sort | sed 's/^/ENVKEY /'
-  echo "SKILL $(ls .claude/skills/sucp-rules/SKILL.md 2>/dev/null)"
+  echo "SKILL $(ls .claude/skills/vivera-rules/SKILL.md 2>/dev/null)"
   echo "AGENTS $(ls .claude/agents | wc -l)"
   echo "COMMITS $(git log --format=%an:%ae | tr '\\n' ' ')"
 } >> "$log"
@@ -95,7 +95,7 @@ function run(ctx, ...args) {
 }
 
 const stubLog = (ctx) => (fs.existsSync(ctx.log) ? fs.readFileSync(ctx.log, 'utf8') : '');
-const SUCP = 'super-ultra-code-plan';
+const MASTER = 'vivera';
 const promptArg = (ctx) => stubLog(ctx).match(/^ARG -p\nARG (.*)$/m)?.[1];
 const argLines = (...args) => args.map((a) => `ARG ${a}`).join('\n');
 const DEFAULT_ALLOWED = 'Read,Edit,Write,Glob,Grep,Agent,Skill,TodoWrite,Bash(bun test*),Bash(bun add *),Bash(bun install*),'
@@ -146,13 +146,13 @@ describe('eval-run', () => {
     expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
     const log = stubLog(ctx);
     expect(log).toContain(argLines(
-      '-p', '/super-ultra-code-plan ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
+      '-p', '/vivera ask', '--output-format', 'stream-json', '--verbose', '--max-turns', '6', '--permission-mode', 'dontAsk',
       '--allowedTools', [DEFAULT_ALLOWED, ...['add', 'commit', 'status', 'diff', 'log', 'show', 'switch', 'branch', 'rev-parse']
         .map((sub) => `Bash(git -C ${cwdOf(ctx)} ${sub}*)`)].join(','), '--disallowedTools', DISALLOWED,
       '--append-system-prompt', EVAL_NOTE, '--no-session-persistence', '--max-budget-usd', '2.00', '--setting-sources', 'project,local',
     ));
     expect(log).toContain('ENV memory=1 mcp=false');
-    expect(log).toContain('SKILL .claude/skills/sucp-rules/SKILL.md');
+    expect(log).toContain('SKILL .claude/skills/vivera-rules/SKILL.md');
     expect(log).toMatch(/AGENTS\s+[1-9]/);
     expect(log).toContain('COMMITS eval:eval@local');
   });
@@ -227,7 +227,7 @@ describe('eval-run', () => {
       { id: 'gate-a', prompt: 'ask', assertions: GATE },
     ]);
     const baseline = path.join(ctx.root, 'base.json');
-    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate-w', pass: true, invoke: SUCP }, { id: 'gate-a', pass: false, invoke: SUCP }] }));
+    fs.writeFileSync(baseline, JSON.stringify({ scenarios: [{ id: 'gate-w', pass: true, invoke: MASTER }, { id: 'gate-a', pass: false, invoke: MASTER }] }));
     const r = run(ctx, '--only', 'gate-w,gate-a', '--baseline', baseline, '--out', path.join(ctx.root, 'o.json'));
     expect(r.code).toBe(1);
     expect(r.out).toMatch(/regression: gate-w/i);
@@ -296,12 +296,12 @@ describe('eval-run', () => {
     const ctx = setup([{ id: 'gate-a', prompt: 'ask', assertions: GATE }]);
     const out = path.join(ctx.root, 'o.json');
     expect(run(ctx, '--out', out).code).toBe(0);
-    expect(promptArg(ctx)).toBe(`/${SUCP} ask`);
-    expect(JSON.parse(fs.readFileSync(out, 'utf8')).scenarios[0].invoke).toBe(SUCP);
+    expect(promptArg(ctx)).toBe(`/${MASTER} ask`);
+    expect(JSON.parse(fs.readFileSync(out, 'utf8')).scenarios[0].invoke).toBe(MASTER);
   });
 
   test('a scenario invoke names another skill, or false for a bare prompt', () => {
-    for (const [invoke, prompt] of [['sucp-rules', '/sucp-rules ask'], [false, 'ask']]) {
+    for (const [invoke, prompt] of [['vivera-rules', '/vivera-rules ask'], [false, 'ask']]) {
       const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke, assertions: GATE }]);
       expect(run(ctx, '--out', path.join(ctx.root, 'o.json')).code).toBe(0);
       expect(promptArg(ctx)).toBe(prompt);
@@ -309,7 +309,7 @@ describe('eval-run', () => {
   });
 
   test('--no-invoke sends every prompt bare and records invoke false', () => {
-    const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke: 'sucp-rules', assertions: GATE }]);
+    const ctx = setup([{ id: 'gate-a', prompt: 'ask', invoke: 'vivera-rules', assertions: GATE }]);
     const out = path.join(ctx.root, 'o.json');
     expect(run(ctx, '--no-invoke', '--out', out).code).toBe(0);
     expect(promptArg(ctx)).toBe('ask');

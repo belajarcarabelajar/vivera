@@ -4,13 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // A skill that asks a gate names its header (header `Design`). The gate
-// catalog in sucp-rules reference 07 is the one place that fixes the options
+// catalog in vivera-rules reference 07 is the one place that fixes the options
 // and the basis of each gate, so a header named in a skill with no catalog
 // row is a gate the agent has to invent the options for.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKILLS = path.join(ROOT, 'skills');
-const CATALOG = path.join(SKILLS, 'sucp-rules', 'references', '07-completion-confirmation.md');
+const CATALOG = path.join(SKILLS, 'vivera-rules', 'references', '07-completion-confirmation.md');
 
 function markdownFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {

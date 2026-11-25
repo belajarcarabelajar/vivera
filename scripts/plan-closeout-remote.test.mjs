@@ -1,6 +1,6 @@
 // scripts/plan-closeout-remote.test.mjs
 //
-// `plan-closeout --readiness` sends each task's skip_if through SUCP_REMOTE_RUNNER
+// `plan-closeout --readiness` sends each task's skip_if through VIVERA_REMOTE_RUNNER
 // (scripts/lib/remote-runner.mjs) when it is set. Split from plan-closeout.test.mjs,
 // which sits at its size ceiling.
 
@@ -15,7 +15,7 @@ const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-clo
 const dirs = [];
 afterEach(() => { while (dirs.length) rmSync(dirs.pop(), { recursive: true, force: true }); });
 
-test('readiness CLI: SUCP_REMOTE_RUNNER receives skip_if as bash -c <cmd>', () => {
+test('readiness CLI: VIVERA_REMOTE_RUNNER receives skip_if as bash -c <cmd>', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'plan-closeout-cli-'));
   dirs.push(root);
   const runner = path.join(root, 'fake-runner');
@@ -27,7 +27,7 @@ test('readiness CLI: SUCP_REMOTE_RUNNER receives skip_if as bash -c <cmd>', () =
     '  - id: T1', '    depends_on: []', '    skip_if: "test -d . && echo \'ok\'"', '---', '',
   ].join('\n'));
   const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], {
-    stdout: 'pipe', stderr: 'pipe', env: { ...process.env, SUCP_REMOTE_RUNNER: runner },
+    stdout: 'pipe', stderr: 'pipe', env: { ...process.env, VIVERA_REMOTE_RUNNER: runner },
   });
   assert.match(r.stdout.toString(), /^T1\tDONE\t/);
   assert.equal(readFileSync(path.join(root, 'runner-args'), 'utf8'), "bash\n-c\ntest -d . && echo 'ok'\n");

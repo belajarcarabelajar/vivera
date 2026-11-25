@@ -205,7 +205,7 @@ function Get-StalePhaseDirs($T) {
     if ($T.Kind -ne 'package') { return }
     $parent = Get-ParentDir (Join-Rel $HomeDir $T.Rel)
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { return }
-    foreach ($d in @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'sucp-*' -Force)) {
+    foreach ($d in @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'vivera-*' -Force)) {
         if (Test-Reparse $d) { continue }
         if (Test-Path -LiteralPath (Join-Path (Join-Path $RepoDir 'skills') $d.Name)) { continue }
         if (Test-InsideCheckout (Join-Path $d.FullName 'SKILL.md')) { continue }

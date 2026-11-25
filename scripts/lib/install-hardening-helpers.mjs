@@ -12,9 +12,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertSandbox, makeSandbox } from './install-sandbox.mjs';
 
-export const MASTER = 'Super Ultra Code Plan Implementation.md';
+export const MASTER = 'VIVERA.md';
 export const STAMP = '20260101T000000Z';
-export const PKG = '.agents/skills/super-ultra-code-plan';
+export const PKG = '.agents/skills/vivera';
 export const AGENTS = '.agents/skills';
 export const BUILTIN = '.gemini/antigravity-cli/builtin/skills';
 
@@ -37,7 +37,7 @@ export const link = (sb, target, rel) => {
   fs.symlinkSync(target, at(sb, rel));
 };
 export const isLink = (sb, rel) => fs.lstatSync(at(sb, rel), { throwIfNoEntry: false })?.isSymbolicLink() === true;
-export const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
+export const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('vivera-')).sort();
 export const backupsUnder = (sb) => sb.snapshot(sb.root).filter((l) => l.split('|')[0].includes('.vivera-bak-'));
 export const shim = (sb, name, body) => {
   const file = path.join(sb.bin, name);

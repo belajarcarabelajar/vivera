@@ -13,7 +13,7 @@
 //   - A symlink that is broken, or that already points into vivera/skills/, is
 //     repointed at the current source.
 //   - A real file or a foreign symlink is reported and left alone.
-//   - A real directory (for example super-ultra-code-plan, which holds symlinked
+//   - A real directory (for example vivera, which holds symlinked
 //     files) is merged file by file under the same rules.
 //
 // Usage:

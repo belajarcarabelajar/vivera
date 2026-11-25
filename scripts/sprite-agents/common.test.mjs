@@ -73,7 +73,7 @@ describe('readTemplate', () => {
 
   test('a read-only role has tools and no edit tool', () => {
     const r = read(role('researcher'), timid);
-    expect(r.tools).toEqual(['Read', 'Grep', 'Glob', 'Bash', 'mcp__tinyfish']);
+    expect(r.tools).toEqual(['Read', 'Grep', 'Glob', 'Bash', 'REPL', 'mcp__tinyfish']);
     expect(r.readOnly).toBe(true);
   });
 

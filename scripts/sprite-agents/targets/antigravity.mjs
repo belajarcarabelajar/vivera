@@ -3,7 +3,7 @@
 // description, tools, mainAgent, subagent, model, commandExecutionPolicy,
 // mcpServers, skills and plugins. The CLI page shows only the directory form
 // ~/.gemini/config/agents/<name>/agent.md, so that is the form written.
-import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../common.mjs';
+import { assertGitGuardHooks, CLAUDE_CODE_ONLY_TOOLS, readTemplate, skillLine, tomlString } from '../common.mjs';
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
@@ -17,6 +17,7 @@ function translateTools(tools, templateLabel) {
   for (const tool of tools) {
     // A role's MCP servers are not configured on this harness, so naming one would only break the list.
     if (tool.startsWith('mcp__')) continue;
+    if (CLAUDE_CODE_ONLY_TOOLS.includes(tool)) continue;
     // The page documents that an unmapped or misspelled name can hang the subagent, so it is refused, not passed on.
     if (!Object.hasOwn(TOOL_MAP, tool)) {
       throw new Error(`${templateLabel}: tool "${tool}" has no Antigravity translation in scripts/sprite-agents/targets/antigravity.mjs`);

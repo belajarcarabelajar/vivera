@@ -111,30 +111,80 @@ select_targets() {
   done <<< "$(target_ids)"
 }
 
-# The phase-skill dirs of a package target that this checkout no longer has, one per line. A phase
-# skill that left skills/ leaves its <skills dir>/vivera-<name>/ behind in every harness. Only a vivera-*
-# entry that is a real directory is considered, and only when it is the installer's own: it carries a
-# .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
-# ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
-# link to a file elsewhere, and a skill the checkout still has are never listed. A name with a newline
-# or a tab would break this one-per-line list, so it is never listed (report_unusual_stale_names says so).
-# Both --check (which reports them) and --update (which prunes them) read this one list.
+# The names the skills were installed under before the rename of 2026-11-26 (the package, then the seven
+# phase skills), and the ai-config file name of that time. An install made under them is invisible to the
+# vivera-* glob, so stale_phase_dirs lists these names too, under the same ownership rule.
+LEGACY_SKILL_NAMES=(super-ultra-code-plan sucp-rules sucp-brainstorm sucp-plan sucp-overnight sucp-tdd-debug sucp-verify-deliver sucp-debt-sweep)
+LEGACY_MASTER_NAME="Super Ultra Code Plan Implementation.md"
+
+is_legacy_skill_name() {
+  local n
+  for n in ${LEGACY_SKILL_NAMES[@]+"${LEGACY_SKILL_NAMES[@]}"}; do
+    if [ "$n" = "$1" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# The old ai-config file while it is the installer's own: a link into this checkout (live or dangling), or a
+# plain file with a .vivera-managed sidecar (prune_stale_skills judges its digest before removing it).
+stale_legacy_master() {
+  local entry
+  entry="$(target_skills_dir "$1")/$LEGACY_MASTER_NAME"
+  if [ -L "$entry" ]; then
+    case "$(COPY_MODE=false classify_dest "$entry" "$REPO_DIR/$LEGACY_MASTER_NAME")" in
+      ok | ours-stale) echo "$entry" ;;
+    esac
+  elif [ -f "$entry" ] && marker_regular "$entry.vivera-managed"; then
+    echo "$entry"
+  fi
+}
+
+# The entries of a target that this checkout no longer has, one per line: phase-skill dirs (vivera-* and the
+# legacy names above) for a package target, the legacy master file for ai-config. A phase skill that left
+# skills/ leaves its <skills dir>/<name>/ behind in every harness. A real directory is listed only when it
+# is the installer's own: it carries a .vivera-managed marker (a copy-mode directory), or its SKILL.md is a
+# symlink that classify_dest calls ok or ours-stale. A directory symlink under a legacy name is listed when
+# it is itself such a link (an old install linked whole phase dirs into the checkout). A directory inside this checkout, a
+# user's real SKILL.md without a marker, a live link to a file elsewhere, and a skill the checkout still
+# has are never listed. A name with a newline or a tab would break this one-per-line list, so it is never
+# listed (report_unusual_stale_names says so).
+# Both --check (which reports them) and --update and --uninstall (which prune them) read this one list.
 stale_phase_dirs() {
   local id="$1"
   local parent entry name skill_md state
+  local candidates=()
+  case "$(target_kind "$id")" in
+    file) stale_legacy_master "$id" ;;
+  esac
   if [ "$(target_kind "$id")" != package ]; then
     return 0
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
-  for entry in "$parent"/vivera-*; do
-    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
-      continue
-    fi
+  candidates=("$parent"/vivera-*)
+  for name in ${LEGACY_SKILL_NAMES[@]+"${LEGACY_SKILL_NAMES[@]}"}; do
+    candidates+=("$parent/$name")
+  done
+  for entry in ${candidates[@]+"${candidates[@]}"}; do
     name="$(basename "$entry")"
     case "$name" in
       *$'\n'* | *$'\t'*) continue ;;
     esac
     if [ -e "$REPO_DIR/skills/$name" ]; then
+      continue
+    fi
+    if [ -L "$entry" ]; then
+      # Only an old install linked whole phase dirs; a vivera-* dir link is someone's own setup.
+      if ! is_legacy_skill_name "$name"; then
+        continue
+      fi
+      case "$(COPY_MODE=false classify_dest "$entry" "$REPO_DIR/skills/$name")" in
+        ok | ours-stale) echo "$entry" ;;
+      esac
+      continue
+    fi
+    if [ ! -d "$entry" ]; then
       continue
     fi
     skill_md="$entry/SKILL.md"

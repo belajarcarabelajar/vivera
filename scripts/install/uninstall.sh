@@ -5,7 +5,7 @@
 # A copy-mode install (a managed copy: see copy_managed in lib.sh) is removed too, but only while it
 # is still identical to its source; a modified copy stays and is reported as [KEEP]. This works with
 # or without --copy, since what is on disk decides. The generated sprite agents of each selected
-# harness are removed too (clean_sprites).
+# harness are removed too (clean_sprites), and so are the stale and old-name entries --update prunes.
 
 UNINSTALL_REMOVED=0
 UNINSTALL_RESTORED=0
@@ -235,6 +235,8 @@ mode_uninstall() {
       uninstall_entry "$desired" "$dest"
       dirs+=("$(dirname "$dest")")
     done 3< <(target_entries "$id")
+    # What this checkout no longer has, or was installed under the old names, goes by the --update rule.
+    prune_stale_target "$id"
     if [ "$(target_kind "$id")" = package ] && [ "$DRY_RUN" != true ]; then
       # A marker stays only in a directory that still holds a kept (modified) copy.
       for dir in ${dirs[@]+"${dirs[@]}"}; do

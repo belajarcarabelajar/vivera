@@ -199,13 +199,27 @@ function Install-Hooks {
     Write-Host "     (revert: git -C `"$RepoDir`" config --unset core.hooksPath)"
 }
 
-# Phase-skill directories of a package target that this checkout no longer has: ours (they carry a marker),
-# not a link, not inside this checkout. -Check reports them and -Update prunes them.
+# What a target holds that this checkout no longer has: phase-skill directories of a package target (vivera-* and
+# the names used before the rename of 2026-11-26, which the vivera-* filter cannot see), and for ai-config the
+# master file of that time. Ours only (a marker, a sidecar marker for the file), not a link, not inside this
+# checkout. -Check reports them, and -Update and -Uninstall prune them.
 function Get-StalePhaseDirs($T) {
+    $LegacySkillNames = @('super-ultra-code-plan', 'sucp-rules', 'sucp-brainstorm', 'sucp-plan', 'sucp-overnight', 'sucp-tdd-debug', 'sucp-verify-deliver', 'sucp-debt-sweep')
+    if ($T.Kind -eq 'file') {
+        $old = Join-Path (Join-Rel $HomeDir $T.Rel) 'Super Ultra Code Plan Implementation.md'
+        $item = Get-ItemOrNull $old
+        if (($null -ne $item) -and (-not $item.PSIsContainer) -and (-not (Test-Reparse $item)) -and (Test-Path -LiteralPath ($old + $MarkerName) -PathType Leaf)) { $old }
+        return
+    }
     if ($T.Kind -ne 'package') { return }
     $parent = Get-ParentDir (Join-Rel $HomeDir $T.Rel)
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { return }
-    foreach ($d in @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'vivera-*' -Force)) {
+    $found = @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'vivera-*' -Force)
+    foreach ($n in $LegacySkillNames) {
+        $i = Get-ItemOrNull (Join-Path $parent $n)
+        if (($null -ne $i) -and $i.PSIsContainer) { $found += $i }
+    }
+    foreach ($d in $found) {
         if (Test-Reparse $d) { continue }
         if (Test-Path -LiteralPath (Join-Path (Join-Path $RepoDir 'skills') $d.Name)) { continue }
         if (Test-InsideCheckout (Join-Path $d.FullName 'SKILL.md')) { continue }
@@ -215,12 +229,14 @@ function Get-StalePhaseDirs($T) {
 
 # A stale phase skill loses its SKILL.md only while that is exactly what the installer placed: its digest still
 # equals the one the marker recorded, with the same algorithm tag. An edited SKILL.md, one that is not a plain
-# file, or one with no usable record is the user's: the directory stays with a KEEP line. The directory goes
-# only when that left it empty.
+# file, or one with no usable record is the user's: the directory stays with a KEEP line. The other entries go by
+# the same rule, each against its own record. The directory goes only when that left it empty. The old master
+# file is judged the same way, against its sidecar marker.
 function Invoke-Prune($Selected) {
     foreach ($t in $Selected) {
         foreach ($dir in @(Get-StalePhaseDirs $t)) {
-            $skill = Join-Path $dir 'SKILL.md'
+            $isFile = Test-Path -LiteralPath $dir -PathType Leaf
+            $skill = if ($isFile) { $dir } else { Join-Path $dir 'SKILL.md' }
             if ($null -ne (Get-ItemOrNull $skill)) {
                 $current = Get-EntryDigest $skill
                 if (($current -eq '') -or ($current -cne (Get-RecordedDigest $skill))) {
@@ -231,6 +247,12 @@ function Invoke-Prune($Selected) {
             }
             if ($script:DryRunOn) { Write-Host "[DRY-RUN] Would prune $dir"; continue }
             Remove-File $skill
+            if ($isFile) { Remove-File ($dir + $MarkerName); Write-Host "[PRUNED] $dir"; continue }
+            foreach ($c in @(Get-ChildItem -LiteralPath $dir -Force)) {
+                if (($c.Name -eq $MarkerName) -or (Test-Reparse $c)) { continue }
+                $digest = Get-EntryDigest $c.FullName
+                if (($digest -ne '') -and ($digest -ceq (Get-RecordedDigest $c.FullName)) -and (Test-Proceed $c.FullName 'remove')) { Remove-Tree $c.FullName }
+            }
             Remove-File (Join-Path $dir $MarkerName)
             if (Remove-IfEmpty $dir) { Write-Host "[PRUNED] $dir" } else { Write-Host "[PRUNED] files removed from $dir; the directory stays, it holds other files" }
         }
@@ -309,6 +331,8 @@ function Invoke-Uninstall($Selected) {
         if ($t.Kind -eq 'none') { continue }
         $entries = @(Get-TargetEntries $t)
         foreach ($e in $entries) { Uninstall-Entry $e }
+        # What this checkout no longer has, or was installed under the old names, goes by the -Update rule.
+        Invoke-Prune @($t)
         if ($t.Kind -ne 'package') { continue }
         $dirs = @($entries | ForEach-Object { Get-ParentDir $_.Dest } | Select-Object -Unique)
         # A marker stays only in a directory that still holds a kept copy.

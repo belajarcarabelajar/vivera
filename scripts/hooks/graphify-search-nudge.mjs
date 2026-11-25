@@ -23,11 +23,18 @@
 // after that, or after any graph query, searches run and the reminders apply.
 // Fail-open: any parse, status or state failure lets the call through, and a
 // block is only printed after its count was saved.
+// Parallel calls (Code Mode batches, 2026-11-26): several hook processes can
+// read the state file at once and the last write wins, which once dropped a
+// recorded query and let three searches each print "1 of 2". The two facts that
+// must survive live outside the state file and are only ever created: a
+// `<state>.queried` marker, and one `<state>.block-<n>` slot per block, claimed
+// with O_EXCL so the cap holds across processes. A query and a search in the
+// same parallel batch stay order-dependent: the search may run first.
 // Kill switch: GRAPHIFY_GATE=0, or the file ~/.local/state/graphify-gate/off
 // (path overridable with GRAPHIFY_GATE_OFF_FILE). Revert: git revert the commit
 // that added the gate, or keep the kill switch file.
 
-import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { writeFileAtomic } from '../lib/atomic-write.mjs';
@@ -343,8 +350,28 @@ function readState(file) {
   }
 }
 
-// Returns { block } when the call must be stopped, else null. The count is
-// saved before a block is returned, so a state that cannot be saved never blocks.
+// Path of a marker file that sits beside the state file.
+function sideFile(file, suffix) {
+  return file.replace(/\.json$/, `.${suffix}`);
+}
+
+// Claims the lowest free block slot above `from` with O_EXCL and returns its
+// number, or null when every slot is taken or a slot cannot be created.
+function claimBlock(file, from) {
+  for (let n = from + 1; n <= MAX_BLOCKS; n++) {
+    try {
+      closeSync(openSync(sideFile(file, `block-${n}`), 'wx'));
+      return n;
+    } catch (e) {
+      if (e?.code === 'EEXIST') continue;
+      return null;
+    }
+  }
+  return null;
+}
+
+// Returns { block } when the call must be stopped, else null. The block slot is
+// created before a block is returned, so a slot that cannot be created never blocks.
 function gate(input, state, cwd, file, stateDir, env) {
   if (state.queried || !gateEnabled(env)) return null;
   const blocks = Number.isInteger(state.blocks) ? state.blocks : 0;
@@ -367,15 +394,19 @@ function gate(input, state, cwd, file, stateDir, env) {
     s = { dir, kind: st.kind, graphPath: st.graphPath };
   }
   const next = { ...state, gateStatus: s };
-  if (s.kind === 'registered') next.blocks = blocks + 1;
+  let nth = null;
   try {
     mkdirSync(stateDir, { recursive: true });
+    if (s.kind === 'registered') {
+      nth = claimBlock(file, blocks);
+      next.blocks = nth ?? MAX_BLOCKS;
+    }
     writeFileAtomic(file, `${JSON.stringify(next)}\n`);
   } catch {
-    return null;
+    // The slot, not the state file, records the block.
   }
-  if (s.kind !== 'registered') return null;
-  return { block: blockText(s.graphPath, blocks + 1) };
+  if (nth === null) return null;
+  return { block: blockText(s.graphPath, nth) };
 }
 
 export function handle(raw, env = process.env) {
@@ -393,6 +424,12 @@ export function handle(raw, env = process.env) {
   const agent = typeof agentId === 'string' && agentId ? agentId : 'main';
   const file = path.join(stateDir, `${safeId(sessionId)}.${safeId(agent)}.json`);
   const state = readState(file);
+  const queriedMarker = sideFile(file, 'queried');
+  try {
+    if (!state.queried && existsSync(queriedMarker)) state.queried = true;
+  } catch {
+    // An unreadable marker counts as no query yet.
+  }
 
   const blocked = gate(input, state, cwd, file, stateDir, env);
   if (blocked) return blocked;
@@ -412,6 +449,14 @@ export function handle(raw, env = process.env) {
   }
 
   const { output, nextState } = decide(input, state, status);
+  if (nextState.queried && !state.queried) {
+    try {
+      mkdirSync(stateDir, { recursive: true });
+      writeFileSync(queriedMarker, '');
+    } catch {
+      // The state file below still records the query.
+    }
+  }
   const toWrite = { ...nextState, status: nextStatus };
   if (JSON.stringify(toWrite) !== JSON.stringify(state)) {
     // Persist before printing: if the state cannot be saved, a printed reminder

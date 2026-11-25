@@ -5,7 +5,7 @@ category: pipeline
 slug: confirmations
 order: 3
 source: README.md#Confirmations Without Typing
-source_hash: "467febc492dc"
+source_hash: "3582ee2b06f3"
 ---
 
 <a id="confirmations-without-typing"></a>

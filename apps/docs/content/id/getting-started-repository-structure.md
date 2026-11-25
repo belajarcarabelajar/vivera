@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "31a9de36ef0d"
+source_hash: "6e217124731e"
 ---
 
 <a id="repository-structure"></a>

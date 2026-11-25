@@ -5,7 +5,7 @@ category: tooling
 slug: validation
 order: 8
 source: README.md#Validation & Quality Checks
-source_hash: "9ca2a5357a0c"
+source_hash: "1f553bb100a4"
 ---
 
 <a id="validation--quality-checks"></a>

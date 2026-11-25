@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: docs/guide/tooling-trigger-snippets-1.md
-source_hash: "3c6cdf25b4e2"
+source_hash: "d0cf2d2bae82"
 ---
 
 <a id="trigger-snippets"></a>

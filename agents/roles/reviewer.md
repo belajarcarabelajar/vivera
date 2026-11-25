@@ -1,6 +1,6 @@
 ---
 description: Independent auditor of a diff, a subagent report, or a completion claim against fresh evidence. Does not edit files. Use proactively before any claim that work is done and before a pull request is opened.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, REPL
 skills:
   - sucp-verify-deliver
 maxTurns: 30

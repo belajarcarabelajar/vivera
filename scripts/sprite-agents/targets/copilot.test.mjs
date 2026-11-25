@@ -173,6 +173,10 @@ describe('copilot target', () => {
       for (const tool of ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']) expect(toolsOf(`Read, ${tool}`)).toEqual(['read', 'edit']);
     });
 
+    test('drops REPL, the Claude Code tool that only runs the other listed tools', () => {
+      expect(toolsOf('Read, Bash, REPL')).toEqual(['read', 'execute']);
+    });
+
     test('drops a tool whose name starts with mcp__', () => {
       expect(toolsOf('Read, mcp__tinyfish, mcp__x__y')).toEqual(['read']);
     });

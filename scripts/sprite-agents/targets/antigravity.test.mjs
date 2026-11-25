@@ -170,6 +170,10 @@ describe('antigravity target', () => {
       expect(frontmatter(render(tpl('\nBody.\n', 'tools: mcp__tinyfish\n'))).tools).toEqual([]);
     });
 
+    test('drops REPL, the Claude Code tool that only runs the other listed tools', () => {
+      expect(frontmatter(render(tpl('\nBody.\n', 'tools: Read, Bash, REPL\n'))).tools).toEqual(['view_file', 'run_command']);
+    });
+
     test('drops maxTurns and writes no steps key', () => {
       const text = render(tpl('\nBody.\n', 'maxTurns: 5\n'));
       expect(Object.keys(frontmatter(text)).sort()).toEqual(['commandExecutionPolicy', 'description', 'mainAgent', 'model', 'name', 'subagent']);

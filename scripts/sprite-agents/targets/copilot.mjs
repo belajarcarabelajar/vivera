@@ -2,7 +2,7 @@
 // in ~/.copilot/agents. The configuration page (read 2026-10-11) requires only
 // `description`, takes `tools` as a list with case-insensitive aliases, and caps
 // the prompt at 30,000 characters.
-import { assertGitGuardHooks, readTemplate, skillLine, tomlString } from '../common.mjs';
+import { assertGitGuardHooks, CLAUDE_CODE_ONLY_TOOLS, readTemplate, skillLine, tomlString } from '../common.mjs';
 import { proseGuard } from '../guard.mjs';
 import { MARKER } from '../sync.mjs';
 
@@ -26,6 +26,7 @@ function translateTools(tools, templateLabel) {
   for (const name of tools) {
     // Copilot MCP tools are addressed as `server/tool` and need a configured server.
     if (name.startsWith('mcp__')) continue;
+    if (CLAUDE_CODE_ONLY_TOOLS.includes(name)) continue;
     if (!Object.hasOwn(TOOL_MAP, name)) {
       throw new Error(`${templateLabel}: tool "${name}" has no Copilot translation in scripts/sprite-agents/targets/copilot.mjs`);
     }

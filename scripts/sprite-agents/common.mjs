@@ -5,6 +5,12 @@ import { capitalize, splitFrontmatter } from './crew.mjs';
 // The tools that change files. A role whose tools list has none of them is read-only.
 export const EDIT_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'];
 
+// Claude Code's Code Mode tool. Its code can only call the other tools in the
+// list (a REPL agent without Edit or Write got "Write tool is not available",
+// measured 2026-11-26), so it never makes a role writable, and harnesses
+// without Code Mode drop it.
+export const CLAUDE_CODE_ONLY_TOOLS = ['REPL'];
+
 // `allowedKeys` are the template keys this target can translate. Any other key
 // throws instead of being dropped, so a field cannot vanish from one harness silently.
 export function readTemplate(template, member, { allowedKeys, target, templateLabel = `agents/roles/${member.role}.md` }) {

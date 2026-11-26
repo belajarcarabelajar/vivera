@@ -19,7 +19,10 @@
 // a registered repository is blocked with exit 2 and a stderr message naming
 // the exact query command. `cd <dir> && rg ...` is followed. Read, Glob,
 // find/fd, single-file searches, pipe filters and searches outside a graph
-// repository are never blocked. At most MAX_BLOCKS blocks per session and agent;
+// repository are never blocked, and neither is a search whose target lies
+// DEEP_LEVELS or more folders below the repository root (2026-11-26, owner,
+// after a transcript audit: 1,602 blocks in 1,199 agents, 91% subagents, most
+// aimed at a folder the agent had already located, where the graph adds little). At most MAX_BLOCKS blocks per session and agent;
 // after that, or after any graph query, searches run and the reminders apply.
 // Fail-open: any parse, status or state failure lets the call through, and a
 // block is only printed after its count was saved.
@@ -47,6 +50,14 @@ const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 export const REPEAT_EVERY = 25;
 export const MAX_REMINDERS = 3;
 export const MAX_BLOCKS = 2;
+// A search this many folders (or more) below the graph's repository root is never blocked.
+export const DEEP_LEVELS = 2;
+
+/** Folders between the repository root of graphPath and dir (0 at the root). */
+export function depthBelowRoot(graphPath, dir) {
+  const rel = path.relative(path.dirname(path.dirname(graphPath)), dir);
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel.split(path.sep).length : 0;
+}
 
 // rg flags that take a separate value word, so the value is not read as the
 // pattern or a path. Long forms written as --flag=value are one word anyway.
@@ -224,7 +235,7 @@ export function blockText(graphPath, nth) {
     `Blocked by the graphify gate (${nth} of ${MAX_BLOCKS}): this search walks a repository that has a graphify knowledge graph, and this session has not queried it yet. ` +
     `Ask the graph first, then search again: \`graphify query "<question>" --graph ${shellArg(graphPath)}\` ` +
     `(or \`graphify path "A" "B"\` / \`graphify explain "X"\` with the same --graph flag, or MCP query_graph with project_path: ${root}). ` +
-    'After one graph query, searches run normally. Read, Glob, find and single-file searches are never blocked.'
+    `After one graph query, searches run normally. Read, Glob, find, single-file searches and searches ${DEEP_LEVELS} or more folders below the repository root are never blocked.`
   );
 }
 
@@ -397,7 +408,7 @@ function gate(input, state, cwd, file, stateDir, env) {
   let nth = null;
   try {
     mkdirSync(stateDir, { recursive: true });
-    if (s.kind === 'registered') {
+    if (s.kind === 'registered' && depthBelowRoot(s.graphPath, dir) < DEEP_LEVELS) {
       nth = claimBlock(file, blocks);
       next.blocks = nth ?? MAX_BLOCKS;
     }

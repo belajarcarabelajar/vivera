@@ -153,7 +153,7 @@ function sha256(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
-export function makeSandbox({ tools = [], git = false, extraEnv = {} } = {}) {
+export function makeSandbox({ tools = [], git = false, extraEnv = {}, spaced = false } = {}) {
   // Resolve every tool before creating anything, so a bad name leaves no temp dir behind.
   const links = [];
   for (const name of new Set([...BASE_TOOLS.filter((n) => !NAMED_ONLY.has(n)), ...tools])) {
@@ -166,7 +166,8 @@ export function makeSandbox({ tools = [], git = false, extraEnv = {} } = {}) {
   const gitBin = git ? resolveTool('git') : null;
   if (git && !gitBin) throw new Error("install sandbox: 'git' not found on this machine");
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-install-'));
+  // spaced: a root with a space, so every repo and HOME path the installer handles contains one.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), spaced ? 'vivera install-' : 'vivera-install-'));
   const home = path.join(root, 'home');
   const repo = path.join(root, 'repo');
   const bin = path.join(root, 'bin');

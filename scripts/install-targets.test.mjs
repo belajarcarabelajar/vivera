@@ -352,7 +352,9 @@ describe('entries', () => {
   });
 
   test('targets: a path with spaces survives the TAB split intact', () => {
-    const sb = sandbox();
+    // The master file name has no space since the rename to VIVERA.md, so the space comes from the sandbox root.
+    const sb = makeSandbox({ tools: ['git', 'bun'], spaced: true });
+    open.push(sb);
     for (const [desired, dest] of entryLines(sb, 'ai-config')) {
       expect(desired).toContain(' ');
       expect(dest).toContain(' ');

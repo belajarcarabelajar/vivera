@@ -114,7 +114,9 @@ function pendingCleared(plans, repoRoot, gh, skip) {
       state = v.code === 0 ? JSON.parse(v.stdout).state : null;
     } catch {}
     if (state === 'CLOSED') {
+      // Cleared together, so a plan skipped below is not left labelled PR-OPEN with no PR; a flip relabels it.
       entry.pending_pr = null;
+      entry.verdict = null;
       cleared = true;
       return true;
     }

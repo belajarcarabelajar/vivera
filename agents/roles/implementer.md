@@ -35,4 +35,5 @@ The orchestrating agent reads `vivera-rules`; you follow this card instead.
 - When the contract names the project's own package manager, use it instead of Bun.
 - No attribution line or co-author trailer in anything you write.
 - When the contract gives a turn budget, report by it, with partial results if the work is not done.
+- Never call the advisor tool: the approach was settled before the plan was approved, and the parent session consults the advisor at a bottleneck. If you are stuck, report the blocker to the parent instead.
 - End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

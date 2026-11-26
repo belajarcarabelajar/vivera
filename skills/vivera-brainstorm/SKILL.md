@@ -48,7 +48,7 @@ Treat unknown elements according to their epistemic nature before asking the use
    - Formulate focused questions offering 2–4 mutually exclusive options plus an explicit recommended default.
    - The recommended default states its basis in one line (`Why:`), as the Confirmation Protocol requires, and says `Why: my judgment` when there is no verified basis.
    - If unanswered or ambiguous, proceed with the recommended default and record it as an explicit assumption in the plan. This applies to a clarifying preference question, never to a catalog gate.
-   - Frontier grilling: model the open decisions as a design tree, where settling one decision opens the ones that depend on it. The frontier is every open decision whose prerequisites are settled. Ask the whole frontier each round through the question tool, at most 4 questions per call and several calls in the same round when the frontier is larger.
+   - Frontier grilling: model the open decisions as a design tree, where settling one decision opens the ones that depend on it. The frontier is every open decision whose prerequisites are settled. Ask the whole frontier each round through the question tool, at most 4 questions per call and several calls in the same round when the frontier is larger. A round of 2 or more questions is preceded by the advisor consult in `vivera-rules` (Execution Floor).
    - A question whose answer depends on another open question waits for the next round. After each round, recompute the frontier from the answers.
    - Facts the frontier needs go to fact-finding subagents. Only the questions downstream of a pending lookup wait for it; the rest of the frontier is asked now.
    - The session is done when the frontier is empty and nothing is silently assumed: a default taken is recorded as an assumption, so it is not silent.
@@ -98,7 +98,7 @@ Treat unknown elements according to their epistemic nature before asking the use
    The phase closes with the intent-lock question (header `Intent`) asked through the Confirmation Protocol.
 3. Phase 3 — Implementation Chat: Detail decision-complete architecture (interfaces, data flow, failure modes, acceptance criteria). Must include at least one Mermaid diagram as visual companion (a `flowchart` showing tasks, dependencies, gates, and verification is MANDATORY; add `sequenceDiagram`, `stateDiagram-v2`, or `erDiagram` when they clarify interactions, lifecycle, or data).
 4. Propose 2-3 approaches — trade-offs, recommendation, YAGNI applied.
-   Score them in the alternative matrix of the Creative & Convergent row (criteria and weights before scores).
+   Score them in the alternative matrix of the Creative & Convergent row (criteria and weights before scores), and choose one only after that advisor consult.
    When the approaches are interface or module shapes, produce them with Design It Twice.
 5. Present the design in sections scaled to complexity, and ask approval after each section through the Confirmation Protocol (header `Section`).
 6. Write design doc — save to docs/code-plan/specs/YYYY-MM-DD-<topic>-design.md, commit.

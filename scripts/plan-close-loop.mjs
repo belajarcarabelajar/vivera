@@ -19,7 +19,7 @@ import { readinessVerdict, openNowRows, openStepBoxes } from './lib/plan-readine
 import { planFileOf } from './lib/registry-plan-file.mjs';
 import { hashOf } from './lib/plan-issue-render.mjs';
 import { readDue, writeDue, readKept, writeKept } from './lib/closeout-state.mjs';
-import { flipRepo, cwdMeasure } from './lib/closeout-flip.mjs';
+import { flipRepo } from './lib/closeout-flip.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const closeoutScript = path.join(repoRoot, 'scripts', 'plan-closeout.mjs');
@@ -95,7 +95,7 @@ const TASK_ROW = /^([^\s\t][^\t]*)\t(DONE-ASSERTED|DONE|OPEN|UNREAD|UNPROVEN)(?:
 // The readiness CLI is spawned rather than imported: its bash runner and its
 // origin/main re-read are private to it, and --due must agree with --readiness.
 // Its verdict is not used, because it counts open boxes of DONE tasks as blocking.
-function readinessMeasure({ registry, timeoutS }) {
+export function readinessMeasure({ registry, timeoutS }) {
   return (_text, file) => {
     const r = spawnSync(process.execPath, [closeoutScript, '--readiness', file, '--registry', registry, '--timeout-s', String(timeoutS)], {
       encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: process.env,
@@ -193,14 +193,19 @@ function issueProject(planRepo) {
   }
 }
 
-function flipCli(opts, { fallbackRepo, sessions }) {
+function flipCli(opts, { registry, fallbackRepo, sessions }) {
   const byRepo = new Map();
   const errors = [];
   for (const plan of opts.plans) {
     const own = sessions.filter((s) => s.plan === plan);
-    const s = own.find((x) => x.state === 'merged') ?? own[0];
-    if (!s) {
+    const s = own.find((x) => x.state === 'merged');
+    if (!own.length) {
       errors.push(`unknown plan: ${plan} (no registry session)`);
+      continue;
+    }
+    // Only a landed plan was measured by --due, so only a landed plan may be flipped.
+    if (!s) {
+      errors.push(`not landed: ${plan} (no merged registry session)`);
       continue;
     }
     const file = planFileOf(s, fallbackRepo);
@@ -232,7 +237,7 @@ function flipCli(opts, { fallbackRepo, sessions }) {
       const args = [path.join(repoRoot, 'scripts', 'plan-sync.mjs'), file, ...(project ? ['--project', project] : [])];
       return { code: spawnSync(process.execPath, args, { stdio: 'inherit', env }).status ?? 1 };
     },
-    measure: cwdMeasure({ timeoutS: opts['--timeout-s'] ?? 300 }),
+    measure: readinessMeasure({ registry, timeoutS: opts['--timeout-s'] ?? 300 }),
   };
   let failed = false;
   for (const [repo, plans] of byRepo) {
@@ -241,7 +246,7 @@ function flipCli(opts, { fallbackRepo, sessions }) {
     console.log(`${repo}: flipped ${r.flipped.length}, ${pr}`);
     if (r.error) {
       failed = true;
-      console.log(`${repo}: error: ${r.error}${r.worktree ? ` (worktree kept: ${r.worktree})` : ''}`);
+      console.log(`${repo}: error: ${r.error}`);
     }
     for (const s of r.skipped) console.log(`skipped\t${s.plan}\t${s.reason}`);
   }

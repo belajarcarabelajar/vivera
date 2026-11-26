@@ -14,12 +14,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Namespace imports, so a missing export fails its own test instead of the whole file.
 import * as flip from './lib/closeout-flip.mjs';
+import * as loop from './plan-close-loop.mjs';
 import { planStatus } from './plan-issue-sync.mjs';
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-close-loop.mjs');
-const NOW = new Date('2026-11-26T05:00:00Z').getTime();
-const DATE = '2026-11-26';
-const BRANCH = `closeout/${DATE}`;
+// Local time 12:34:56, so the branch stamp is a known literal in any time zone.
+const NOW = new Date(2026, 10, 26, 12, 34, 56).getTime();
+const STAMP = '2026-11-26-123456';
+const BRANCH = `closeout/${STAMP}`;
 const REL = 'docs/code-plan/plans/ready.md';
 
 const dirs = [];
@@ -94,10 +96,12 @@ function fixture({ text = READY, ignored = false } = {}) {
   const publish = path.join(root, 'plans.publish.json');
   writeFileSync(publish, JSON.stringify({ vault: '/nowhere', projects: [{ name: 'widgets', root: repo, mirror: true }, { name: 'other', root: '/elsewhere' }] }));
   process.env.VIVERA_PLANS_PUBLISH = publish;
-  return { root, bare, repo, stateDir, wtRoot, file: path.join(repo, REL), wt: path.join(wtRoot, `vivera-closeout-${DATE}-widgets`) };
+  const registry = path.join(root, 'pr.registry.json');
+  writeFileSync(registry, JSON.stringify({ sessions: [{ session: 's-ready', plan: 'ready', state: 'merged', repo }] }));
+  return { root, bare, repo, stateDir, wtRoot, registry, file: path.join(repo, REL), wt: path.join(wtRoot, `vivera-closeout-${STAMP}-widgets`) };
 }
 
-function recorder({ failPush = false, failPr = false } = {}) {
+function recorder(fx, { failPush = false, failPr = false } = {}) {
   const events = [];
   const deps = {
     git(args, { cwd }) {
@@ -116,17 +120,21 @@ function recorder({ failPush = false, failPr = false } = {}) {
       events.push({ kind: 'sync', file, config, text: readFileSync(file, 'utf8') });
       return { code: 0 };
     },
-    measure: flip.cwdMeasure({ timeoutS: 30 }),
+    // The measure --due uses, so both agree on READY.
+    measure: loop.readinessMeasure({ registry: fx.registry, timeoutS: 30 }),
   };
   return { deps, events, of: (k) => events.filter((e) => e.kind === k) };
 }
 
-const run = (fx, rec) => flip.flipRepo({ repoRoot: fx.repo, plans: [{ plan: 'ready', file: fx.file }], deps: rec.deps, now: NOW });
+const run = (fx, rec, now = NOW) => flip.flipRepo({ repoRoot: fx.repo, plans: [{ plan: 'ready', file: fx.file }], deps: rec.deps, now });
+const localCloseouts = (fx) => sh(fx.repo, 'branch', '--list', 'closeout/*');
+const remoteCloseouts = (fx) => sh(fx.bare, 'branch', '--list', 'closeout/*').split('\n').map((b) => b.trim()).filter(Boolean);
+const pushes = (rec) => rec.of('git').filter((e) => e.args[0] === 'push');
 const readDue = (fx) => JSON.parse(readFileSync(path.join(fx.stateDir, 'due.json'), 'utf8'));
 
 test('flip: a tracked plan goes out as one close-out commit and PR, then syncs and records pending_pr', () => {
   const fx = fixture();
-  const rec = recorder();
+  const rec = recorder(fx);
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
   assert.deepEqual(r.pr, { number: 42, url: 'https://github.com/acme/widgets/pull/42' });
@@ -169,11 +177,13 @@ test('flip: a tracked plan goes out as one close-out commit and PR, then syncs a
   assert.equal(entry.verdict, 'PR-OPEN');
   assert.deepEqual(Object.keys(entry).sort(), ['asserted', 'file', 'hash', 'pending_pr', 'plan', 'repo', 'tickable', 'verdict']);
   assert.equal(existsSync(fx.wt), false);
+  // The remote branch backs the PR; the local one is gone so the next flip starts clean.
+  assert.equal(localCloseouts(fx), '');
 });
 
 test('flip: plans gitignored in their repository are written in place with no git call but check-ignore', () => {
   const fx = fixture({ ignored: true });
-  const rec = recorder();
+  const rec = recorder(fx);
   const head = sh(fx.repo, 'rev-parse', 'HEAD');
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
@@ -188,41 +198,66 @@ test('flip: plans gitignored in their repository are written in place with no gi
   assert.deepEqual(rec.of('sync').map((e) => e.file), [fx.file]);
 });
 
-test('flip: a failed push returns the error, keeps the worktree, and leaves sync and due.json alone', () => {
+// A rerun after a failure must start clean, so the failed run leaves no worktree, branch or remote branch behind.
+function assertRolledBack(fx, r) {
+  assert.equal(r.pr, null);
+  assert.deepEqual(r.flipped, []);
+  assert.equal(existsSync(fx.wt), false);
+  assert.equal(localCloseouts(fx), '');
+  assert.deepEqual(remoteCloseouts(fx), []);
+  assert.equal(existsSync(path.join(fx.stateDir, 'due.json')), false);
+}
+
+function assertRerunFlips(fx) {
+  const rec = recorder(fx);
+  const r = run(fx, rec);
+  assert.equal(r.error, undefined, JSON.stringify(r));
+  assert.deepEqual(r.flipped, ['ready']);
+  assert.equal(pushes(rec).length, 1);
+  assert.equal(rec.of('gh').length, 1);
+  assert.deepEqual(remoteCloseouts(fx), [BRANCH]);
+}
+
+test('flip: a failed push rolls back fully, so a rerun flips and pushes once', () => {
   const fx = fixture();
-  const rec = recorder({ failPush: true });
+  const rec = recorder(fx, { failPush: true });
   const r = run(fx, rec);
   assert.match(r.error ?? '', /push/);
   assert.match(r.error, /permission denied/);
-  assert.equal(r.worktree, fx.wt);
-  assert.ok(existsSync(path.join(fx.wt, REL)));
   assert.equal(rec.of('gh').length, 0);
   assert.equal(rec.of('sync').length, 0);
-  assert.equal(existsSync(path.join(fx.stateDir, 'due.json')), false);
-  assert.equal(gitOk(fx.bare, 'rev-parse', '--verify', BRANCH), false);
+  assertRolledBack(fx, r);
+  assertRerunFlips(fx);
 });
 
-test('flip: a failed gh pr create returns the error, keeps the worktree, and leaves sync and due.json alone', () => {
+test('flip: a failed gh pr create deletes the pushed branch, so a rerun flips and pushes once', () => {
   const fx = fixture();
-  const rec = recorder({ failPr: true });
+  const rec = recorder(fx, { failPr: true });
   const r = run(fx, rec);
   assert.match(r.error ?? '', /pr create/);
   assert.match(r.error, /already exists/);
-  // A second flip on the same day hits the open PR's head, so the message says what to do about it.
-  assert.ok(r.error.includes(BRANCH), r.error);
-  assert.match(r.error, /merge or close it first/);
-  assert.equal(r.pr, null);
-  assert.deepEqual(r.flipped, []);
-  assert.equal(r.worktree, fx.wt);
-  assert.ok(existsSync(path.join(fx.wt, REL)));
   assert.equal(rec.of('sync').length, 0);
-  assert.equal(existsSync(path.join(fx.stateDir, 'due.json')), false);
+  assertRolledBack(fx, r);
+  assertRerunFlips(fx);
+});
+
+test('flip: two flips at different times open two PRs on their own branches and leave no local branch', () => {
+  const fx = fixture();
+  const rec = recorder(fx);
+  const first = run(fx, rec);
+  const second = run(fx, rec, NOW + 60 * 60 * 1000);
+  assert.equal(first.error, undefined, JSON.stringify(first));
+  assert.equal(second.error, undefined, JSON.stringify(second));
+  assert.equal(rec.of('gh').length, 2);
+  assert.deepEqual(remoteCloseouts(fx), [BRANCH, 'closeout/2026-11-26-133456']);
+  assert.equal(localCloseouts(fx), '');
+  assert.equal(sh(fx.repo, 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).length, 1);
 });
 
 test('flip: a plan edited in the main checkout but not on origin is skipped as drift, with no PR', () => {
   const fx = fixture();
   writeFileSync(fx.file, READY + '\nA local note not pushed yet.\n');
-  const rec = recorder();
+  const rec = recorder(fx);
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
   assert.deepEqual(r.flipped, []);
@@ -238,7 +273,7 @@ test('flip: skip_if runs in the main checkout, so a file only it has still count
   ]) });
   // Untracked, so the temp worktree at origin/main does not have it, like node_modules.
   writeFileSync(path.join(fx.repo, 'local-only.txt'), 'x\n');
-  const rec = recorder();
+  const rec = recorder(fx);
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
   assert.deepEqual(r.skipped, []);
@@ -248,7 +283,7 @@ test('flip: skip_if runs in the main checkout, so a file only it has still count
 
 test('flip: a DONE task whose boxes are already ticked still flips the status', () => {
   const fx = fixture({ text: planOf('ready', [{ id: 'T1', skipIf: 'true', body: ['- [x] Step 1: run it'] }]) });
-  const rec = recorder();
+  const rec = recorder(fx);
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
   assert.deepEqual(r.flipped, ['ready']);
@@ -258,7 +293,7 @@ test('flip: a DONE task whose boxes are already ticked still flips the status', 
 
 test('flip: a plan that no longer measures READY is skipped with its verdict and no PR is opened', () => {
   const fx = fixture({ text: FAILING });
-  const rec = recorder();
+  const rec = recorder(fx);
   const r = run(fx, rec);
   assert.equal(r.error, undefined, JSON.stringify(r));
   assert.equal(r.pr, null);
@@ -272,7 +307,7 @@ test('flip: a plan that no longer measures READY is skipped with its verdict and
 });
 
 // The CLI wires the real deps: gh through GH_BIN, the sync through plan-sync.mjs and its stub seams.
-function cliFixture(fx) {
+function cliFixture(fx, { state = 'merged' } = {}) {
   const bin = path.join(fx.root, 'bin');
   mkdirSync(bin);
   const ghLog = path.join(fx.root, 'gh.log');
@@ -282,7 +317,7 @@ function cliFixture(fx) {
   const stub = path.join(bin, 'sync-stub.mjs');
   writeFileSync(stub, `import { appendFileSync } from 'node:fs';\nappendFileSync(${JSON.stringify(syncLog)}, process.argv.slice(2).join(' ') + ' ' + (process.env.PLAN_PUBLISH_CONFIG ? 'config' : 'none') + '\\n');\n`);
   const registry = path.join(fx.root, 'pr.registry.json');
-  writeFileSync(registry, JSON.stringify({ sessions: [{ session: 's-ready', plan: 'ready', state: 'merged', repo: fx.repo }] }));
+  writeFileSync(registry, JSON.stringify({ sessions: [{ session: 's-ready', plan: 'ready', state, repo: fx.repo }] }));
   const issues = path.join(fx.root, 'plan.issues.json');
   writeFileSync(issues, JSON.stringify({ version: 1, projects: { widgets: 'acme/widgets' } }));
   const env = {
@@ -301,7 +336,7 @@ test('cli: --flip groups by repository, prints the PR and exits 0', () => {
   const { out, err, exit } = c.cli(['--flip', 'ready', '--registry', c.registry, '--timeout-s', '30']);
   assert.equal(exit, 0, out + err);
   assert.match(out, new RegExp(`^${fx.repo}: flipped 1, PR https://github.com/acme/widgets/pull/7$`, 'm'));
-  assert.match(readFileSync(c.ghLog, 'utf8'), /^pr create --repo acme\/widgets --base main --head closeout\/\d{4}-\d{2}-\d{2} /m);
+  assert.match(readFileSync(c.ghLog, 'utf8'), /^pr create --repo acme\/widgets --base main --head closeout\/\d{4}-\d{2}-\d{2}-\d{6} /m);
   // The publish step gets the plan alone; the issue step names the main checkout's project (rule B4).
   const syncLog = readFileSync(c.syncLog, 'utf8');
   assert.match(syncLog, /^\S+ready\.md config$/m);
@@ -316,4 +351,15 @@ test('cli: --flip with an unknown plan exits 2 and runs nothing; no plan is a us
   assert.match(r.err, /nosuch/);
   assert.equal(existsSync(c.ghLog), false);
   assert.equal(c.cli(['--flip', '--registry', c.registry]).exit, 2);
+});
+
+test('cli: --flip refuses a plan with no merged registry session, naming it, and flips nothing', () => {
+  const fx = fixture();
+  const c = cliFixture(fx, { state: 'claimed' });
+  const r = c.cli(['--flip', 'ready', '--registry', c.registry, '--timeout-s', '30']);
+  assert.equal(r.exit, 2, r.out + r.err);
+  assert.match(r.err, /not landed: ready/);
+  assert.equal(existsSync(c.ghLog), false);
+  assert.deepEqual(remoteCloseouts(fx), []);
+  assert.equal(planStatus(readFileSync(fx.file, 'utf8')), 'Verification');
 });

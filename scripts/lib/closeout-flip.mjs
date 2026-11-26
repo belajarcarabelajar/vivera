@@ -8,34 +8,20 @@
 // closes an issue for a flip that did not happen.
 
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { homedir, tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { extractFrontmatter } from '../ultra-plan-runner.mjs';
 import { markDone } from '../plan-mark-done.mjs';
 import { readinessVerdict, openNowRows, openStepBoxes, evidenceLog } from './plan-readiness.mjs';
 import { hashOf } from './plan-issue-render.mjs';
 import { readDue, writeDue } from './closeout-state.mjs';
+import { localDate } from './eval-run-report.mjs';
 
-const closeoutScript = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'plan-closeout.mjs');
-const TASK_ROW = /^([^\s\t][^\t]*)\t(DONE-ASSERTED|DONE|OPEN|UNREAD|UNPROVEN)(?:\t|$)/;
-
-// The readiness CLI with --cwd, so skip_if runs against the checkout being flipped, not the session worktree.
-export function cwdMeasure({ timeoutS = 300 } = {}) {
-  return (_text, cwd, file) => {
-    const r = spawnSync(process.execPath, [closeoutScript, '--readiness', file, '--cwd', cwd, '--timeout-s', String(timeoutS)], {
-      encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: process.env,
-    });
-    if (r.error || ![0, 1, 3].includes(r.status)) throw new Error(`readiness exit ${r.status}`);
-    return r.stdout.split('\n').map((l) => l.match(TASK_ROW)).filter(Boolean).map((m) => ({ id: m[1], state: m[2] }));
-  };
-}
-
-const localDate = (now) => {
+// One branch per run, so a second flip opens its own PR instead of colliding with an open one.
+function runStamp(now) {
   const d = new Date(now);
-  return [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
-};
+  return `${localDate(d)}-${[d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, '0')).join('')}`;
+}
 
 // The last two path segments of the origin URL, which covers https, ssh and the bare fixture paths.
 const slugOf = (url) => url.trim().replace(/\.git$/, '').split(/[/:]/).filter(Boolean).slice(-2).join('/');
@@ -72,11 +58,11 @@ function flipText(text, tasks) {
   return { text: out, asserted: v.asserted, tickable, ticked: boxes.length - openStepBoxes(out).length };
 }
 
-function flipOne(plan, file, cwd, measure) {
+function flipOne(plan, file, measure) {
   if (!existsSync(file)) return { reason: `no plan file at ${file}` };
   const text = readFileSync(file, 'utf8');
   try {
-    return { ...flipText(text, measure(text, cwd, file)), before: text };
+    return { ...flipText(text, measure(text, file)), before: text };
   } catch (e) {
     return { reason: `UNREADABLE (${e.message})` };
   }
@@ -124,7 +110,7 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   for (const p of plans) (git(['check-ignore', '-q', p.file], { cwd: repoRoot }).code === 0 ? ignored : tracked).push(p);
 
   for (const { plan, file } of ignored) {
-    const r = flipOne(plan, file, repoRoot, measure);
+    const r = flipOne(plan, file, measure);
     if (!r.text) {
       skip(plan, r.reason);
       continue;
@@ -145,23 +131,22 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   const fetch = run(['fetch', 'origin', base]);
   if (fetch.code !== 0) return { ...result, error: `git fetch origin ${base} failed (${failed(fetch)})` };
 
-  const date = localDate(now);
-  const branch = `closeout/${date}`;
-  const wt = path.join(process.env.VIVERA_CLOSEOUT_WT_ROOT || path.join(homedir(), '.cache', 'tmp'), `vivera-closeout-${date}-${path.basename(repoRoot)}`);
-  let created = false;
-  // A worktree kept by an earlier failed push is picked up again, so a retry pushes its commit.
-  if (existsSync(wt)) {
-    const on = run(['rev-parse', '--abbrev-ref', 'HEAD'], wt);
-    if (on.code !== 0 || on.stdout.trim() !== branch) return { ...result, error: `${wt} exists and is not a worktree on ${branch}`, worktree: wt };
-  } else {
-    const exists = run(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]).code === 0;
-    const add = run(exists ? ['worktree', 'add', wt, branch] : ['worktree', 'add', '-b', branch, wt, `origin/${base}`]);
-    if (add.code !== 0) return { ...result, error: `git worktree add failed (${failed(add)})` };
-    created = !exists;
-  }
+  const stamp = runStamp(now);
+  const branch = `closeout/${stamp}`;
+  const wt = path.join(process.env.VIVERA_CLOSEOUT_WT_ROOT || path.join(homedir(), '.cache', 'tmp'), `vivera-closeout-${stamp}-${path.basename(repoRoot)}`);
+  const add = run(['worktree', 'add', '-b', branch, wt, `origin/${base}`]);
+  if (add.code !== 0) return { ...result, error: `git worktree add failed (${failed(add)})` };
+  let pushed = false;
+  // Every exit removes the worktree and the local branch; a failure also deletes a pushed branch with no PR,
+  // so a rerun starts clean. --force because a failure before the commit leaves edited plan files there.
   const drop = () => {
     run(['worktree', 'remove', '--force', wt]);
-    if (created) run(['branch', '-D', branch]);
+    run(['branch', '-D', branch]);
+  };
+  const fail = (error) => {
+    const del = pushed ? run(['push', 'origin', '--delete', branch]) : null;
+    drop();
+    return { ...result, error: del && del.code !== 0 ? `${error}; remote branch ${branch} not deleted (${failed(del)})` : error };
   };
 
   const rows = [];
@@ -178,7 +163,7 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
       skip(plan, `plan differs between ${repoRoot} and origin/${base}; pull, then run --due again`);
       continue;
     }
-    const r = flipOne(plan, file, repoRoot, measure);
+    const r = flipOne(plan, file, measure);
     if (!r.text) {
       skip(plan, r.reason);
       continue;
@@ -192,22 +177,18 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   }
 
   const n = rows.length;
-  const add = run(['add', '--', ...rows.map((r) => r.rel)], wt);
-  if (add.code !== 0) return { ...result, error: `git add failed (${failed(add)})`, worktree: wt };
-  if (run(['diff', '--cached', '--quiet'], wt).code !== 0) {
-    const commit = run(['commit', '-q', '-m', `docs(plans): close out ${n} finished plan(s)`], wt);
-    if (commit.code !== 0) return { ...result, error: `git commit failed (${failed(commit)})`, worktree: wt };
-  }
+  const stage = run(['add', '--', ...rows.map((r) => r.rel)], wt);
+  if (stage.code !== 0) return fail(`git add failed (${failed(stage)})`);
+  const commit = run(['commit', '-q', '-m', `docs(plans): close out ${n} finished plan(s)`], wt);
+  if (commit.code !== 0) return fail(`git commit failed (${failed(commit)})`);
   const push = run(['push', '-u', 'origin', branch], wt);
-  if (push.code !== 0) return { ...result, error: `git push failed (${failed(push)})`, worktree: wt };
+  if (push.code !== 0) return fail(`git push failed (${failed(push)})`);
+  pushed = true;
 
   const body = rows.map((r) => `- ${r.plan}: READY (asserted ${r.asserted}, ticked ${r.ticked})`).join('\n') + '\n';
   const pr = gh(['pr', 'create', '--repo', slug, '--base', base, '--head', branch, '--title', `Close out ${n} finished plan(s)`, '--body-file', '-'], { input: body });
   const url = pr.code === 0 ? String(pr.stdout).match(/https:\/\/\S+\/pull\/(\d+)/) : null;
-  if (!url) {
-    const open = /already exists/i.test(String(pr.stderr ?? '') + String(pr.stdout ?? '')) ? `; a pull request from ${branch} is already open, merge or close it first` : '';
-    return { ...result, error: `gh pr create failed (${failed(pr)})${open}`, worktree: wt };
-  }
+  if (!url) return fail(`gh pr create failed (${failed(pr)})`);
   result.pr = { number: Number(url[1]), url: url[0] };
   result.flipped.push(...rows.map((r) => r.plan));
 
@@ -218,7 +199,7 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   // Recorded even when a sync failed, or the next --due would offer the plan again and open a second PR.
   recordPending(repoRoot, rows, { number: result.pr.number, repo: slug, opened_at: new Date(now).toISOString() });
   if (syncFailed.length) result.error = `sync failed for ${syncFailed.join(', ')}`;
-  // --force because skip_if commands ran in the worktree and may have left untracked files.
-  run(['worktree', 'remove', '--force', wt]);
+  // The remote branch backs the PR, so only the local side goes.
+  drop();
   return result;
 }

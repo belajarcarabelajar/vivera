@@ -27,6 +27,7 @@ const USAGE = `usage: bun scripts/closeout-hooks-install.mjs (--add | --check | 
   --settings <path>  settings file (default: ~/.claude/settings.json)
   -h, --help         this message`;
 
+// dup-defs: allow graphify-hooks-install.mjs owns other OWNER_MARKS
 const isOurs = (entry) => settingsHooks.isOwned(entry, OWNER_MARKS);
 
 /** Returns a copy of `settings` with our old entry removed and a fresh one appended. */
@@ -41,6 +42,7 @@ export function removeEntries(settings) {
 }
 
 /** Reports whether a matcherless SessionStart entry runs `hookFile` and the file exists. */
+// dup-defs: allow graphify-hooks-install.mjs checks three entries and two scripts, this one entry
 export function checkEntries(settings, hookFile) {
   settingsHooks.validateSettings(settings, EVENTS);
   const matchesAll = (m) => m === undefined || m === '' || m === '*';

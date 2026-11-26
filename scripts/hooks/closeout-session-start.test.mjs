@@ -111,6 +111,33 @@ test('a linked worktree whose .git is a file counts as the repository root', () 
     .toBe(`closeout: 1 landed plan(s) measured READY: p-wt${TAIL}`);
 });
 
+// Real git, so the .git file of the linked worktree has the shape git writes.
+// Global and system config are cut off so a user hook or signing setting cannot break the fixture.
+function git(cwd, ...args) {
+  const r = Bun.spawnSync(['git', ...args], {
+    cwd,
+    env: {
+      ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+      GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.invalid', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.invalid',
+    },
+  });
+  if (r.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr.toString()}`);
+}
+
+test('a linked worktree also matches READY plans of its main checkout', () => {
+  const main = tempDir('wtmain');
+  git(main, 'init', '-q');
+  git(main, 'commit', '-q', '--no-verify', '--allow-empty', '-m', 'init');
+  mkdirSync(path.join(main, 'docs', 'code-plan', 'plans'), { recursive: true });
+  const linked = path.join(tempDir('wtlinked'), 'wt');
+  git(main, 'worktree', 'add', '-q', '--detach', linked);
+  mkdirSync(path.join(linked, 'sub'));
+  const dir = state({ plans: [entry(main, 'p-main'), entry(repo('wtother'), 'p-other')] });
+  const want = `closeout: 1 landed plan(s) measured READY: p-main${TAIL}`;
+  expect(contextFrom(runHook(event('SessionStart', linked), dir))).toBe(want);
+  expect(contextFrom(runHook(event('SessionStart', path.join(linked, 'sub')), dir))).toBe(want);
+});
+
 test("another repository's plan is hidden, and with none left the hook is silent", () => {
   const mine = repo('mine');
   const other = repo('other');
@@ -128,6 +155,23 @@ test('a cwd inside the vivera checkout lists READY plans of every repository', (
   const want = `closeout: 2 landed plan(s) measured READY: p-a, p-b${TAIL}`;
   expect(contextFrom(runHook(event('SessionStart', VIVERA_ROOT), dir))).toBe(want);
   expect(contextFrom(runHook(event('SessionStart', path.join(VIVERA_ROOT, 'scripts')), dir))).toBe(want);
+});
+
+// Only reachable from a linked worktree of vivera: the main checkout of that worktree counts as vivera too.
+function viveraGitText() {
+  try {
+    return readFileSync(path.join(VIVERA_ROOT, '.git'), 'utf8');
+  } catch {
+    return '';
+  }
+}
+test.skipIf(!/^gitdir: .+\/\.git\/worktrees\//.test(viveraGitText()))('the main checkout of the vivera worktree lists every repository', () => {
+  const viveraMain = viveraGitText().match(/^gitdir: (.+)\/\.git\/worktrees\//)[1];
+  const a = repo('vma');
+  const b = repo('vmb');
+  const dir = state({ plans: [entry(a, 'p-a'), entry(b, 'p-b')] });
+  expect(contextFrom(runHook(event('SessionStart', viveraMain), dir)))
+    .toBe(`closeout: 2 landed plan(s) measured READY: p-a, p-b${TAIL}`);
 });
 
 test('a sibling directory whose name starts with the vivera path is not vivera', () => {

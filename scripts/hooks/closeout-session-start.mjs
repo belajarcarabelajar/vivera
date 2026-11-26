@@ -19,6 +19,7 @@ import { shellArg } from './graphify-session-start.mjs';
 const VIVERA_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MAX_LISTED = 8;
 
+// dup-defs: allow registry-sync.mjs keeps its copy private, and loading that module would slow every session start
 function real(p) {
   try {
     return realpathSync(p);
@@ -40,6 +41,18 @@ function gitToplevel(dir) {
   }
 }
 
+// A linked worktree's .git file reads "gitdir: <main>/.git/worktrees/<name>",
+// while due.json names the main checkout, so both paths scope the note.
+function mainCheckout(top) {
+  try {
+    const m = /^gitdir:\s*(.+?)\s*$/m.exec(readFileSync(path.join(top, '.git'), 'utf8'));
+    const w = m && /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+$/.exec(path.resolve(top, m[1]));
+    return w ? real(w[1]) : top;
+  } catch {
+    return top;
+  }
+}
+
 const str = (v) => typeof v === 'string' && v !== '';
 
 // Hashed the way --due hashes (utf8 text), so an edit after the measurement hides the plan.
@@ -51,12 +64,12 @@ function currentHash(file) {
   }
 }
 
-export function readyPlans(due, kept, scopeRepo) {
+export function readyPlans(due, kept, scopeRepos) {
   const out = [];
   for (const e of due.plans) {
     if (!e || typeof e !== 'object' || e.verdict !== 'READY') continue;
     if (![e.plan, e.repo, e.file, e.hash].every(str)) continue;
-    if (scopeRepo && real(e.repo) !== scopeRepo) continue;
+    if (scopeRepos && !scopeRepos.has(real(e.repo))) continue;
     if (kept[e.plan]?.hash === e.hash) continue;
     if (currentHash(path.resolve(e.repo, e.file)) !== e.hash) continue;
     out.push(e.plan);
@@ -78,13 +91,15 @@ async function main() {
   const { hook_event_name: event, cwd } = input;
   if (event !== 'SessionStart' || typeof cwd !== 'string' || !path.isAbsolute(cwd)) return;
   const dir = real(cwd);
-  let scopeRepo = null;
+  let scopeRepos = null;
   if (!isInside(dir, real(VIVERA_ROOT))) {
     const top = gitToplevel(dir);
     if (!top) return;
-    scopeRepo = top;
+    const main = mainCheckout(top);
+    // Any worktree of vivera counts as vivera and lists every repository.
+    if (main !== mainCheckout(real(VIVERA_ROOT))) scopeRepos = new Set([top, main]);
   }
-  const text = noteFor(readyPlans(readDue(), readKept(), scopeRepo), VIVERA_ROOT);
+  const text = noteFor(readyPlans(readDue(), readKept(), scopeRepos), VIVERA_ROOT);
   if (!text) return;
   const out = { hookSpecificOutput: { hookEventName: event, additionalContext: text } };
   process.stdout.write(`${JSON.stringify(out)}\n`);

@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import { writeFileAtomic } from './atomic-write.mjs';
 
+// dup-defs: allow telegram-ask's stateDir resolves its own env var and runtime dir
 export const stateDir = () => process.env.VIVERA_CLOSEOUT_STATE || path.join(homedir(), '.local', 'state', 'vivera-closeout');
 
 const dueFile = () => path.join(stateDir(), 'due.json');

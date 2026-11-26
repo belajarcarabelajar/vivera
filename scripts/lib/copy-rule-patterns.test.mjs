@@ -54,6 +54,10 @@ describe('lines that still pass', () => {
   test('a quoted example in backticks does not start a line with the trailer', () => {
     expect(rules('The message ended with `Co-Authored-By: Claude <noreply@anthropic.com>`.\n')).toEqual([]);
   });
+
+  test('a word that only ends in the footer phrase is prose', () => {
+    expect(rules('Lockfile regenerated with bun install.\n')).toEqual([]);
+  });
 });
 
 describe('a robot emoji that is not a credit badge', () => {

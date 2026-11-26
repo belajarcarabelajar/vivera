@@ -5,7 +5,7 @@ category: getting-started
 slug: quick-start
 order: 3
 source: docs/guide/getting-started-quick-start-1.md
-source_hash: "8f8197b3e70e"
+source_hash: "7cd9536e390e"
 ---
 
 <a id="quick-start--installation"></a>

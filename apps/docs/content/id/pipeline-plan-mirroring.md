@@ -5,7 +5,7 @@ category: pipeline
 slug: plan-mirroring
 order: 6
 source: "README.md#Plan Mirroring: Obsidian and GitHub Issues"
-source_hash: "23e31b322a70"
+source_hash: "d9eb36f0e15e"
 ---
 
 <a id="plan-mirroring-obsidian-and-github-issues"></a>
@@ -115,3 +115,10 @@ catatan yang repositorinya bukan repositori yang sedang di-sync, sebelum ada pan
 atau penulisan apa pun; ganti nama file plan untuk memperbaikinya. Gerbang merged (`pr-registry state <s>
 merged`, melalui `checkCloseout`) membaca store yang sama, menentukan "repositori ini"
 dengan `resolveProjectRepo` yang sama, dan melaporkan catatan seperti itu sebagai `ISSUE_OTHER_REPO`.
+
+Plan yang pekerjaannya sudah mendarat tetapi statusnya tidak pernah mencapai `Complete`
+kembali lewat `bun scripts/plan-close-loop.mjs --due`, yang mengukur setiap plan yang sudah
+mendarat dan mendaftar plan yang terbaca `READY`. Setelah pemilik menjawab `Close plan`,
+`--flip <plan>...` menetapkan `status: Complete` lewat satu pull request close-out per
+repositori (langsung di tempat bila plan di-gitignore), dan issue tertutup setelah pull
+request itu ada (`vivera-sweep`, referensi 07).

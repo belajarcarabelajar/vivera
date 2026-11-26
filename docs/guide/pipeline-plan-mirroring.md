@@ -100,3 +100,10 @@ refuses a record whose repository is not the one being synced, before any `gh` c
 or write; rename the plan file to fix it. The merged gate (`pr-registry state <s>
 merged`, through `checkCloseout`) reads the same store, decides "this repository"
 with the same `resolveProjectRepo`, and reports such a record as `ISSUE_OTHER_REPO`.
+
+A plan whose work landed but whose status never reached `Complete` comes back through
+`bun scripts/plan-close-loop.mjs --due`, which measures every landed plan and lists the
+ones that read `READY`. After the owner's `Close plan` answer, `--flip <plan>...` sets
+`status: Complete` through one close-out pull request per repository (in place where
+plans are gitignored), and the issue closes once that pull request exists (`vivera-sweep`,
+reference 07).

@@ -19,7 +19,8 @@ bun scripts/plan-sync.mjs docs/code-plan/plans/YYYY-MM-DD-<feature>.md [--projec
 bun scripts/plan-publish.mjs docs/code-plan/plans/YYYY-MM-DD-<feature>.md
 bun scripts/plan-publish.mjs --check --all
 bun scripts/plan-publish.mjs --status
-bun scripts/plan-mark-done.mjs docs/code-plan/plans/YYYY-MM-DD-<feature>.md --from runner.log
+bun scripts/plan-closeout.mjs --readiness docs/code-plan/plans/YYYY-MM-DD-<feature>.md --evidence readiness.log
+bun scripts/plan-mark-done.mjs docs/code-plan/plans/YYYY-MM-DD-<feature>.md --from readiness.log  # a runner.log works too
 bun scripts/plan-lifecycle-audit.mjs
 ```
 

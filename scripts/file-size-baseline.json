@@ -17,7 +17,7 @@
   "scripts/install-sprites.test.mjs": 21425,
   "scripts/lib/chunk-schema.test.mjs": 21762,
   "scripts/lib/redaction-selftest.test.mjs": 21166,
-  "scripts/plan-closeout.test.mjs": 44146,
+  "scripts/plan-closeout.test.mjs": 44143,
   "scripts/plan-issue-sync.mjs": 38251,
   "scripts/plan-issue-sync.test.mjs": 62182,
   "scripts/plan-lifecycle-audit.mjs": 29612,
@@ -28,8 +28,8 @@
   "scripts/plan-publish-registry.test.mjs": 20245,
   "scripts/plan-publish.mjs": 31624,
   "scripts/plan-publish.test.mjs": 59784,
-  "scripts/pr-registry.mjs": 29977,
-  "scripts/pr-registry.test.mjs": 44001,
+  "scripts/pr-registry.mjs": 27745,
+  "scripts/pr-registry.test.mjs": 43340,
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,
   "scripts/ultra-plan-runner.mjs": 59013,
@@ -44,6 +44,6 @@
   "scripts/vault-index-structural.test.mjs": 94265,
   "scripts/vault-index.mjs": 23535,
   "scripts/vault-index.test.mjs": 31712,
-  "snippets/orkestrasi-ngoding-plan.md": 22442,
+  "snippets/orkestrasi-ngoding-plan.md": 22430,
   "snippets/orkestrasi-pr-review.md": 20205
 }

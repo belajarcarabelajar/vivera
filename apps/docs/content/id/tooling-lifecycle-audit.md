@@ -1,11 +1,11 @@
 ---
 title: Audit Siklus Hidup Plan dan Penyelesaian Task
-description: Satu script melaporkan jumlah status plan, dan script lain mencentang langkah plan hanya untuk task yang tercatat PASSED atau SKIPPED-IDEMPOTENT di log runner.
+description: Satu script melaporkan jumlah status plan, dan script lain mencentang langkah plan hanya untuk task yang tercatat PASSED atau SKIPPED-IDEMPOTENT di log bukti readiness atau log runner.
 category: tooling
 slug: lifecycle-audit
 order: 6
 source: README.md#Plan Lifecycle Audit & Task Completion
-source_hash: "9e2156224825"
+source_hash: "bf57ca7e42d6"
 ---
 
 <a id="plan-lifecycle-audit--task-completion"></a>
@@ -34,9 +34,11 @@ Selalu keluar dengan exit 0: ini laporan, bukan gate. Ambang batas akan langsung
 <a id="task-completion-scriptsplan-mark-donemjs"></a>
 ## Penyelesaian Task (`scripts/plan-mark-done.mjs`)
 
-Membaca log eksekusi runner dan memberi centang `[x]` pada baris langkah plan `[ ]` untuk setiap task yang mencapai keberhasilan terminal (`PASSED` atau `SKIPPED-IDEMPOTENT`). Tiga status non-sukses (`NEEDS-AGENT`, `READY (dry-run)`, `HALTED-UPSTREAM`) ditolak secara eksplisit: sebuah task ditandai selesai hanya ketika bukti menyatakan demikian.
+Membaca log bukti dan memberi centang `[x]` pada baris langkah plan `[ ]` untuk setiap task yang mencapai keberhasilan terminal (`PASSED` atau `SKIPPED-IDEMPOTENT`). Log utamanya adalah bukti readiness, yang mencatat setiap task yang `skip_if`-nya keluar dengan exit 0; log eksekusi runner (`ultra-plan-runner.mjs <plan> --execute > runner.log`) tetap berlaku. Tiga status non-sukses (`NEEDS-AGENT`, `READY (dry-run)`, `HALTED-UPSTREAM`) ditolak secara eksplisit: sebuah task ditandai selesai hanya ketika bukti menyatakan demikian.
 
 ```bash
+bun scripts/plan-closeout.mjs --readiness docs/code-plan/plans/<plan>.md --evidence readiness.log
+bun scripts/plan-mark-done.mjs --from readiness.log docs/code-plan/plans/<plan>.md
 bun scripts/plan-mark-done.mjs --from runner.log docs/code-plan/plans/<plan>.md
 bun scripts/plan-mark-done.mjs --task T3 docs/code-plan/plans/<plan>.md  # assert, no evidence
 ```

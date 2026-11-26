@@ -10,10 +10,14 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync,
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { loadRegistry } from './pr-registry.mjs';
-import { parseRemote, resolveRepoPath, applyReconcile } from './lib/registry-sync.mjs';
+import { parseRemote, resolveRepoPath, applyReconcile, reconcile } from './lib/registry-sync.mjs';
 
 const SCRIPT = path.join(path.dirname(new URL(import.meta.url).pathname), 'pr-registry.mjs');
 const GIT_ENV = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+// The merged verdict reads the issue store; a path that never exists keeps the
+// machine's real plan.issues.json out of these tests.
+const NO_STORE = path.join(tmpdir(), 'pr-registry-reconcile-no-issue-store', 'plan.issues.json');
+const DUE = 'due: bun scripts/plan-close-loop.mjs --due';
 
 const ANSWERS = {
   11: { state: 'MERGED', mergedAt: '2026-10-10T01:00:00Z', closedAt: '2026-10-10T01:00:00Z', headRefName: 'p/m1' },
@@ -29,7 +33,7 @@ function git(cwd, ...args) {
   if (r.exitCode !== 0) throw new Error(`git ${args.join(' ')}: ${r.stderr}`);
 }
 
-function fixture() {
+function fixture({ only } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'pr-registry-reconcile-'));
   const bin = path.join(dir, 'bin');
   mkdirSync(bin);
@@ -69,17 +73,36 @@ function fixture() {
       row('g1', 'open', 20, undefined, fresh, `${dir}/Gone-wt/g1`),
     ],
   };
+  if (only) registry.sessions = registry.sessions.filter((s) => only.includes(s.session));
   const file = path.join(dir, 'pr.registry.json');
   writeFileSync(file, JSON.stringify(registry, null, 2));
   const run = (...args) => {
     const r = Bun.spawnSync(['bun', SCRIPT, 'reconcile', '--registry', file, ...args], {
-      env: { ...process.env, ...GIT_ENV, PATH: `${bin}:${process.env.PATH}` },
+      env: { ...process.env, ...GIT_ENV, PLAN_ISSUES_CONFIG: NO_STORE, PATH: `${bin}:${process.env.PATH}` },
     });
     return { code: r.exitCode, out: r.stdout.toString(), err: r.stderr.toString() };
   };
   const state = (s) => loadRegistry(file).sessions.find((x) => x.session === s);
   const calls = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : []);
-  return { dir, file, run, state, calls, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  // In-process, so a verdict function can be injected; the fake gh still answers.
+  const runIn = (verdict, flags = {}) => {
+    const saved = { PATH: process.env.PATH, ...Object.fromEntries(Object.keys(GIT_ENV).map((k) => [k, process.env[k]])) };
+    const log = console.log;
+    const out = [];
+    Object.assign(process.env, GIT_ENV, { PATH: `${bin}:${process.env.PATH}` });
+    console.log = (...a) => out.push(a.join(' '));
+    try {
+      const code = reconcile({ registryPath: file, rootDir: dir, flags, verdict });
+      return { code, lines: out.join('\n').split('\n') };
+    } finally {
+      console.log = log;
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  };
+  return { dir, file, repoSsh, run, runIn, state, calls, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 test('parseRemote reads owner/repo from https and ssh origin URLs', () => {
@@ -228,4 +251,68 @@ test('a stale close is dropped at write time when the session gained a PR since 
   assert.equal(applyReconcile({ version: 1, sessions: [live] }, facts).sessions[0].state, 'closed');
   const gained = { ...live, state: 'verified', pr: 9 };
   assert.deepEqual(applyReconcile({ version: 1, sessions: [gained] }, facts).sessions[0], gained);
+});
+
+test('reconcile prints the close-out verdict right after each merged line, and none in --dry-run', () => {
+  const f = fixture();
+  try {
+    const plans = path.join(f.repoSsh, 'docs', 'code-plan', 'plans');
+    mkdirSync(plans, { recursive: true });
+    writeFileSync(path.join(plans, 'p.md'), '---\nstatus: Verification\n---\n\n# p\n');
+    const dry = f.run('--dry-run');
+    assert.ok(!/warning: recording|^note: close-out|^due: /m.test(dry.out), dry.out);
+    const lines = f.run().out.split('\n');
+    const at = lines.findIndex((l) => l.startsWith('merged m1 '));
+    assert.ok(at >= 0, lines.join('\n'));
+    // The verdict block runs from the merged line to the next reconcile line.
+    const block = [];
+    for (let i = at + 1; i < lines.length && !/^(merged|closed|skipped|stale|reconciled) /.test(lines[i]); i++) block.push(lines[i]);
+    assert.ok(block.includes('warning: recording "m1" as merged, but plan p is not closed out:'), lines.join('\n'));
+    assert.equal(block.at(-1), DUE, lines.join('\n'));
+    assert.equal(f.state('m1').state, 'merged');
+  } finally { f.cleanup(); }
+});
+
+test('reconcile asks the verdict with the merge repository of the session', () => {
+  const f = fixture({ only: ['m1', 'o1'] });
+  try {
+    const seen = [];
+    const r = f.runIn((s, opts) => { seen.push([s.session, opts.repoRoot]); return { lines: ['verdict line'] }; });
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.deepEqual(seen, [['m1', f.repoSsh]]);
+    const at = r.lines.findIndex((l) => l.startsWith('merged m1 '));
+    assert.equal(r.lines[at + 1], 'verdict line');
+  } finally { f.cleanup(); }
+});
+
+test('reconcile asks the verdict with the -wt derived repository for a session that records none', () => {
+  const f = fixture({ only: ['r1'] });
+  try {
+    const seen = [];
+    const r = f.runIn((s, opts) => { seen.push([s.session, opts.repoRoot]); return { lines: [] }; });
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.deepEqual(seen, [['r1', path.join(f.dir, 'Other')]]);
+  } finally { f.cleanup(); }
+});
+
+test('reconcile turns a verdict that throws into one note line and keeps the exit code', () => {
+  const f = fixture({ only: ['m1'] });
+  try {
+    const r = f.runIn(() => { throw new Error('boom'); });
+    assert.equal(r.code, 0, r.lines.join('\n'));
+    assert.equal(f.state('m1').state, 'merged');
+    const notes = r.lines.filter((l) => l.startsWith('note: '));
+    assert.equal(notes.length, 1, r.lines.join('\n'));
+    assert.match(notes[0], /m1.*boom/);
+  } finally { f.cleanup(); }
+});
+
+test('reconcile --dry-run never asks the verdict', () => {
+  const f = fixture({ only: ['m1'] });
+  try {
+    let asked = 0;
+    const r = f.runIn(() => { asked++; return { lines: ['verdict line'] }; }, { 'dry-run': true });
+    assert.equal(asked, 0);
+    assert.ok(!r.lines.includes('verdict line'), r.lines.join('\n'));
+  } finally { f.cleanup(); }
 });

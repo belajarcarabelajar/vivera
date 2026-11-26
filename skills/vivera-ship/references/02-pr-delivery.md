@@ -21,6 +21,8 @@ So the naming is computed rather than chosen, and the order is computed rather t
 9. `gh pr merge <N> --merge --match-head-commit <sha>`
 10. `bun scripts/pr-registry.mjs reconcile`
 
+Between steps 6 and 7 the owner may type `/steward` to have a watch handle failing checks, conflicts, and review comments on the open PR. An agent cannot start it, and `/ship` is not used here because it opens its own PR outside the registry and the template. The watch follows `.claude/skills/steward/SKILL.md`, which reruns the skipped git-hook gates before each push and never merges. After the watch ends, run step 4 again on the final head before step 9, because the watch pushed commits no local gate verified.
+
 ### 5.1 Isolation, before any subagent is dispatched
 ```bash
 # One claim per session. It derives the branch and worktree path, then runs

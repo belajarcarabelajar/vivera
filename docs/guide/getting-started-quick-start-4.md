@@ -55,6 +55,15 @@ forwards the updates to the bridge instead.
 Install, logs, and revert are in `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs` runs the
 Bun tests of the bridge and of the mod's hooks.
 
+In OpenCode the same mirror is a plugin, `mods/telegram-ask/opencode/telegram-ask.ts`, installed as a plain copy
+in `~/.config/opencode/plugins/`. `./install.sh` neither copies nor checks it, so the copy does not follow a pull:
+after a pull that changes the plugin, copy it again, check with `cmp` that both files match, and restart OpenCode.
+
+```bash
+cp ~/vivera/mods/telegram-ask/opencode/telegram-ask.ts ~/.config/opencode/plugins/telegram-ask.ts
+cmp ~/vivera/mods/telegram-ask/opencode/telegram-ask.ts ~/.config/opencode/plugins/telegram-ask.ts && echo same
+```
+
 Things that are easy to get wrong:
 
 - **There is no `CLAUDE.md` on purpose.** Claude Code reads `AGENTS.md` itself only when no `CLAUDE.md`

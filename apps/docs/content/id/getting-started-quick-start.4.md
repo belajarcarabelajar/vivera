@@ -57,6 +57,16 @@ melakukan polling pada bot yang sama, Snipset yang meneruskan update ke bridge.
 Cara pasang, log, dan revert ada di `mods/telegram-ask/README.md`; `scripts/telegram-ask.test.mjs`
 menjalankan tes Bun milik bridge dan milik hook mod.
 
+Di OpenCode, cermin yang sama berupa plugin, `mods/telegram-ask/opencode/telegram-ask.ts`, yang dipasang sebagai
+salinan biasa di `~/.config/opencode/plugins/`. `./install.sh` tidak menyalin maupun memeriksanya, jadi salinan itu
+tidak ikut berubah saat pull: setelah pull yang mengubah plugin, salin ulang, pastikan dengan `cmp` bahwa kedua file
+sama, lalu restart OpenCode.
+
+```bash
+cp ~/vivera/mods/telegram-ask/opencode/telegram-ask.ts ~/.config/opencode/plugins/telegram-ask.ts
+cmp ~/vivera/mods/telegram-ask/opencode/telegram-ask.ts ~/.config/opencode/plugins/telegram-ask.ts && echo same
+```
+
 Hal-hal yang mudah keliru:
 
 - **Sengaja tidak ada `CLAUDE.md`.** Claude Code membaca `AGENTS.md` sendiri hanya jika tidak ada `CLAUDE.md`

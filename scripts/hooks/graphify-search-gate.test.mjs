@@ -8,7 +8,7 @@
 import { test, expect } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { gateTarget, MAX_BLOCKS, shellPipelines } from './graphify-search-nudge.mjs';
+import { DEEP_LEVELS, depthBelowRoot, gateTarget, MAX_BLOCKS, shellPipelines } from './graphify-search-nudge.mjs';
 import {
   contextOf,
   event,
@@ -96,6 +96,24 @@ test('the gate never blocks Read, Glob, find, single-file searches, pipe filters
     const r = run(event(root, tool, input), { stateDir, env });
     expect(r.status).toBe(0);
   }
+});
+
+test('a search two or more folders below the repository root is never blocked; one folder below still is', () => {
+  const root = repo('gate-deep');
+  mkdirSync(path.join(root, 'apps', 'web', 'src'), { recursive: true });
+  const env = gateEnv();
+  const status = (tool, input) => run(event(root, tool, input), { stateDir: tempDir('state'), env }).status;
+  expect(DEEP_LEVELS).toBe(2);
+  expect(status('Bash', { command: 'rg foo apps/web' })).toBe(0);
+  expect(status('Bash', { command: `cd '${root}/apps/web/src' && rg -n foo` })).toBe(0);
+  expect(status('Grep', { pattern: 'foo', path: path.join(root, 'apps', 'web') })).toBe(0);
+  expect(status('Bash', { command: 'rg foo apps' })).toBe(2);
+  expect(status('Bash', { command: 'rg foo' })).toBe(2);
+});
+
+test('depthBelowRoot counts folders between the repository root and the target', () => {
+  const g = path.join('/r', 'graphify-out', 'graph.json');
+  expect(['/r', '/r/a', '/r/a/b', '/r/a/b/c', '/elsewhere', '/r/../x'].map((d) => depthBelowRoot(g, d))).toEqual([0, 1, 2, 3, 0, 0]);
 });
 
 test('the gate stays open in a repository without a graph and outside any repository', () => {

@@ -5,19 +5,21 @@
 // reached Complete, and caches the result for the session-start note.
 // `--keep-open` records the owner's answer for a plan at its current hash, so
 // the plan stays off the list until its text changes. Neither mode writes a plan
-// file: the Complete flip happens only after the owner's Close plan answer.
+// file. `--flip` is the Complete flip, run only after the owner's Close plan
+// answer: one close-out PR per repository (scripts/lib/closeout-flip.mjs).
 
 import { readFileSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { auditCloseout } from './plan-closeout.mjs';
-import { planStatus } from './plan-issue-sync.mjs';
+import { planStatus, ghRunner, loadConfig, resolveProjectRepo, ISSUES_STORE } from './plan-issue-sync.mjs';
 import { extractFrontmatter } from './ultra-plan-runner.mjs';
 import { readinessVerdict, openNowRows, openStepBoxes } from './lib/plan-readiness.mjs';
 import { planFileOf } from './lib/registry-plan-file.mjs';
 import { hashOf } from './lib/plan-issue-render.mjs';
 import { readDue, writeDue, readKept, writeKept } from './lib/closeout-state.mjs';
+import { flipRepo, cwdMeasure } from './lib/closeout-flip.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const closeoutScript = path.join(repoRoot, 'scripts', 'plan-closeout.mjs');
@@ -109,14 +111,15 @@ function readinessMeasure({ registry, timeoutS }) {
 const USAGE = [
   'usage: bun scripts/plan-close-loop.mjs --due [--repo <dir>] [--registry <path>] [--timeout-s <n>]',
   '       bun scripts/plan-close-loop.mjs --keep-open <plan>... --reason <text> [--repo <dir>] [--registry <path>]',
+  '       bun scripts/plan-close-loop.mjs --flip <plan>... [--repo <dir>] [--registry <path>] [--timeout-s <n>]',
 ].join('\n');
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
-  const allowed = mode === '--due' ? ['--repo', '--registry', '--timeout-s'] : mode === '--keep-open' ? ['--repo', '--registry', '--reason'] : null;
+  const allowed = mode === '--due' || mode === '--flip' ? ['--repo', '--registry', '--timeout-s'] : mode === '--keep-open' ? ['--repo', '--registry', '--reason'] : null;
   if (!allowed) return null;
   const opts = { mode, plans: [] };
-  if (mode === '--keep-open') while (rest.length && !rest[0].startsWith('--')) opts.plans.push(rest.shift());
+  if (mode !== '--due') while (rest.length && !rest[0].startsWith('--')) opts.plans.push(rest.shift());
   while (rest.length) {
     const flag = rest.shift();
     const value = rest.shift();
@@ -125,6 +128,7 @@ function parseArgs(argv) {
   }
   if (opts['--timeout-s'] !== undefined && !(Number(opts['--timeout-s']) > 0)) return null;
   if (mode === '--keep-open' && (!opts.plans.length || !opts['--reason']?.trim())) return null;
+  if (mode === '--flip' && !opts.plans.length) return null;
   return opts;
 }
 
@@ -173,6 +177,74 @@ function keepOpenCli(opts, { fallbackRepo, sessions }) {
   return 0;
 }
 
+// Rule B4: synced from the temp worktree, plan-issue-sync would take the worktree's
+// directory name as the project, so the main checkout's mapped project is named.
+// An unmapped one is left out; the sync then falls back to the origin remote.
+function issueProject(planRepo) {
+  try {
+    const cfg = loadConfig(ISSUES_STORE);
+    const { project } = resolveProjectRepo(cfg, planRepo);
+    return cfg.projects[project] ? project : null;
+  } catch {
+    return null;
+  }
+}
+
+function flipCli(opts, { fallbackRepo, sessions }) {
+  const byRepo = new Map();
+  const errors = [];
+  for (const plan of opts.plans) {
+    const own = sessions.filter((s) => s.plan === plan);
+    const s = own.find((x) => x.state === 'merged') ?? own[0];
+    if (!s) {
+      errors.push(`unknown plan: ${plan} (no registry session)`);
+      continue;
+    }
+    const file = planFileOf(s, fallbackRepo);
+    if (!existsSync(file)) {
+      errors.push(`no plan file for ${plan}: ${file}`);
+      continue;
+    }
+    // The repository holding the plan file, which differs from s.repo when a vivera plan drives another repo.
+    const repo = path.resolve(s.plan_repo ?? s.repo ?? fallbackRepo);
+    byRepo.set(repo, [...(byRepo.get(repo) ?? []), { plan, file }]);
+  }
+  // As with --keep-open, a typo stops the run before any push or PR.
+  if (errors.length) {
+    for (const e of errors) console.error(e);
+    return 2;
+  }
+  const ghRun = ghRunner();
+  const deps = {
+    git: (args, { cwd }) => {
+      const r = spawnSync('git', args, { cwd, encoding: 'utf8', env: process.env });
+      return { code: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr || r.error?.message || '' };
+    },
+    gh: (args, { input }) => {
+      const r = ghRun(args, input);
+      return { code: r.ok ? 0 : (r.status ?? 1), stdout: r.out, stderr: r.err ?? '' };
+    },
+    sync: (file, { env, repoRoot: planRepo }) => {
+      const project = issueProject(planRepo);
+      const args = [path.join(repoRoot, 'scripts', 'plan-sync.mjs'), file, ...(project ? ['--project', project] : [])];
+      return { code: spawnSync(process.execPath, args, { stdio: 'inherit', env }).status ?? 1 };
+    },
+    measure: cwdMeasure({ timeoutS: opts['--timeout-s'] ?? 300 }),
+  };
+  let failed = false;
+  for (const [repo, plans] of byRepo) {
+    const r = flipRepo({ repoRoot: repo, plans, deps });
+    const pr = r.pr ? `PR ${r.pr.url}` : 'no PR';
+    console.log(`${repo}: flipped ${r.flipped.length}, ${pr}`);
+    if (r.error) {
+      failed = true;
+      console.log(`${repo}: error: ${r.error}${r.worktree ? ` (worktree kept: ${r.worktree})` : ''}`);
+    }
+    for (const s of r.skipped) console.log(`skipped\t${s.plan}\t${s.reason}`);
+  }
+  return failed ? 1 : 0;
+}
+
 if (import.meta.main) {
   const opts = parseArgs(process.argv.slice(2));
   if (!opts) {
@@ -189,5 +261,6 @@ if (import.meta.main) {
     process.exit(2);
   }
   const ctx = { registry, fallbackRepo, sessions };
-  process.exit(opts.mode === '--due' ? dueCli(opts, ctx) : keepOpenCli(opts, ctx));
+  const modes = { '--due': dueCli, '--keep-open': keepOpenCli, '--flip': flipCli };
+  process.exit(modes[opts.mode](opts, ctx));
 }

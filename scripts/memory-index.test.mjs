@@ -150,6 +150,6 @@ describe('the real handbook', () => {
     const topics = Object.fromEntries(files.map((f) => [`docs/memory/${f}`, fs.readFileSync(path.join(dir, f), 'utf8')]));
     expect(checkMemoryIndex({ memory: fs.readFileSync(path.join(ROOT, 'MEMORY.md'), 'utf8'), topics })).toEqual([]);
     expect(fs.readFileSync(path.join(ROOT, 'MEMORY.md'), 'utf8')).toMatch(/^Retired: (\(none\)|L\d+(, L\d+)*)$/m);
-    expect(files).toEqual(['gates-and-tests.md', 'git-and-delivery.md', 'other-repositories.md', 'plans-and-approvals.md', 'subagents.md', 'tools-and-environment.md']);
+    expect(files).toEqual(['gates-and-tests.md', 'git-and-delivery.md', 'other-repositories.md', 'plans-and-approvals.md', 'repl-and-harness.md', 'subagents.md', 'tools-and-environment.md']);
   });
 });

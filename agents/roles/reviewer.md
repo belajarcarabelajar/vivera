@@ -29,6 +29,8 @@ How to audit:
 
 Report every finding, deduplicated by location and defect, each with a path, a line, and the failing evidence. State separately what you verified and what you could not.
 
+REPL scripts: declare every path and value the script uses, since an earlier script's names can be gone. The REPL is sealed, so use `$`, `file()` and `write()`, not Bun, process, Buffer, fetch or structuredClone. Add `.nothrow()` when a non-zero exit is information.
+
 ## Rules card
 
 The orchestrating agent reads `vivera-rules`; you follow this card instead.

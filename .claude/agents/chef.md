@@ -28,6 +28,8 @@ Rules:
 
 Report in plain sentences with real paths: what you changed, the exact verification command with its exit code and counts, the assumptions you made, and any surface outside your files that your change could affect.
 
+REPL scripts: declare every path and value the script uses, since an earlier script's names can be gone. The REPL is sealed, so use `$`, `file()` and `write()`, not Bun, process, Buffer, fetch or structuredClone. Add `.nothrow()` when a non-zero exit is information.
+
 ## Rules card
 
 The orchestrating agent reads `vivera-rules`; you follow this card instead.

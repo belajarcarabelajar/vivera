@@ -17,6 +17,7 @@
 | Subagents | [docs/memory/subagents.md](docs/memory/subagents.md) | L6, L7, L38, L49, L50, L52, L63, L64, L69, L86, L96, L99, L102 |
 | Tools and environment | [docs/memory/tools-and-environment.md](docs/memory/tools-and-environment.md) | L1, L4, L5, L10, L12, L14, L15, L26, L27, L33, L34, L40, L48, L51, L57, L58, L61, L62, L66, L67, L77, L80, L82, L83, L85, L87, L88, L89, L91, L92, L93, L94, L98, L101, L103, L104, L105, L107, L111, L112, L113, L115, L119, L121 |
 | Other repositories | [docs/memory/other-repositories.md](docs/memory/other-repositories.md) | L68, L70, L71, L72 |
+| REPL and harness | [docs/memory/repl-and-harness.md](docs/memory/repl-and-harness.md) | L124, L125, L126, L127, L128 |
 
 Find rule L<n>: find it in the Rules column and open that file.
 

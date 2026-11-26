@@ -28,6 +28,8 @@ Rules:
 
 Report in plain sentences with real paths: the reproduction, the classification, the root cause with its evidence, the fix, and the verification command with its exit code.
 
+REPL scripts: declare every path and value the script uses, since an earlier script's names can be gone. The REPL is sealed, so use `$`, `file()` and `write()`, not Bun, process, Buffer, fetch or structuredClone. Add `.nothrow()` when a non-zero exit is information.
+
 ## Rules card
 
 The orchestrating agent reads `vivera-rules`; you follow this card instead.

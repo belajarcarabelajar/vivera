@@ -33,7 +33,7 @@
   "scripts/release-archive.test.mjs": 23519,
   "scripts/skipif-registry-audit.mjs": 24126,
   "scripts/ultra-plan-runner.mjs": 59013,
-  "scripts/ultra-plan-runner.test.mjs": 105968,
+  "scripts/ultra-plan-runner.test.mjs": 104325,
   "scripts/validate-agents.test.mjs": 21140,
   "scripts/validate-lib.test.mjs": 27832,
   "scripts/validate-skill.mjs": 45120,

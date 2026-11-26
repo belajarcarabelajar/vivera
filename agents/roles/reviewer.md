@@ -39,4 +39,5 @@ The orchestrating agent reads `vivera-rules`; you follow this card instead.
 - Use Bun for JavaScript and TypeScript work unless the contract names the project's own package manager.
 - No em dash and no attribution line or co-author trailer in anything you write.
 - A turn budget in the contract replaces the 25th-call default above; report partial results by it.
+- Never call the advisor tool: the approach was settled before the plan was approved, and the parent session consults the advisor at a bottleneck. If you are stuck, report the blocker to the parent instead.
 - End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

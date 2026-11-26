@@ -99,6 +99,34 @@ function recordPending(repoRoot, rows, pr) {
   writeDue({ generated_at: due.generated_at ?? new Date(pr.opened_at).toISOString(), plans: due.plans });
 }
 
+// A plan with a recorded close-out PR flips again only once that PR is known to be closed unmerged:
+// an open one already carries the flip, a merged one means the checkout is behind, an unknown state is not a yes.
+function pendingCleared(plans, repoRoot, gh, skip) {
+  const due = readDue();
+  let cleared = false;
+  const go = plans.filter(({ plan }) => {
+    const entry = due.plans.find((e) => e.plan === plan && e.pending_pr);
+    if (!entry) return true;
+    const { number, repo } = entry.pending_pr;
+    const v = gh(['pr', 'view', String(number), '--repo', repo, '--json', 'state'], {});
+    let state = null;
+    try {
+      state = v.code === 0 ? JSON.parse(v.stdout).state : null;
+    } catch {}
+    if (state === 'CLOSED') {
+      entry.pending_pr = null;
+      cleared = true;
+      return true;
+    }
+    if (state === 'OPEN') skip(plan, `closeout PR #${number} open`);
+    else if (state === 'MERGED') skip(plan, `closeout PR #${number} merged; pull ${repoRoot}, then run --due again`);
+    else skip(plan, `closeout PR #${number} state unreadable (${v.code === 0 ? `state ${state ?? 'missing'} in gh output` : failed(v)})`);
+    return false;
+  });
+  if (cleared) writeDue(due);
+  return go;
+}
+
 const failed = (r) => `exit ${r.code}: ${String(r.stderr || r.stdout || '').trim().split('\n').pop()}`;
 
 export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
@@ -107,7 +135,7 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   const skip = (plan, reason) => result.skipped.push({ plan, reason });
   const ignored = [];
   const tracked = [];
-  for (const p of plans) (git(['check-ignore', '-q', p.file], { cwd: repoRoot }).code === 0 ? ignored : tracked).push(p);
+  for (const p of pendingCleared(plans, repoRoot, gh, skip)) (git(['check-ignore', '-q', p.file], { cwd: repoRoot }).code === 0 ? ignored : tracked).push(p);
 
   for (const { plan, file } of ignored) {
     const r = flipOne(plan, file, measure);
@@ -192,14 +220,27 @@ export function flipRepo({ repoRoot, plans, deps, now = Date.now() }) {
   result.pr = { number: Number(url[1]), url: url[0] };
   result.flipped.push(...rows.map((r) => r.plan));
 
-  const config = publishConfig(repoRoot, wt);
-  const env = { ...process.env, ...(config ? { PLAN_PUBLISH_CONFIG: config.file } : {}) };
-  const syncFailed = rows.filter((r) => sync(path.join(wt, r.rel), { env, repoRoot }).code !== 0).map((r) => r.plan);
-  if (config) rmSync(config.dir, { recursive: true, force: true });
+  const errors = [];
+  let config = null;
+  try {
+    config = publishConfig(repoRoot, wt);
+    const env = { ...process.env, ...(config ? { PLAN_PUBLISH_CONFIG: config.file } : {}) };
+    const syncFailed = rows.filter((r) => sync(path.join(wt, r.rel), { env, repoRoot }).code !== 0).map((r) => r.plan);
+    if (syncFailed.length) errors.push(`sync failed for ${syncFailed.join(', ')}`);
+  } catch (e) {
+    errors.push(`sync failed (${e.message})`);
+  } finally {
+    if (config) rmSync(config.dir, { recursive: true, force: true });
+  }
   // Recorded even when a sync failed, or the next --due would offer the plan again and open a second PR.
-  recordPending(repoRoot, rows, { number: result.pr.number, repo: slug, opened_at: new Date(now).toISOString() });
-  if (syncFailed.length) result.error = `sync failed for ${syncFailed.join(', ')}`;
-  // The remote branch backs the PR, so only the local side goes.
-  drop();
+  try {
+    recordPending(repoRoot, rows, { number: result.pr.number, repo: slug, opened_at: new Date(now).toISOString() });
+  } catch (e) {
+    errors.push(`pending_pr for PR #${result.pr.number} not recorded (${e.message})`);
+  } finally {
+    // The remote branch backs the PR, so only the local side goes.
+    drop();
+  }
+  if (errors.length) result.error = errors.join('; ');
   return result;
 }

@@ -199,13 +199,15 @@ function flipCli(opts, { registry, fallbackRepo, sessions }) {
   for (const plan of opts.plans) {
     const own = sessions.filter((s) => s.plan === plan);
     const s = own.find((x) => x.state === 'merged');
+    // auditCloseout is the rule --due lists by: every session merged or closed, at least one merged.
+    const landed = auditCloseout({ sessions: own, planStatusOf: () => null }).length > 0;
     if (!own.length) {
       errors.push(`unknown plan: ${plan} (no registry session)`);
       continue;
     }
     // Only a landed plan was measured by --due, so only a landed plan may be flipped.
-    if (!s) {
-      errors.push(`not landed: ${plan} (no merged registry session)`);
+    if (!landed) {
+      errors.push(`not landed: ${plan} (needs every registry session merged or closed and one merged)`);
       continue;
     }
     const file = planFileOf(s, fallbackRepo);

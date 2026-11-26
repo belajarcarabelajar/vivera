@@ -239,9 +239,9 @@ function evalSuites(paths) {
 const isDocsSource = (p) => p === 'README.md' || p.startsWith('apps/docs/')
   || (p.startsWith('docs/') && !p.startsWith('docs/code-plan/'));
 
-// Indonesian twins may lag while the docs site is frozen: `--warn` only reports them.
-const docsSuites = (reasons) => [['docs-gen', '--check', '--scope', 'en'], ['docs-warn', '--warn']]
-  .map(([name, ...flags]) => ({ name, cmd: ['bun', 'scripts/docs-gen.mjs', ...flags], reasons: [...reasons] }));
+// The check the docs deploy runs (docs-remote.sh build: `--check --scope all`), so a stale ID twin
+// fails before merge, not in Docs deploy after it (PR #283 merged green, deploy failed, fixed in #284).
+const docsSuites = (reasons) => [{ name: 'docs-gen', cmd: ['bun', 'scripts/docs-gen.mjs', '--check', '--scope', 'all'], reasons: [...reasons] }];
 
 /** Planner: `index.sources` maps scripts/ to text; `index.mermaidChanged` lists edited mermaid blocks. */
 export function planChecks(changed, index, { base = 'origin/main', full = false } = {}) {

@@ -175,7 +175,7 @@ describe('planChecks', () => {
   test('a docs markdown file selects only the docs-gen, file-size, and copy checks', () => {
     const plan = check(['docs/guide.md']);
     targeted(plan);
-    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
+    expect(names(plan)).toEqual(['file-size', 'docs-gen', 'copy-rules', 'secrets']);
     expect(suite(plan, 'copy-rules').cmd).toEqual(['bun', 'scripts/check-copy-rules.mjs', '--diff', 'origin/main']);
     expect(plan.skipped.map((s) => s.name)).toEqual([
       'render-diagrams', 'validate-skill', 'validate-agents', 'gen-sprite-agents', 'tests', 'sync-snippets',
@@ -184,7 +184,7 @@ describe('planChecks', () => {
 
   test('a markdown file whose mermaid block changed selects render-diagrams', () => {
     const plan = planChecks(['docs/guide.md'], { sources: SOURCES, mermaidChanged: ['docs/guide.md'] });
-    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
+    expect(names(plan)).toEqual(['render-diagrams', 'file-size', 'docs-gen', 'copy-rules', 'secrets']);
   });
 
   test('a diagram source selects render-diagrams', () => {
@@ -192,11 +192,11 @@ describe('planChecks', () => {
     expect(names(check(['mermaid.dark.config.json']))).toContain('render-diagrams');
   });
 
-  test('the copy, size, and both docs checks run with their flags, targeted or full', () => {
+  test('the copy, size, and docs checks run with their flags, targeted or full', () => {
     for (const p of ['docs/guide.md', 'bun.lock']) {
       const cmd = (n) => planChecks([p], INDEX, { base: 'u/d' }).suites.find((s) => s.name === n)?.cmd.slice(2);
-      expect(['copy-rules', 'file-size', 'docs-gen', 'docs-warn'].map(cmd))
-        .toEqual([['--diff', 'u/d'], ['--all', '--base', 'u/d'], ['--check', '--scope', 'en'], ['--warn']]);
+      expect(['copy-rules', 'file-size', 'docs-gen'].map(cmd))
+        .toEqual([['--diff', 'u/d'], ['--all', '--base', 'u/d'], ['--check', '--scope', 'all']]);
     }
   });
 
@@ -211,7 +211,7 @@ describe('planChecks', () => {
   test('bun.lock forces the full ci list', () => {
     const plan = check(['bun.lock']);
     expect(plan.full).toBe(true);
-    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'docs-warn', 'copy-rules', 'secrets']);
+    expect(names(plan)).toEqual([...FULL_CI.map((s) => s.name), 'docs-gen', 'copy-rules', 'secrets']);
     expect(plan.suites[0].reasons.join('\n')).toContain('bun.lock');
     expect(plan.skipped).toEqual([]);
   });
@@ -243,7 +243,7 @@ describe('planChecks', () => {
 
   test('file-size runs before the tests and the snippet check', () => {
     const n = names(check(['bun.lock']));
-    expect(n.slice(n.indexOf('gen-sprite-agents'), -4)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
+    expect(n.slice(n.indexOf('gen-sprite-agents'), -3)).toEqual(['gen-sprite-agents', 'file-size', 'tests', 'sync-snippets']);
   });
 
   test('eval scenarios and fixtures select their tests and the eval; evals/README.md is a doc', () => {

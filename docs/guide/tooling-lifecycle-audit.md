@@ -21,9 +21,11 @@ Always exits 0: a report, not a gate. A threshold would fail the moment a new pl
 
 ## Task Completion (`scripts/plan-mark-done.mjs`)
 
-Reads a runner execution log and applies `[x]` ticks to plan `[ ]` step lines for every task that reached a terminal success (`PASSED` or `SKIPPED-IDEMPOTENT`). Three non-success statuses (`NEEDS-AGENT`, `READY (dry-run)`, `HALTED-UPSTREAM`) are explicitly refused: a task is marked done only when evidence says so.
+Reads an evidence log and applies `[x]` ticks to plan `[ ]` step lines for every task that reached a terminal success (`PASSED` or `SKIPPED-IDEMPOTENT`). The primary log is the readiness evidence, which records every task whose `skip_if` exited 0; a runner execution log (`ultra-plan-runner.mjs <plan> --execute > runner.log`) is still valid. Three non-success statuses (`NEEDS-AGENT`, `READY (dry-run)`, `HALTED-UPSTREAM`) are explicitly refused: a task is marked done only when evidence says so.
 
 ```bash
+bun scripts/plan-closeout.mjs --readiness docs/code-plan/plans/<plan>.md --evidence readiness.log
+bun scripts/plan-mark-done.mjs --from readiness.log docs/code-plan/plans/<plan>.md
 bun scripts/plan-mark-done.mjs --from runner.log docs/code-plan/plans/<plan>.md
 bun scripts/plan-mark-done.mjs --task T3 docs/code-plan/plans/<plan>.md  # assert, no evidence
 ```

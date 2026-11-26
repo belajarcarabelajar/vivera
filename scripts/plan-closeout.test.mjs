@@ -835,7 +835,7 @@ describe('open step boxes', () => {
     const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
     return { file, out: r.stdout.toString(), exit: r.exitCode };
   };
-  const tickFor = (file) => `bun scripts/ultra-plan-runner.mjs ${file} --execute > runner.log; bun scripts/plan-mark-done.mjs ${file} --from runner.log`;
+  const tickFor = (file) => `bun scripts/plan-closeout.mjs --readiness ${file} --evidence readiness.log; bun scripts/plan-mark-done.mjs ${file} --from readiness.log`;
 
   test('open step boxes: readiness CLI prints the count, five task rows and the tick command, then exits 1', () => {
     const { file, out, exit } = readiness([
@@ -880,12 +880,12 @@ describe('open step boxes', () => {
 
   const tick = tickFor(PLAN);
 
-  test('open step boxes: the tick command always runs plan-mark-done, never chained behind the runner with &&', () => {
+  test('open step boxes: the tick command always runs plan-mark-done, never chained with &&', () => {
     const text = [...front(['T1']), '', '### Task T1: a', '- [ ] Step 1 a', ''].join('\n');
     const root = repo({ planText: text, config: cfgWith(closedEntry) });
     const { fix } = checkCloseout({ repoRoot: root, planSlug: 'demo' }).gaps[0];
     assert.doesNotMatch(fix, /&&/);
-    assert.match(fix, /--execute > runner\.log; bun scripts\/plan-mark-done\.mjs /);
+    assert.match(fix, /--evidence readiness\.log; bun scripts\/plan-mark-done\.mjs /);
   });
 
   test('open step boxes: checkCloseout reports OPEN_STEPS naming the tasks and lines, with the tick command', () => {

@@ -22,11 +22,14 @@ import path from 'node:path';
 import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo } from './plan-issue-sync.mjs';
 import { planFileOf, planMissingOf } from './lib/registry-plan-file.mjs';
 import { planFreshness } from './plan-publish.mjs';
-import { extractFrontmatter, parseUltraPlanYaml, classifySkipIf, reapGroup } from './ultra-plan-runner.mjs';
-import { planTaskIds, taskSectionRange, stepLineIndices } from './plan-mark-done.mjs';
-import { missingTestPaths } from './lib/test-paths.mjs';
+import { extractFrontmatter, reapGroup } from './ultra-plan-runner.mjs';
 import { runPlanCommand } from './lib/remote-runner.mjs';
 import { defaultCwd, rereadAtMain } from './lib/readiness-main.mjs';
+import {
+  BOXES_SHOWN, tickCommand, openStepBoxes, otherOpenBoxes, readinessVerdict, taskReadiness, openNowRows, evidenceLog,
+} from './lib/plan-readiness.mjs';
+
+export { openStepBoxes, otherOpenBoxes, readinessVerdict, outputTail, taskReadiness, openNowRows } from './lib/plan-readiness.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -161,115 +164,8 @@ export function checkCloseout({
   return { skipped: skipped.length ? skipped.join('; ') : null, gaps };
 }
 
-const OPEN_STEP = /^[ \t]*[-*+][ \t]+\[ \]/;
-// Mirrors plan-mark-done's unexported STEP_RE and FENCE_RE, so both tools agree on what a box and a fence are.
-const OTHER_BOX = /^[ \t]*[-*+][ \t]+\[ \](?=[ \t]|$)/;
-const CODE_FENCE = /^[ \t]*(?:```|~~~)/;
-const BOXES_SHOWN = 5;
-
-const tickCommand = (plan) =>
-  `bun scripts/ultra-plan-runner.mjs ${plan} --execute > runner.log; bun scripts/plan-mark-done.mjs ${plan} --from runner.log`;
-
 const lineNumbers = (rows) =>
   rows.slice(0, BOXES_SHOWN).map((b) => b.line).join(', ') + (rows.length > BOXES_SHOWN ? ', ...' : '');
-
-// The gate counts only what plan-mark-done can tick, so its printed fix always clears it.
-export function openStepBoxes(planText) {
-  const lines = planText.split('\n');
-  const rows = [];
-  for (const task of planTaskIds(planText).ids) {
-    const range = taskSectionRange(lines, task);
-    if (!range) continue;
-    for (const i of stepLineIndices(lines, range.start, range.end)) {
-      if (OPEN_STEP.test(lines[i])) rows.push({ line: i + 1, text: lines[i].replace(/\r$/, '').trim(), task });
-    }
-  }
-  return rows.sort((a, b) => a.line - b.line);
-}
-
-export function otherOpenBoxes(planText) {
-  const lines = planText.split('\n');
-  const owned = new Set();
-  for (const task of planTaskIds(planText).ids) {
-    const range = taskSectionRange(lines, task);
-    if (range) for (let i = range.start; i < range.end; i++) owned.add(i);
-  }
-  let body = planText;
-  // checkCloseout runs inside the merge gate, where a malformed plan must still be measured, not throw.
-  try {
-    ({ body } = extractFrontmatter(planText));
-  } catch {}
-  // The body is a suffix of the file, so the lines before it give the whole-file offset.
-  const offset = lines.length - body.split('\n').length;
-  const rows = [];
-  let inFence = false;
-  for (let i = offset; i < lines.length; i++) {
-    // plan-mark-done starts each section outside a fence, so each stretch between task sections does too.
-    if (owned.has(i)) {
-      inFence = false;
-      continue;
-    }
-    const line = lines[i].replace(/\r$/, '');
-    if (CODE_FENCE.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (!inFence && OTHER_BOX.test(line)) rows.push({ line: i + 1, text: line.trim() });
-  }
-  return rows;
-}
-
-const STATES = ['DONE', 'OPEN', 'UNREAD', 'UNPROVEN'];
-
-export function readinessVerdict({ tasks, openNow = 0, openBoxes = 0 }) {
-  const counts = Object.fromEntries(STATES.map((s) => [s, 0]));
-  for (const t of tasks) counts[t.state] = (counts[t.state] ?? 0) + 1;
-  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0) return { verdict: 'NOT-READY', exit: 1, counts };
-  // A plan with no tasks measured nothing, so READY would recommend Complete without evidence.
-  if (tasks.length === 0 || counts.UNPROVEN > 0) return { verdict: 'NEEDS-HUMAN', exit: 3, counts };
-  return { verdict: 'READY', exit: 0, counts };
-}
-
-const TAIL_LINES = 5;
-const TAIL_COLS = 200;
-
-// ledgerTrace in ultra-plan-runner.mjs joins and escapes lines into one table
-// cell; here each line is printed on its own row, so it gets a plain list.
-export function outputTail({ stdout, stderr }) {
-  const raw = stderr && String(stderr).trim() ? stderr : (stdout || '');
-  const lines = String(raw).replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
-  return lines.slice(-TAIL_LINES).map((l) => (l.length > TAIL_COLS ? `${l.slice(0, TAIL_COLS)}…` : l));
-}
-
-export function taskReadiness(planText, { run, cwd, timeoutMs, onOutput }) {
-  const { frontmatter } = extractFrontmatter(planText);
-  const { tasks } = parseUltraPlanYaml(frontmatter);
-  return tasks.map((t) => {
-    const skipIf = typeof t.skip_if === 'string' ? t.skip_if : '';
-    const kind = classifySkipIf(skipIf);
-    // No command means no machine proof, so a human has to judge the task.
-    if (kind === 'empty' || kind === 'sentinel') return { id: t.id, state: 'UNPROVEN', skipIf };
-    // bun test exits 0 when a named file is missing, which would read an unmerged task as DONE.
-    const missing = missingTestPaths(skipIf, cwd);
-    if (missing.length) return { id: t.id, state: 'OPEN', skipIf, missing, tail: ['not run: a named test file is missing'] };
-    const r = run(skipIf, { cwd, timeoutMs });
-    const state = r.timedOut ? 'UNREAD' : r.exit === 0 ? 'DONE' : 'OPEN';
-    if (onOutput) onOutput(t.id, r);
-    return { id: t.id, state, skipIf, tail: outputTail(r) };
-  });
-}
-
-export function openNowRows(body) {
-  let n = 0;
-  for (const line of body.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith('|')) continue;
-    const cells = trimmed.replace(/^\||\|$/g, '').split('|').map((c) => c.replace(/`/g, '').trim());
-    // Plans annotate the class and state cells ("`NOW` bila sempat"), so only the leading word decides.
-    if (cells.some((c) => /^NOW\b/.test(c)) && cells.some((c) => /^OPEN\b/.test(c))) n++;
-  }
-  return n;
-}
 
 const TERMINAL = ['merged', 'closed'];
 
@@ -323,14 +219,14 @@ function writeTaskLog(dir, id, r) {
 }
 
 const USAGE = [
-  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--registry <path>] [--timeout-s <n>] [--log <dir>]',
+  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--registry <path>] [--timeout-s <n>] [--log <dir>] [--evidence <log>]',
   '       bun scripts/plan-closeout.mjs --audit [--registry <path>]',
 ].join('\n');
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
   const opts = { mode };
-  const allowed = mode === '--readiness' ? ['--cwd', '--registry', '--timeout-s', '--log'] :mode === '--audit' ? ['--registry'] : null;
+  const allowed = mode === '--readiness' ? ['--cwd', '--registry', '--timeout-s', '--log', '--evidence'] :mode === '--audit' ? ['--registry'] : null;
   if (!allowed) return null;
   if (mode === '--readiness') {
     opts.plan = rest.shift();
@@ -388,6 +284,16 @@ function readinessCli(opts) {
     for (const l of lines) console.log(`    ${t.id}> ${l}`);
   }
   if (logDir) console.log(`log: ${logDir}`);
+  if (opts['--evidence']) {
+    const file = path.resolve(opts['--evidence']);
+    try {
+      writeFileSync(file, evidenceLog(tasks));
+    } catch (e) {
+      console.error(`cannot write evidence log ${file}: ${e.message}`);
+      return 2;
+    }
+    console.log(`evidence: ${file}`);
+  }
   console.log(`open NOW follow-ups: ${openNow}`);
   const boxes = openStepBoxes(text);
   console.log(`open step boxes: ${boxes.length}`);
@@ -399,7 +305,7 @@ function readinessCli(opts) {
   console.log(`other open boxes: ${other.length} (outside task sections; tick by hand with evidence, not counted)`);
   for (const b of other.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
   const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length });
-  console.log(`readiness: ${v.verdict}`);
+  console.log(`readiness: ${v.verdict}${v.asserted ? ` (${v.asserted} asserted)` : ''}`);
   return v.exit;
 }
 

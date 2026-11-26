@@ -14,6 +14,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { loadRegistry, mutateRegistry, setPr } from '../pr-registry.mjs';
 import { maskUserinfo } from './sync-guards.mjs';
+import { closeoutVerdict, resolveMergeRepo } from './closeout-verdict.mjs';
 
 const DAY_MS = 86400000;
 const LIVE_STATES = ['isolated', 'active', 'verified', 'open'];
@@ -87,7 +88,8 @@ export function applyReconcile(registry, facts) {
 
 // Reads first, then writes once. The mutation only replays facts already read,
 // so mutateRegistry can re-apply it on a conflict without calling GitHub again.
-export function reconcile({ registryPath, rootDir, flags }) {
+// `verdict` is injected so tests can make it throw.
+export function reconcile({ registryPath, rootDir, flags, verdict = closeoutVerdict }) {
   const staleDays = flags['stale-days'] === undefined ? 7 : Number(flags['stale-days']);
   if (!Number.isFinite(staleDays) || staleDays < 0) throw new Error(`--stale-days must be a non-negative number, got ${flags['stale-days']}`);
   const dryRun = flags['dry-run'] === true;
@@ -98,6 +100,10 @@ export function reconcile({ registryPath, rootDir, flags }) {
   const counts = { merged: 0, closed: 0, stale: 0, skipped: 0 };
   const lines = [];
   const slugs = new Map();
+  // Index of each merged line, so the session's close-out verdict prints under it,
+  // with the repository this read resolved (a session without `repo` would
+  // otherwise be measured in this repository).
+  const mergedLine = new Map();
 
   for (const s of live) {
     if (!s.pr) {
@@ -121,6 +127,7 @@ export function reconcile({ registryPath, rootDir, flags }) {
     const { state, mergedAt, closedAt } = read.pr;
     if (state === 'MERGED') {
       counts.merged++;
+      mergedLine.set(lines.length, { ...s, repo: where.path });
       lines.push(`merged ${s.session} (PR #${s.pr} on ${repo.slug}) at ${mergedAt}`);
       facts.set(s.session, { patch: { state: 'merged', merged_at: mergedAt } });
     } else if (state === 'CLOSED') {
@@ -143,10 +150,23 @@ export function reconcile({ registryPath, rootDir, flags }) {
       return next;
     }, { registryPath });
   }
-  for (const l of lines) console.log(dryRun ? `[dry run] ${l}` : l);
+  lines.forEach((l, i) => {
+    console.log(dryRun ? `[dry run] ${l}` : l);
+    const s = mergedLine.get(i);
+    if (s && !dryRun) for (const v of verdictLines(verdict, s)) console.log(v);
+  });
   if (dryRun) console.log('dry run: nothing written');
   console.log(`reconciled ${live.length}: merged ${counts.merged}, closed ${counts.closed}, stale ${counts.stale}, stale-closed ${staleClosed}, skipped ${counts.skipped}`);
   return counts.skipped > 0 ? 1 : 0;
+}
+
+// The merge is already recorded, so a verdict that fails is reported, never fatal.
+function verdictLines(verdict, session) {
+  try {
+    return verdict(session, { repoRoot: resolveMergeRepo(session) }).lines;
+  } catch (e) {
+    return [`note: close-out verdict for ${session.session} not checked: ${e.message}`];
+  }
 }
 
 const real = (p) => (existsSync(p) ? realpathSync(p) : path.resolve(p));

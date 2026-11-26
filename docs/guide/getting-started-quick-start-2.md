@@ -5,7 +5,7 @@ other target is installed only when its harness is detected, or when you name it
 
 | Target id | Harness | Detected when | Skills go to | Sprite agents go to | Do the sprites load? |
 |---|---|---|---|---|---|
-| `ai-config` | Personal config mirror | always | `~/.config/ai/Super Ultra Code Plan Implementation.md` (one link) | none | n/a |
+| `ai-config` | Personal config mirror | always | `~/.config/ai/VIVERA.md` (one link) | none | n/a |
 | `agents` | Universal Agents | always | `~/.agents/skills/` | none | n/a |
 | `antigravity` | Antigravity 2.0 and the IDE | `~/.gemini` exists, or `agy` is on `PATH` | `~/.gemini/config/skills/` | `~/.gemini/config/agents/<sprite>/agent.md` | not verified (Antigravity 1.3.3) |
 | `antigravity-cli` | Antigravity CLI (`agy`) | `~/.gemini/antigravity-cli` exists, or `agy` is on `PATH` | `~/.gemini/antigravity-cli/skills/` | none | n/a |
@@ -16,8 +16,8 @@ other target is installed only when its harness is detected, or when you name it
 | `cursor` | Cursor | `~/.cursor` exists, or `cursor-agent` is on `PATH` | none | `~/.cursor/agents/<sprite>.md` | not verified (CLI not installed here) |
 | `copilot` | Copilot CLI | `~/.copilot` exists, or `copilot` is on `PATH` | none | `~/.copilot/agents/<sprite>.agent.md` | not verified (CLI not installed here) |
 
-Every skills directory above except `~/.config/ai` holds `super-ultra-code-plan/` (`SKILL.md`, `templates/`, `examples/` and the two
-Mermaid configs) next to the seven phase skills, `sucp-<name>/SKILL.md`. Runs on Linux in a throwaway home
+Every skills directory above except `~/.config/ai` holds `vivera/` (`SKILL.md`, `templates/`, `examples/` and the two
+Mermaid configs) next to the seven phase skills, `vivera-<name>/SKILL.md`. Runs on Linux in a throwaway home
 checked the directory-based and the CLI-based detection and the skills and sprite paths of all 10 targets,
 using stub CLIs for detection.
 
@@ -88,14 +88,14 @@ so an install made by an older version, or by hand, is judged by the same rules.
 | `ok` | Already the wanted link (in copy mode, an identical copy). | Nothing. |
 | `ours-stale` | The installer's own and wrong: a link into this checkout that points elsewhere or dangles, or a link into the items of the old `ai-skills` repository, live or dangling. | Replace it, with no backup, because nothing you wrote is in it. |
 | `foreign` | Anything the installer cannot show is its own: a real file or directory without a marker, or a link that points anywhere else (even a dangling one). | Move it to a backup, then place. |
-| `inrepo` | The destination is a file of this checkout itself (for example `~/.claude/skills/sucp-rules` linked to `<checkout>/skills/sucp-rules`). | Skip. |
+| `inrepo` | The destination is a file of this checkout itself (for example `~/.claude/skills/vivera-rules` linked to `<checkout>/skills/vivera-rules`). | Skip. |
 | `viadir` | An existing real file behind a symlinked directory (for example `~/.claude/skills -> ~/dotfiles/skills`), or a link there that is not the installer's own; in `--copy` mode also the installer's own links and any absent entry. | Skip. |
 
 | Operation | What it does | Tags you will see |
 |---|---|---|
 | Backup | The colliding file is moved with `mv` to `<dest>.vivera-bak-<UTC YYYYmmddTHHMMSSZ>`, for example `SKILL.md.vivera-bak-20261011T080000Z`. If that name is taken, `-1`, `-2` and so on are appended. If placing the link or copy then fails, your file is moved back and the run exits 1. | `[BACKUP]` |
 | `--check` | Read-only: it creates, moves and removes nothing of the installer's, also with `--dry-run`, with `--copy` and on a read-only `HOME` (when it runs `bun` for the sprite check, `bun` itself may create its transpiler cache under `~/.bun`; `BUN_RUNTIME_TRANSPILER_CACHE_PATH=0` stops that). One line per path, then a verdict. | `[ok]`, `[missing]`, `[stale]`, `[dangling]`, `[foreign]`, `[skip]` |
-| `--update` | Runs every step of a plain install, then prunes. A dangling link into the old `ai-skills` path is repointed with no backup. A `sucp-*` directory that this checkout no longer has is pruned, but only when it is a real directory that is the installer's own (it holds a marker, or its `SKILL.md` is a link the installer judges `ok` or `ours-stale`). Your own directory and a live link elsewhere are never pruned. In a directory that also holds other files, only the installer's link (or its `SKILL.md` and marker) is removed and the directory stays; the directory itself goes only when that leaves it empty. An edited `SKILL.md`, or a `SKILL.md` that is a symlink, is kept with a `[KEEP]` line. `--check` lists the same set as `[stale]`. | `[PRUNED]` |
+| `--update` | Runs every step of a plain install, then prunes. A dangling link into the old `ai-skills` path is repointed with no backup. A `vivera-*` directory that this checkout no longer has is pruned, but only when it is a real directory that is the installer's own (it holds a marker, or its `SKILL.md` is a link the installer judges `ok` or `ours-stale`). Your own directory and a live link elsewhere are never pruned. In a directory that also holds other files, only the installer's link (or its `SKILL.md` and marker) is removed and the directory stays; the directory itself goes only when that leaves it empty. An edited `SKILL.md`, or a `SKILL.md` that is a symlink, is kept with a `[KEEP]` line. `--check` lists the same set as `[stale]`. An install made under the skill names used before 2026-11-26 (listed in the README) is pruned by the same rule, also by `--uninstall`; an edited copy under an old name is kept, and `--check` reports it as `[warn] <path> (an edited copy under the old name; kept, delete it when you no longer need it)`, which does not fail the check. | `[PRUNED]` |
 | `--uninstall` | Removes every `ok` or `ours-stale` link and then puts the newest backup back: the later UTC stamp wins, then the larger `-N` as a number (`-10` beats `-2`); names that only look like a backup are ignored and older backups stay. It removes a directory with `rmdir` only when it is empty, with one exception: a managed copy directory (`templates/`, `examples/`) that is identical to its source, or still matches its recorded digest, is removed whole. A modified copy is kept, so your files survive. It never removes harness roots such as `~/.claude` or `~/.gemini`, `~/.config/ai` itself, the `antigravity-builtin` skills directory, or the `core.hooksPath` setting (undo it with `git -C <checkout> config --unset core.hooksPath`). It removes the generated sprite files too, when `bun` is present. | `[REMOVED]`, `[RESTORED]`, `[KEEP]` |
 | `--dry-run` | Prints the plan and writes nothing, in install, `--update` and `--uninstall` alike. | `[DRY-RUN]` lines |
 
@@ -105,7 +105,7 @@ so an install made by an older version, or by hand, is judged by the same rules.
 |---|---|
 | `[ok]` | The wanted link resolves (in copy mode, the copy matches). |
 | `[missing]` | Nothing there. `[missing] <dir> (sprite agents)` means an empty or partial sprite directory. |
-| `[stale]` | The installer's own but wrong: a link that points elsewhere in the checkout or into `ai-skills`, a copy where a link is expected, a copy that differs or was edited, a `sucp-*` directory this checkout no longer has, or sprite files that are out of date or hand-edited. `--update` fixes it. |
+| `[stale]` | The installer's own but wrong: a link that points elsewhere in the checkout or into `ai-skills`, a copy where a link is expected, a copy that differs or was edited, a `vivera-*` directory this checkout no longer has, or sprite files that are out of date or hand-edited. `--update` fixes it. |
 | `[dangling]` | The installer's own link whose target does not exist (a link into this checkout or the old `ai-skills` repository, or the wanted link whose source file is gone). A dangling link that points anywhere else is `[foreign]`. |
 | `[foreign]` | Not the installer's: a real file or another link (`--update` would move it aside), a `viadir` file, or an `inrepo` file that is not the expected one. It counts as a problem, so a `viadir` file keeps `--check` at exit 1 until you resolve it. |
 | `[skip]` | A target with no skills to check, or a sprite directory that was not checked: no `bun`, tier `minimal`, or a directory inside this checkout or behind a symlink. The last line then says `sprite agents not verified: <why>`. |

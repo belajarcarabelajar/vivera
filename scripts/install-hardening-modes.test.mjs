@@ -34,12 +34,12 @@ import {
 afterEach(closeSandboxes);
 
 describe('H4: check finds stale phase dirs and refuses to call an empty check CURRENT', () => {
-  test('H4: a leftover dangling sucp-gone is reported, pruned by --update, and then check is CURRENT', () => {
+  test('H4: a leftover dangling vivera-gone is reported, pruned by --update, and then check is CURRENT', () => {
     const sb = sandbox();
     expect(sb.run([]).status).toBe(0);
-    const dir = at(sb, `${AGENTS}/sucp-gone`);
+    const dir = at(sb, `${AGENTS}/vivera-gone`);
     fs.mkdirSync(dir);
-    fs.symlinkSync(path.join(sb.repo, 'skills/sucp-gone/SKILL.md'), `${dir}/SKILL.md`);
+    fs.symlinkSync(path.join(sb.repo, 'skills/vivera-gone/SKILL.md'), `${dir}/SKILL.md`);
     const stale = sb.run(['--check']);
     expect(stale.status).toBe(1);
     expect(stale.stdout).toContain(`[stale] ${dir} (a skill this checkout no longer has; --update prunes it)`);
@@ -83,8 +83,8 @@ describe('H6: directories the installer did not make stay, and update says when 
   test('H6: update names the dir that stays, and prints the plain line only when the dir is gone', () => {
     const sb = sandbox();
     expect(sb.run([]).status).toBe(0);
-    const keeps = at(sb, `${AGENTS}/sucp-x`);
-    const gone = at(sb, `${AGENTS}/sucp-gone`);
+    const keeps = at(sb, `${AGENTS}/vivera-x`);
+    const gone = at(sb, `${AGENTS}/vivera-gone`);
     for (const dir of [keeps, gone]) {
       fs.mkdirSync(dir);
       fs.symlinkSync(path.join(sb.repo, `skills/${path.basename(dir)}/SKILL.md`), `${dir}/SKILL.md`);

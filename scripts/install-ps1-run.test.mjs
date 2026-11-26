@@ -19,7 +19,7 @@ const win = process.platform === 'win32';
 const root = !win && process.getuid?.() === 0;
 if (!shell) console.log('install-ps1-run.test: no PowerShell (PWSH, pwsh, powershell); the behaviour tests are skipped');
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const KEEP = '[KEEP]';
 const MODIFIED_KEEP = 'modified copy: it stays as it is; .\\install.ps1 -Update replaces it after backing yours up';
 const bases = [];
@@ -39,7 +39,7 @@ function makeFixture({ homeName = 'h', extraSkill = false } = {}) {
   const chk = path.join(base, 'chk');
   const home = path.join(base, homeName);
   put(path.join(chk, MASTER), 'master v1\n');
-  for (const n of extraSkill ? ['sucp-a', 'sucp-b', 'sucp-gone'] : ['sucp-a', 'sucp-b']) put(path.join(chk, 'skills', n, 'SKILL.md'), `skill ${n}\n`);
+  for (const n of extraSkill ? ['vivera-a', 'vivera-b', 'vivera-gone'] : ['vivera-a', 'vivera-b']) put(path.join(chk, 'skills', n, 'SKILL.md'), `skill ${n}\n`);
   put(path.join(chk, 'templates', 't.md'), 'template\n');
   put(path.join(chk, 'templates', 'sub', 'n.md'), 'nested\n');
   put(path.join(chk, 'examples', 'e.md'), 'example\n');
@@ -53,7 +53,7 @@ function makeFixture({ homeName = 'h', extraSkill = false } = {}) {
   }
   fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
   fs.mkdirSync(path.join(base, 'emptybin'), { recursive: true });
-  return { base, chk, home, ps1: path.join(chk, 'install.ps1'), pkg: path.join(home, '.claude', 'skills', 'super-ultra-code-plan'), skills: path.join(home, '.claude', 'skills') };
+  return { base, chk, home, ps1: path.join(chk, 'install.ps1'), pkg: path.join(home, '.claude', 'skills', 'vivera'), skills: path.join(home, '.claude', 'skills') };
 }
 
 function run(fx, args, env = {}) {
@@ -130,12 +130,12 @@ describe.skipIf(!shell)('install.ps1 run: install, backups, markers', () => {
     expect(r.out).toContain('[OK] Copied');
     expect(read(path.join(fx.pkg, 'SKILL.md'))).toBe('master v1\n');
     expect(read(path.join(fx.pkg, 'templates', 'sub', 'n.md'))).toBe('nested\n');
-    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md'))).toBe('skill sucp-a\n');
+    expect(read(path.join(fx.skills, 'vivera-a', 'SKILL.md'))).toBe('skill vivera-a\n');
     const marker = read(path.join(fx.pkg, '.vivera-managed')).split('\n');
     expect(marker[0]).toBe(`source=${fx.chk}`);
     expect(marker).toContain(`entry SKILL.md ps-sha256:${sha('master v1\n')}`);
     expect(marker).toContain(`entry templates ${dirDigest(path.join(fx.chk, 'templates'))}`);
-    expect(read(path.join(fx.skills, 'sucp-a', '.vivera-managed'))).toContain(`entry SKILL.md ps-sha256:${sha('skill sucp-a\n')}`);
+    expect(read(path.join(fx.skills, 'vivera-a', '.vivera-managed'))).toContain(`entry SKILL.md ps-sha256:${sha('skill vivera-a\n')}`);
   });
 
   test('a second install changes nothing and says it is current', () => {
@@ -279,7 +279,7 @@ describe.skipIf(!shell)('install.ps1 run: -Uninstall', () => {
     expect(read(path.join(fx.pkg, 'SKILL.md'))).toBe('edited\n');
     expect(fs.existsSync(path.join(fx.pkg, '.vivera-managed'))).toBe(true);
     expect(fs.existsSync(path.join(fx.pkg, 'templates'))).toBe(false);
-    expect(fs.existsSync(path.join(fx.skills, 'sucp-a'))).toBe(false);
+    expect(fs.existsSync(path.join(fx.skills, 'vivera-a'))).toBe(false);
     expect(r.out).toContain('[REMOVED]');
   });
 
@@ -329,31 +329,31 @@ describe.skipIf(!shell)('install.ps1 run: links (junctions on Windows, symlinks 
       const r = run(fx, args);
       clean(r);
     }
-    expect(read(path.join(fx.chk, 'skills', 'sucp-a', 'SKILL.md'))).toBe('skill sucp-a\n');
-    expect(fs.readdirSync(path.join(fx.chk, 'skills')).sort()).toEqual(['sucp-a', 'sucp-b']);
+    expect(read(path.join(fx.chk, 'skills', 'vivera-a', 'SKILL.md'))).toBe('skill vivera-a\n');
+    expect(fs.readdirSync(path.join(fx.chk, 'skills')).sort()).toEqual(['vivera-a', 'vivera-b']);
     expect(run(fx, ONLY).out).toContain('is inside this checkout; left alone');
   });
 
   test('F1: a real file behind a linked skills directory (a dotfiles repo) is left alone by install, check and uninstall', () => {
     const fx = makeFixture();
     const dots = path.join(fx.base, 'dotfiles', 'skills');
-    put(path.join(dots, 'sucp-a', 'SKILL.md'), 'dotfiles copy\n');
-    put(path.join(dots, 'super-ultra-code-plan', 'SKILL.md'), 'dotfiles orchestrator\n');
+    put(path.join(dots, 'vivera-a', 'SKILL.md'), 'dotfiles copy\n');
+    put(path.join(dots, 'vivera', 'SKILL.md'), 'dotfiles orchestrator\n');
     linkDir(dots, fx.skills);
     const inst = run(fx, ONLY);
     clean(inst);
     expect(inst.out).toContain('reached through a symlinked directory; left alone');
-    expect(read(path.join(dots, 'sucp-a', 'SKILL.md'))).toBe('dotfiles copy\n');
-    expect(read(path.join(dots, 'super-ultra-code-plan', 'SKILL.md'))).toBe('dotfiles orchestrator\n');
-    expect(fs.readdirSync(path.join(dots, 'sucp-a')).filter((n) => n.includes('vivera-bak'))).toEqual([]);
+    expect(read(path.join(dots, 'vivera-a', 'SKILL.md'))).toBe('dotfiles copy\n');
+    expect(read(path.join(dots, 'vivera', 'SKILL.md'))).toBe('dotfiles orchestrator\n');
+    expect(fs.readdirSync(path.join(dots, 'vivera-a')).filter((n) => n.includes('vivera-bak'))).toEqual([]);
     const chk = run(fx, [...ONLY, '-Check']);
     expect(chk.code).toBe(1);
     expect(chk.out).toContain('(behind a symlinked directory; left alone)');
     const un = run(fx, [...ONLY, '-Uninstall']);
     clean(un);
-    expect(un.out).toContain(`${KEEP} ${path.join(fx.skills, 'sucp-a', 'SKILL.md')} (behind a symlinked directory)`);
-    expect(read(path.join(dots, 'sucp-a', 'SKILL.md'))).toBe('dotfiles copy\n');
-    expect(read(path.join(dots, 'super-ultra-code-plan', 'SKILL.md'))).toBe('dotfiles orchestrator\n');
+    expect(un.out).toContain(`${KEEP} ${path.join(fx.skills, 'vivera-a', 'SKILL.md')} (behind a symlinked directory)`);
+    expect(read(path.join(dots, 'vivera-a', 'SKILL.md'))).toBe('dotfiles copy\n');
+    expect(read(path.join(dots, 'vivera', 'SKILL.md'))).toBe('dotfiles orchestrator\n');
     expect(fs.lstatSync(fx.skills).isSymbolicLink()).toBe(true);
   });
 
@@ -374,8 +374,8 @@ describe.skipIf(!shell)('install.ps1 run: F2, -Update prunes a phase skill the c
   const setup = () => {
     const fx = makeFixture({ extraSkill: true });
     clean(run(fx, ONLY));
-    fs.rmSync(path.join(fx.chk, 'skills', 'sucp-gone'), { recursive: true });
-    return { fx, gone: path.join(fx.skills, 'sucp-gone') };
+    fs.rmSync(path.join(fx.chk, 'skills', 'vivera-gone'), { recursive: true });
+    return { fx, gone: path.join(fx.skills, 'vivera-gone') };
   };
 
   test('an untouched copy (digest equals the record) is pruned with its marker and its directory', () => {
@@ -397,11 +397,11 @@ describe.skipIf(!shell)('install.ps1 run: F2, -Update prunes a phase skill the c
 
   test('a record made with another algorithm tag (the bash sha256:) is never trusted: kept', () => {
     const { fx, gone } = setup();
-    put(path.join(gone, '.vivera-managed'), `source=${fx.chk}\nentry SKILL.md sha256:${sha('skill sucp-gone\n')}\n`);
+    put(path.join(gone, '.vivera-managed'), `source=${fx.chk}\nentry SKILL.md sha256:${sha('skill vivera-gone\n')}\n`);
     const r = run(fx, [...ONLY, '-Update']);
     clean(r);
     expect(r.out).toContain(`${KEEP} ${gone} (modified copy of a skill this checkout no longer has)`);
-    expect(read(path.join(gone, 'SKILL.md'))).toBe('skill sucp-gone\n');
+    expect(read(path.join(gone, 'SKILL.md'))).toBe('skill vivera-gone\n');
   });
 
   test('a marker with no record at all keeps the copy, and -DryRun prunes nothing', () => {
@@ -421,11 +421,11 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
     const fx = makeFixture();
     clean(run(fx, ONLY));
     // The checkout moves on: one phase skill (a file entry) and one file inside templates (a directory entry) change.
-    put(path.join(fx.chk, 'skills', 'sucp-a', 'SKILL.md'), 'skill sucp-a v2\n');
+    put(path.join(fx.chk, 'skills', 'vivera-a', 'SKILL.md'), 'skill vivera-a v2\n');
     put(path.join(fx.chk, 'templates', 't.md'), 'template v2\n');
     return fx;
   };
-  const skillA = (fx) => path.join(fx.skills, 'sucp-a', 'SKILL.md');
+  const skillA = (fx) => path.join(fx.skills, 'vivera-a', 'SKILL.md');
 
   test('W1: -Uninstall removes an outdated copy (a file and a directory) the installer placed, with no KEEP and no skills directory left', () => {
     const fx = outdated();
@@ -444,7 +444,7 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
     clean(r);
     expect(r.out).toContain(`${KEEP} ${skillA(fx)} (${MODIFIED_KEEP})`);
     expect(read(skillA(fx))).toBe('my edit of the old one\n');
-    expect(fs.existsSync(path.join(fx.skills, 'sucp-a', '.vivera-managed'))).toBe(true);
+    expect(fs.existsSync(path.join(fx.skills, 'vivera-a', '.vivera-managed'))).toBe(true);
   });
 
   test('W2: -Update refreshes an outdated copy in place with no backup, and re-records its digest', () => {
@@ -453,10 +453,10 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
     clean(r);
     expect(r.out).toContain(`[OK] Refreshed: ${skillA(fx)}`);
     expect(r.out).not.toContain('[BACKUP]');
-    expect(read(skillA(fx))).toBe('skill sucp-a v2\n');
+    expect(read(skillA(fx))).toBe('skill vivera-a v2\n');
     expect(read(path.join(fx.pkg, 'templates', 't.md'))).toBe('template v2\n');
-    for (const dir of [fx.skills, path.join(fx.skills, 'sucp-a'), fx.pkg]) expect({ dir, baks: baks(dir) }).toEqual({ dir, baks: [] });
-    expect(read(path.join(fx.skills, 'sucp-a', '.vivera-managed'))).toContain(`entry SKILL.md ps-sha256:${sha('skill sucp-a v2\n')}`);
+    for (const dir of [fx.skills, path.join(fx.skills, 'vivera-a'), fx.pkg]) expect({ dir, baks: baks(dir) }).toEqual({ dir, baks: [] });
+    expect(read(path.join(fx.skills, 'vivera-a', '.vivera-managed'))).toContain(`entry SKILL.md ps-sha256:${sha('skill vivera-a v2\n')}`);
     expect(read(path.join(fx.pkg, '.vivera-managed'))).toContain(`entry templates ${dirDigest(path.join(fx.chk, 'templates'))}`);
     const chk = run(fx, [...ONLY, '-Check']);
     clean(chk);
@@ -479,13 +479,13 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
     const r = run(fx, [...ONLY, '-Update']);
     clean(r);
     expect(r.out).toContain('[BACKUP]');
-    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('my edit of the old one\n');
-    expect(read(skillA(fx))).toBe('skill sucp-a v2\n');
+    expect(read(path.join(fx.skills, 'vivera-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('my edit of the old one\n');
+    expect(read(skillA(fx))).toBe('skill vivera-a v2\n');
   });
 
   test('W2: a record with the bash tag (sha256:) is never trusted: -Update backs the outdated copy up, -Uninstall keeps it', () => {
     const fx = outdated();
-    const marker = path.join(fx.skills, 'sucp-a', '.vivera-managed');
+    const marker = path.join(fx.skills, 'vivera-a', '.vivera-managed');
     put(marker, read(marker).replace(' ps-sha256:', ' sha256:'));
     const un = run(fx, [...ONLY, '-Uninstall', '-DryRun']);
     clean(un);
@@ -493,17 +493,17 @@ describe.skipIf(!shell)('install.ps1 run: W1 and W2, an outdated copy is told fr
     const r = run(fx, [...ONLY, '-Update']);
     clean(r);
     expect(r.out).toContain('[BACKUP]');
-    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill sucp-a\n');
+    expect(read(path.join(fx.skills, 'vivera-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill vivera-a\n');
   });
 
   test('W2: a repeated record vouches for nothing (as in bash): the outdated copy counts as modified and is backed up', () => {
     const fx = outdated();
-    const marker = path.join(fx.skills, 'sucp-a', '.vivera-managed');
-    put(marker, `${read(marker)}entry SKILL.md ps-sha256:${sha('skill sucp-a\n')}\n`);
+    const marker = path.join(fx.skills, 'vivera-a', '.vivera-managed');
+    put(marker, `${read(marker)}entry SKILL.md ps-sha256:${sha('skill vivera-a\n')}\n`);
     const r = run(fx, [...ONLY, '-Update']);
     clean(r);
     expect(r.out).toContain('[BACKUP]');
-    expect(read(path.join(fx.skills, 'sucp-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill sucp-a\n');
+    expect(read(path.join(fx.skills, 'vivera-a', 'SKILL.md.vivera-bak-20260101T000000Z'))).toBe('skill vivera-a\n');
   });
 
   test('W2: -Check calls an outdated copy stale (exit 1) and says it is outdated; an edited one is told apart', () => {
@@ -569,13 +569,13 @@ describe.skipIf(!shell)('install.ps1 run: W3, nothing is created, moved or retar
       const { fx, dots } = linked();
       const elsewhere = path.join(fx.base, 'elsewhere.md');
       if (label === 'live') put(elsewhere, 'elsewhere\n');
-      const sub = path.join(dots, 'super-ultra-code-plan');
+      const sub = path.join(dots, 'vivera');
       fs.mkdirSync(sub, { recursive: true });
       fs.symlinkSync(elsewhere, path.join(sub, 'SKILL.md'));
       for (const args of [ONLY, [...ONLY, '-Update'], [...ONLY, '-Uninstall']]) clean(run(fx, args));
       expect({ label, link: fs.lstatSync(path.join(sub, 'SKILL.md')).isSymbolicLink() }).toEqual({ label, link: true });
       expect({ label, target: fs.readlinkSync(path.join(sub, 'SKILL.md')) }).toEqual({ label, target: elsewhere });
-      expect({ label, sub: fs.readdirSync(sub), dots: fs.readdirSync(dots) }).toEqual({ label, sub: ['SKILL.md'], dots: ['super-ultra-code-plan'] });
+      expect({ label, sub: fs.readdirSync(sub), dots: fs.readdirSync(dots) }).toEqual({ label, sub: ['SKILL.md'], dots: ['vivera'] });
       if (label === 'live') expect(read(elsewhere)).toBe('elsewhere\n');
     }
   });

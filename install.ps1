@@ -70,7 +70,7 @@ Set-StrictMode -Version 3.0
 $MarkerName = '.vivera-managed'
 $BackupInfix = '.vivera-bak-'
 $DigestTag = 'ps-sha256:'
-$MasterName = 'Super Ultra Code Plan Implementation.md'
+$MasterName = 'VIVERA.md'
 # Read once here: a helper function would see its own $PSCmdlet, not the script's.
 $script:Cmdlet = $PSCmdlet
 # -WhatIf is a dry run too: ShouldProcess would skip each write, but the closing lines would still claim one.
@@ -84,12 +84,12 @@ $script:Placed = New-Object System.Collections.Generic.List[string]
 # relative to the user profile; a CLI on PATH also counts as detected.
 $Targets = @(
     [pscustomobject]@{ Id = 'ai-config'; Kind = 'file'; Rel = '.config\ai'; Dirs = @(); Cmds = @(); Always = $true },
-    [pscustomobject]@{ Id = 'agents'; Kind = 'package'; Rel = '.agents\skills\super-ultra-code-plan'; Dirs = @(); Cmds = @(); Always = $true },
-    [pscustomobject]@{ Id = 'antigravity'; Kind = 'package'; Rel = '.gemini\config\skills\super-ultra-code-plan'; Dirs = @('.gemini'); Cmds = @('agy'); Always = $false },
-    [pscustomobject]@{ Id = 'antigravity-cli'; Kind = 'package'; Rel = '.gemini\antigravity-cli\skills\super-ultra-code-plan'; Dirs = @('.gemini\antigravity-cli'); Cmds = @('agy'); Always = $false },
-    [pscustomobject]@{ Id = 'antigravity-builtin'; Kind = 'package'; Rel = '.gemini\antigravity-cli\builtin\skills\super-ultra-code-plan'; Dirs = @('.gemini\antigravity-cli\builtin\skills'); Cmds = @(); Always = $false },
-    [pscustomobject]@{ Id = 'opencode'; Kind = 'package'; Rel = '.config\opencode\skills\super-ultra-code-plan'; Dirs = @('.config\opencode'); Cmds = @('opencode'); Always = $false },
-    [pscustomobject]@{ Id = 'claude'; Kind = 'package'; Rel = '.claude\skills\super-ultra-code-plan'; Dirs = @('.claude'); Cmds = @(); Always = $false },
+    [pscustomobject]@{ Id = 'agents'; Kind = 'package'; Rel = '.agents\skills\vivera'; Dirs = @(); Cmds = @(); Always = $true },
+    [pscustomobject]@{ Id = 'antigravity'; Kind = 'package'; Rel = '.gemini\config\skills\vivera'; Dirs = @('.gemini'); Cmds = @('agy'); Always = $false },
+    [pscustomobject]@{ Id = 'antigravity-cli'; Kind = 'package'; Rel = '.gemini\antigravity-cli\skills\vivera'; Dirs = @('.gemini\antigravity-cli'); Cmds = @('agy'); Always = $false },
+    [pscustomobject]@{ Id = 'antigravity-builtin'; Kind = 'package'; Rel = '.gemini\antigravity-cli\builtin\skills\vivera'; Dirs = @('.gemini\antigravity-cli\builtin\skills'); Cmds = @(); Always = $false },
+    [pscustomobject]@{ Id = 'opencode'; Kind = 'package'; Rel = '.config\opencode\skills\vivera'; Dirs = @('.config\opencode'); Cmds = @('opencode'); Always = $false },
+    [pscustomobject]@{ Id = 'claude'; Kind = 'package'; Rel = '.claude\skills\vivera'; Dirs = @('.claude'); Cmds = @(); Always = $false },
     [pscustomobject]@{ Id = 'codex'; Kind = 'none'; Rel = ''; Dirs = @('.codex'); Cmds = @('codex'); Always = $false },
     [pscustomobject]@{ Id = 'cursor'; Kind = 'none'; Rel = ''; Dirs = @('.cursor'); Cmds = @('cursor-agent'); Always = $false },
     [pscustomobject]@{ Id = 'copilot'; Kind = 'none'; Rel = ''; Dirs = @('.copilot'); Cmds = @('copilot'); Always = $false }

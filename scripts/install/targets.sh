@@ -15,12 +15,12 @@ target_ids() {
 target_skills_dir() {
   case "$1" in
     ai-config) echo "$HOME/.config/ai" ;;
-    agents) echo "$HOME/.agents/skills/super-ultra-code-plan" ;;
-    antigravity) echo "$HOME/.gemini/config/skills/super-ultra-code-plan" ;;
-    antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/super-ultra-code-plan" ;;
-    antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/super-ultra-code-plan" ;;
-    opencode) echo "$HOME/.config/opencode/skills/super-ultra-code-plan" ;;
-    claude) echo "$HOME/.claude/skills/super-ultra-code-plan" ;;
+    agents) echo "$HOME/.agents/skills/vivera" ;;
+    antigravity) echo "$HOME/.gemini/config/skills/vivera" ;;
+    antigravity-cli) echo "$HOME/.gemini/antigravity-cli/skills/vivera" ;;
+    antigravity-builtin) echo "$HOME/.gemini/antigravity-cli/builtin/skills/vivera" ;;
+    opencode) echo "$HOME/.config/opencode/skills/vivera" ;;
+    claude) echo "$HOME/.claude/skills/vivera" ;;
     codex | cursor | copilot) echo "" ;;
     *) return 1 ;;
   esac
@@ -59,7 +59,7 @@ target_entries() {
   local dir
   dir="$(target_skills_dir "$id")"
   case "$(target_kind "$id")" in
-    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/Super Ultra Code Plan Implementation.md" ;;
+    file) printf '%s\t%s\n' "$MASTER_FILE" "$dir/VIVERA.md" ;;
     package) package_entries "$dir" ;;
     none) ;;
   esac
@@ -111,30 +111,80 @@ select_targets() {
   done <<< "$(target_ids)"
 }
 
-# The phase-skill dirs of a package target that this checkout no longer has, one per line. A phase
-# skill that left skills/ leaves its <skills dir>/sucp-<name>/ behind in every harness. Only a sucp-*
-# entry that is a real directory is considered, and only when it is the installer's own: it carries a
-# .vivera-managed marker (a copy-mode directory), or its SKILL.md is a symlink that classify_dest calls
-# ok or ours-stale. A directory inside this checkout, a user's real SKILL.md without a marker, a live
-# link to a file elsewhere, and a skill the checkout still has are never listed. A name with a newline
-# or a tab would break this one-per-line list, so it is never listed (report_unusual_stale_names says so).
-# Both --check (which reports them) and --update (which prunes them) read this one list.
+# The names the skills were installed under before the rename of 2026-11-26 (the package, then the seven
+# phase skills), and the ai-config file name of that time. An install made under them is invisible to the
+# vivera-* glob, so stale_phase_dirs lists these names too, under the same ownership rule.
+LEGACY_SKILL_NAMES=(super-ultra-code-plan sucp-rules sucp-brainstorm sucp-plan sucp-overnight sucp-tdd-debug sucp-verify-deliver sucp-debt-sweep)
+LEGACY_MASTER_NAME="Super Ultra Code Plan Implementation.md"
+
+is_legacy_skill_name() {
+  local n
+  for n in ${LEGACY_SKILL_NAMES[@]+"${LEGACY_SKILL_NAMES[@]}"}; do
+    if [ "$n" = "$1" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# The old ai-config file while it is the installer's own: a link into this checkout (live or dangling), or a
+# plain file with a .vivera-managed sidecar (prune_stale_skills judges its digest before removing it).
+stale_legacy_master() {
+  local entry
+  entry="$(target_skills_dir "$1")/$LEGACY_MASTER_NAME"
+  if [ -L "$entry" ]; then
+    case "$(COPY_MODE=false classify_dest "$entry" "$REPO_DIR/$LEGACY_MASTER_NAME")" in
+      ok | ours-stale) echo "$entry" ;;
+    esac
+  elif [ -f "$entry" ] && marker_regular "$entry.vivera-managed"; then
+    echo "$entry"
+  fi
+}
+
+# The entries of a target that this checkout no longer has, one per line: phase-skill dirs (vivera-* and the
+# legacy names above) for a package target, the legacy master file for ai-config. A phase skill that left
+# skills/ leaves its <skills dir>/<name>/ behind in every harness. A real directory is listed only when it
+# is the installer's own: it carries a .vivera-managed marker (a copy-mode directory), or its SKILL.md is a
+# symlink that classify_dest calls ok or ours-stale. A directory symlink under a legacy name is listed when
+# it is itself such a link (an old install linked whole phase dirs into the checkout). A directory inside this checkout, a
+# user's real SKILL.md without a marker, a live link to a file elsewhere, and a skill the checkout still
+# has are never listed. A name with a newline or a tab would break this one-per-line list, so it is never
+# listed (report_unusual_stale_names says so).
+# Both --check (which reports them) and --update and --uninstall (which prune them) read this one list.
 stale_phase_dirs() {
   local id="$1"
   local parent entry name skill_md state
+  local candidates=()
+  case "$(target_kind "$id")" in
+    file) stale_legacy_master "$id" ;;
+  esac
   if [ "$(target_kind "$id")" != package ]; then
     return 0
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
-  for entry in "$parent"/sucp-*; do
-    if [ ! -d "$entry" ] || [ -L "$entry" ]; then
-      continue
-    fi
+  candidates=("$parent"/vivera-*)
+  for name in ${LEGACY_SKILL_NAMES[@]+"${LEGACY_SKILL_NAMES[@]}"}; do
+    candidates+=("$parent/$name")
+  done
+  for entry in ${candidates[@]+"${candidates[@]}"}; do
     name="$(basename "$entry")"
     case "$name" in
       *$'\n'* | *$'\t'*) continue ;;
     esac
     if [ -e "$REPO_DIR/skills/$name" ]; then
+      continue
+    fi
+    if [ -L "$entry" ]; then
+      # Only an old install linked whole phase dirs; a vivera-* dir link is someone's own setup.
+      if ! is_legacy_skill_name "$name"; then
+        continue
+      fi
+      case "$(COPY_MODE=false classify_dest "$entry" "$REPO_DIR/skills/$name")" in
+        ok | ours-stale) echo "$entry" ;;
+      esac
+      continue
+    fi
+    if [ ! -d "$entry" ]; then
       continue
     fi
     skill_md="$entry/SKILL.md"
@@ -155,7 +205,7 @@ stale_phase_dirs() {
   done
 }
 
-# One "[SKIP] <name>: unusual name" line for every sucp-* dir of a package target whose name holds a
+# One "[SKIP] <name>: unusual name" line for every vivera-* dir of a package target whose name holds a
 # newline or a tab: it is left alone, because nothing that reads names a line at a time can be trusted
 # with it.
 report_unusual_stale_names() {
@@ -165,7 +215,7 @@ report_unusual_stale_names() {
     return 0
   fi
   parent="$(dirname "$(target_skills_dir "$id")")"
-  for entry in "$parent"/sucp-*; do
+  for entry in "$parent"/vivera-*; do
     # Only a real directory is a phase dir, as in stale_phase_dirs: a file or a link of that name is not.
     if [ ! -d "$entry" ] || [ -L "$entry" ]; then
       continue
@@ -267,8 +317,8 @@ install_targets() {
 
   # Retired 2026-10-01: the vendored `use-tinyfish` skill is gone.
   #     TinyFish is now documented inline in the master skill
-  #     ("Super Ultra Code Plan Implementation.md", section
-  #     "Web Evidence & Retrieval — TinyFish"), so the whole super-ultra-code-plan
+  #     ("VIVERA.md", section
+  #     "Web Evidence & Retrieval — TinyFish"), so the whole vivera
   #     package carries the escalation ladder wherever it is deployed. A separate
   #     skill created drift: two sources of truth documenting different tool
   #     surfaces, and the CLI copy never described the MCP tools agents actually call.
@@ -281,7 +331,7 @@ install_targets() {
   #     empty dirs. They are symlinks into this repo, so removing the target breaks
   #     them without touching real content.
 
-  # Retired 2026-10-11: the `gemini-cli` target (~/.gemini/skills/super-ultra-code-plan, detected by a
+  # Retired 2026-10-11: the `gemini-cli` target (~/.gemini/skills/vivera, detected by a
   #     `gemini` on PATH) is gone. Google stopped serving Gemini CLI to free, AI Pro and Ultra accounts
   #     on 2026-06-18 and replaced it with Antigravity CLI (`agy`), which the antigravity-cli target
   #     already covers (~/.gemini/antigravity-cli/skills). Gemini CLI lives on only under a Code Assist
@@ -290,7 +340,7 @@ install_targets() {
   #     Revert: restore the four `gemini-cli` lines in this file and the row in install.ps1 from git
   #     history at the commit before this one, then re-run ./install.sh. Cleanup for an already-deployed
   #     copy: this installer no longer lists the link, so --uninstall and --check skip it; remove it by
-  #     hand with `rm -f` on the symlinks under ~/.gemini/skills/super-ultra-code-plan/ and `rmdir` the
+  #     hand with `rm -f` on the symlinks under ~/.gemini/skills/vivera/ and `rmdir` the
   #     empty dirs. They are symlinks into this repo, so removing them touches no real content.
 }
 
@@ -300,18 +350,18 @@ install_selfcheck() {
   if [ "${COPY_MODE:-false}" = true ]; then
     echo "[SKIP] internal repo links: copy mode"
   elif [ "$DRY_RUN" = true ]; then
-    echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/super-ultra-code-plan"
-    echo "[DRY-RUN]   - SKILL.md -> ../../Super Ultra Code Plan Implementation.md"
+    echo "[DRY-RUN] Would verify internal skill package in: $REPO_DIR/skills/vivera"
+    echo "[DRY-RUN]   - SKILL.md -> ../../VIVERA.md"
     echo "[DRY-RUN]   - templates -> ../../templates"
     echo "[DRY-RUN]   - examples -> ../../examples"
     echo "[DRY-RUN]   - mermaid.config.json -> ../../mermaid.config.json"
     echo "[DRY-RUN]   - mermaid.dark.config.json -> ../../mermaid.dark.config.json"
   else
-    local package_dir="$REPO_DIR/skills/super-ultra-code-plan"
+    local package_dir="$REPO_DIR/skills/vivera"
     local entry name relative_target
     # name|relative target, in the order the dry-run block above lists them.
     local internal_links=(
-      "SKILL.md|../../Super Ultra Code Plan Implementation.md"
+      "SKILL.md|../../VIVERA.md"
       "templates|../../templates"
       "examples|../../examples"
       "mermaid.config.json|../../mermaid.config.json"

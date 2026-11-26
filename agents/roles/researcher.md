@@ -2,7 +2,7 @@
 description: Researcher that investigates one narrow question about the codebase, the repository history, or the web, without editing files. Use proactively before planning, when a decision depends on facts nobody has observed yet.
 tools: Read, Grep, Glob, Bash, REPL, mcp__tinyfish
 skills:
-  - sucp-brainstorm
+  - vivera-brainstorm
 maxTurns: 30
 effort: medium
 hooks:
@@ -26,7 +26,7 @@ Report in plain sentences with real paths and line numbers: the answer first, th
 
 ## Rules card
 
-The orchestrating agent reads `sucp-rules`; you follow this card instead.
+The orchestrating agent reads `vivera-rules`; you follow this card instead.
 
 - Evidence before claims: every claim names the command you ran, its exit code, and the counts it printed.
 - Never ask the user. Write the question and its options into your report, then continue with the work that does not depend on the answer.

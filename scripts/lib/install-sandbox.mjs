@@ -4,7 +4,7 @@
 // installer payload, and a PATH made only of symlinks to a named tool list.
 //
 // Why a copy of the repo and not the repo itself: install.sh writes into its own
-// checkout (step 7 relinks skills/super-ultra-code-plan, step 8 sets
+// checkout (step 7 relinks skills/vivera, step 8 sets
 // core.hooksPath in that repo's git config). Running the real tree would change
 // the checkout under test, so the copy has no .git unless a test asks for one.
 //
@@ -28,6 +28,9 @@ const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 // Repo-relative paths copied into the sandbox repo. The two optional entries
 // appear in later tasks; every other entry must exist or the copy throws.
+// The master file's name in the old ai-skills repo, which links into that repo still carry (before VIVERA.md).
+export const OLD_AI_SKILLS_MASTER = 'Super Ultra Code Plan Implementation.md';
+
 export const INSTALL_PAYLOAD = [
   'install.sh',
   'scripts/install',
@@ -43,7 +46,7 @@ export const INSTALL_PAYLOAD = [
   'mermaid.config.json',
   'mermaid.dark.config.json',
   'package.json',
-  'Super Ultra Code Plan Implementation.md',
+  'VIVERA.md',
 ];
 const OPTIONAL_PAYLOAD = new Set(['scripts/install', 'scripts/sprite-agents']);
 
@@ -96,7 +99,7 @@ function resolveReal(p) {
 // repo has one. Read from the sandbox repo so a test never hard-codes which phase has references.
 export function phaseEntries(repo) {
   const skills = path.join(repo, 'skills');
-  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('sucp-')).sort();
+  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('vivera-')).sort();
   return phases.flatMap((p) => [`${p}/SKILL.md`, ...(fs.existsSync(path.join(skills, p, 'references')) ? [`${p}/references`] : [])]);
 }
 
@@ -150,7 +153,7 @@ function sha256(file) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
-export function makeSandbox({ tools = [], git = false, extraEnv = {} } = {}) {
+export function makeSandbox({ tools = [], git = false, extraEnv = {}, spaced = false } = {}) {
   // Resolve every tool before creating anything, so a bad name leaves no temp dir behind.
   const links = [];
   for (const name of new Set([...BASE_TOOLS.filter((n) => !NAMED_ONLY.has(n)), ...tools])) {
@@ -163,7 +166,8 @@ export function makeSandbox({ tools = [], git = false, extraEnv = {} } = {}) {
   const gitBin = git ? resolveTool('git') : null;
   if (git && !gitBin) throw new Error("install sandbox: 'git' not found on this machine");
 
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vivera-install-'));
+  // spaced: a root with a space, so every repo and HOME path the installer handles contains one.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), spaced ? 'vivera install-' : 'vivera-install-'));
   const home = path.join(root, 'home');
   const repo = path.join(root, 'repo');
   const bin = path.join(root, 'bin');

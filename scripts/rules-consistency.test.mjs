@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ORCHESTRATOR = 'Super Ultra Code Plan Implementation.md';
+const ORCHESTRATOR = 'VIVERA.md';
 
 function mdUnder(dir) {
   const out = [];

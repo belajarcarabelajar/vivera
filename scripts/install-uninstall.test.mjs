@@ -10,12 +10,12 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const STAMP = '20260101T000000Z';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const PKG = '.agents/skills/vivera';
 
 const open = [];
 afterEach(() => {
@@ -49,7 +49,7 @@ const uninstall = (sb, ...args) => sb.run(['--uninstall', ...args]);
 // mermaid configs, the exit-code hook).
 function linkCount(sb) {
   const skills = path.join(sb.repo, 'skills');
-  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('sucp-'));
+  const phases = fs.readdirSync(skills).filter((n) => n.startsWith('vivera-'));
   const withRefs = phases.filter((n) => fs.existsSync(path.join(skills, n, 'references'))).length;
   return 1 + phases.length + withRefs + 6;
 }
@@ -65,7 +65,7 @@ describe('uninstall: removing links and directories', () => {
     expect(left.filter((line) => ['l', 'f'].includes(line.split('|')[1]))).toEqual([]);
     for (const line of left) {
       const name = path.basename(line.split('|')[0]);
-      expect(name === 'super-ultra-code-plan' || name.startsWith('sucp-')).toBe(false);
+      expect(name === 'vivera' || name.startsWith('vivera-')).toBe(false);
     }
     expect(r.stdout).toContain(`[REMOVED] ${at(sb, `${PKG}/SKILL.md`)}`);
     expect(r.stdout).toContain(`==> Vivera uninstalled: ${linkCount(sb)} link(s) removed, 0 restored, 0 kept`);
@@ -102,7 +102,7 @@ describe('uninstall: removing links and directories', () => {
 
   test('a dangling link into the old ai-skills repo is removed as one of ours', () => {
     const sb = sandbox();
-    link(sb, `/x/ai-skills/${MASTER}`, `.config/ai/${MASTER}`);
+    link(sb, `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`, `.config/ai/${MASTER}`);
     const r = uninstall(sb);
     expect(r.status).toBe(0);
     expect(exists(sb, `.config/ai/${MASTER}`)).toBe(false);
@@ -254,7 +254,7 @@ describe('uninstall: dry run, selection, and harness roots', () => {
     const sb = sandbox();
     fs.mkdirSync(at(sb, '.claude'));
     expect(sb.run([]).status).toBe(0);
-    expect(isLink(sb, '.claude/skills/super-ultra-code-plan/SKILL.md')).toBe(true);
+    expect(isLink(sb, '.claude/skills/vivera/SKILL.md')).toBe(true);
     const r = uninstall(sb, '--only', 'claude');
     expect(r.status).toBe(0);
     expect(exists(sb, '.claude/skills')).toBe(false);
@@ -270,7 +270,7 @@ describe('uninstall: dry run, selection, and harness roots', () => {
     const r = uninstall(sb, '--skip', 'agents');
     expect(r.status).toBe(0);
     expect(isLink(sb, `${PKG}/SKILL.md`)).toBe(true);
-    expect(isLink(sb, '.claude/skills/super-ultra-code-plan/SKILL.md')).toBe(false);
+    expect(isLink(sb, '.claude/skills/vivera/SKILL.md')).toBe(false);
     expect(isLink(sb, `.config/ai/${MASTER}`)).toBe(false);
   });
 
@@ -279,7 +279,7 @@ describe('uninstall: dry run, selection, and harness roots', () => {
     fs.mkdirSync(at(sb, '.claude'));
     fs.mkdirSync(at(sb, '.gemini'));
     expect(sb.run([]).status).toBe(0);
-    expect(isLink(sb, '.gemini/config/skills/super-ultra-code-plan/SKILL.md')).toBe(true);
+    expect(isLink(sb, '.gemini/config/skills/vivera/SKILL.md')).toBe(true);
     expect(uninstall(sb).status).toBe(0);
     expect(exists(sb, '.claude')).toBe(true);
     expect(exists(sb, '.gemini')).toBe(true);

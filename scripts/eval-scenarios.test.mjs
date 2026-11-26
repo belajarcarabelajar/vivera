@@ -254,7 +254,7 @@ describe('eval scenarios', () => {
 
 describe('eval fixtures', () => {
   test('the invoke check accepts false or a skill directory and rejects anything else', () => {
-    expect([undefined, false, 'super-ultra-code-plan', 'sucp-rules'].every(invokeOk)).toBe(true);
+    expect([undefined, false, 'vivera', 'vivera-rules'].every(invokeOk)).toBe(true);
     expect(['no-such-skill', '', 3, true, null].some(invokeOk)).toBe(false);
   });
 

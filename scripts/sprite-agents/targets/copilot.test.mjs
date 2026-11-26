@@ -128,14 +128,14 @@ describe('copilot target', () => {
         guard.comment,
         '---',
         '',
-        skillLine(['sucp-tdd-debug'], SKILL_HOW),
+        skillLine(['vivera-tdd'], SKILL_HOW),
         '',
         guard.paragraph,
         '',
         'Body.',
         '',
       ].join('\n');
-      expect(render(tpl('\nBody.\n', 'tools: Read, Grep, Glob, Bash\nskills:\n  - sucp-tdd-debug\n'))).toBe(expected);
+      expect(render(tpl('\nBody.\n', 'tools: Read, Grep, Glob, Bash\nskills:\n  - vivera-tdd\n'))).toBe(expected);
     });
 
     test('leaves out tools and the skill line for a template that sets neither', () => {

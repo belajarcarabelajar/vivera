@@ -8,10 +8,10 @@
 import { afterEach, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeSandbox } from './lib/install-sandbox.mjs';
+import { makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const MASTER = 'VIVERA.md';
+const PKG = '.agents/skills/vivera';
 const LINE = /^\[(ok|missing|stale|dangling|foreign|skip|info|warn)\] /;
 // The machine rows (hooks-path, bun-version) are not links, so the link cases leave them out;
 // install-check-context.test.mjs tests them.
@@ -63,7 +63,7 @@ test('check: on a bare HOME every link is [missing], the count is reported, and 
 test('check: a link into the old ai-skills repo is named [dangling], and a normal install makes it pass', () => {
   const sb = sandbox();
   const dest = at(sb, `${PKG}/SKILL.md`);
-  const old = `/x/ai-skills/${MASTER}`;
+  const old = `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`;
   link(sb, old, `${PKG}/SKILL.md`);
   const r = sb.run(['--check']);
   expect(r.status).toBe(1);
@@ -209,17 +209,17 @@ test('check: a leftover backup file next to a correct link is not mentioned', ()
 
 // ---- Hardening round 2: mutants the tests above let survive ----------------------------------------
 
-test('check: a phase skill dir this checkout no longer has is [stale], and a real sucp-* dir of the user is not reported', () => {
+test('check: a phase skill dir this checkout no longer has is [stale], and a real vivera-* dir of the user is not reported', () => {
   const sb = sandbox();
   expect(sb.run([]).status).toBe(0);
-  link(sb, path.join(sb.repo, 'skills/sucp-gone/SKILL.md'), '.agents/skills/sucp-gone/SKILL.md');
-  fs.mkdirSync(at(sb, '.agents/skills/sucp-mine'), { recursive: true });
-  fs.writeFileSync(at(sb, '.agents/skills/sucp-mine/SKILL.md'), 'my own skill');
+  link(sb, path.join(sb.repo, 'skills/vivera-gone/SKILL.md'), '.agents/skills/vivera-gone/SKILL.md');
+  fs.mkdirSync(at(sb, '.agents/skills/vivera-mine'), { recursive: true });
+  fs.writeFileSync(at(sb, '.agents/skills/vivera-mine/SKILL.md'), 'my own skill');
   const r = sb.run(['--check']);
   expect(r.status).toBe(1);
-  expect(r.stdout).toContain(`[stale] ${at(sb, '.agents/skills/sucp-gone')} (a skill this checkout no longer has`);
+  expect(r.stdout).toContain(`[stale] ${at(sb, '.agents/skills/vivera-gone')} (a skill this checkout no longer has`);
   expect(r.stdout).toContain('check: 1 problem(s)');
-  expect(r.stdout).not.toContain('sucp-mine');
+  expect(r.stdout).not.toContain('vivera-mine');
 });
 
 test('check: --check and --uninstall ask for no tool with no --tier flag at all, while a plain install does', () => {

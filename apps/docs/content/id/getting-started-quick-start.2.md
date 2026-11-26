@@ -6,7 +6,7 @@ lainnya hanya dipasang bila harness-nya terdeteksi, atau bila Anda menyebutnya d
 
 | Target id | Harness | Terdeteksi bila | Skill dipasang ke | Sprite agent dipasang ke | Apakah sprite dimuat? |
 |---|---|---|---|---|---|
-| `ai-config` | Mirror konfigurasi pribadi | selalu | `~/.config/ai/Super Ultra Code Plan Implementation.md` (satu tautan) | tidak ada | n/a |
+| `ai-config` | Mirror konfigurasi pribadi | selalu | `~/.config/ai/VIVERA.md` (satu tautan) | tidak ada | n/a |
 | `agents` | Universal Agents | selalu | `~/.agents/skills/` | tidak ada | n/a |
 | `antigravity` | Antigravity 2.0 dan IDE-nya | `~/.gemini` ada, atau `agy` ada di `PATH` | `~/.gemini/config/skills/` | `~/.gemini/config/agents/<sprite>/agent.md` | belum terverifikasi (Antigravity 1.3.3) |
 | `antigravity-cli` | Antigravity CLI (`agy`) | `~/.gemini/antigravity-cli` ada, atau `agy` ada di `PATH` | `~/.gemini/antigravity-cli/skills/` | tidak ada | n/a |
@@ -17,8 +17,8 @@ lainnya hanya dipasang bila harness-nya terdeteksi, atau bila Anda menyebutnya d
 | `cursor` | Cursor | `~/.cursor` ada, atau `cursor-agent` ada di `PATH` | tidak ada | `~/.cursor/agents/<sprite>.md` | belum terverifikasi (CLI tidak terpasang di sini) |
 | `copilot` | Copilot CLI | `~/.copilot` ada, atau `copilot` ada di `PATH` | tidak ada | `~/.copilot/agents/<sprite>.agent.md` | belum terverifikasi (CLI tidak terpasang di sini) |
 
-Setiap direktori skill di atas kecuali `~/.config/ai` berisi `super-ultra-code-plan/` (`SKILL.md`, `templates/`, `examples/`, dan dua
-konfigurasi Mermaid) di samping tujuh phase skill, `sucp-<name>/SKILL.md`. Pengujian di Linux pada home sekali pakai
+Setiap direktori skill di atas kecuali `~/.config/ai` berisi `vivera/` (`SKILL.md`, `templates/`, `examples/`, dan dua
+konfigurasi Mermaid) di samping tujuh phase skill, `vivera-<name>/SKILL.md`. Pengujian di Linux pada home sekali pakai
 memeriksa deteksi berbasis direktori dan berbasis CLI serta path skill dan sprite untuk ke-10 target,
 dengan CLI tiruan (stub) untuk deteksi.
 
@@ -91,14 +91,14 @@ sehingga instalasi yang dibuat oleh versi lama, atau secara manual, dinilai deng
 | `ok` | Sudah berupa link yang diinginkan (dalam mode copy, salinan yang identik). | Tidak ada. |
 | `ours-stale` | Milik installer sendiri tetapi salah: link ke dalam checkout ini yang menunjuk ke tempat lain atau menggantung (dangling), atau link ke item repositori lama `ai-skills`, baik yang masih hidup maupun yang menggantung. | Menggantinya tanpa backup, karena tidak ada tulisan Anda di dalamnya. |
 | `foreign` | Apa pun yang tidak dapat dibuktikan installer sebagai miliknya: file atau direktori asli tanpa marker, atau link yang menunjuk ke tempat lain mana pun (bahkan yang menggantung). | Memindahkannya ke backup, lalu menempatkan. |
-| `inrepo` | Tujuannya adalah file dari checkout ini sendiri (misalnya `~/.claude/skills/sucp-rules` yang di-link ke `<checkout>/skills/sucp-rules`). | Dilewati. |
+| `inrepo` | Tujuannya adalah file dari checkout ini sendiri (misalnya `~/.claude/skills/vivera-rules` yang di-link ke `<checkout>/skills/vivera-rules`). | Dilewati. |
 | `viadir` | File asli yang sudah ada di balik direktori yang berupa symlink (misalnya `~/.claude/skills -> ~/dotfiles/skills`), atau link di sana yang bukan milik installer; dalam mode `--copy` juga link milik installer sendiri dan setiap entri yang belum ada. | Dilewati. |
 
 | Operasi | Yang dilakukan | Tag yang akan Anda lihat |
 |---|---|---|
 | Backup | File yang bertabrakan dipindahkan dengan `mv` ke `<dest>.vivera-bak-<UTC YYYYmmddTHHMMSSZ>`, misalnya `SKILL.md.vivera-bak-20261011T080000Z`. Jika nama itu sudah dipakai, ditambahkan `-1`, `-2`, dan seterusnya. Jika penempatan link atau salinan kemudian gagal, file Anda dipindahkan kembali dan run keluar dengan exit 1. | `[BACKUP]` |
 | `--check` | Hanya baca: tidak membuat, memindahkan, atau menghapus apa pun milik installer, juga dengan `--dry-run`, dengan `--copy`, dan pada `HOME` yang read-only (saat menjalankan `bun` untuk pemeriksaan sprite, `bun` sendiri mungkin membuat cache transpiler di bawah `~/.bun`; `BUN_RUNTIME_TRANSPILER_CACHE_PATH=0` mencegahnya). Satu baris per path, lalu satu verdict. | `[ok]`, `[missing]`, `[stale]`, `[dangling]`, `[foreign]`, `[skip]` |
-| `--update` | Menjalankan setiap langkah instalasi biasa, lalu melakukan prune. Link menggantung ke path lama `ai-skills` diarahkan ulang tanpa backup. Direktori `sucp-*` yang tidak lagi dimiliki checkout ini di-prune, tetapi hanya jika itu direktori asli milik installer (berisi marker, atau `SKILL.md`-nya adalah link yang dinilai installer `ok` atau `ours-stale`). Direktori milik Anda sendiri dan link hidup ke tempat lain tidak pernah di-prune. Di direktori yang juga berisi file lain, hanya link milik installer (atau `SKILL.md` dan marker-nya) yang dihapus dan direktorinya tetap ada; direktori itu sendiri baru dihapus jika menjadi kosong karenanya. `SKILL.md` yang sudah diedit, atau `SKILL.md` yang berupa symlink, dipertahankan dengan baris `[KEEP]`. `--check` menampilkan himpunan yang sama sebagai `[stale]`. | `[PRUNED]` |
+| `--update` | Menjalankan setiap langkah instalasi biasa, lalu melakukan prune. Link menggantung ke path lama `ai-skills` diarahkan ulang tanpa backup. Direktori `vivera-*` yang tidak lagi dimiliki checkout ini di-prune, tetapi hanya jika itu direktori asli milik installer (berisi marker, atau `SKILL.md`-nya adalah link yang dinilai installer `ok` atau `ours-stale`). Direktori milik Anda sendiri dan link hidup ke tempat lain tidak pernah di-prune. Di direktori yang juga berisi file lain, hanya link milik installer (atau `SKILL.md` dan marker-nya) yang dihapus dan direktorinya tetap ada; direktori itu sendiri baru dihapus jika menjadi kosong karenanya. `SKILL.md` yang sudah diedit, atau `SKILL.md` yang berupa symlink, dipertahankan dengan baris `[KEEP]`. `--check` menampilkan himpunan yang sama sebagai `[stale]`. Instalasi dengan nama skill yang dipakai sebelum 2026-11-26 (tercantum di README) di-prune dengan aturan yang sama, juga oleh `--uninstall`; salinan yang sudah diedit dengan nama lama dipertahankan, dan `--check` melaporkannya sebagai `[warn] <path> (an edited copy under the old name; kept, delete it when you no longer need it)` tanpa membuat cek gagal. | `[PRUNED]` |
 | `--uninstall` | Menghapus setiap link `ok` atau `ours-stale`, lalu mengembalikan backup terbaru: cap waktu UTC yang lebih akhir menang, lalu `-N` yang lebih besar sebagai angka (`-10` mengalahkan `-2`); nama yang hanya mirip backup diabaikan dan backup yang lebih lama tetap ada. Direktori dihapus dengan `rmdir` hanya jika kosong, dengan satu pengecualian: direktori salinan terkelola (`templates/`, `examples/`) yang identik dengan sumbernya, atau masih cocok dengan digest yang tercatat, dihapus seluruhnya. Salinan yang sudah diubah dipertahankan, sehingga file Anda selamat. Perintah ini tidak pernah menghapus root harness seperti `~/.claude` atau `~/.gemini`, `~/.config/ai` itu sendiri, direktori skill `antigravity-builtin`, atau pengaturan `core.hooksPath` (batalkan dengan `git -C <checkout> config --unset core.hooksPath`). File sprite hasil generate juga dihapus, jika `bun` tersedia. | `[REMOVED]`, `[RESTORED]`, `[KEEP]` |
 | `--dry-run` | Mencetak rencana dan tidak menulis apa pun, baik pada install, `--update`, maupun `--uninstall`. | Baris `[DRY-RUN]` |
 
@@ -108,7 +108,7 @@ Verdict `--check`:
 |---|---|
 | `[ok]` | Link yang diinginkan dapat di-resolve (dalam mode copy, salinannya cocok). |
 | `[missing]` | Tidak ada apa-apa di sana. `[missing] <dir> (sprite agents)` berarti direktori sprite kosong atau tidak lengkap. |
-| `[stale]` | Milik installer tetapi salah: link yang menunjuk ke tempat lain di checkout atau ke `ai-skills`, salinan di tempat yang seharusnya berisi link, salinan yang berbeda atau sudah diedit, direktori `sucp-*` yang tidak lagi dimiliki checkout ini, atau file sprite yang usang atau diedit manual. `--update` memperbaikinya. |
+| `[stale]` | Milik installer tetapi salah: link yang menunjuk ke tempat lain di checkout atau ke `ai-skills`, salinan di tempat yang seharusnya berisi link, salinan yang berbeda atau sudah diedit, direktori `vivera-*` yang tidak lagi dimiliki checkout ini, atau file sprite yang usang atau diedit manual. `--update` memperbaikinya. |
 | `[dangling]` | Link milik installer yang targetnya tidak ada (link ke checkout ini atau ke repositori lama `ai-skills`, atau link yang diinginkan tetapi file sumbernya sudah hilang). Link menggantung yang menunjuk ke tempat lain mana pun adalah `[foreign]`. |
 | `[foreign]` | Bukan milik installer: file asli atau link lain (`--update` akan memindahkannya ke samping), file `viadir`, atau file `inrepo` yang bukan yang diharapkan. Ini dihitung sebagai masalah, sehingga file `viadir` membuat `--check` tetap exit 1 sampai Anda menyelesaikannya. |
 | `[skip]` | Target tanpa skill untuk diperiksa, atau direktori sprite yang tidak diperiksa: tidak ada `bun`, tier `minimal`, atau direktori di dalam checkout ini atau di balik symlink. Baris terakhir kemudian berbunyi `sprite agents not verified: <why>`. |

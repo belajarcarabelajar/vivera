@@ -17,7 +17,7 @@ import path from 'node:path';
 import { makeSandbox } from './install-sandbox.mjs';
 
 export const SKILLS = '.agents/skills';
-export const PKG = `${SKILLS}/super-ultra-code-plan`;
+export const PKG = `${SKILLS}/vivera`;
 export const STAMP = '20260101T000000Z';
 export const MARKER = '.vivera-managed';
 export const AS_ROOT = process.getuid?.() === 0;

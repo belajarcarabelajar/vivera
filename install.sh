@@ -3,7 +3,7 @@
 # This file parses arguments and dispatches; the work lives in scripts/install/*.sh (sourced below).
 set -euo pipefail
 
-# The installer writes under HOME, and in this checkout the relative links of skills/super-ultra-code-plan
+# The installer writes under HOME, and in this checkout the relative links of skills/vivera
 # and, in a git checkout of its own, core.hooksPath. Without HOME `set -u` would stop later with an
 # unbound variable and exit 1.
 if [ -z "${HOME:-}" ]; then
@@ -25,7 +25,7 @@ case "$HOME$REPO_DIR" in
     ;;
 esac
 
-MASTER_FILE="$REPO_DIR/Super Ultra Code Plan Implementation.md"
+MASTER_FILE="$REPO_DIR/VIVERA.md"
 DRY_RUN=false
 COPY_MODE=false
 TIER=standard

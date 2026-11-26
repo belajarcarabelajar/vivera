@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { assertSandbox, makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const IDS = [
   'ai-config',
   'agents',
@@ -22,7 +22,7 @@ const IDS = [
   'cursor',
   'copilot',
 ];
-const PKG = 'super-ultra-code-plan';
+const PKG = 'vivera';
 const BUILTIN = '.gemini/antigravity-cli/builtin/skills';
 
 const open = [];
@@ -292,7 +292,7 @@ describe('entries', () => {
     assertSandbox(sb.env);
     const pairs = Object.entries(sb.env).map(([k, v]) => `${k}=${v}`);
     const script =
-      'REPO_DIR="$1"; MASTER_FILE="$1/Super Ultra Code Plan Implementation.md"; DRY_RUN=false; TIER=standard; ' +
+      'REPO_DIR="$1"; MASTER_FILE="$1/VIVERA.md"; DRY_RUN=false; TIER=standard; ' +
       '. "$1/scripts/install/lib.sh"; . "$1/scripts/install/targets.sh"; target_entries "$2"';
     const r = Bun.spawnSync(['/usr/bin/env', '-i', ...pairs, Bun.which('bash'), '-c', script, '_', sb.repo, id], {
       cwd: sb.home,
@@ -304,7 +304,7 @@ describe('entries', () => {
       .filter((l) => l !== '')
       .map((l) => l.split('\t'));
   }
-  const phaseDirs = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
+  const phaseDirs = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('vivera-')).sort();
 
   test('targets: entries of the agents target are SKILL.md, every phase skill, then four package links', () => {
     const sb = sandbox();
@@ -339,7 +339,7 @@ describe('entries', () => {
       for (const [desired, dest] of lines) {
         expect(fs.existsSync(desired)).toBe(true);
         const underPackage = dest.startsWith(`${dir}/`);
-        const underPhase = dest.startsWith(`${siblings}/sucp-`) && phases.has(path.basename(path.dirname(dest)));
+        const underPhase = dest.startsWith(`${siblings}/vivera-`) && phases.has(path.basename(path.dirname(dest)));
         expect({ id, dest, ok: underPackage || underPhase }).toEqual({ id, dest, ok: true });
       }
     }
@@ -352,7 +352,9 @@ describe('entries', () => {
   });
 
   test('targets: a path with spaces survives the TAB split intact', () => {
-    const sb = sandbox();
+    // The master file name has no space since the rename to VIVERA.md, so the space comes from the sandbox root.
+    const sb = makeSandbox({ tools: ['git', 'bun'], spaced: true });
+    open.push(sb);
     for (const [desired, dest] of entryLines(sb, 'ai-config')) {
       expect(desired).toContain(' ');
       expect(dest).toContain(' ');

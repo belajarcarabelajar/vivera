@@ -15,7 +15,7 @@ const IMPLEMENTER = [
   '---',
   'description: Implements one chunk of an approved plan, test first.',
   'skills:',
-  '  - sucp-tdd-debug',
+  '  - vivera-tdd',
   'maxTurns: 40',
   'hooks:',
   '  PreToolUse:',

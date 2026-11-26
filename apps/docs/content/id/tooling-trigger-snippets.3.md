@@ -17,7 +17,7 @@ turunan (derived isolation), kepemilikan git yang hanya ada di parent, kontrak b
 (`--body-file`), dan batch merge topologis. Varian review PR menegakkan kontrak review yang
 ditambatkan ke baris dan menahan merge sampai pemeriksaan lokal hijau dan verdict-nya `correct`.
 
-Ke-16 snippet (enam titik masuk dan sepuluh snippet perintah) membawa satu paragraf `CONFIRMATIONS:` yang identik tepat setelah paragraf `PROGRESS METER:`, karena sesi yang dimulai dari snippet tidak pernah memuat `sucp-rules`, dan sebuah test di [`scripts/sync-snippets.test.mjs`](https://github.com/belajarcarabelajar/vivera/blob/main/scripts/sync-snippets.test.mjs) gagal jika paragraf itu hilang, terduplikasi, atau bergeser (drift). Salinan di database Snipset baru menyusul ketika pengguna menjalankan `bun run snippets:push`.
+Ke-16 snippet (enam titik masuk dan sepuluh snippet perintah) membawa satu paragraf `CONFIRMATIONS:` yang identik tepat setelah paragraf `PROGRESS METER:`, karena sesi yang dimulai dari snippet tidak pernah memuat `vivera-rules`, dan sebuah test di [`scripts/sync-snippets.test.mjs`](https://github.com/belajarcarabelajar/vivera/blob/main/scripts/sync-snippets.test.mjs) gagal jika paragraf itu hilang, terduplikasi, atau bergeser (drift). Salinan di database Snipset baru menyusul ketika pengguna menjalankan `bun run snippets:push`.
 
 <a id="keeping-the-database-in-sync"></a>
 ## Menjaga database tetap sinkron

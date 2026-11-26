@@ -116,7 +116,7 @@ describe('D1: update prunes a stale phase dir only when what it removes is the i
   test('D1: a symlinked SKILL.md in a marked dir is kept with "(not a plain file)", and its target is untouched', () => {
     const sb = sandbox();
     expect(sb.run(['--copy']).status).toBe(0);
-    const dir = stale(sb, 'sucp-linked');
+    const dir = stale(sb, 'vivera-linked');
     const mine = path.join(sb.root, 'my-skill.md');
     fs.writeFileSync(mine, 'my own skill\n');
     fs.symlinkSync(mine, `${dir}/SKILL.md`);
@@ -132,7 +132,7 @@ describe('D1: update prunes a stale phase dir only when what it removes is the i
   test('D1: a dangling symlinked SKILL.md in a marked dir is kept too', () => {
     const sb = sandbox();
     expect(sb.run(['--copy']).status).toBe(0);
-    const dir = stale(sb, 'sucp-dangling');
+    const dir = stale(sb, 'vivera-dangling');
     fs.symlinkSync('/nonexistent/skill.md', `${dir}/SKILL.md`);
     const r = sb.run(['--update', '--copy']);
     expect(r.status).toBe(0);
@@ -143,9 +143,9 @@ describe('D1: update prunes a stale phase dir only when what it removes is the i
   test('D1: a link-mode leftover (no marker, a link into this checkout) is still pruned', () => {
     const sb = sandbox();
     expect(sb.run([]).status).toBe(0);
-    const dir = at(sb, `${SKILLS}/sucp-gone`);
+    const dir = at(sb, `${SKILLS}/vivera-gone`);
     fs.mkdirSync(dir);
-    fs.symlinkSync(path.join(sb.repo, 'skills/sucp-gone/SKILL.md'), `${dir}/SKILL.md`);
+    fs.symlinkSync(path.join(sb.repo, 'skills/vivera-gone/SKILL.md'), `${dir}/SKILL.md`);
     const r = sb.run(['--update']);
     expect(r.status).toBe(0);
     expect(r.stdout).toContain(`[PRUNED] ${dir}`);

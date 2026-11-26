@@ -229,7 +229,7 @@ const GATE_UNMARKED_HEADERS = new Set(['Blocked', 'Follow-ups']);
 const GATE_TABLE_HEAD_RE = /^\|\s*Gate\s*\|\s*Header\s*\|\s*Options, in order\s*\|/;
 
 /**
- * Check the shape of the gate catalog table in skills/sucp-rules/SKILL.md.
+ * Check the shape of the gate catalog table in skills/vivera-rules/SKILL.md.
  * Options are not counted: labels contain commas ("Cancel, do nothing"), so a
  * split would be unreliable. The fourth column, Basis, must exist and be non-empty
  * in every row. Returns problem strings; empty means fine.

@@ -9,12 +9,12 @@ import { afterEach, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
+import { assertSandbox, makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const STAMP = '20260101T000000Z';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const PKG = '.agents/skills/vivera';
 
 const open = [];
 afterEach(() => {
@@ -79,7 +79,7 @@ test('overwrite: a live symlink to another file is moved aside as a symlink and 
 
 test('overwrite: a dangling link into the old ai-skills repo is replaced without a backup', () => {
   const sb = sandbox();
-  const old = `/x/ai-skills/${MASTER}`;
+  const old = `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`;
   link(sb, old, `.config/ai/${MASTER}`);
   const r = sb.run([]);
   expect(r.status).toBe(0);

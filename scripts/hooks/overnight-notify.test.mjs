@@ -1,7 +1,7 @@
 // scripts/hooks/overnight-notify.test.mjs
 //
 // Guards for the StopFailure and quota Notification hook that pings the owner
-// during an unattended sucp-overnight run.
+// during an unattended vivera-overnight run.
 //
 // The hook is spawned the way Claude Code runs it (one JSON object on stdin)
 // with a temp VIVERA_OVERNIGHT_DIR and a stub NOTIFY_TS that records its argv,

@@ -11,7 +11,7 @@
 // 5. Mermaid fence extraction matches the renderer's awk patterns
 // 6. renderMermaidBatch maps batch output to blocks and bisects a failing batch
 // 7. scripts/mermaid-batch.mjs writes SVGs beside each .mmd and reports counts
-// 8. checkGateCatalog pins the shape of the gate catalog in skills/sucp-rules/SKILL.md
+// 8. checkGateCatalog pins the gate catalog shape in skills/vivera-rules/SKILL.md
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -680,6 +680,6 @@ test('checkGateCatalog stops reading at the first line that is not a table row',
   assert.deepEqual(checkGateCatalog(gateTable(GOOD_GATE_ROWS) + trailing), []);
 });
 
-test('the real gate catalog in skills/sucp-rules/SKILL.md has a valid shape', () => {
-  assert.deepEqual(checkGateCatalog(readSkillText(path.join(import.meta.dirname, '..'), 'skills/sucp-rules/SKILL.md')), []);
+test('the real gate catalog in skills/vivera-rules/SKILL.md has a valid shape', () => {
+  assert.deepEqual(checkGateCatalog(readSkillText(path.join(import.meta.dirname, '..'), 'skills/vivera-rules/SKILL.md')), []);
 });

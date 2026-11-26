@@ -1,6 +1,6 @@
 // scripts/session-cleanup.mjs
 //
-// Run when the user declares a session done (sucp-rules, Git and Worktree
+// Run when the user declares a session done (vivera-rules, Git and Worktree
 // Ownership): removes that session's worktree without asking, after the checks
 // in lib/session-cleanup.mjs. The branch goes only when origin/<base> holds it.
 //

@@ -10,7 +10,7 @@
 - **Task / Goal:** [One sentence — what is this task trying to achieve?]
 - **Plan file:** [Path to implementation plan, e.g. `<plan path>`]
 - **Repo / branch:** [e.g. `~/projects/myapp` on branch `feat/rate-limit`]
-- **Skill active:** `super-ultra-code-plan`
+- **Skill active:** `vivera`
 - **Handoff written at:** [ISO timestamp, e.g. 2026-09-18T03:00:00+07:00]
 
 ---

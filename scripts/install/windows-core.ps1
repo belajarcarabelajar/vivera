@@ -246,7 +246,7 @@ function Get-TargetEntries($T) {
         $sibling = Get-ParentDir $dir
         [pscustomobject]@{ Src = $MasterFile; Dest = (Join-Path $dir 'SKILL.md'); IsDir = $false }
         # Phase skills are siblings of the orchestrator, so each harness finds them by name.
-        foreach ($phase in @(Get-ChildItem -LiteralPath (Join-Path $RepoDir 'skills') -Directory -Filter 'sucp-*' | Sort-Object Name)) {
+        foreach ($phase in @(Get-ChildItem -LiteralPath (Join-Path $RepoDir 'skills') -Directory -Filter 'vivera-*' | Sort-Object Name)) {
             [pscustomobject]@{ Src = (Join-Path $phase.FullName 'SKILL.md'); Dest = (Join-Path (Join-Path $sibling $phase.Name) 'SKILL.md'); IsDir = $false }
             $refs = Join-Path $phase.FullName 'references'
             if (Test-Path -LiteralPath $refs -PathType Container) {

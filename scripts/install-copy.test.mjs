@@ -15,8 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const MASTER = 'VIVERA.md';
+const PKG = '.agents/skills/vivera';
 const SKILLS = '.agents/skills';
 const MARKER = '.vivera-managed';
 const STAMP = '20260101T000000Z';
@@ -38,7 +38,7 @@ function sandbox({ compare = true } = {}) {
 const at = (sb, rel) => path.join(sb.home, rel);
 const read = (sb, rel) => fs.readFileSync(at(sb, rel), 'utf8');
 const exists = (sb, rel) => fs.existsSync(at(sb, rel));
-const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-')).sort();
+const phases = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('vivera-')).sort();
 const linkCount = (sb) => sb.snapshot().filter((l) => l.split('|')[1] === 'l').length;
 const backups = (sb) => sb.snapshot().filter((l) => l.split('|')[0].includes('.vivera-bak-'));
 const listTree = (dir, rel = '') =>
@@ -165,7 +165,7 @@ describe('install', () => {
   test('copy: --copy honors --only and --skip', () => {
     const only = sandbox();
     expect(only.run(['--copy', '--only', 'claude']).status).toBe(0);
-    expect(exists(only, `.claude/skills/super-ultra-code-plan/${MARKER}`)).toBe(true);
+    expect(exists(only, `.claude/skills/vivera/${MARKER}`)).toBe(true);
     expect(exists(only, '.agents')).toBe(false);
     expect(exists(only, '.config')).toBe(false);
     expect(linkCount(only)).toBe(0);
@@ -186,7 +186,7 @@ describe('install', () => {
 
   test('copy: step 7 leaves the repo links alone in copy mode and still runs in link mode', () => {
     const sb = sandbox();
-    const internal = path.join(sb.repo, 'skills/super-ultra-code-plan/templates');
+    const internal = path.join(sb.repo, 'skills/vivera/templates');
     fs.rmSync(internal);
     const before = sb.snapshot(path.join(sb.repo, 'skills'));
     const r = sb.run(['--copy']);
@@ -270,18 +270,18 @@ describe('check and update', () => {
   test('copy: --update --copy prunes a managed phase dir the checkout no longer has, and only that', () => {
     const sb = sandbox();
     expect(sb.run(['--copy']).status).toBe(0);
-    fs.mkdirSync(at(sb, `${SKILLS}/sucp-gone`));
-    fs.writeFileSync(at(sb, `${SKILLS}/sucp-gone/SKILL.md`), 'old copy');
+    fs.mkdirSync(at(sb, `${SKILLS}/vivera-gone`));
+    fs.writeFileSync(at(sb, `${SKILLS}/vivera-gone/SKILL.md`), 'old copy');
     // Changed in T10d: the marker records the digest of what was placed, which is what makes the copy prunable.
     const placed = `sha256:${createHash('sha256').update('old copy').digest('hex')}`;
-    fs.writeFileSync(at(sb, `${SKILLS}/sucp-gone/${MARKER}`), `source=${sb.repo}\nentry SKILL.md ${placed}\n`);
-    fs.mkdirSync(at(sb, `${SKILLS}/sucp-theirs`));
-    fs.writeFileSync(at(sb, `${SKILLS}/sucp-theirs/SKILL.md`), 'user skill');
+    fs.writeFileSync(at(sb, `${SKILLS}/vivera-gone/${MARKER}`), `source=${sb.repo}\nentry SKILL.md ${placed}\n`);
+    fs.mkdirSync(at(sb, `${SKILLS}/vivera-theirs`));
+    fs.writeFileSync(at(sb, `${SKILLS}/vivera-theirs/SKILL.md`), 'user skill');
     const r = sb.run(['--update', '--copy']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${SKILLS}/sucp-gone`)}`);
-    expect(exists(sb, `${SKILLS}/sucp-gone`)).toBe(false);
-    expect(read(sb, `${SKILLS}/sucp-theirs/SKILL.md`)).toBe('user skill');
+    expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${SKILLS}/vivera-gone`)}`);
+    expect(exists(sb, `${SKILLS}/vivera-gone`)).toBe(false);
+    expect(read(sb, `${SKILLS}/vivera-theirs/SKILL.md`)).toBe('user skill');
     for (const n of phases(sb)) expect(exists(sb, `${SKILLS}/${n}/SKILL.md`)).toBe(true);
   });
 });

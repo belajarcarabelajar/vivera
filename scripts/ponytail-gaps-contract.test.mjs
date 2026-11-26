@@ -35,7 +35,7 @@ function git(cwd, ...args) {
   return run.stdout;
 }
 
-const SWEEP = 'skills/sucp-debt-sweep/SKILL.md';
+const SWEEP = 'skills/vivera-sweep/SKILL.md';
 const LITERAL_COMMAND = "git grep -nE '(#|//|/[*]) ?defer:'";
 // The marker word is kept apart from any comment prefix so the sweep command does not count this file's fixture text.
 const MARK = 'defer:';
@@ -194,8 +194,8 @@ describe('T5 wiring', () => {
     assertFileContains('docs/guide/tooling-trigger-snippets-1.md', 'dups:check');
   });
 
-  test('sucp-rules names dups:check on the Simplicity Ladder bullet', () => {
-    const lines = readSkillText(ROOT, 'skills/sucp-rules/SKILL.md').split('\n');
+  test('vivera-rules names dups:check on the Simplicity Ladder bullet', () => {
+    const lines = readSkillText(ROOT, 'skills/vivera-rules/SKILL.md').split('\n');
     const sameLine = lines.some((line) => line.includes('The Simplicity Ladder') && line.includes('dups:check'));
     expect(sameLine).toBe(true);
   });

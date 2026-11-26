@@ -54,8 +54,8 @@ describe('readSkillText', () => {
 describe('readSkillCorpus', () => {
   test('includes the reference text of a phase skill', () => {
     write(MASTER_NAME, 'MASTER');
-    write('skills/sucp-rules/SKILL.md', 'RULES-INDEX');
-    write('skills/sucp-rules/references/01-safety.md', 'RULES-SAFETY');
+    write('skills/vivera-rules/SKILL.md', 'RULES-INDEX');
+    write('skills/vivera-rules/references/01-safety.md', 'RULES-SAFETY');
     expect(readSkillCorpus(root)).toBe('MASTER\nRULES-INDEX\nRULES-SAFETY');
   });
 });

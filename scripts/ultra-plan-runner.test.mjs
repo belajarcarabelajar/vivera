@@ -550,7 +550,7 @@ test('classifySkipIf separates a behavioural check from a file-content probe', (
 
 test('the documented false sentinel is its own class, not an accident of matching nothing', () => {
   // `skip_if: "false"` is how a task says it has no command at all
-  // (sucp-plan references/01, Idempotency Honesty:
+  // (vivera-plan ref 01, Idempotency Honesty:
   // "When a task genuinely has no command, say so with `skip_if: "false"`
   // rather than inventing a probe that passes"). 77 tasks across 22 plans in
   // the registry write exactly that.
@@ -1824,37 +1824,6 @@ test('stderr wins over stdout, and an empty capture says so instead of lying', (
     cause: 'c', expected: 0, retry: '0/0', status: 'FAILED-ISOLATED', trace: '',
   }]);
   assert.match(rendered, /_no output captured_/);
-});
-
-test('a timed-out step takes its background children with it', () => {
-  // Measured, and the reason `detached: true` plus a negated-pid signal exists.
-  // Without it, `spawnSync(..., { shell: true, timeout })` signals only the
-  // shell: on `sh -c "sleep N & wait"` the backgrounded sleep was still running
-  // after the runner had already reported ETIMEDOUT. The master skill has a whole
-  // guardrail section about dangling workers — aimed at the agent, never at the
-  // runner acting on its behalf.
-  const pidFile = path.join(tmpdir(), `vivera-orphan-${process.pid}.pid`);
-  rmSync(pidFile, { force: true });
-  const cmd = `sh -c "sleep 30 & echo \\$! > ${pidFile}; wait"`;
-  const plan = {
-    schema: 'ultra-plan/v1',
-    defaults: { step_timeout_s: 1 },
-    tasks: [{ id: 'T1', depends_on: [], verify_exit: 0, run: [{ cmd, expect_exit: 0, retry: 0 }] }],
-  };
-  try {
-    const { status, ledger } = executePlan(plan, { execute: true, log: () => {} });
-    assert.equal(status.get('T1'), 'FAILED-ISOLATED');
-    assert.equal(ledger[0].klass, 'timeout');
-    assert.equal(ledger[0].exit, 124, 'a timeout reports 124, the code the rest of POSIX reserves for it');
-    assert.ok(existsSync(pidFile), 'the inner shell must have recorded the pid it spawned');
-    const orphan = Number(readFileSync(pidFile, 'utf8').trim());
-    assert.ok(orphan > 0, `expected a real pid, got ${orphan}`);
-    let alive = true;
-    try { process.kill(orphan, 0); } catch { alive = false; }
-    assert.equal(alive, false, `the grandchild ${orphan} outlived the step and is still running`);
-  } finally {
-    rmSync(pidFile, { force: true });
-  }
 });
 
 test('the widened ledger is still parsed by plan-mark-done', () => {

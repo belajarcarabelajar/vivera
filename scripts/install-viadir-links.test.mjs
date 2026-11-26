@@ -16,10 +16,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const VIA = 'is reached through a symlinked directory; left alone';
 const FOREIGN_VIA = '(behind a symlinked directory; left alone)';
-const PACKAGE = 'super-ultra-code-plan';
+const PACKAGE = 'vivera';
 const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
 
 const open = [];

@@ -17,7 +17,7 @@ const git = Bun.which('git');
 if (!shell) console.log('install-ps1-hooks.test: no PowerShell (PWSH, pwsh, powershell); the hook tests are skipped');
 if (!git) console.log('install-ps1-hooks.test: no git on PATH; the hook tests are skipped');
 
-const MASTER = 'Super Ultra Code Plan Implementation.md';
+const MASTER = 'VIVERA.md';
 const OK_LINE = '[OK] Enabled git hooks: core.hooksPath=.githooks';
 const DRY_LINE = '[DRY-RUN] Would set repo-local git config: core.hooksPath=.githooks';
 const NOT_OWN = '[SKIP] Not a git checkout of its own; skipping core.hooksPath (the hook is opt-in).';
@@ -51,7 +51,7 @@ function makeFixture({ ownRepo = true, outerRepo = false } = {}) {
   const chk = path.join(base, 'chk');
   const home = path.join(base, 'h');
   put(path.join(chk, MASTER), 'master v1\n');
-  put(path.join(chk, 'skills', 'sucp-a', 'SKILL.md'), 'skill sucp-a\n');
+  put(path.join(chk, 'skills', 'vivera-a', 'SKILL.md'), 'skill vivera-a\n');
   put(path.join(chk, 'templates', 't.md'), 'template\n');
   put(path.join(chk, 'examples', 'e.md'), 'example\n');
   put(path.join(chk, 'mermaid.config.json'), '{}\n');

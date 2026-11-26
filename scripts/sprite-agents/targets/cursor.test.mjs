@@ -126,14 +126,14 @@ describe('cursor target', () => {
         guard.comment,
         '---',
         '',
-        skillLine(['sucp-tdd-debug'], SKILL_HOW),
+        skillLine(['vivera-tdd'], SKILL_HOW),
         '',
         guard.paragraph,
         '',
         'Body.',
         '',
       ].join('\n');
-      expect(render(tpl('\nBody.\n', 'tools: Read\nskills:\n  - sucp-tdd-debug\n'))).toBe(expected);
+      expect(render(tpl('\nBody.\n', 'tools: Read\nskills:\n  - vivera-tdd\n'))).toBe(expected);
     });
 
     test('leaves out readonly and the skill line for a writer without skills', () => {

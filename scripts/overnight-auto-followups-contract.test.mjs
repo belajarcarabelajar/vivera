@@ -7,7 +7,7 @@ import path from 'node:path';
 // class, one round, one commit per follow-up; the rest is parked for a human.
 
 const ROOT = path.join(import.meta.dir, '..');
-const OVERNIGHT = 'skills/sucp-overnight/SKILL.md';
+const OVERNIGHT = 'skills/vivera-overnight/SKILL.md';
 const SNIPPET = 'snippets/orkestrasi-overnight.md';
 
 function readRepoFile(rel) {
@@ -52,14 +52,14 @@ describe('overnight skill', () => {
 describe('restatements', () => {
   test('the sweep, the rules, the guide and the gate catalog point at the overnight exception', () => {
     for (const rel of [
-      'skills/sucp-debt-sweep/SKILL.md',
-      'skills/sucp-debt-sweep/references/02-rank-and-execute.md',
-      'skills/sucp-rules/SKILL.md',
-      'skills/sucp-rules/references/07-completion-confirmation.md',
+      'skills/vivera-sweep/SKILL.md',
+      'skills/vivera-sweep/references/02-rank-and-execute.md',
+      'skills/vivera-rules/SKILL.md',
+      'skills/vivera-rules/references/07-completion-confirmation.md',
       'docs/guide/pipeline-confirmations.md',
     ]) {
       const text = readRepoFile(rel);
-      expect({ rel, names: text.includes('eligible') && text.includes('sucp-overnight') }).toEqual({ rel, names: true });
+      expect({ rel, names: text.includes('eligible') && text.includes('vivera-overnight') }).toEqual({ rel, names: true });
     }
   });
 

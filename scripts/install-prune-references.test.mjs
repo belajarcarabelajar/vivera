@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeSandbox } from './lib/install-sandbox.mjs';
 
-const PHASE = 'sucp-zzz-gone';
+const PHASE = 'vivera-zzz-gone';
 const PHASE_REL = `.agents/skills/${PHASE}`;
 
 const put = (file, text) => {
@@ -30,7 +30,7 @@ function staleWithReferences(installArgs) {
   // Copy mode needs cmp and diff to judge a copy, and the sandbox PATH does not carry them by default.
   for (const tool of ['cmp', 'diff']) fs.symlinkSync(Bun.which(tool), path.join(sb.bin, tool));
   const src = path.join(sb.repo, 'skills', PHASE);
-  put(path.join(src, 'SKILL.md'), '---\nname: sucp-zzz-gone\ndescription: fixture\n---\n# Gone\n');
+  put(path.join(src, 'SKILL.md'), '---\nname: vivera-zzz-gone\ndescription: fixture\n---\n# Gone\n');
   put(path.join(src, 'references', '01-x.md'), 'reference fixture\n');
   expect(sb.run([...installArgs, '--only', 'agents']).status).toBe(0);
   expect(fs.existsSync(path.join(sb.home, PHASE_REL, 'references', '01-x.md'))).toBe(true);

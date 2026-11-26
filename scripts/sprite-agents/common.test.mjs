@@ -93,14 +93,14 @@ describe('readTemplate', () => {
   });
 
   test('returns the skills list, empty when the template names none', () => {
-    expect(read(role('researcher'), timid).skills).toEqual(['sucp-brainstorm']);
+    expect(read(role('researcher'), timid).skills).toEqual(['vivera-brainstorm']);
     expect(read(withHead('skills:\n  - a\n  - b')).skills).toEqual(['a', 'b']);
     expect(read(withHead('maxTurns: 3')).skills).toEqual([]);
   });
 
   test('takes a skill given as one name as a list of one, and an empty skills key as none', () => {
-    expect(read(withHead('skills: sucp-tdd-debug')).skills).toEqual(['sucp-tdd-debug']);
-    expect(read(withHead('skills: "sucp-tdd-debug"')).skills).toEqual(['sucp-tdd-debug']);
+    expect(read(withHead('skills: vivera-tdd')).skills).toEqual(['vivera-tdd']);
+    expect(read(withHead('skills: "vivera-tdd"')).skills).toEqual(['vivera-tdd']);
     expect(read(withHead('skills:')).skills).toEqual([]);
     expect(read(withHead('skills: []')).skills).toEqual([]);
   });
@@ -127,7 +127,7 @@ describe('readTemplate', () => {
 
   test('every target built on it keeps a skill given as one name', () => {
     for (const id of ['codex', 'opencode', 'antigravity', 'copilot', 'cursor']) {
-      expect(TARGETS[id].render(withHead('skills: sucp-tdd-debug'), chef, {})).toContain('`sucp-tdd-debug`');
+      expect(TARGETS[id].render(withHead('skills: vivera-tdd'), chef, {})).toContain('`vivera-tdd`');
     }
   });
 });
@@ -138,8 +138,8 @@ describe('skillLine', () => {
   });
 
   test('names each skill in backticks and says how to load them', () => {
-    expect(skillLine(['sucp-tdd-debug'], 'with the skill tool')).toBe(
-      'Load the `sucp-tdd-debug` skill with the skill tool before anything else; it holds the rules of your phase.',
+    expect(skillLine(['vivera-tdd'], 'with the skill tool')).toBe(
+      'Load the `vivera-tdd` skill with the skill tool before anything else; it holds the rules of your phase.',
     );
     expect(skillLine(['a', 'b'], 'by reading its SKILL.md')).toBe(
       'Load the `a`, `b` skill by reading its SKILL.md before anything else; it holds the rules of your phase.',

@@ -7,8 +7,8 @@ import path from 'node:path';
 // so that costly step runs once, after the sweep's follow-ups land.
 
 const ROOT = path.join(import.meta.dir, '..');
-const SWEEP = 'skills/sucp-debt-sweep/SKILL.md';
-const REF = 'skills/sucp-debt-sweep/references/06-terminal-task.md';
+const SWEEP = 'skills/vivera-sweep/SKILL.md';
+const REF = 'skills/vivera-sweep/references/06-terminal-task.md';
 
 function readRepoFile(rel) {
   const abs = path.join(ROOT, rel);
@@ -50,26 +50,26 @@ describe('T1 core rule', () => {
   });
 
   test('the phase router enters Step 6 before a terminal task', () => {
-    const row = readRepoFile('skills/super-ultra-code-plan/SKILL.md').split('\n').find((l) => l.startsWith('| Step 6:'));
+    const row = readRepoFile('skills/vivera/SKILL.md').split('\n').find((l) => l.startsWith('| Step 6:'));
     expect(row).toBeDefined();
     expect(row).toContain('terminal task');
   });
 
   test('the plan writer marks the terminal task', () => {
-    const plan = readRepoFile('skills/sucp-plan/SKILL.md');
+    const plan = readRepoFile('skills/vivera-plan/SKILL.md');
     expect(plan).toContain('(terminal)');
     expect(plan).toContain('06-terminal-task.md');
   });
 
   test('the saturation rule lets the terminal task stay open at sweep time', () => {
-    const line = readRepoFile('skills/sucp-verify-deliver/references/01-engineering-gates.md').split('\n').find((l) => l.startsWith('- Plan Completion Saturation Rule:'));
+    const line = readRepoFile('skills/vivera-ship/references/01-engineering-gates.md').split('\n').find((l) => l.startsWith('- Plan Completion Saturation Rule:'));
     expect(line).toContain('terminal task');
   });
 });
 
 describe('F follow-ups', () => {
   test('F2 the overnight run parks the terminal task', () => {
-    expect(readRepoFile('skills/sucp-overnight/SKILL.md')).toContain('terminal task');
+    expect(readRepoFile('skills/vivera-overnight/SKILL.md')).toContain('terminal task');
   });
 
   test('F1 the README names the terminal-task exception', () => {
@@ -78,7 +78,7 @@ describe('F follow-ups', () => {
   });
 
   test('F3 the task template shows the terminal marker', () => {
-    expect(readRepoFile('skills/sucp-plan/references/02-plan-templates.md')).toContain('(terminal)');
+    expect(readRepoFile('skills/vivera-plan/references/02-plan-templates.md')).toContain('(terminal)');
   });
 });
 
@@ -97,8 +97,8 @@ describe('R review fixes', () => {
   test('R2 the Close plan mirrors name the terminal exception', () => {
     expect(lineWith('templates/follow-up-injection-template.md', 'Mandatory: readiness runs before the follow-ups call')).toContain('terminal task');
     expect(lineWith('templates/follow-up-injection-template.md', '| Question asked | `Close plan`')).toContain('terminal task');
-    expect(lineWith('skills/sucp-rules/references/07-completion-confirmation.md', '| Plan closeout (Step 6) |')).toContain('terminal task');
-    expect(lineWith('skills/sucp-debt-sweep/references/04-stars-anti-patterns.md', 'accDescr: Once the plan is done')).toContain('terminal task');
+    expect(lineWith('skills/vivera-rules/references/07-completion-confirmation.md', '| Plan closeout (Step 6) |')).toContain('terminal task');
+    expect(lineWith('skills/vivera-sweep/references/04-stars-anti-patterns.md', 'accDescr: Once the plan is done')).toContain('terminal task');
   });
 
   test('R4 the follow-up template diagram names the terminal exception', () => {
@@ -111,7 +111,7 @@ describe('R review fixes', () => {
     for (const term of ['no `run[]`', 'NEEDS-HUMAN', 'runs the render or deploy again']) {
       expect({ term, found: ref.includes(term) }).toEqual({ term, found: true });
     }
-    expect(readRepoFile('skills/sucp-plan/SKILL.md')).toContain('no `run[]`');
+    expect(readRepoFile('skills/vivera-plan/SKILL.md')).toContain('no `run[]`');
   });
 });
 
@@ -120,9 +120,9 @@ describe('T2 mirrors', () => {
     'templates/follow-up-injection-template.md',
     'templates/session-learning-ledger-template.md',
     'templates/implementation-plan-template.md',
-    'skills/sucp-debt-sweep/references/04-stars-anti-patterns.md',
-    'skills/sucp-rules/references/09-anti-patterns.md',
-    'skills/sucp-verify-deliver/references/03-verification-matrix.md',
+    'skills/vivera-sweep/references/04-stars-anti-patterns.md',
+    'skills/vivera-rules/references/09-anti-patterns.md',
+    'skills/vivera-ship/references/03-verification-matrix.md',
   ];
   for (const rel of MIRRORS) {
     test(`${rel} restates the terminal-task exception`, () => {

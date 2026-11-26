@@ -53,7 +53,7 @@ const CATEGORIES = [
     suites: ['validate-skill'],
     scripts: ['scripts/validate-skill.mjs', 'scripts/validate-lib.mjs'],
     match: (p) => ['skills/', 'templates/', 'examples/', 'docs/guide/'].some((d) => p.startsWith(d))
-      || ['Super Ultra Code Plan Implementation.md', 'README.md', 'AGENTS.md'].includes(p),
+      || ['VIVERA.md', 'README.md', 'AGENTS.md'].includes(p),
   },
   {
     suites: ['validate-agents', 'gen-sprite-agents'],
@@ -71,7 +71,7 @@ const CATEGORIES = [
 
 const RECOGNIZED_DIRS = ['scripts/', 'skills/', 'templates/', 'examples/', 'agents/', '.claude/agents/', 'snippets/', 'docs/', 'diagrams/', 'vault-index/', 'apps/', 'evals/'];
 const RECOGNIZED_FILES = [
-  'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'GLOSSARY.md', 'Super Ultra Code Plan Implementation.md',
+  'snippets.manifest.json', 'README.md', 'AGENTS.md', 'CLAUDE.md', 'MEMORY.md', 'GLOSSARY.md', 'VIVERA.md',
   'LICENSE', 'THIRD-PARTY-NOTICES.md', '.gitignore', '.graphifyignore', 'puppeteer-config.json',
 ];
 const CODE_EXT = /\.(?:mjs|cjs|js|sh|py)$/;

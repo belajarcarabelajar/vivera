@@ -9,7 +9,7 @@
 A skill pipeline that guides AI coding agents through the whole software engineering lifecycle: **Idea -> Design -> Plan -> Human Approval Gate -> TDD -> Systematic Debugging -> Subagent Orchestration -> Verification -> Finishing -> Session-Close Debt Sweep**.
 
 - **Four gated components.** Brainstorming → Writing Plans → TDD → Verification, with a human approval gate between each one, plus a **Deep Research** path that runs only when a decision depends on information the codebase does not contain. The sub-agent pipeline that carries out the work is mandatory, not a recommendation.
-- **One source of truth.** `Super Ultra Code Plan Implementation.md` keeps contextual invariants, safety constraints, and human-approval gates in view for the whole run.
+- **One source of truth.** `VIVERA.md` keeps contextual invariants, safety constraints, and human-approval gates in view for the whole run.
 - **Verification is the last gate, not the last step.** Once the plan is `Done 100%` (except a terminal task such as a render or deploy, which runs once after the sweep) and the evidence is green, the agent harvests every noticed-but-unclosed item from the session, ranks 3-5 follow-ups that can be finished right now, and asks them as multi-select checkboxes in the harness's own prompt widget. The session ends with zero unexamined coding debt.
 
 ### Install
@@ -20,6 +20,8 @@ cd vivera
 ./install.sh           # installs into every agent harness it detects
 ./install.sh --check   # prints check: CURRENT and exits 0 when the install is in order
 ```
+
+The skills are `/vivera` and its phase skills `vivera-*` (named `super-ultra-code-plan` and `sucp-*` before 2026-11-26); `./install.sh --update` removes an install under the old names.
 
 Run `./install.sh --dry-run` first to see what it would do without writing anything. Tiers, flags, and the other install channels are in [Quick Start & Installation](docs/guide/getting-started-quick-start-1.md).
 

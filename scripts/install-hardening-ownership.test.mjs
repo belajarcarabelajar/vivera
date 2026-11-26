@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import { OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 import {
   AGENTS,
   MASTER,
@@ -100,15 +101,15 @@ describe('H1: a destination inside this checkout is never touched', () => {
   test('H1c: a package dir that is a symlink into the checkout keeps its tracked links through uninstall', () => {
     const sb = sandbox();
     mkdir(sb, AGENTS);
-    fs.symlinkSync(path.join(sb.repo, 'skills/super-ultra-code-plan'), at(sb, PKG));
+    fs.symlinkSync(path.join(sb.repo, 'skills/vivera'), at(sb, PKG));
     const names = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
-    const targets = names.map((n) => fs.readlinkSync(path.join(sb.repo, 'skills/super-ultra-code-plan', n)));
+    const targets = names.map((n) => fs.readlinkSync(path.join(sb.repo, 'skills/vivera', n)));
     runEveryMode(sb);
     // Uninstall says it kept them, on its own and not only by doing nothing.
     const again = sb.run(['--uninstall']);
     expect(again.stdout).toContain(`[KEEP] ${at(sb, `${PKG}/SKILL.md`)} (inside this checkout)`);
     names.forEach((n, i) => {
-      const file = path.join(sb.repo, 'skills/super-ultra-code-plan', n);
+      const file = path.join(sb.repo, 'skills/vivera', n);
       expect(fs.lstatSync(file).isSymbolicLink()).toBe(true);
       expect(fs.readlinkSync(file)).toBe(targets[i]);
     });
@@ -116,7 +117,7 @@ describe('H1: a destination inside this checkout is never touched', () => {
 });
 
 describe('H2: only this repo and the legacy ai-skills items count as ours', () => {
-  const LEGACY = [MASTER, 'skills/sucp-plan', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
+  const LEGACY = [OLD_AI_SKILLS_MASTER, 'skills/vivera-plan', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
   const classify = (sb, dest) => lib(sb, 'classify_dest', dest, path.join(sb.repo, MASTER));
 
   test('H2: every legacy form of the old repo is ours-stale, dangling or live', () => {
@@ -171,8 +172,8 @@ describe('H2: only this repo and the legacy ai-skills items count as ours', () =
 
   test('H2: legacy links on this machine are still repointed with no backup', () => {
     const sb = sandbox();
-    link(sb, `/x/ai-skills/${MASTER}`, `.config/ai/${MASTER}`);
-    link(sb, '/x/ai-skills/skills/super-ultra-code-plan/SKILL.md', `${PKG}/SKILL.md`);
+    link(sb, `/x/ai-skills/${OLD_AI_SKILLS_MASTER}`, `.config/ai/${MASTER}`);
+    link(sb, '/x/ai-skills/skills/vivera/SKILL.md', `${PKG}/SKILL.md`);
     link(sb, '/x/ai-skills/templates', `${PKG}/templates`);
     const r = sb.run(['--update']);
     expect(r.status).toBe(0);
@@ -210,20 +211,20 @@ describe('H10: a real file reached through a directory symlink into another tree
     return out;
   }
 
-  test('H10-1: a file of another checkout behind ~/.claude/skills/sucp-rules is left alone by every mode', () => {
+  test('H10-1: a file of another checkout behind ~/.claude/skills/vivera-rules is left alone by every mode', () => {
     const sb = sandbox();
     const other = path.join(sb.root, 'other');
-    fs.mkdirSync(path.join(other, 'skills/sucp-rules'), { recursive: true });
-    fs.writeFileSync(path.join(other, 'skills/sucp-rules/SKILL.md'), 'the other checkout');
+    fs.mkdirSync(path.join(other, 'skills/vivera-rules'), { recursive: true });
+    fs.writeFileSync(path.join(other, 'skills/vivera-rules/SKILL.md'), 'the other checkout');
     mkdir(sb, '.claude/skills');
-    fs.symlinkSync(path.join(other, 'skills/sucp-rules'), at(sb, '.claude/skills/sucp-rules'));
+    fs.symlinkSync(path.join(other, 'skills/vivera-rules'), at(sb, '.claude/skills/vivera-rules'));
     // Control: the destination is a real file that lives in another tree.
-    const dest = at(sb, '.claude/skills/sucp-rules/SKILL.md');
+    const dest = at(sb, '.claude/skills/vivera-rules/SKILL.md');
     expect(fs.realpathSync(dest).startsWith(fs.realpathSync(other))).toBe(true);
     expect(fs.lstatSync(dest).isSymbolicLink()).toBe(false);
 
     const before = sb.snapshot(other);
-    const runs = runEveryMode(sb, other, { 'skills/sucp-rules/SKILL.md': 'the other checkout' });
+    const runs = runEveryMode(sb, other, { 'skills/vivera-rules/SKILL.md': 'the other checkout' });
     expect(sb.snapshot(other)).toEqual(before);
     for (const mode of ['install', '--update', '--uninstall']) expect({ mode, status: runs[mode].status }).toEqual({ mode, status: 0 });
     expect(runs.install.stdout).toContain(`[SKIP] ${dest} ${VIA}`);
@@ -235,26 +236,26 @@ describe('H10: a real file reached through a directory symlink into another tree
   test('H10-2: a real package file in a symlinked dotfiles dir stays, while the missing links are placed beside it', () => {
     const sb = sandbox();
     const dotfiles = path.join(sb.root, 'dotfiles');
-    fs.mkdirSync(path.join(dotfiles, 'super-ultra-code-plan'), { recursive: true });
-    fs.writeFileSync(path.join(dotfiles, 'super-ultra-code-plan/SKILL.md'), 'my own copy');
+    fs.mkdirSync(path.join(dotfiles, 'vivera'), { recursive: true });
+    fs.writeFileSync(path.join(dotfiles, 'vivera/SKILL.md'), 'my own copy');
     mkdir(sb, '.claude');
     fs.symlinkSync(dotfiles, at(sb, '.claude/skills'));
-    const dest = at(sb, '.claude/skills/super-ultra-code-plan/SKILL.md');
+    const dest = at(sb, '.claude/skills/vivera/SKILL.md');
 
     const install = sb.run([]);
     expect(install.status).toBe(0);
     expect(install.stdout).toContain(`[SKIP] ${dest} ${VIA}`);
     // The other entries of the package were absent there and are placed as links inside the dotfiles dir.
-    expect(fs.lstatSync(path.join(dotfiles, 'super-ultra-code-plan/templates')).isSymbolicLink()).toBe(true);
-    expect(fs.readFileSync(path.join(dotfiles, 'super-ultra-code-plan/SKILL.md'), 'utf8')).toBe('my own copy');
+    expect(fs.lstatSync(path.join(dotfiles, 'vivera/templates')).isSymbolicLink()).toBe(true);
+    expect(fs.readFileSync(path.join(dotfiles, 'vivera/SKILL.md'), 'utf8')).toBe('my own copy');
 
-    const runs = runEveryMode(sb, dotfiles, { 'super-ultra-code-plan/SKILL.md': 'my own copy' });
+    const runs = runEveryMode(sb, dotfiles, { 'vivera/SKILL.md': 'my own copy' });
     for (const mode of ['install', '--update', '--uninstall']) expect({ mode, status: runs[mode].status }).toEqual({ mode, status: 0 });
     expect(runs['--check'].status).toBe(1);
     expect(runs['--check'].stdout).toContain(`[foreign] ${dest} (behind a symlinked directory; left alone)`);
     expect(runs['--uninstall'].stdout).toContain(`[KEEP] ${dest} (behind a symlinked directory)`);
     // Uninstall removed the links it had placed there, and only those.
-    expect(fs.existsSync(path.join(dotfiles, 'super-ultra-code-plan/templates'))).toBe(false);
+    expect(fs.existsSync(path.join(dotfiles, 'vivera/templates'))).toBe(false);
   });
 
   test('H10-3: a HOME that is itself reached through a symlink installs normally', () => {
@@ -271,7 +272,7 @@ describe('H10: a real file reached through a directory symlink into another tree
     expect(check.stdout).toContain('check: CURRENT');
   });
 
-  test("H10-4: the user's real layout (~/.claude/skills pointing at ~/.config/opencode/skills, sucp-* dir links) is still left alone", () => {
+  test("H10-4: the user's real layout (~/.claude/skills pointing at ~/.config/opencode/skills, vivera-* dir links) is still left alone", () => {
     const sb = sandbox();
     mkdir(sb, '.config/opencode/skills');
     for (const name of phases(sb)) {
@@ -319,7 +320,7 @@ describe('C9a: a link that is not this repo and not a legacy ai-skills item is f
     const planted = {
       [`${PKG}/templates`]: '/x/templates',
       [`${PKG}/examples`]: '/x/examples',
-      [`${AGENTS}/sucp-plan/SKILL.md`]: '/x/skills/y',
+      [`${AGENTS}/vivera-plan/SKILL.md`]: '/x/skills/y',
       [`.config/ai/${MASTER}`]: `/x/${MASTER}`,
       [`${PKG}/mermaid.config.json`]: `${sb.repo}-old/x.md`,
     };

@@ -241,7 +241,7 @@ describe('L1: the hash tool matrix, and no usable hash tool at all', () => {
     const r = sb.run(['--copy']);
     expect(r.status).toBe(0);
     expect(read(sb, `${PKG}/SKILL.md.vivera-bak-${STAMP}`)).toBe(edited);
-    expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md`)).equals(fs.readFileSync(repoFile(sb, 'Super Ultra Code Plan Implementation.md')))).toBe(true);
+    expect(fs.readFileSync(at(sb, `${PKG}/SKILL.md`)).equals(fs.readFileSync(repoFile(sb, 'VIVERA.md')))).toBe(true);
   });
 
   test('L1: --copy with no hash tool installs, writes no record it cannot back, and a later run with a tool backs the copy up', () => {

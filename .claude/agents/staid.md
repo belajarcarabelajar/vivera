@@ -4,7 +4,7 @@ description: "Staid, a Harvest Sprite on the reviewer crew. Independent auditor 
 color: cyan
 tools: Read, Grep, Glob, Bash, REPL
 skills:
-  - sucp-verify-deliver
+  - vivera-ship
 maxTurns: 30
 effort: high
 hooks:
@@ -34,7 +34,7 @@ Report every finding, deduplicated by location and defect, each with a path, a l
 
 ## Rules card
 
-The orchestrating agent reads `sucp-rules`; you follow this card instead.
+The orchestrating agent reads `vivera-rules`; you follow this card instead.
 
 - Evidence before claims: every claim names the command you ran, its exit code, and the counts it printed.
 - Never ask the user. Write the question and its options into your report, then continue with the work that does not depend on the answer.

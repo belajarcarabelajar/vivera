@@ -2,7 +2,7 @@
 //
 // install.sh --update: the install flow (repoint dangling or legacy links, move a user's own file
 // aside, re-render the sprite agents), then a prune of the phase-skill directories the checkout no
-// longer has. The prune only touches a sucp-* directory whose SKILL.md is a symlink of ours
+// longer has. The prune only touches a vivera-* directory whose SKILL.md is a symlink of ours
 // (classify_dest ok or ours-stale); everything else stays.
 
 import { afterEach, expect, test } from 'bun:test';
@@ -38,7 +38,7 @@ const lstat = (sb, rel) => fs.lstatSync(at(sb, rel), { throwIfNoEntry: false });
 const exists = (sb, rel) => lstat(sb, rel) !== undefined;
 const isLink = (sb, rel) => lstat(sb, rel)?.isSymbolicLink() === true;
 const backups = (sb) => sb.snapshot().filter((line) => line.split('|')[0].includes('.vivera-bak-'));
-const phaseSkills = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('sucp-'));
+const phaseSkills = (sb) => fs.readdirSync(path.join(sb.repo, 'skills')).filter((n) => n.startsWith('vivera-'));
 
 const AGENTS = '.agents/skills';
 const ANTI = '.gemini/config/skills';
@@ -46,22 +46,22 @@ const PACKAGE_LINKS = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json
 
 // The stale and the protected entries of ~/.agents/skills, as one fixture.
 function prunable(sb) {
-  link(sb, path.join(sb.repo, 'skills/sucp-gone/SKILL.md'), `${AGENTS}/sucp-gone/SKILL.md`);
-  link(sb, '/x/ai-skills/skills/sucp-old/SKILL.md', `${AGENTS}/sucp-old/SKILL.md`);
-  write(sb, `${AGENTS}/sucp-mine/SKILL.md`, 'my own skill');
+  link(sb, path.join(sb.repo, 'skills/vivera-gone/SKILL.md'), `${AGENTS}/vivera-gone/SKILL.md`);
+  link(sb, '/x/ai-skills/skills/vivera-old/SKILL.md', `${AGENTS}/vivera-old/SKILL.md`);
+  write(sb, `${AGENTS}/vivera-mine/SKILL.md`, 'my own skill');
   write(sb, 'notes/other.md', 'someone else');
-  link(sb, at(sb, 'notes/other.md'), `${AGENTS}/sucp-other/SKILL.md`);
-  link(sb, '/x/ai-skills/skills/sucp-x/SKILL.md', `${AGENTS}/sucp-x/SKILL.md`);
-  write(sb, `${AGENTS}/sucp-x/notes.txt`, 'keep me');
+  link(sb, at(sb, 'notes/other.md'), `${AGENTS}/vivera-other/SKILL.md`);
+  link(sb, '/x/ai-skills/skills/vivera-x/SKILL.md', `${AGENTS}/vivera-x/SKILL.md`);
+  write(sb, `${AGENTS}/vivera-x/notes.txt`, 'keep me');
   link(sb, '/x/ai-skills/skills/not-ours/SKILL.md', `${AGENTS}/not-ours/SKILL.md`);
 }
 
 test('update: this machine\'s dangling links into ai-skills are repointed into the checkout with no backup', () => {
   const sb = sandbox();
   for (const name of PACKAGE_LINKS) {
-    link(sb, `/x/ai-skills/skills/super-ultra-code-plan/${name}`, `${ANTI}/super-ultra-code-plan/${name}`);
+    link(sb, `/x/ai-skills/skills/vivera/${name}`, `${ANTI}/vivera/${name}`);
   }
-  link(sb, '/x/ai-skills/skills/super-ultra-code-plan/SKILL.md', `${AGENTS}/super-ultra-code-plan/SKILL.md`);
+  link(sb, '/x/ai-skills/skills/vivera/SKILL.md', `${AGENTS}/vivera/SKILL.md`);
 
   const r = sb.run(['--update', '--only', 'antigravity,agents']);
   expect(r.status).toBe(0);
@@ -69,7 +69,7 @@ test('update: this machine\'s dangling links into ai-skills are repointed into t
 
   for (const base of [ANTI, AGENTS]) {
     for (const name of PACKAGE_LINKS) {
-      const rel = `${base}/super-ultra-code-plan/${name}`;
+      const rel = `${base}/vivera/${name}`;
       expect(fs.readlinkSync(at(sb, rel)).startsWith(sb.repo)).toBe(true);
       expect(fs.existsSync(at(sb, rel))).toBe(true);
     }
@@ -85,26 +85,26 @@ test('update: a stale phase skill is pruned together with its empty directory, o
   prunable(sb);
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(0);
-  expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-gone`)}`);
-  expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-old`)}`);
-  expect(exists(sb, `${AGENTS}/sucp-gone`)).toBe(false);
-  expect(exists(sb, `${AGENTS}/sucp-old`)).toBe(false);
+  expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${AGENTS}/vivera-gone`)}`);
+  expect(r.stdout).toContain(`[PRUNED] ${at(sb, `${AGENTS}/vivera-old`)}`);
+  expect(exists(sb, `${AGENTS}/vivera-gone`)).toBe(false);
+  expect(exists(sb, `${AGENTS}/vivera-old`)).toBe(false);
 });
 
-test('update: a user\'s own sucp-* entry, a foreign link, a current skill and a non-sucp entry are never pruned', () => {
+test('update: a user\'s own vivera-* entry, a foreign link, a current skill and a non-vivera entry are never pruned', () => {
   const sb = sandbox();
   prunable(sb);
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(0);
 
-  expect(fs.readFileSync(at(sb, `${AGENTS}/sucp-mine/SKILL.md`), 'utf8')).toBe('my own skill');
-  expect(isLink(sb, `${AGENTS}/sucp-mine/SKILL.md`)).toBe(false);
-  expect(fs.readlinkSync(at(sb, `${AGENTS}/sucp-other/SKILL.md`))).toBe(at(sb, 'notes/other.md'));
+  expect(fs.readFileSync(at(sb, `${AGENTS}/vivera-mine/SKILL.md`), 'utf8')).toBe('my own skill');
+  expect(isLink(sb, `${AGENTS}/vivera-mine/SKILL.md`)).toBe(false);
+  expect(fs.readlinkSync(at(sb, `${AGENTS}/vivera-other/SKILL.md`))).toBe(at(sb, 'notes/other.md'));
   expect(isLink(sb, `${AGENTS}/not-ours/SKILL.md`)).toBe(true);
-  expect(fs.existsSync(at(sb, `${AGENTS}/sucp-rules/SKILL.md`))).toBe(true);
-  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-mine`)}`);
-  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-other`)}`);
-  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/sucp-rules`)}`);
+  expect(fs.existsSync(at(sb, `${AGENTS}/vivera-rules/SKILL.md`))).toBe(true);
+  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/vivera-mine`)}`);
+  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/vivera-other`)}`);
+  expect(r.stdout).not.toContain(`[PRUNED] ${at(sb, `${AGENTS}/vivera-rules`)}`);
   expect(r.stdout).not.toContain('not-ours');
 });
 
@@ -115,20 +115,20 @@ test('update: a stale link in a directory that holds another file loses the link
   expect(r.status).toBe(0);
   // Changed in T10b (H6): the line says the directory stayed, instead of claiming it was pruned.
   expect(r.stdout).toContain(
-    `[PRUNED] link removed from ${at(sb, `${AGENTS}/sucp-x`)}; the directory stays because it holds other files`,
+    `[PRUNED] link removed from ${at(sb, `${AGENTS}/vivera-x`)}; the directory stays because it holds other files`,
   );
-  expect(exists(sb, `${AGENTS}/sucp-x/SKILL.md`)).toBe(false);
-  expect(fs.readFileSync(at(sb, `${AGENTS}/sucp-x/notes.txt`), 'utf8')).toBe('keep me');
+  expect(exists(sb, `${AGENTS}/vivera-x/SKILL.md`)).toBe(false);
+  expect(fs.readFileSync(at(sb, `${AGENTS}/vivera-x/notes.txt`), 'utf8')).toBe('keep me');
 });
 
 test('update: only the selected targets are pruned', () => {
   const sb = sandbox();
-  link(sb, '/x/ai-skills/skills/sucp-old/SKILL.md', `${ANTI}/sucp-old/SKILL.md`);
-  link(sb, '/x/ai-skills/skills/sucp-old/SKILL.md', `${AGENTS}/sucp-old/SKILL.md`);
+  link(sb, '/x/ai-skills/skills/vivera-old/SKILL.md', `${ANTI}/vivera-old/SKILL.md`);
+  link(sb, '/x/ai-skills/skills/vivera-old/SKILL.md', `${AGENTS}/vivera-old/SKILL.md`);
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(0);
-  expect(exists(sb, `${AGENTS}/sucp-old`)).toBe(false);
-  expect(isLink(sb, `${ANTI}/sucp-old/SKILL.md`)).toBe(true);
+  expect(exists(sb, `${AGENTS}/vivera-old`)).toBe(false);
+  expect(isLink(sb, `${ANTI}/vivera-old/SKILL.md`)).toBe(true);
 });
 
 test('update: --dry-run says what it would prune and changes nothing', () => {
@@ -137,8 +137,8 @@ test('update: --dry-run says what it would prune and changes nothing', () => {
   const before = sb.snapshot();
   const r = sb.run(['--update', '--dry-run', '--only', 'agents']);
   expect(r.status).toBe(0);
-  expect(r.stdout).toContain(`[DRY-RUN] Would prune ${at(sb, `${AGENTS}/sucp-gone`)}`);
-  expect(r.stdout).toContain(`[DRY-RUN] Would prune ${at(sb, `${AGENTS}/sucp-old`)}`);
+  expect(r.stdout).toContain(`[DRY-RUN] Would prune ${at(sb, `${AGENTS}/vivera-gone`)}`);
+  expect(r.stdout).toContain(`[DRY-RUN] Would prune ${at(sb, `${AGENTS}/vivera-old`)}`);
   expect(r.stdout).not.toContain('[PRUNED]');
   expect(sb.snapshot()).toEqual(before);
 });
@@ -158,12 +158,12 @@ test('update: a second run changes nothing', () => {
 
 test('update: a user\'s own file where a link goes is backed up and then linked, as install does', () => {
   const sb = sandbox();
-  write(sb, `${AGENTS}/super-ultra-code-plan/SKILL.md`, 'mine');
+  write(sb, `${AGENTS}/vivera/SKILL.md`, 'mine');
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(0);
   expect(r.stdout).toContain('[BACKUP]');
-  expect(fs.readFileSync(at(sb, `${AGENTS}/super-ultra-code-plan/SKILL.md.vivera-bak-${STAMP}`), 'utf8')).toBe('mine');
-  expect(isLink(sb, `${AGENTS}/super-ultra-code-plan/SKILL.md`)).toBe(true);
+  expect(fs.readFileSync(at(sb, `${AGENTS}/vivera/SKILL.md.vivera-bak-${STAMP}`), 'utf8')).toBe('mine');
+  expect(isLink(sb, `${AGENTS}/vivera/SKILL.md`)).toBe(true);
 });
 
 test('update: a changed sprite agent is rendered again and a hand-written one beside it is left alone', () => {
@@ -198,7 +198,7 @@ test('update: --tier minimal with no tools works and renders no sprite agents', 
 
 test('update: a failing install step fails the run and prints no done line', () => {
   const sb = sandbox();
-  fs.rmSync(path.join(sb.repo, 'Super Ultra Code Plan Implementation.md'));
+  fs.rmSync(path.join(sb.repo, 'VIVERA.md'));
   const r = sb.run(['--update', '--only', 'agents']);
   expect(r.status).toBe(1);
   expect(r.stdout).not.toContain(DONE);

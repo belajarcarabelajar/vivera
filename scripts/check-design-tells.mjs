@@ -2,14 +2,14 @@
 // scripts/check-design-tells.mjs
 //
 // The master skill names seven frontend "tells" (Frontend-Only Aesthetic Rules in
-// skills/sucp-rules/SKILL.md). They are prose, and prose is applied only when
-// someone happens to look. This gate turns the one tell with a mechanical shape
+// skills/vivera-rules/SKILL.md). They are prose, and prose is applied only when
+// someone looks. This gate turns the one tell with a mechanical shape
 // into a check: a colored LEFT STRIPE on a card, row, panel, or section header
 // that carries no state.
 //
 // WHY THIS EXISTS, measured.
 //
-// The tell was written down in sucp-rules, and on 2026-10-16 the Snipset website
+// The tell is written in vivera-rules, and on 2026-10-16 the Snipset website
 // still carried 31 of them: a 4px accent `border-left` on the closing CTA card of
 // every solutions page (23 inline `style=""` attributes, EN and ID), on the compare
 // page's TCO card, on every testimonial card (a 4px gradient `::before`), on the
@@ -457,7 +457,7 @@ function report(violations) {
     console.error(`  ${v.where}  [${v.rule}]${v.detail ? ` ${v.detail}` : ''}`);
     if (v.line) console.error(`      ${v.line}`);
   }
-  console.error('\n   A colored left stripe that marks no state is decoration (sucp-rules, Frontend-Only Aesthetic Rules).');
+  console.error('\n   A colored left stripe that marks no state is decoration (vivera-rules, Frontend-Only Aesthetic Rules).');
   console.error('   A selector naming the state it marks (active, current, warning, error, callout, blockquote, ...) passes;');
   console.error('   anything else needs `/* design-tells: allow <reason> */` on the line above, with the reason.');
   return 1;
@@ -506,5 +506,5 @@ if (isMain) process.exit(main(process.argv.slice(2)));
 // REVERT: delete this file and scripts/check-design-tells.test.mjs; drop
 // `design:check` from package.json scripts; remove the design-tells bullet in
 // agents/roles/reviewer.md, the "Design tells" section in README.md, the gate
-// sentence on the left-stripe tell in skills/sucp-rules/SKILL.md, and the entry
+// sentence on the left-stripe tell in skills/vivera-rules/SKILL.md, and the entry
 // in backfill-plan-impacts.mjs's gate list.

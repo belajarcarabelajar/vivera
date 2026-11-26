@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_DIR="$HOME/.config/ai"
-FILE_NAME="Super Ultra Code Plan Implementation.md"
+FILE_NAME="VIVERA.md"
 
 ACTION="${1:-status}"
 FORCE="${2:-}"

@@ -4,16 +4,16 @@ import path from 'path';
 // The phase skills split out of the orchestrator. The orchestrator routes to
 // each of them by name, so a missing or unrouted phase is a validator failure.
 export const PHASE_SKILLS = [
-  'sucp-rules',
-  'sucp-brainstorm',
-  'sucp-plan',
-  'sucp-tdd-debug',
-  'sucp-verify-deliver',
-  'sucp-debt-sweep',
-  'sucp-overnight',
+  'vivera-rules',
+  'vivera-brainstorm',
+  'vivera-plan',
+  'vivera-tdd',
+  'vivera-ship',
+  'vivera-sweep',
+  'vivera-overnight',
 ];
 
-export const MASTER_NAME = 'Super Ultra Code Plan Implementation.md';
+export const MASTER_NAME = 'VIVERA.md';
 
 // A skill index may move its body into a sibling references/ directory, so a
 // SKILL.md reads as the index plus every reference file, in name order.

@@ -84,7 +84,7 @@ describe('multi-turn scenarios', () => {
     expect(r.code).toBe(0);
     const [first, second] = calls(ctx);
     expect(calls(ctx)).toHaveLength(2);
-    expect(after(first, '-p')).toBe('/super-ultra-code-plan build it');
+    expect(after(first, '-p')).toBe('/vivera build it');
     expect(after(second, '-p')).toBe('1');
     const id = after(first, '--session-id');
     expect(id).toMatch(/^[0-9a-f-]{36}$/);

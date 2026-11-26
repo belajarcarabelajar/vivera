@@ -5,7 +5,7 @@ category: getting-started
 slug: quick-start
 order: 3
 source: docs/guide/getting-started-quick-start-1.md
-source_hash: "4a3df300398e"
+source_hash: "3a81b5541c3c"
 ---
 
 <a id="quick-start--installation"></a>
@@ -23,7 +23,7 @@ cd vivera
 
 | Langkah | Apa yang dilakukan |
 |---|---|
-| Menautkan skill | Paket skill (`SKILL.md`, tujuh phase skill `sucp-*`, `templates/`, `examples/`, dan dua konfigurasi Mermaid) ditautkan ke setiap target dengan path absolut yang menunjuk ke checkout ini, jadi biarkan checkout tetap di tempatnya. `--copy` menyalin file sebagai gantinya. |
+| Menautkan skill | Paket skill (`SKILL.md`, tujuh phase skill `vivera-*`, `templates/`, `examples/`, dan dua konfigurasi Mermaid) ditautkan ke setiap target dengan path absolut yang menunjuk ke checkout ini, jadi biarkan checkout tetap di tempatnya. `--copy` menyalin file sebagai gantinya. |
 | Memilih target | `~/.config/ai` dan `~/.agents/skills` selalu dipilih. Harness lain hanya dipilih bila terdeteksi (direktorinya ada di home Anda, atau CLI-nya ada di `PATH`, `~/.local/bin`, atau `~/.bun/bin`; tabel di bawah menyebut direktori dan CLI setiap target, dan CLI dicari di ketiga tempat itu untuk setiap baris) atau disebut dengan `--only ID,ID`. Home yang masih kosong hanya mendapat dua target itu. |
 | Merender sprite agent | Tujuh file subagent Harvest Sprite (peri pembantu) dibuat, bukan ditautkan, untuk setiap harness yang terdeteksi di antara Claude Code, OpenCode, Codex, Cursor, Copilot, dan Antigravity. Langkah ini butuh `bun`, sehingga tier `minimal` melewatinya. |
 | Mengaktifkan git hook | Menyetel `core.hooksPath=.githooks` di checkout ini bila checkout memiliki `.git` sendiri, baik `graphify` terpasang maupun tidak, karena hook ini membawa gate ukuran file. Batalkan dengan `git -C <checkout> config --unset core.hooksPath`. |
@@ -67,8 +67,8 @@ mengganti arsip juga bisa mengganti checksum-nya.
 `install`, dan `details` di home yang terisolasi. Packaging-nya berfungsi: validasi lolos dan 8 skill
 terdaftar. Marketplace ditunda karena tiga alasan:
 
-- Master skill memuat phase skill-nya dengan nama polos (`sucp-rules`, `sucp-plan`) dan berhenti bila salah satunya tidak bisa
-  dimuat. Dokumentasi menampilkan skill plugin dengan nama plugin sebagai prefiks (`/vivera:sucp-rules`). Apakah tool Skill
+- Master skill memuat phase skill-nya dengan nama polos (`vivera-rules`, `vivera-plan`) dan berhenti bila salah satunya tidak bisa
+  dimuat. Dokumentasi menampilkan skill plugin dengan nama plugin sebagai prefiks (`/vivera:vivera-rules`). Apakah tool Skill
   milik model menerima nama polos tidak didokumentasikan, dan tidak ada sesi live yang dijalankan, jadi hal ini
   belum terverifikasi.
 - Path fallback `~/vivera/skills/<name>/SKILL.md` tidak ada di mesin yang hanya memiliki plugin.
@@ -126,7 +126,7 @@ Tool-tool tersebut, dari `scripts/install/tiers.tsv`:
   (`scripts/render-diagrams.sh` dan bagian Mermaid dari `scripts/validate-skill.mjs`): `mmdc` dari
   `@mermaid-js/mermaid-cli` diawali dengan `#!/usr/bin/env node`, dan `package.json` meminta Node >= 22.13.0.
   Satu-satunya lockfile adalah `bun.lock`.
-- **`ripgrep` (`rg`) & `tgrep`**: Pencarian kode utama memakai `rg` (binary langsung v15.2+ dengan smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) dipakai untuk pencarian berindeks trigram di repository yang terindeks dan untuk penyaringan shell pipe. GNU `grep` mentah dilarang keras. `tgrep` hanya wajib di tier `full`: di `standard`, install.sh mencetak satu peringatan bila tool ini tidak ada (tidak ada peringatan di `minimal`) dan aturan pencarian skill (`skills/sucp-rules/SKILL.md`) menerima `rg` atau `tgrep`, sehingga `rg` saja sudah memenuhinya.
+- **`ripgrep` (`rg`) & `tgrep`**: Pencarian kode utama memakai `rg` (binary langsung v15.2+ dengan smart-case). `tgrep` ([microsoft/tgrep](https://github.com/microsoft/tgrep)) dipakai untuk pencarian berindeks trigram di repository yang terindeks dan untuk penyaringan shell pipe. GNU `grep` mentah dilarang keras. `tgrep` hanya wajib di tier `full`: di `standard`, install.sh mencetak satu peringatan bila tool ini tidak ada (tidak ada peringatan di `minimal`) dan aturan pencarian skill (`skills/vivera-rules/SKILL.md`) menerima `rg` atau `tgrep`, sehingga `rg` saja sudah memenuhinya.
 
 <a id="platform-matrix"></a>
 ## Matriks platform

@@ -11,12 +11,12 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertSandbox, makeSandbox } from './lib/install-sandbox.mjs';
+import { assertSandbox, makeSandbox, OLD_AI_SKILLS_MASTER } from './lib/install-sandbox.mjs';
 import { loadTierTable, requiredAt, TIERS } from './lib/prereq.mjs';
 
 const WORKTREE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MASTER = 'Super Ultra Code Plan Implementation.md';
-const PKG = '.agents/skills/super-ultra-code-plan';
+const MASTER = 'VIVERA.md';
+const PKG = '.agents/skills/vivera';
 const SLOW = 120_000;
 
 const has = (tool) => Bun.which(tool) !== null;
@@ -130,7 +130,7 @@ describe('dry-run purity', () => {
     },
     'a dangling ai-skills link': (sb) => {
       fs.mkdirSync(at(sb, '.config/ai'), { recursive: true });
-      fs.symlinkSync(`/x/ai-skills/${MASTER}`, at(sb, `.config/ai/${MASTER}`));
+      fs.symlinkSync(`/x/ai-skills/${OLD_AI_SKILLS_MASTER}`, at(sb, `.config/ai/${MASTER}`));
     },
   };
 

@@ -1,6 +1,6 @@
 # Session-Close Debt Sweep & Follow-Up Injection — Template
 
-> Use after the approved plan is `Done 100%` and the verification gate is green. A terminal task (marked `(terminal)`: render, deploy, publish) is the exception: it stays open, and runs once after the selected follow-ups land (`sucp-debt-sweep` reference 06). The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
+> Use after the approved plan is `Done 100%` and the verification gate is green. A terminal task (marked `(terminal)`: render, deploy, publish) is the exception: it stays open, and runs once after the selected follow-ups land (`vivera-sweep` reference 06). The output is a batched question-tool call of multi-select groups, not a report. Default 3-5 items.
 
 ---
 
@@ -76,7 +76,7 @@ Did executing a selected item create new debt in the surface it touched? List ne
 
 ## 7. Plan Closeout Decision
 
-Mandatory: readiness runs before the follow-ups call, the question rides in that call (with a terminal task, readiness and the question come after that task, in their own call), and the answer is applied after the follow-ups are executed or declined, including `Nothing, close session` (`sucp-debt-sweep`, 6.5.5).
+Mandatory: readiness runs before the follow-ups call, the question rides in that call (with a terminal task, readiness and the question come after that task, in their own call), and the answer is applied after the follow-ups are executed or declined, including `Nothing, close session` (`vivera-sweep`, 6.5.5).
 
 | Field | Value |
 |---|---|

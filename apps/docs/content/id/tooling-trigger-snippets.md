@@ -5,7 +5,7 @@ category: tooling
 slug: trigger-snippets
 order: 2
 source: docs/guide/tooling-trigger-snippets-1.md
-source_hash: "3c6cdf25b4e2"
+source_hash: "d0cf2d2bae82"
 ---
 
 <a id="trigger-snippets"></a>
@@ -154,7 +154,7 @@ cd <repo> && bun <vivera>/scripts/check-design-tells.mjs --diff origin/main
 ```
 
 Gate ini ada karena pada 2026-10-16 situs Snipset masih membawa 31 garis kiri
-dekoratif, padahal tell tersebut sudah sejak awal tertulis sebagai prosa di `sucp-rules`:
+dekoratif, padahal tell tersebut sudah sejak awal tertulis sebagai prosa di `vivera-rules`:
 `border-left` aksen 4px pada kartu CTA penutup di setiap halaman solutions (23 atribut
 `style=""` inline, EN dan ID), pada kartu TCO di halaman compare, pada setiap kartu
 testimoni (`::before` bergradien 4px), pada dua kotak demo terminal, dan pada halaman

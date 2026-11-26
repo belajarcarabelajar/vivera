@@ -39,10 +39,10 @@ test('extractPromptBody drops the title and the usage note above the fence', () 
     '',
     '---',
     '',
-    'Apply super-ultra-code-plan with Systematic Debugging.',
+    'Apply vivera with Systematic Debugging.',
   ].join('\n');
   const body = extractPromptBody(md);
-  assert.equal(body, 'Apply super-ultra-code-plan with Systematic Debugging.');
+  assert.equal(body, 'Apply vivera with Systematic Debugging.');
   assert.doesNotMatch(body, /Copy-paste/);
   assert.doesNotMatch(body, /Snippet Orkestrasi/);
 });
@@ -143,7 +143,7 @@ test('checkDrift reports a missing snippet rather than treating it as empty', ()
   assert.match(results[0].problem, /not found/);
 });
 
-// The progress meter is defined once, in `sucp-rules` (Progress Meter at Checkpoints).
+// The progress meter is defined once, in `vivera-rules` (Progress Meter at Checkpoints).
 // A snippet that leaves it to the agent to load that skill gets no meter when the
 // skill is not loaded, which is the case for every short `cmd-*` snippet. So every
 // trigger carries the same paragraph itself, and this test keeps them identical.
@@ -164,7 +164,7 @@ test('every trigger snippet carries the same progress-meter paragraph', () => {
   }
 });
 
-// Same reason as the progress meter: the cmd-* snippets never load `sucp-rules`, so the
+// Same reason as the progress meter: the cmd-* snippets never load `vivera-rules`, so the
 // Confirmation Protocol has to travel inside each trigger. Without it a snippet-started
 // session asks its approval gates as plain chat text and the user has to type the answer.
 test('every trigger snippet carries the same confirmations paragraph', () => {

@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 // .claude/hooks/require-exit-code.mjs
 //
-// Stop hook that the super-ultra-code-plan skill registers in its frontmatter: a final message that
+// Stop hook that the vivera skill registers in its frontmatter: a final message that
 // claims something passes must name an exit code ("Every passing claim names its evidence" in
-// sucp-rules). Rule text alone did not hold: evidence-exit-code-cited failed 2 of 2 runs after the
+// vivera-rules). Rule text alone did not hold: evidence-exit-code-cited failed 2 of 2 runs after the
 // rule spelled out the words "exit 0", with pass counts and no exit code in the final message.
 //
 // A block is {"decision":"block"} on stdout, so Claude rewrites the message once. A rewrite is never

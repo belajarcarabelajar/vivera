@@ -158,9 +158,9 @@ const skip = (what, why) => {
 }
 
 // 1. Check Master File & Frontmatter
-const masterPath = path.join(rootDir, 'Super Ultra Code Plan Implementation.md');
+const masterPath = path.join(rootDir, 'VIVERA.md');
 if (!fs.existsSync(masterPath)) {
-  console.error('❌ Master file missing: Super Ultra Code Plan Implementation.md');
+  console.error('❌ Master file missing: VIVERA.md');
   errors++;
 } else {
   const content = fs.readFileSync(masterPath, 'utf8');
@@ -210,7 +210,7 @@ for (const name of PHASE_SKILLS) {
     errors++;
     continue;
   }
-  const orchestrator = fs.readFileSync(path.join(rootDir, 'Super Ultra Code Plan Implementation.md'), 'utf8');
+  const orchestrator = fs.readFileSync(path.join(rootDir, 'VIVERA.md'), 'utf8');
   if (!orchestrator.includes(`\`${name}\``)) {
     console.error(`❌ Orchestrator never routes to \`${name}\`: no phase would load it.`);
     errors++;
@@ -222,19 +222,19 @@ if (phasesOk === PHASE_SKILLS.length) {
   console.log(`✅ Phase skills present, named, and routed: ${phasesOk}/${PHASE_SKILLS.length}.`);
 }
 
-// 2. Check Symlinks in skills/super-ultra-code-plan/
-const skillDir = path.join(rootDir, 'skills', 'super-ultra-code-plan');
+// 2. Check Symlinks in skills/vivera/
+const skillDir = path.join(rootDir, 'skills', 'vivera');
 const requiredSkillLinks = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json'];
 
 for (const linkName of requiredSkillLinks) {
   const p = path.join(skillDir, linkName);
   if (!fs.existsSync(p)) {
-    console.error(`❌ skills/super-ultra-code-plan/${linkName} does not exist.`);
+    console.error(`❌ skills/vivera/${linkName} does not exist.`);
     errors++;
   } else {
     try {
       const target = fs.readlinkSync(p);
-      console.log(`✅ Symlink valid: skills/super-ultra-code-plan/${linkName} -> ${target}`);
+      console.log(`✅ Symlink valid: skills/vivera/${linkName} -> ${target}`);
     } catch (err) {
       console.error(`❌ Failed to read symlink ${linkName}: ${err.message}`);
       errors++;
@@ -517,13 +517,13 @@ for (const snip of requiredSnippets) {
 
 // 3l. Retired typed-approval phrases and the gate catalog shape.
 {
-  const rules = 'skills/sucp-rules/SKILL.md';
-  const orchestrator = 'Super Ultra Code Plan Implementation.md';
-  // skills/super-ultra-code-plan/SKILL.md is a symlink to the orchestrator, so it is skipped.
+  const rules = 'skills/vivera-rules/SKILL.md';
+  const orchestrator = 'VIVERA.md';
+  // skills/vivera/SKILL.md is a symlink to the orchestrator, so it is skipped.
   const typedApprovalPhrases = ['wait for explicit yes', 'nod sufficient', 'wait for explicit approval before plan'];
   const typedApprovalFiles = [
     orchestrator,
-    ...['sucp-brainstorm', 'sucp-debt-sweep', 'sucp-overnight', 'sucp-plan', 'sucp-rules', 'sucp-tdd-debug', 'sucp-verify-deliver']
+    ...['vivera-brainstorm', 'vivera-sweep', 'vivera-overnight', 'vivera-plan', 'vivera-rules', 'vivera-tdd', 'vivera-ship']
       .map((name) => `skills/${name}/SKILL.md`),
   ];
   let typedApprovalClean = true;

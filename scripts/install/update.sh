@@ -1,79 +1,113 @@
 # shellcheck shell=bash
 # Sourced by install.sh: --update mode. It runs the install flow, so a dangling or legacy link is
 # repointed, a user's own file is moved aside and a changed sprite agent is rendered again, and then
-# it prunes the phase skills this checkout no longer has.
+# it prunes the phase skills this checkout no longer has, and what was installed under the old names.
 
-# Prunes what stale_phase_dirs (targets.sh) lists, the same list --check reports. A link-mode leftover
-# loses its link. A copy-mode directory (one with a .vivera-managed marker) loses its SKILL.md only while
-# that is exactly what the installer placed (its digest still matches the marker's record): an edited
-# SKILL.md, or one that is not a plain file, is the user's, so the directory stays with a KEEP line. The
-# directory itself goes only when that left it empty: rmdir refuses one that still holds something.
+# Prunes what stale_phase_dirs (targets.sh) lists, the same list --check reports, for every selected target.
 prune_stale_skills() {
-  local id entry skill_md recorded current
+  local id
   for id in $(select_targets); do
-    report_unusual_stale_names "$id"
-    while IFS= read -r -u 3 entry; do
-      if [ -z "$entry" ]; then
-        continue
-      fi
-      skill_md="$entry/SKILL.md"
-      if marker_regular "$entry/.vivera-managed"; then
-        # The installer places a plain file in a marked dir; a symlink there (live or dangling) is the user's.
-        if [ -L "$skill_md" ]; then
-          echo "[KEEP] $entry (not a plain file)"
-          continue
-        fi
-        if [ -e "$skill_md" ]; then
-          recorded="$(recorded_digest "$skill_md")"
-          current="$(entry_digest "$skill_md")"
-          if [ -z "$current" ] || [ "$current" != "$recorded" ]; then
-            echo "[KEEP] $entry (modified copy of a skill this checkout no longer has)"
-            continue
-          fi
-        fi
-      fi
-      if [ "$DRY_RUN" = true ]; then
-        echo "[DRY-RUN] Would prune $entry"
-        continue
-      fi
-      rm -f "$skill_md"
-      prune_stale_references "$entry"
-      if marker_regular "$entry/.vivera-managed"; then
-        rm -f "$entry/.vivera-managed"
-      fi
-      if rmdir "$entry" 2>/dev/null; then
-        echo "[PRUNED] $entry"
-      else
-        echo "[PRUNED] link removed from $entry; the directory stays because it holds other files"
-      fi
-    done 3<<< "$(stale_phase_dirs "$id")"
+    prune_stale_target "$id"
   done
 }
 
-# Removes <entry>/references when the installer placed it, judged like SKILL.md above: in a marked
-# copy dir a real directory whose digest still matches the marker's record, otherwise a vivera link.
-# Anything else is the user's and stays, so the rmdir after this keeps the directory.
-prune_stale_references() {
+# The prune of one target; --uninstall calls it too. A link (a phase dir linked whole, or the old ai-config
+# file) is removed as a link, never followed. The old ai-config copy goes with its sidecar only while its
+# digest still matches the sidecar's record. A directory loses each entry that is the installer's own: a
+# link classify_dest calls ok or ours-stale, or, in a copy-mode directory (one with a .vivera-managed marker),
+# a plain entry whose digest still matches the marker's record. A marked directory whose SKILL.md was edited,
+# or is not a plain file, is the user's, so it stays whole with a KEEP line. The directory itself goes only
+# when that left it empty: rmdir refuses one that still holds something.
+prune_stale_target() {
+  local id="$1"
+  local entry skill_md
+  report_unusual_stale_names "$id"
+  while IFS= read -r -u 3 entry; do
+    if [ -z "$entry" ]; then
+      continue
+    fi
+    skill_md="$entry/SKILL.md"
+    if [ ! -L "$entry" ] && [ -f "$entry" ] && ! owned_copy "$entry"; then
+      echo "[KEEP] $entry (modified copy of a skill this checkout no longer has)"
+      continue
+    fi
+    if [ ! -L "$entry" ] && marker_regular "$entry/.vivera-managed"; then
+      # The installer places a plain file in a marked dir; a symlink there (live or dangling) is the user's.
+      if [ -L "$skill_md" ]; then
+        echo "[KEEP] $entry (not a plain file)"
+        continue
+      fi
+      if [ -e "$skill_md" ] && ! owned_copy "$skill_md"; then
+        echo "[KEEP] $entry (modified copy of a skill this checkout no longer has)"
+        continue
+      fi
+    fi
+    if [ "$DRY_RUN" = true ]; then
+      echo "[DRY-RUN] Would prune $entry"
+      continue
+    fi
+    if [ -L "$entry" ] || [ -f "$entry" ]; then
+      rm -f "$entry"
+      if marker_regular "$entry.vivera-managed"; then
+        rm -f "$entry.vivera-managed"
+      fi
+      echo "[PRUNED] $entry"
+      continue
+    fi
+    prune_owned_entries "$entry"
+    if marker_regular "$entry/.vivera-managed"; then
+      rm -f "$entry/.vivera-managed"
+    fi
+    if rmdir "$entry" 2>/dev/null; then
+      echo "[PRUNED] $entry"
+    else
+      echo "[PRUNED] link removed from $entry; the directory stays because it holds other files"
+    fi
+  done 3<<< "$(stale_phase_dirs "$id")"
+}
+
+# True when prune_stale_target would keep the stale <entry> as the user's (one of its KEEP branches), so
+# --check can tell a kept entry from one --update would prune.
+stale_entry_kept() {
   local entry="$1"
-  local refs="$1/references"
+  if [ -L "$entry" ]; then
+    return 1
+  fi
+  if [ -f "$entry" ]; then
+    ! owned_copy "$entry"
+    return
+  fi
+  marker_regular "$entry/.vivera-managed" || return 1
+  [ -L "$entry/SKILL.md" ] || { [ -e "$entry/SKILL.md" ] && ! owned_copy "$entry/SKILL.md"; }
+}
+
+# True when the plain file or directory at <path> is exactly what the installer placed: its digest equals
+# the one its marker (or sidecar) recorded. An empty digest never matches.
+owned_copy() {
   local recorded current
-  if [ ! -e "$refs" ] && [ ! -L "$refs" ]; then
-    return 0
-  fi
-  if marker_regular "$entry/.vivera-managed"; then
-    if [ -L "$refs" ] || [ ! -d "$refs" ]; then
-      return 0
+  recorded="$(recorded_digest "$1")"
+  current="$(entry_digest "$1")"
+  [ -n "$current" ] && [ "$current" = "$recorded" ]
+}
+
+# Removes each entry of the stale directory <dir> that the installer placed (see prune_stale_target).
+# Hidden entries are never the installer's, apart from the marker, which the caller handles.
+prune_owned_entries() {
+  local dir="$1"
+  local child
+  for child in "$dir"/*; do
+    if [ -L "$child" ]; then
+      # The installer places plain copies in a marked dir, so a link there is the user's.
+      if marker_regular "$dir/.vivera-managed"; then
+        continue
+      fi
+      case "$(COPY_MODE=false classify_dest "$child" "$REPO_DIR/skills/$(basename "$dir")/$(basename "$child")")" in
+        ok | ours-stale) rm -f "$child" ;;
+      esac
+    elif [ -e "$child" ] && marker_regular "$dir/.vivera-managed" && owned_copy "$child"; then
+      rm -rf "$child"
     fi
-    recorded="$(recorded_digest "$refs")"
-    current="$(entry_digest "$refs")"
-    if [ -n "$current" ] && [ "$current" = "$recorded" ]; then
-      rm -rf "$refs"
-    fi
-    return 0
-  fi
-  case "$(classify_dest "$refs" "$REPO_DIR/skills/$(basename "$entry")/references")" in
-    ok | ours-stale) rm -f "$refs" ;;
-  esac
+  done
 }
 
 # The closing line is sprites_exit_if_failed's to change: it ends the run with a failure, or with a count

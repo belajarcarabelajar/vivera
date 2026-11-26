@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "31a9de36ef0d"
+source_hash: "6e217124731e"
 ---
 
 <a id="repository-structure"></a>
@@ -16,7 +16,7 @@ vivera/
 ├── README.md                                    # Documentation & architecture flow
 ├── LICENSE                                      # MIT License
 ├── package.json                                 # npm scripts & devDependencies (@mermaid-js/mermaid-cli)
-├── Super Ultra Code Plan Implementation.md      # Orchestrator skill: gates, classification, phase router
+├── VIVERA.md      # Orchestrator skill: gates, classification, phase router
 ├── MEMORY.md                                    # Distilled in-repo rules from Step 6 learning harvest
 ├── install.sh                                   # 1-command installer: skills for every detected harness, sprite agents for six
 ├── install.ps1                                  # Windows installer: copy mode, skills only (run under pwsh 7.6.6 on Linux; not verified on Windows)
@@ -175,21 +175,21 @@ vivera/
 │   ├── manifest.json                            # Vault files, sha256 hashes, byte sizes, and node counts
 │   └── semantic/                                # Subagent chunk outputs (chunk-*.json)
 └── skills/
-    ├── super-ultra-code-plan/                   # Full skill package with bundled templates & examples
-    │   ├── SKILL.md -> ../../Super Ultra Code Plan Implementation.md
+    ├── vivera/                   # Full skill package with bundled templates & examples
+    │   ├── SKILL.md -> ../../VIVERA.md
     │   ├── templates -> ../../templates
     │   ├── examples -> ../../examples
     │   ├── mermaid.config.json -> ../../mermaid.config.json
     │   ├── mermaid.dark.config.json -> ../../mermaid.dark.config.json
     │   └── require-exit-code.mjs -> ../../.claude/hooks/require-exit-code.mjs
-    ├── sucp-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
-    ├── sucp-rules/references/                   # Nine rule files
-    ├── sucp-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research
-    ├── sucp-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
-    ├── sucp-tdd-debug/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
-    ├── sucp-verify-deliver/SKILL.md             # Phase skill: Step 5 verification and PR delivery
-    ├── sucp-debt-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep (scans code for defer: markers), plan closeout decision, learning harvest
-    └── sucp-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
+    ├── vivera-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
+    ├── vivera-rules/references/                   # Nine rule files
+    ├── vivera-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research
+    ├── vivera-plan/SKILL.md                       # Phase skill: Step 3 writing plans and GitHub issue sync
+    ├── vivera-tdd/SKILL.md                  # Phase skill: Step 4 TDD and systematic debugging
+    ├── vivera-ship/SKILL.md             # Phase skill: Step 5 verification and PR delivery
+    ├── vivera-sweep/SKILL.md                 # Phase skill: Step 6 debt sweep (scans code for defer: markers), plan closeout decision, learning harvest
+    └── vivera-overnight/SKILL.md                  # Phase skill: unattended run from approved plan to verified PR
 ```
 
 TinyFish didokumentasikan di dalam master skill itu sendiri, di bagian
@@ -201,6 +201,6 @@ dipasang oleh `install.sh` §6b yang kini sudah dihapus); pemisahan itu dihentik
 kedua sumber kebenaran sudah tidak sinkron, dan salinan khusus CLI tidak pernah menjelaskan
 tool MCP yang benar-benar dipanggil agent. Satu master skill, satu set aturan.
 
-Skill dipasang melalui `skills/super-ultra-code-plan/`, yang berupa kumpulan symlink ke
+Skill dipasang melalui `skills/vivera/`, yang berupa kumpulan symlink ke
 root repo, bukan salinan. File master tetap bersumber tunggal, dan
 `render-diagrams.sh` melewati file symlink sehingga diagram yang sama tidak pernah dirender dua kali.

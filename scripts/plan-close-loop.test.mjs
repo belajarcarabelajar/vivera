@@ -208,7 +208,9 @@ test('due: a landed plan whose file is missing is reported as NO-FILE, not fatal
   const fx = fixture({ extraSessions: [{ session: 's-gone', plan: 'gone', state: 'merged' }] });
   const { out, exit } = due(fx);
   assert.equal(exit, 10, out);
-  assert.match(out, /^NO-FILE\tgone\t/m);
+  // Registries carry many plan_missing sessions, so missing files are one summary line, not one row each.
+  assert.doesNotMatch(out, /^NO-FILE\t/m);
+  assert.match(out, /^no-file: 1 plan\(s\) without a plan file \(gone\)$/m);
 });
 
 test('keep-open: an unknown plan exits 2 naming it and writes nothing', () => {

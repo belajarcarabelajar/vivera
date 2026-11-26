@@ -143,7 +143,10 @@ function dueCli(opts, { registry, fallbackRepo, sessions }) {
   const now = Date.now();
   const measure = readinessMeasure({ registry, timeoutS: opts['--timeout-s'] ?? 300 });
   const { plans, skipped, carried } = dueList({ sessions, readPlan, measure, kept: readKept(), prior: readDue(), now, fallbackRepo });
-  for (const p of plans) console.log(`${p.verdict}\t${p.plan}\t${p.repo}\tasserted=${p.asserted} tickable=${p.tickable}`);
+  for (const p of plans) if (p.verdict !== 'NO-FILE') console.log(`${p.verdict}\t${p.plan}\t${p.repo}\tasserted=${p.asserted} tickable=${p.tickable}`);
+  // Registries carry many plan_missing sessions; one row each would bury the READY lines.
+  const missing = plans.filter((p) => p.verdict === 'NO-FILE').map((p) => p.plan);
+  if (missing.length) console.log(`no-file: ${missing.length} plan(s) without a plan file (${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', ...' : ''})`);
   for (const s of skipped) console.log(`skipped\t${s.plan}\t${s.reason}`);
   const ready = plans.filter((p) => p.verdict === 'READY').length;
   console.log(`due: ${ready} plan(s) READY`);

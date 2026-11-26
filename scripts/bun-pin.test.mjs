@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-const EXPECTED = '1.4.4';
+const EXPECTED = '1.4.5';
 
 const IMAGE = /oven\/bun:(\d+\.\d+\.\d+)-debian/g;
 const ACTION = /bun-version:\s*'(\d+\.\d+\.\d+)'/g;

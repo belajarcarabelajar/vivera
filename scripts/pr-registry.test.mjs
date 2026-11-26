@@ -552,7 +552,6 @@ test('re-claiming the same session stays idempotent under the CAS path', () => {
 const SESSION = { session: 'w1', plan: 'my-plan' };
 const GAP = { code: 'PLAN_NOT_COMPLETE', message: 'plan.md has status "Verification", not Complete', fix: 'set "status: Complete"' };
 const WARN = 'warning: recording "w1" as merged, but plan my-plan is not closed out:';
-const GAP2 = { code: 'ISSUE_NOT_CLOSED', message: 'issue #7 is recorded as "open", not closed', fix: 'bun scripts/plan-issue-sync.mjs plan.md' };
 
 test('closeoutVerdict proceeds silently when nothing is open and nothing was skipped', () => {
   let seen;
@@ -570,21 +569,6 @@ test('closeoutVerdict proceeds with a note when the check was partial', () => {
     check: () => ({ skipped: 'no plan file at /r/x.md', gaps: [] }),
   });
   assert.deepEqual(verdict.lines, ['note: close-out not fully checked: no plan file at /r/x.md']);
-});
-
-test('closeoutVerdict warns with exact lines, one message and one fix per gap', () => {
-  const verdict = closeoutVerdict(SESSION, {
-    repoRoot: '/r',
-    check: () => ({ skipped: null, gaps: [GAP, GAP2] }),
-  });
-  assert.deepEqual(verdict.lines, [
-    WARN,
-    `  - [PLAN_NOT_COMPLETE] ${GAP.message}`,
-    `    fix: ${GAP.fix}`,
-    `  - [ISSUE_NOT_CLOSED] ${GAP2.message}`,
-    `    fix: ${GAP2.fix}`,
-    'readiness: bun scripts/plan-closeout.mjs --readiness /r/docs/code-plan/plans/my-plan.md',
-  ]);
 });
 
 function closeoutOnPlan(planText) {

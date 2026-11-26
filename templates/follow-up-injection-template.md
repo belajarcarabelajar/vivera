@@ -80,7 +80,7 @@ Mandatory: readiness runs before the follow-ups call, the question rides in that
 
 | Field | Value |
 |---|---|
-| Tick command | `bun scripts/ultra-plan-runner.mjs <plan.md> --execute > runner.log`, then `bun scripts/plan-mark-done.mjs <plan.md> --from runner.log` |
+| Tick command | `bun scripts/plan-closeout.mjs --readiness <plan.md> --evidence readiness.log; bun scripts/plan-mark-done.mjs <plan.md> --from readiness.log` |
 | Readiness command | `bun scripts/plan-closeout.mjs --readiness <plan.md>` |
 | Verdict and exit code | `READY` 0 / `NOT-READY` 1 / `NEEDS-HUMAN` 3 |
 | Open items | Each `OPEN`, `UNREAD` and `UNPROVEN` task, each open `NOW` backlog row, each open task step box (`open step boxes: N`), and each other open box (`other open boxes: M`) |

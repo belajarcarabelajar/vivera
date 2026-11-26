@@ -158,7 +158,7 @@
       "slug": "lifecycle-audit",
       "order": 6,
       "title": "Plan Lifecycle Audit & Task Completion",
-      "description": "One script reports plan status counts, and another ticks plan steps only for tasks a runner log shows as PASSED or SKIPPED-IDEMPOTENT.",
+      "description": "One script reports plan status counts, and another ticks plan steps only for tasks a readiness evidence log or a runner log shows as PASSED or SKIPPED-IDEMPOTENT.",
       "source": {
         "file": "docs/guide/tooling-lifecycle-audit.md"
       }

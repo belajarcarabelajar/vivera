@@ -26,7 +26,7 @@ import { extractFrontmatter, reapGroup } from './ultra-plan-runner.mjs';
 import { runPlanCommand } from './lib/remote-runner.mjs';
 import { defaultCwd, rereadAtMain } from './lib/readiness-main.mjs';
 import {
-  BOXES_SHOWN, tickCommand, openStepBoxes, otherOpenBoxes, readinessVerdict, taskReadiness, openNowRows,
+  BOXES_SHOWN, tickCommand, openStepBoxes, otherOpenBoxes, readinessVerdict, taskReadiness, openNowRows, evidenceLog,
 } from './lib/plan-readiness.mjs';
 
 export { openStepBoxes, otherOpenBoxes, readinessVerdict, outputTail, taskReadiness, openNowRows } from './lib/plan-readiness.mjs';
@@ -219,14 +219,14 @@ function writeTaskLog(dir, id, r) {
 }
 
 const USAGE = [
-  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--registry <path>] [--timeout-s <n>] [--log <dir>]',
+  'usage: bun scripts/plan-closeout.mjs --readiness <plan.md> [--cwd <dir>] [--registry <path>] [--timeout-s <n>] [--log <dir>] [--evidence <log>]',
   '       bun scripts/plan-closeout.mjs --audit [--registry <path>]',
 ].join('\n');
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
   const opts = { mode };
-  const allowed = mode === '--readiness' ? ['--cwd', '--registry', '--timeout-s', '--log'] :mode === '--audit' ? ['--registry'] : null;
+  const allowed = mode === '--readiness' ? ['--cwd', '--registry', '--timeout-s', '--log', '--evidence'] :mode === '--audit' ? ['--registry'] : null;
   if (!allowed) return null;
   if (mode === '--readiness') {
     opts.plan = rest.shift();
@@ -284,6 +284,16 @@ function readinessCli(opts) {
     for (const l of lines) console.log(`    ${t.id}> ${l}`);
   }
   if (logDir) console.log(`log: ${logDir}`);
+  if (opts['--evidence']) {
+    const file = path.resolve(opts['--evidence']);
+    try {
+      writeFileSync(file, evidenceLog(tasks));
+    } catch (e) {
+      console.error(`cannot write evidence log ${file}: ${e.message}`);
+      return 2;
+    }
+    console.log(`evidence: ${file}`);
+  }
   console.log(`open NOW follow-ups: ${openNow}`);
   const boxes = openStepBoxes(text);
   console.log(`open step boxes: ${boxes.length}`);
@@ -295,7 +305,7 @@ function readinessCli(opts) {
   console.log(`other open boxes: ${other.length} (outside task sections; tick by hand with evidence, not counted)`);
   for (const b of other.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
   const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length });
-  console.log(`readiness: ${v.verdict}`);
+  console.log(`readiness: ${v.verdict}${v.asserted ? ` (${v.asserted} asserted)` : ''}`);
   return v.exit;
 }
 

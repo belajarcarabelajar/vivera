@@ -15,7 +15,7 @@ const CODE_FENCE = /^[ \t]*(?:```|~~~)/;
 export const BOXES_SHOWN = 5;
 
 export const tickCommand = (plan) =>
-  `bun scripts/ultra-plan-runner.mjs ${plan} --execute > runner.log; bun scripts/plan-mark-done.mjs ${plan} --from runner.log`;
+  `bun scripts/plan-closeout.mjs --readiness ${plan} --evidence readiness.log; bun scripts/plan-mark-done.mjs ${plan} --from readiness.log`;
 
 // The gate counts only what plan-mark-done can tick, so its printed fix always clears it.
 export function openStepBoxes(planText) {
@@ -64,14 +64,17 @@ export function otherOpenBoxes(planText) {
 }
 
 const STATES = ['DONE', 'OPEN', 'UNREAD', 'UNPROVEN'];
+// Counted as done but kept out of STATES, so counts only names it when a task has it.
+const ASSERTED = 'DONE-ASSERTED';
 
 export function readinessVerdict({ tasks, openNow = 0, openBoxes = 0 }) {
   const counts = Object.fromEntries(STATES.map((s) => [s, 0]));
   for (const t of tasks) counts[t.state] = (counts[t.state] ?? 0) + 1;
-  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0) return { verdict: 'NOT-READY', exit: 1, counts };
+  const asserted = counts[ASSERTED] ?? 0;
+  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0) return { verdict: 'NOT-READY', exit: 1, counts, asserted };
   // A plan with no tasks measured nothing, so READY would recommend Complete without evidence.
-  if (tasks.length === 0 || counts.UNPROVEN > 0) return { verdict: 'NEEDS-HUMAN', exit: 3, counts };
-  return { verdict: 'READY', exit: 0, counts };
+  if (tasks.length === 0 || counts.UNPROVEN > 0) return { verdict: 'NEEDS-HUMAN', exit: 3, counts, asserted };
+  return { verdict: 'READY', exit: 0, counts, asserted };
 }
 
 const TAIL_LINES = 5;
@@ -88,11 +91,12 @@ export function outputTail({ stdout, stderr }) {
 export function taskReadiness(planText, { run, cwd, timeoutMs, onOutput }) {
   const { frontmatter } = extractFrontmatter(planText);
   const { tasks } = parseUltraPlanYaml(frontmatter);
+  const lines = planText.split('\n');
   return tasks.map((t) => {
     const skipIf = typeof t.skip_if === 'string' ? t.skip_if : '';
     const kind = classifySkipIf(skipIf);
-    // No command means no machine proof, so a human has to judge the task.
-    if (kind === 'empty' || kind === 'sentinel') return { id: t.id, state: 'UNPROVEN', skipIf };
+    // No command means no machine proof, so only fully ticked step boxes stand in for it, labelled as asserted.
+    if (kind === 'empty' || kind === 'sentinel') return { id: t.id, state: assertedState(lines, t.id), skipIf };
     // bun test exits 0 when a named file is missing, which would read an unmerged task as DONE.
     const missing = missingTestPaths(skipIf, cwd);
     if (missing.length) return { id: t.id, state: 'OPEN', skipIf, missing, tail: ['not run: a named test file is missing'] };
@@ -102,6 +106,21 @@ export function taskReadiness(planText, { run, cwd, timeoutMs, onOutput }) {
     return { id: t.id, state, skipIf, tail: outputTail(r) };
   });
 }
+
+// The same step lines plan-mark-done ticks, so a box in a code fence never counts.
+function assertedState(lines, id) {
+  const range = taskSectionRange(lines, id);
+  const steps = range ? stepLineIndices(lines, range.start, range.end) : [];
+  return steps.length && steps.every((i) => !OPEN_STEP.test(lines[i])) ? ASSERTED : 'UNPROVEN';
+}
+
+// Only a skip_if that exited 0 is evidence; an asserted task never enters the log.
+export function evidenceLines(tasks) {
+  return tasks.filter((t) => t.state === 'DONE').map((t) => `${t.id}: SKIPPED-IDEMPOTENT (readiness: skip_if exit 0)`);
+}
+
+// plan-mark-done reads a status line only when it is indented, as the runner prints it.
+export const evidenceLog = (tasks) => evidenceLines(tasks).map((l) => `  ${l}\n`).join('');
 
 export function openNowRows(body) {
   let n = 0;

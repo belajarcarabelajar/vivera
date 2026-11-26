@@ -11,8 +11,7 @@ A watch started with `/steward` reads this file from the checkout, and PR Stewar
 
 ## Checks and tests
 
-- Run only the checks the failure points at, never the whole suite. Heavy work goes to Claude Managed Agents: `ma-run --base origin/main --tools tgrep,gh,chromium -- <command>` (for example `-- bun test scripts/<file>.test.mjs` or `-- bun run ci:targeted`). Without `--base origin/main` the container has no `.git` and about 60 tests fail for environment reasons.
-- `ma-run` exit 3 means the head is not pushed and exit 70 means the job did not finish. Only then run one test file here, prefixed `HEAVY_LOCAL=steward-fallback`.
+- Run only the test file the change touches, here: `HEAVY_LOCAL=steward timeout 120 bun test <file>`. Never the whole suite or `ci:targeted`. `ma-run` is not used during a watch: it tests only a pushed commit, and the watch's limits keep cloud tools out (probe PR #289, 2026-11-27).
 - No end-to-end or browser runs unless the owner asks for them in a comment.
 - A check that fails before any test ran, or that passed earlier on the same commit, is re-run once before you look for a cause.
 
@@ -22,7 +21,8 @@ The watch commits with `core.hooksPath=/dev/null`, so `.githooks/pre-commit` doe
 
 1. `bun scripts/check-secrets.mjs --staged` (this repository is public; GitHub push protection only knows provider tokens, not personal paths or addresses)
 2. `bun scripts/check-file-size.mjs --staged`
-3. When code changed: `graphify update .` and `bun run graphify:sync`, then stage the graph files they changed
+
+Skip the hook's graphify step: `graphify-out/` is not tracked, so it changes nothing the push carries, and `bun run graphify:sync` exits 2 in a worktree without `local.config.json` (probe PR #289).
 
 A gate that fails is reported in a pull request comment, and nothing is pushed.
 

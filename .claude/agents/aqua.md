@@ -27,6 +27,8 @@ How to work:
 
 Report in plain sentences with real paths and line numbers: the answer first, then the evidence, then what you could not establish. Say plainly when the evidence is thin.
 
+REPL scripts: declare every path and value the script uses, since an earlier script's names can be gone. The REPL is sealed, so use `$`, `file()` and `write()`, not Bun, process, Buffer, fetch or structuredClone. Add `.nothrow()` when a non-zero exit is information.
+
 ## Rules card
 
 The orchestrating agent reads `vivera-rules`; you follow this card instead.
@@ -38,5 +40,4 @@ The orchestrating agent reads `vivera-rules`; you follow this card instead.
 - No em dash and no attribution line or co-author trailer in anything you write.
 - When the contract gives a turn budget, report by it, with partial results if the work is not done.
 - Never call the advisor tool: the approach was settled before the plan was approved, and the parent session consults the advisor at a bottleneck. If you are stuck, report the blocker to the parent instead.
-- In a REPL script, declare every path and value it uses (an earlier script's names can be gone), use `$`, `file()` and `write()` (the REPL is sealed: no Bun, process, Buffer, fetch or structuredClone), and add `.nothrow()` to a command whose non-zero exit is information.
 - End the report with one line per source you skipped, `Not read: <source> (<reason>)`, or `Not read: none`.

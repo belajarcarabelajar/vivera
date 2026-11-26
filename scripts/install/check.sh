@@ -4,7 +4,9 @@
 # One line per path: [ok], [missing], [stale], [dangling] or [foreign]; then `check: CURRENT` (exit 0)
 # or `check: N problem(s)` (exit 1). Over a copy install checked without --copy, one `[hint]` line before
 # that verdict says to run --check --copy; it changes no count and no exit code. A phase-skill dir this
-# checkout no longer has is reported as [stale] too (--update prunes it). When nothing was checked at
+# checkout no longer has is reported as [stale] too (--update prunes it), except an edited copy under a name
+# used before the 2026-11-26 rename that --update keeps: a [warn] line that changes no count or exit code.
+# When nothing was checked at
 # all (no selected target has skills) the
 # answer is `check: nothing to check` and exit 2, never CURRENT. Nothing is created, moved or removed,
 # and --dry-run changes nothing here. With --copy the copies are compared by content instead of the
@@ -193,7 +195,7 @@ check_sprites() {
 }
 
 mode_check() {
-  local selected id desired dest state target expected stale note
+  local selected id desired dest state target expected stale name note
   CHECK_PROBLEMS=0
   CHECK_CHECKED=0
   CHECK_UNVERIFIED=""
@@ -274,7 +276,14 @@ mode_check() {
       esac
     done 3< <(target_entries "$id")
     while IFS= read -r -u 4 stale; do
-      if [ -n "$stale" ]; then
+      if [ -z "$stale" ]; then
+        continue
+      fi
+      name="$(basename "$stale")"
+      # Owner decision 2026-11-26: --update keeps such a copy for good, so it must not hold --check off CURRENT.
+      if { is_legacy_skill_name "$name" || [ "$name" = "$LEGACY_MASTER_NAME" ]; } && stale_entry_kept "$stale"; then
+        check_row "[warn] $stale (an edited copy under the old name; kept, delete it when you no longer need it)"
+      else
         check_row "[stale] $stale (a skill this checkout no longer has; --update prunes it)"
         CHECK_PROBLEMS=$((CHECK_PROBLEMS + 1))
       fi

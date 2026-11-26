@@ -66,6 +66,21 @@ prune_stale_target() {
   done 3<<< "$(stale_phase_dirs "$id")"
 }
 
+# True when prune_stale_target would keep the stale <entry> as the user's (one of its KEEP branches), so
+# --check can tell a kept entry from one --update would prune.
+stale_entry_kept() {
+  local entry="$1"
+  if [ -L "$entry" ]; then
+    return 1
+  fi
+  if [ -f "$entry" ]; then
+    ! owned_copy "$entry"
+    return
+  fi
+  marker_regular "$entry/.vivera-managed" || return 1
+  [ -L "$entry/SKILL.md" ] || { [ -e "$entry/SKILL.md" ] && ! owned_copy "$entry/SKILL.md"; }
+}
+
 # True when the plain file or directory at <path> is exactly what the installer placed: its digest equals
 # the one its marker (or sidecar) recorded. An empty digest never matches.
 owned_copy() {

@@ -204,7 +204,6 @@ function Install-Hooks {
 # master file of that time. Ours only (a marker, a sidecar marker for the file), not a link, not inside this
 # checkout. -Check reports them, and -Update and -Uninstall prune them.
 function Get-StalePhaseDirs($T) {
-    $LegacySkillNames = @('super-ultra-code-plan', 'sucp-rules', 'sucp-brainstorm', 'sucp-plan', 'sucp-overnight', 'sucp-tdd-debug', 'sucp-verify-deliver', 'sucp-debt-sweep')
     if ($T.Kind -eq 'file') {
         $old = Join-Path (Join-Rel $HomeDir $T.Rel) 'Super Ultra Code Plan Implementation.md'
         $item = Get-ItemOrNull $old
@@ -215,7 +214,7 @@ function Get-StalePhaseDirs($T) {
     $parent = Get-ParentDir (Join-Rel $HomeDir $T.Rel)
     if (-not (Test-Path -LiteralPath $parent -PathType Container)) { return }
     $found = @(Get-ChildItem -LiteralPath $parent -Directory -Filter 'vivera-*' -Force)
-    foreach ($n in $LegacySkillNames) {
+    foreach ($n in (Get-LegacySkillNames)) {
         $i = Get-ItemOrNull (Join-Path $parent $n)
         if (($null -ne $i) -and $i.PSIsContainer) { $found += $i }
     }
@@ -225,6 +224,19 @@ function Get-StalePhaseDirs($T) {
         if (Test-InsideCheckout (Join-Path $d.FullName 'SKILL.md')) { continue }
         if (Test-Path -LiteralPath (Join-Path $d.FullName $MarkerName) -PathType Leaf) { $d.FullName }
     }
+}
+
+function Get-LegacySkillNames { @('super-ultra-code-plan', 'sucp-rules', 'sucp-brainstorm', 'sucp-plan', 'sucp-overnight', 'sucp-tdd-debug', 'sucp-verify-deliver', 'sucp-debt-sweep') }
+
+# True when -Update keeps the stale <Path> (Invoke-Prune's KEEP) and it has a name used before the rename:
+# -Check then prints a [warn] line that counts for nothing (owner decision 2026-11-26). A vivera-* one stays [stale].
+function Test-KeptLegacyCopy([string]$Path) {
+    $name = Get-LeafName $Path
+    if (((Get-LegacySkillNames) -notcontains $name) -and ($name -ne 'Super Ultra Code Plan Implementation.md')) { return $false }
+    $skill = if (Test-Path -LiteralPath $Path -PathType Leaf) { $Path } else { Join-Path $Path 'SKILL.md' }
+    if ($null -eq (Get-ItemOrNull $skill)) { return $false }
+    $current = Get-EntryDigest $skill
+    return (($current -eq '') -or ($current -cne (Get-RecordedDigest $skill)))
 }
 
 # A stale phase skill loses its SKILL.md only while that is exactly what the installer placed: its digest still
@@ -280,6 +292,7 @@ function Invoke-Check($Selected) {
             else { Write-Host "[foreign] $($e.Dest) (not a vivera copy; -Update would move it aside)" }
         }
         foreach ($s in @(Get-StalePhaseDirs $t)) {
+            if (Test-KeptLegacyCopy $s) { Write-Host "[warn] $s (an edited copy under the old name; kept, delete it when you no longer need it)"; continue }
             Write-Host "[stale] $s (a skill this checkout no longer has; -Update prunes it)"
             $problems++
         }

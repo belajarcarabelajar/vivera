@@ -24,6 +24,8 @@ const OLD_PHASES = {
   'sucp-debt-sweep': 'vivera-sweep',
 };
 const OLD_NAMES = [OLD_PACKAGE, ...Object.keys(OLD_PHASES)];
+// The non-failing line --check prints, after the path, for an edited copy --update keeps under an old name.
+const KEPT_WARN = '(an edited copy under the old name; kept, delete it when you no longer need it)';
 const CLAUDE = '.claude/skills';
 const AGENTS = '.agents/skills';
 const AI = '.config/ai';
@@ -205,6 +207,37 @@ describe('install.sh: an install made under the old skill names (copy mode)', ()
     fs.rmSync(at(sb, `${AGENTS}/sucp-plan`), { recursive: true });
     expect(sb.run(['--check', ...only]).stdout).toContain('check: CURRENT');
   });
+
+  test('an edited copy --update kept under an old name is a [warn] line, and --check --copy is CURRENT with it still there', () => {
+    const sb = sandbox();
+    const only = ['--copy', '--only', 'ai-config,agents'];
+    expect(sb.run(only).status).toBe(0);
+    renameToOld(sb, AGENTS);
+    fs.appendFileSync(at(sb, `${AGENTS}/sucp-plan/SKILL.md`), 'my edit\n');
+    fs.appendFileSync(at(sb, `${AI}/${OLD_MASTER}`), 'my edit\n');
+    expect(sb.run(['--update', ...only]).status).toBe(0);
+    expect({ agents: oldEntries(sb, AGENTS), ai: oldEntries(sb, AI) }).toEqual({ agents: ['sucp-plan'], ai: [OLD_MASTER] });
+    const r = sb.run(['--check', ...only]);
+    for (const p of [`${AGENTS}/sucp-plan`, `${AI}/${OLD_MASTER}`]) {
+      expect(r.stdout).toContain(`[warn] ${at(sb, p)} ${KEPT_WARN}`);
+      expect(r.stdout).not.toContain(`[stale] ${at(sb, p)}`);
+    }
+    expect(r.stdout).toContain('check: CURRENT');
+    expect(r.status).toBe(0);
+  });
+
+  test('an edited vivera-* copy the checkout no longer has stays [stale]: the [warn] line is for the old names only', () => {
+    const sb = sandbox();
+    const only = ['--copy', '--only', 'agents'];
+    expect(sb.run(only).status).toBe(0);
+    fs.cpSync(at(sb, `${AGENTS}/vivera-plan`), at(sb, `${AGENTS}/vivera-gone`), { recursive: true });
+    fs.appendFileSync(at(sb, `${AGENTS}/vivera-gone/SKILL.md`), 'my edit\n');
+    expect(sb.run(['--update', ...only]).stdout).toContain(`[KEEP] ${at(sb, `${AGENTS}/vivera-gone`)} (`);
+    const r = sb.run(['--check', ...only]);
+    expect(r.stdout).toContain(`[stale] ${at(sb, `${AGENTS}/vivera-gone`)} (`);
+    expect(r.stdout).not.toContain('[warn] ' + at(sb, `${AGENTS}/vivera-gone`));
+    expect(r.status).toBe(1);
+  });
 });
 
 const pwsh = Bun.which('pwsh') ?? Bun.which('powershell');
@@ -240,6 +273,32 @@ describe.skipIf(!pwsh)('install.ps1: a copy install made under the old skill nam
     expect(oldEntries(sb, AI)).toEqual([]);
     fs.rmSync(at(sb, `${AGENTS}/sucp-plan`), { recursive: true });
     expect(ps(sb, ['-Check', ...only]).out).toContain('check: CURRENT');
+  });
+
+  test('-Check reports an edited copy -Update kept under an old name as a [warn] line and is CURRENT', () => {
+    const sb = setup();
+    fs.appendFileSync(at(sb, `${AGENTS}/sucp-plan/SKILL.md`), 'my edit\n');
+    fs.appendFileSync(at(sb, `${AI}/${OLD_MASTER}`), 'my edit\n');
+    expect(ps(sb, ['-Update', ...only]).code).toBe(0);
+    expect({ agents: oldEntries(sb, AGENTS), ai: oldEntries(sb, AI) }).toEqual({ agents: ['sucp-plan'], ai: [OLD_MASTER] });
+    const r = ps(sb, ['-Check', ...only]);
+    for (const p of [`${AGENTS}/sucp-plan`, `${AI}/${OLD_MASTER}`]) {
+      expect(r.out).toContain(`[warn] ${at(sb, p)} ${KEPT_WARN}`);
+      expect(r.out).not.toContain(`[stale] ${at(sb, p)}`);
+    }
+    expect(r.out).toContain('check: CURRENT');
+    expect(r.code).toBe(0);
+  });
+
+  test('-Check keeps an edited vivera-* copy the checkout no longer has as [stale]', () => {
+    const sb = setup();
+    fs.cpSync(at(sb, `${AGENTS}/sucp-plan`), at(sb, `${AGENTS}/vivera-gone`), { recursive: true });
+    fs.appendFileSync(at(sb, `${AGENTS}/vivera-gone/SKILL.md`), 'my edit\n');
+    expect(ps(sb, ['-Update', ...only]).code).toBe(0);
+    const r = ps(sb, ['-Check', ...only]);
+    expect(r.out).toContain(`[stale] ${at(sb, `${AGENTS}/vivera-gone`)} (`);
+    expect(r.out).not.toContain('[warn] ' + at(sb, `${AGENTS}/vivera-gone`));
+    expect(r.code).toBe(1);
   });
 
   test('-Uninstall removes them too', () => {

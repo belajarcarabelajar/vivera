@@ -88,3 +88,9 @@ describe('single helper', () => {
     expect(offenders.map((f) => path.relative(scripts, f))).toEqual([]);
   });
 });
+
+test('gitText passes an env option to git', () => {
+  const dir = tempRepo();
+  const out = gitText(dir, ['var', 'GIT_AUTHOR_IDENT'], { env: { ...process.env, GIT_AUTHOR_NAME: 'x', GIT_AUTHOR_EMAIL: 'x@x' } });
+  expect(out.startsWith('x <x@x>')).toBe(true);
+});

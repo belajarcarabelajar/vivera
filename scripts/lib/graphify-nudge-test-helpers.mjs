@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { gitText } from './git.mjs';
 
 export const HOOK = path.join(import.meta.dir, '..', 'hooks', 'graphify-search-nudge.mjs');
 export const COMMIT_EPOCH_S = 1_700_000_000;
@@ -44,12 +45,10 @@ export function tempDir(tag) {
 
 export function git(cwd, ...args) {
   const date = `@${COMMIT_EPOCH_S} +0000`;
-  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-C', cwd, ...args], {
-    encoding: 'utf8',
+  return gitText(cwd, ['-c', 'user.name=t', '-c', 'user.email=t@t', '-C', cwd, ...args], {
     env: { ...process.env, ...ISOLATED_ENV, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+    label: `git ${args.join(' ')} failed`,
   });
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
-  return r.stdout;
 }
 
 export function repo(tag, { graph = true } = {}) {

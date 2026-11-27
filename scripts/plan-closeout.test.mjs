@@ -12,6 +12,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
 import { tickSteps } from './plan-mark-done.mjs';
+import { currentIssueEnv } from './lib/readiness-issue-fixture.mjs';
 
 
 const { closeoutGaps } = closeout;
@@ -567,7 +568,7 @@ describe('closeout audit', () => {
 
 describe('closeout CLI', () => {
   const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
-  const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
+  const cli = (args, env) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } });
 
   test('readiness CLI: unknown arguments print usage on stderr and exit 2', () => {
     const r = cli(['--bogus']);
@@ -592,8 +593,8 @@ describe('closeout CLI', () => {
       '  - id: T1', '    depends_on: []', '    skip_if: "test -f marker"',
       '---', '', '| Item | Class | State |', '|---|---|---|', '| x | NOW | DONE |', '',
     ].join('\n'));
-    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nreadiness: READY\n');
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10'], currentIssueEnv(root, file));
+    assert.equal(r.stdout.toString(), 'T1\tDONE\ttest -f marker\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nissue sync: CURRENT (issue #1 matches the plan)\nreadiness: READY\n');
     assert.equal(r.exitCode, 0);
   });
 
@@ -639,8 +640,8 @@ describe('closeout CLI', () => {
   test('failure output: a DONE task prints nothing extra', () => {
     const root = tmpRoot();
     const file = planWith(root, [{ id: 'T1', skipIf: 'echo noisy; echo noisy-err >&2; true' }]);
-    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10']);
-    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nreadiness: READY\n`);
+    const r = cli(['--readiness', file, '--cwd', root, '--timeout-s', '10'], currentIssueEnv(root, file));
+    assert.equal(r.stdout.toString(), `T1\tDONE\techo noisy; echo noisy-err >&2; true\nopen NOW follow-ups: 0\nopen step boxes: 0\nother open boxes: 0 (outside task sections; tick by hand with evidence, not counted)\nissue sync: CURRENT (issue #1 matches the plan)\nreadiness: READY\n`);
   });
 
   test('failure output: a task printing many lines shows at most 5', () => {
@@ -832,7 +833,7 @@ describe('open step boxes', () => {
     writeFileSync(path.join(root, 'marker'), '');
     const file = path.join(root, 'plan.md');
     writeFileSync(file, text);
-    const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
+    const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10'], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...currentIssueEnv(root, file) } });
     return { file, out: r.stdout.toString(), exit: r.exitCode };
   };
   const tickFor = (file) => `bun scripts/plan-closeout.mjs --readiness ${file} --evidence readiness.log; bun scripts/plan-mark-done.mjs ${file} --from readiness.log`;
@@ -855,6 +856,7 @@ describe('open step boxes', () => {
       `    tick from evidence: ${tickFor(file)}`,
       'other open boxes: 1 (outside task sections; tick by hand with evidence, not counted)',
       '    line 20: - [ ] Approved',
+      'issue sync: CURRENT (issue #1 matches the plan)',
       'readiness: NOT-READY',
       '',
     ].join('\n'));
@@ -872,6 +874,7 @@ describe('open step boxes', () => {
       '    line 17: - [ ] AC1 the gate reads ticks',
       '    line 18: - [ ] AC2 nothing else',
       '    line 28: - [ ] Approved by the owner',
+      'issue sync: CURRENT (issue #1 matches the plan)',
       'readiness: READY',
       '',
     ].join('\n'));

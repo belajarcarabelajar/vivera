@@ -11,10 +11,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
+import { currentIssueEnv } from './lib/readiness-issue-fixture.mjs';
 
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
-const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env } });
+const cli = (args, env) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } });
 
 const dirs = [];
 afterEach(() => {
@@ -80,7 +81,7 @@ describe('readiness runs in the session worktree', () => {
   const cwdLine = (out) => out.split('\n').filter((l) => l.startsWith('readiness cwd:'));
 
   test('without --cwd, skip_if runs in the newest unfinished session worktree, which is named', () => {
-    const { plan } = checkout('test -f marker');
+    const { root, plan } = checkout('test -f marker');
     const fresh = worktree(true);
     const reg = registry([
       session('s-new', fresh, 'open', 2),
@@ -89,7 +90,7 @@ describe('readiness runs in the session worktree', () => {
       session('s-closed', worktree(false), 'closed', 4),
       session('s-other', worktree(false), 'open', 5, 'other-plan'),
     ]);
-    const r = cli(['--readiness', plan, '--registry', reg, '--timeout-s', '10']);
+    const r = cli(['--readiness', plan, '--registry', reg, '--timeout-s', '10'], currentIssueEnv(root, plan));
     const out = r.stdout.toString();
     assert.deepEqual(cwdLine(out), [`readiness cwd: ${fresh} (worktree of unfinished session s-new in ${reg})`]);
     assert.match(out, /^T1\tDONE\ttest -f marker$/m);
@@ -118,7 +119,7 @@ describe('readiness runs in the session worktree', () => {
     writeFileSync(path.join(root, 'marker'), '');
     const reg = path.join(tempDir('plan-closeout-reg-'), 'pr.registry.json');
     writeFileSync(reg, '{ "sessions": [ not json');
-    const r = cli(['--readiness', plan, '--registry', reg, '--timeout-s', '10']);
+    const r = cli(['--readiness', plan, '--registry', reg, '--timeout-s', '10'], currentIssueEnv(root, plan));
     const err = r.stderr.toString().trim().split('\n');
     assert.equal(err.length, 1);
     assert.ok(err[0].includes(reg), err[0]);

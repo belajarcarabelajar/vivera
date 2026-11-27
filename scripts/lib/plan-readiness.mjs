@@ -67,13 +67,14 @@ const STATES = ['DONE', 'OPEN', 'UNREAD', 'UNPROVEN'];
 // Counted as done but kept out of STATES, so counts only names it when a task has it.
 const ASSERTED = 'DONE-ASSERTED';
 
-export function readinessVerdict({ tasks, openNow = 0, openBoxes = 0 }) {
+// issueDrift and issueUnchecked come from the issue mirror check; callers that do not run it keep the old verdicts.
+export function readinessVerdict({ tasks, openNow = 0, openBoxes = 0, issueDrift = 0, issueUnchecked = false }) {
   const counts = Object.fromEntries(STATES.map((s) => [s, 0]));
   for (const t of tasks) counts[t.state] = (counts[t.state] ?? 0) + 1;
   const asserted = counts[ASSERTED] ?? 0;
-  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0) return { verdict: 'NOT-READY', exit: 1, counts, asserted };
+  if (counts.OPEN > 0 || counts.UNREAD > 0 || openNow > 0 || openBoxes > 0 || issueDrift > 0) return { verdict: 'NOT-READY', exit: 1, counts, asserted };
   // A plan with no tasks measured nothing, so READY would recommend Complete without evidence.
-  if (tasks.length === 0 || counts.UNPROVEN > 0) return { verdict: 'NEEDS-HUMAN', exit: 3, counts, asserted };
+  if (tasks.length === 0 || counts.UNPROVEN > 0 || issueUnchecked) return { verdict: 'NEEDS-HUMAN', exit: 3, counts, asserted };
   return { verdict: 'READY', exit: 0, counts, asserted };
 }
 

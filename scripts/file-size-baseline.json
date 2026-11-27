@@ -17,7 +17,7 @@
   "scripts/install-sprites.test.mjs": 21425,
   "scripts/lib/chunk-schema.test.mjs": 21762,
   "scripts/lib/redaction-selftest.test.mjs": 21166,
-  "scripts/plan-closeout.test.mjs": 44143,
+  "scripts/plan-closeout.test.mjs": 44527,
   "scripts/plan-issue-sync.mjs": 38251,
   "scripts/plan-issue-sync.test.mjs": 62182,
   "scripts/plan-lifecycle-audit.mjs": 29612,

@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { checkMeter as check, countSteps } from "../.claude/hooks/require-progress-meter.mjs";
+import { checkMeter as check, countSteps, meterReason } from "../.claude/hooks/require-progress-meter.mjs";
 import { parse } from "yaml";
 import { planStatus } from "./plan-status.mjs";
 
@@ -141,6 +141,15 @@ describe("check", () => {
   });
 });
 
+describe("meterReason", () => {
+  test("checks transcript text directly, with no transcript file", () => {
+    const s = session();
+    const transcript = JSON.stringify([{ type: "tool", input: { filePath: "docs/code-plan/plans/2026-11-27-demo.md" } }]);
+    expect(meterReason({ transcript, cwd: s.dir, message: "Update." })).toContain(BAR);
+    expect(meterReason({ transcript, cwd: s.dir, message: BAR })).toBeNull();
+    expect(meterReason({ transcript: "no plan here", cwd: s.dir, message: "Update." })).toBeNull();
+  });
+});
 
 describe("review round 1", () => {
   test("a long run of path-like characters does not stall the scan", () => {

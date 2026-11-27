@@ -113,13 +113,18 @@ export function checkMeter(input) {
   // No message field means a harness that does not send it: fail open, like require-exit-code.
   if (input.last_assistant_message == null) return null;
   if (!existsSync(input.transcript_path)) return null;
-  const found = resolvePlan(readFileSync(input.transcript_path, "utf8"), input.cwd);
+  return meterReason({ transcript: readFileSync(input.transcript_path, "utf8"), cwd: input.cwd, message: input.last_assistant_message });
+}
+
+// The check on transcript text, for a harness with no transcript file (the OpenCode plugin passes
+// its session context as JSON).
+export function meterReason({ transcript, cwd, message }) {
+  const found = resolvePlan(String(transcript ?? ""), cwd);
   if (!found) return null;
   const plan = found.path;
   const steps = countSteps(found.md);
   if (steps.total === 0) return null;
-  const message = String(input.last_assistant_message ?? "");
-  const first = message.split(/\r?\n/).find((l) => l.trim() !== "")?.trim() ?? "";
+  const first = String(message ?? "").split(/\r?\n/).find((l) => l.trim() !== "")?.trim() ?? "";
   if (meterMatches(first, steps)) return null;
   return [
     `This session works from the plan ${plan} (${steps.done} of ${steps.total} task steps checked).`,

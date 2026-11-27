@@ -1,0 +1,1 @@
+../../.claude/hooks/require-progress-meter.mjs

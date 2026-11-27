@@ -5,7 +5,7 @@ category: getting-started
 slug: repository-structure
 order: 2
 source: docs/guide/getting-started-repository-structure-1.md
-source_hash: "e71265c37b1c"
+source_hash: "ce94ce67a225"
 ---
 
 <a id="repository-structure"></a>
@@ -32,7 +32,8 @@ vivera/
 │   ├── agents/                                  # Seven Harvest Sprite subagents, generated from agents/roles
 │   └── hooks/
 │       ├── block-git-writes.mjs                 # PreToolUse guard: subagents never write git state
-│       └── require-exit-code.mjs                # Stop hook: a final pass claim must name its exit code
+│       ├── require-exit-code.mjs                # Stop hook: a final pass claim must name its exit code
+│       └── require-progress-meter.mjs           # Stop hook: a turn-end message opens with the progress meter while a plan is open
 ├── agents/
 │   ├── roles/                                   # Four role templates: researcher, implementer, debugger, reviewer
 │   └── crew.json                                # Assigns each Harvest Sprite a role and a color
@@ -118,6 +119,7 @@ vivera/
 │   ├── install-*.test.mjs                       # Installer tests (baseline, targets, check, update, uninstall, copy, sprites, ps1, ...)
 │   ├── block-git-writes.test.mjs                # Blocked and allowed command tables for the git guard hook
 │   ├── require-exit-code.test.mjs               # Blocked and allowed final messages for the exit-code Stop hook
+│   ├── require-progress-meter.test.mjs          # Blocked and allowed turn-end messages for the progress-meter Stop hook
 │   ├── skipif-registry-audit.mjs                # Tally and classify skip_if predicates across all plans
 │   ├── ultra-plan-runner.mjs                    # ultra-plan/v1 DAG runner + visual map contract
 │   ├── ultra-plan-runner.test.mjs               # Contract tests for the runner
@@ -181,7 +183,8 @@ vivera/
     │   ├── examples -> ../../examples
     │   ├── mermaid.config.json -> ../../mermaid.config.json
     │   ├── mermaid.dark.config.json -> ../../mermaid.dark.config.json
-    │   └── require-exit-code.mjs -> ../../.claude/hooks/require-exit-code.mjs
+    │   ├── require-exit-code.mjs -> ../../.claude/hooks/require-exit-code.mjs
+    │   └── require-progress-meter.mjs -> ../../.claude/hooks/require-progress-meter.mjs
     ├── vivera-rules/SKILL.md                      # Phase skill: shared operating rules (loaded every run)
     ├── vivera-rules/references/                   # Nine rule files
     ├── vivera-brainstorm/SKILL.md                 # Phase skill: Step 2 path process and deep research

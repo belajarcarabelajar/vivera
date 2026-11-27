@@ -159,7 +159,7 @@ test('every trigger snippet carries the same progress-meter paragraph', () => {
   assert.ok(paragraphs.size >= 16, `expected every manifest snippet, got ${paragraphs.size}`);
   const first = [...paragraphs.values()][0];
   for (const [src, p] of paragraphs) assert.equal(p, first, `${src} drifted from the shared paragraph`);
-  for (const token of ['▰', '▱', 'N/M', '★', '☆', 'never estimate', 'never written to a file']) {
+  for (const token of ['▰', '▱', 'N/M', '★', '☆', 'never estimate', 'never written to a file', 'task steps', '### Task']) {
     assert.ok(first.includes(token), `shared paragraph lost "${token}"`);
   }
 });

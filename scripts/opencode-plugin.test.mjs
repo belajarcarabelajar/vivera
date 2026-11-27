@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { decideNudge, NUDGE_SOURCE } from "../opencode/vivera-plugin.ts";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { decideMeterNudge, decideNudge, METER_SOURCE, NUDGE_SOURCE } from "../opencode/vivera-plugin.ts";
 import plugin from "../opencode/vivera-plugin.ts";
 import { REASON } from "../.claude/hooks/require-exit-code.mjs";
 
@@ -116,5 +118,88 @@ describe("plugin wiring", () => {
       await expect(fire({ sessionID: "ses1", background: false })).resolves.toBeUndefined();
       expect(calls.synthetic).toHaveLength(0);
     }
+  });
+});
+
+describe("progress meter", () => {
+  // One of two task steps checked, so the expected first line is this bar.
+  const PLAN = ["---", "status: Approved", "---", "### Task T1: A", "- [x] Step 1", "- [ ] Step 2", ""].join("\n");
+  const BAR = "▰▰▰▰▰▱▱▱▱▱ 50% · 1/2 · Task T1: A";
+  function planDir() {
+    const dir = mkdtempSync(join(tmpdir(), "vivera-plugin-meter-"));
+    mkdirSync(join(dir, "docs", "code-plan", "plans"), { recursive: true });
+    const planPath = join(dir, "docs", "code-plan", "plans", "2026-11-27-demo.md");
+    writeFileSync(planPath, PLAN);
+    return { dir, planPath };
+  }
+  const read = (p) => ({ id: "t1", type: "tool", tool: "read", input: { filePath: p } });
+
+  test("nudges an answer without the meter while the session's plan is open", () => {
+    const { dir, planPath } = planDir();
+    const verdict = decideMeterNudge({ ...base, cwd: dir, items: [skill, user, read(planPath), assistant("a1", "T1 step 1 done.")] });
+    expect(verdict?.messageID).toBe("a1");
+    expect(verdict?.reason).toContain(BAR);
+    expect(verdict?.reason).toContain(planPath);
+  });
+  test("lets an answer that opens with the matching meter through", () => {
+    const { dir, planPath } = planDir();
+    expect(decideMeterNudge({ ...base, cwd: dir, items: [skill, user, read(planPath), assistant("a1", `${BAR}\n\nStep 1 done.`)] })).toBeNull();
+  });
+  test("resolves a relative plan path against the given directory", () => {
+    const { dir } = planDir();
+    const verdict = decideMeterNudge({ ...base, cwd: dir, items: [skill, user, read("docs/code-plan/plans/2026-11-27-demo.md"), assistant("a1", "Update.")] });
+    expect(verdict?.reason).toContain(BAR);
+  });
+  test("ignores a session where the vivera skill is not active", () => {
+    const { dir, planPath } = planDir();
+    expect(decideMeterNudge({ ...base, cwd: dir, items: [user, read(planPath), assistant("a1", "Update.")] })).toBeNull();
+  });
+  test("never nudges the same assistant message twice", () => {
+    const { dir, planPath } = planDir();
+    expect(decideMeterNudge({ ...base, cwd: dir, nudged: new Set(["a1"]), items: [skill, user, read(planPath), assistant("a1", "Update.")] })).toBeNull();
+  });
+  test("never nudges the rewrite that answers a nudge from either source", () => {
+    const { dir, planPath } = planDir();
+    for (const source of [METER_SOURCE, NUDGE_SOURCE]) {
+      const nudge = { id: "n1", type: "synthetic", text: "rewrite", metadata: { source } };
+      const items = [skill, user, read(planPath), assistant("a1", "Update."), nudge, assistant("a2", "Still no meter.")];
+      expect(decideMeterNudge({ ...base, cwd: dir, items })).toBeNull();
+    }
+  });
+  test("the exit-code check never nudges the rewrite that answers a meter nudge", () => {
+    const nudge = { id: "n1", type: "synthetic", text: "meter", metadata: { source: METER_SOURCE } };
+    expect(decideNudge({ ...base, items: [skill, user, assistant("a1", "Update."), nudge, assistant("a2", "All 12 tests pass.")] })).toBeNull();
+  });
+
+  function wired(items) {
+    const calls = { synthetic: [] };
+    let idle;
+    const ctx = {
+      session: {
+        hook: async (name, fn) => { if (name === "experimental.idle") idle = fn; },
+        get: async ({ sessionID }) => ({ id: sessionID }),
+        context: async () => items,
+        synthetic: async (input) => { calls.synthetic.push(input); },
+      },
+    };
+    return { ctx, calls, fire: (e) => idle(e) };
+  }
+  test("the idle hook adds one meter nudge tagged with its own source, and none on the next idle", async () => {
+    const { planPath } = planDir();
+    const { ctx, calls, fire } = wired([skill, user, read(planPath), assistant(crypto.randomUUID(), "Step 1 done.")]);
+    await plugin.setup(ctx);
+    await fire({ sessionID: "ses1", background: false });
+    await fire({ sessionID: "ses1", background: false });
+    expect(calls.synthetic).toHaveLength(1);
+    expect(calls.synthetic[0].metadata).toEqual({ source: METER_SOURCE });
+    expect(calls.synthetic[0].text).toContain(BAR);
+  });
+  test("the idle hook sends only the exit-code nudge when both checks fail", async () => {
+    const { planPath } = planDir();
+    const { ctx, calls, fire } = wired([skill, user, read(planPath), assistant(crypto.randomUUID(), "Done. 12 tests pass, 0 fail.")]);
+    await plugin.setup(ctx);
+    await fire({ sessionID: "ses1", background: false });
+    expect(calls.synthetic).toHaveLength(1);
+    expect(calls.synthetic[0]).toMatchObject({ text: REASON, metadata: { source: NUDGE_SOURCE } });
   });
 });

@@ -37,6 +37,7 @@ const PACKAGE_LINKS = {
   'mermaid.config.json': 'mermaid.config.json',
   'mermaid.dark.config.json': 'mermaid.dark.config.json',
   'require-exit-code.mjs': '.claude/hooks/require-exit-code.mjs',
+  'require-progress-meter.mjs': '.claude/hooks/require-progress-meter.mjs',
 };
 
 const open = [];

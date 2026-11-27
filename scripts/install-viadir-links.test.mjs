@@ -20,7 +20,7 @@ const MASTER = 'VIVERA.md';
 const VIA = 'is reached through a symlinked directory; left alone';
 const FOREIGN_VIA = '(behind a symlinked directory; left alone)';
 const PACKAGE = 'vivera';
-const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
+const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'require-progress-meter.mjs'];
 
 const open = [];
 afterEach(() => {

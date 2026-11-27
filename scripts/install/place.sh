@@ -426,6 +426,7 @@ link_skill_package() {
       echo "[DRY-RUN]   - mermaid.config.json -> $REPO_DIR/mermaid.config.json"
       echo "[DRY-RUN]   - mermaid.dark.config.json -> $REPO_DIR/mermaid.dark.config.json"
       echo "[DRY-RUN]   - require-exit-code.mjs -> $REPO_DIR/.claude/hooks/require-exit-code.mjs"
+      echo "[DRY-RUN]   - require-progress-meter.mjs -> $REPO_DIR/.claude/hooks/require-progress-meter.mjs"
       echo "[DRY-RUN]   - phase skills -> $sibling_dir/vivera-*/SKILL.md"
     fi
   fi

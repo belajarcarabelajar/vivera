@@ -489,6 +489,7 @@ package_entries() {
   # the same diagram rendering (font embedding, palette, dark variant).
   printf '%s\t%s\n' "$REPO_DIR/mermaid.config.json" "$dir/mermaid.config.json"
   printf '%s\t%s\n' "$REPO_DIR/mermaid.dark.config.json" "$dir/mermaid.dark.config.json"
-  # The Stop hook in the orchestrator's frontmatter runs this script from the installed package.
+  # The Stop hooks in the orchestrator's frontmatter run these scripts from the installed package.
   printf '%s\t%s\n' "$REPO_DIR/.claude/hooks/require-exit-code.mjs" "$dir/require-exit-code.mjs"
+  printf '%s\t%s\n' "$REPO_DIR/.claude/hooks/require-progress-meter.mjs" "$dir/require-progress-meter.mjs"
 }

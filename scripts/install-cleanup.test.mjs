@@ -21,7 +21,7 @@ import { makeSandbox, phaseEntries } from './lib/install-sandbox.mjs';
 const MASTER = 'VIVERA.md';
 const VIA = 'is reached through a symlinked directory; left alone';
 const PACKAGE = 'vivera';
-const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs'];
+const ENTRIES = ['SKILL.md', 'templates', 'examples', 'mermaid.config.json', 'mermaid.dark.config.json', 'require-exit-code.mjs', 'require-progress-meter.mjs'];
 const LINK = ['--tier', 'minimal', '--only', 'claude,opencode'];
 const COPY = ['--copy', ...LINK];
 

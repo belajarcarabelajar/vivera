@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { check, countSteps } from "../.claude/hooks/require-progress-meter.mjs";
+import { checkMeter as check, countSteps } from "../.claude/hooks/require-progress-meter.mjs";
 import { parse } from "yaml";
 import { planStatus } from "./plan-status.mjs";
 
@@ -138,6 +138,40 @@ describe("check", () => {
     const s = session();
     fs.writeFileSync(s.transcript, [touch(s.planPath), touch("/nowhere/docs/code-plan/plans/2026-01-01-gone.md")].join("\n") + "\n");
     expect(check(input(s, "Update."))).toContain("2/5");
+  });
+});
+
+
+describe("review round 1", () => {
+  test("a long run of path-like characters does not stall the scan", () => {
+    const s = session();
+    // Base64-shaped output: a long run of path characters with no slash, the shape the reviewer timed
+    // at 3.7 s for 100 KB under the first regex.
+    const blob = "aB3+xY9_".repeat(25000);
+    fs.writeFileSync(s.transcript, [touch(s.planPath), JSON.stringify({ type: "user", message: { content: blob } })].join("\n") + "\n");
+    const t0 = performance.now();
+    expect(check(input(s, "Update."))).toContain("2/5");
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+
+  test("a later mention of a closed plan falls back to the open one before it", () => {
+    const s = session();
+    const closed = path.join(s.dir, "docs", "code-plan", "plans", "2026-10-01-old.md");
+    fs.writeFileSync(closed, PLAN.replace("status: Approved", "status: Complete"));
+    fs.writeFileSync(s.transcript, [touch(s.planPath), touch(closed)].join("\n") + "\n");
+    expect(check(input(s, "Update."))).toContain("2/5");
+  });
+
+  test("accepts +1 item right after N/M as well as after the item", () => {
+    const s = session();
+    expect(check(input(s, "▰▰▰▰▱▱▱▱▱▱ 40% · 2/5 (+1 item) · Task T2"))).toBeNull();
+    expect(check(input(s, "▰▰▰▰▱▱▱▱▱▱ 40% · 2/5 +1 item · Task T2"))).toBeNull();
+  });
+
+  test("lets the stop through when the harness sends no message field", () => {
+    const s = session();
+    const { last_assistant_message, ...rest } = input(s, "x");
+    expect(check(rest)).toBeNull();
   });
 });
 

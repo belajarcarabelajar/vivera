@@ -671,7 +671,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-function projectRootFor(opts) {
+export function projectRootFor(opts) {
   if (opts.repoRoot) return opts.repoRoot;
   // The plan's own repository: walk up from the plan until a .git entry appears.
   // `git rev-parse` would be the obvious answer and is deliberately not used, so

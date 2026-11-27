@@ -19,7 +19,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo, hashOf, ISSUE_FORMAT } from './plan-issue-sync.mjs';
+import {
+  planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo, hashOf, ISSUE_FORMAT, projectRootFor,
+} from './plan-issue-sync.mjs';
 import { planFileOf, planMissingOf } from './lib/registry-plan-file.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, reapGroup } from './ultra-plan-runner.mjs';
@@ -340,9 +342,8 @@ function readinessCli(opts) {
   const other = otherOpenBoxes(text);
   console.log(`other open boxes: ${other.length} (outside task sections; tick by hand with evidence, not counted)`);
   for (const b of other.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
-  // The issue key is relative to the checkout holding the plan, not to the skip_if cwd.
-  const top = spawnSync('git', ['-C', path.dirname(planFile), 'rev-parse', '--show-toplevel'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-  const issue = issueSyncState({ planFile: opts.plan, planText: text, repoRoot: top.status === 0 ? top.stdout.trim() : defaultCwd(planFile) });
+  // The checkout holding the plan, found on the logical path as the sync finds it, not the skip_if cwd.
+  const issue = issueSyncState({ planFile: opts.plan, planText: text, repoRoot: projectRootFor({ plans: [opts.plan] }) });
   console.log(`issue sync: ${issue.state} (${issue.detail})`);
   if (issue.fix) console.log(`    fix: ${issue.fix}`);
   const issueDrift = ['DRIFT', 'MISSING', 'UNREADABLE'].includes(issue.state) ? 1 : 0;

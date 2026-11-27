@@ -7,15 +7,15 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { hashOf, issueKey, ISSUE_FORMAT } from '../plan-issue-sync.mjs';
+import { hashOf, issueKey, ISSUE_FORMAT, projectRootFor } from '../plan-issue-sync.mjs';
 import { gitText } from './git.mjs';
 
 // Returns the env entry for a spawned readiness CLI. A repoRoot that is not a
 // git repository yet is initialised, because readiness keys the record by the
-// plan's path from the git top level of the folder holding it.
+// plan's path from the root it walks up to, as plan-issue-sync does.
 export function currentIssueEnv(repoRoot, planFile) {
   if (!existsSync(path.join(repoRoot, '.git'))) gitText(repoRoot, ['init', '--quiet']);
-  const top = gitText(path.dirname(planFile), ['rev-parse', '--show-toplevel']).trim();
+  const top = projectRootFor({ plans: [planFile] });
   const repo = 'fixture-owner/fixture-repo';
   const record = {
     number: 1, url: `https://github.com/${repo}/issues/1`, hash: hashOf(readFileSync(planFile, 'utf8')), state: 'open',

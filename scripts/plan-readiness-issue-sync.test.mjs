@@ -6,7 +6,7 @@
 import './lib/local-runner-env.mjs';
 import { test, describe, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -192,5 +192,17 @@ describe('readiness CLI', () => {
     assert.match(out, /^T1\tDONE\ttrue$/m);
     assert.match(out, /\nissue sync: NOT-CHECKED \(.+\)\nreadiness: NEEDS-HUMAN\n$/);
     assert.equal(exit, 3);
+  });
+
+  test('a plan opened through a symlinked checkout reads CURRENT, as plan-issue-sync keys it', () => {
+    const c = checkout();
+    // Same name as the real checkout, so the logical path resolves to the mapped project.
+    const alias = path.join(c.base, 'alias', 'demo');
+    mkdirSync(path.dirname(alias));
+    symlinkSync(c.root, alias, 'dir');
+    const linked = { root: c.root, planFile: path.join(alias, KEY) };
+    const { out, exit } = cli(linked, sidecar(c.base, { [KEY]: record() }));
+    assert.match(out, /\nissue sync: CURRENT \(.+\)\nreadiness: READY\n$/);
+    assert.equal(exit, 0);
   });
 });

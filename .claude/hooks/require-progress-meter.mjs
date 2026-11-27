@@ -99,11 +99,11 @@ export function check(input) {
   if (meterMatches(first, steps)) return null;
   return [
     `This session works from the plan ${plan} (${steps.done} of ${steps.total} task steps checked).`,
-    "Rewrite your message so its first line is the progress meter computed from that file:",
-    `${meterLine(steps)}`,
+    "Rewrite your message so its first line is the progress meter computed from that file:\n",
+    `${meterLine(steps)}\n`,
     "During the debt sweep use one star per debt instead (★ closed, ☆ open). Keep the rest of the",
     "message as it was and start no new work. The meter stays in chat; never write it into a file.",
-  ].join(" ");
+  ].join(" ").replace(/ ?\n ?/g, "\n");
 }
 
 if (import.meta.main) {

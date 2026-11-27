@@ -12,6 +12,8 @@ hooks:
     - hooks:
         - type: command
           command: 'for f in "$CLAUDE_PROJECT_DIR/.claude/skills/vivera/require-exit-code.mjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/vivera/require-exit-code.mjs"; do if [ -f "$f" ]; then exec bun "$f"; fi; done; exit 0'
+        - type: command
+          command: 'for f in "$CLAUDE_PROJECT_DIR/.claude/skills/vivera/require-progress-meter.mjs" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/vivera/require-progress-meter.mjs"; do if [ -f "$f" ]; then exec bun "$f"; fi; done; exit 0'
 ---
 
 # Vivera
@@ -101,7 +103,7 @@ flowchart LR
 
 > **Progress symbols:** Explore · Profile · Clarify · Design · Plan · Test · Implement · ✅ Verify · Debt sweep · Await approval · Stop
 
-> **Progress meter:** checkpoint messages in the chat (never written to a file) open with a bar from the plan checklist (`▰▰▰▱▱▱▱▱▱▱ 30% · 3/10 · Test`), or one star per debt found during the debt sweep (`★★★☆☆`). Rules: `vivera-rules`, Output.
+> **Progress meter:** open every message to the user that reports progress (a checkpoint, a phase change, a status or recap, the final report) with one meter line: `▰▰▰▱▱▱▱▱▱▱ 30% · 3/10 · <item in progress>`. Ten segments; filled means `[x]` task steps over all task steps in the plan file, rounded down. Always show `N/M`, and say `+1 item` when M grows. During the debt sweep, show one star per debt instead (`★` closed, `☆` open). No plan checklist yet means no meter, never an estimate. Chat only, never written to a file. In Claude Code the Stop hook `require-progress-meter.mjs` sends a message back once when the plan has task steps and the first line is not a matching meter. Full rule: `vivera-rules` reference 06.
 
 ## Step 1 — Classify
 Before first question: classify task, state classification aloud.

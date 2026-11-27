@@ -8,10 +8,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { check, countSteps } from "../.claude/hooks/require-progress-meter.mjs";
+import { parse } from "yaml";
 import { planStatus } from "./plan-status.mjs";
 
 const ROOT = path.join(import.meta.dir, "..");
 const HOOK = path.join(ROOT, ".claude", "hooks", "require-progress-meter.mjs");
+const MASTER = path.join(ROOT, "VIVERA.md");
 
 // Two of five task steps checked; a fenced example and a non-task box must not count.
 const PLAN = [
@@ -163,5 +165,50 @@ describe("hook process", () => {
     const r = spawn("not json");
     expect(r.code).toBe(0);
     expect(r.stdout).toBe("");
+  });
+});
+
+describe("orchestrator frontmatter", () => {
+  const text = fs.readFileSync(MASTER, "utf8");
+  const fm = parse(text.slice(4, text.indexOf("\n---", 3)));
+  const stop = fm.hooks?.Stop?.[0]?.hooks ?? [];
+  const entry = stop.find((h) => h.command?.includes("require-progress-meter.mjs"));
+  const command = entry?.command;
+
+  test("registers the hook on Stop after require-exit-code", () => {
+    expect(entry?.type).toBe("command");
+    expect(stop[0].command).toContain("require-exit-code.mjs");
+  });
+
+  const install = (skillsDir) => {
+    const dir = path.join(skillsDir, "vivera");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(HOOK, path.join(dir, "require-progress-meter.mjs"));
+  };
+  const run = (stdin, env) => {
+    const r = Bun.spawnSync(["sh", "-c", command], { stdin: Buffer.from(stdin), env: { PATH: process.env.PATH, ...env } });
+    return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  };
+
+  test("finds the script in the project's skills directory", () => {
+    const s = session();
+    const project = scratch();
+    install(path.join(project, ".claude", "skills"));
+    const r = run(JSON.stringify(input(s, "Update without a meter.")), { HOME: scratch(), CLAUDE_PROJECT_DIR: project });
+    expect(JSON.parse(r.stdout).decision).toBe("block");
+  });
+
+  test("finds the script in the user's skills directory", () => {
+    const s = session();
+    const home = scratch();
+    install(path.join(home, ".claude", "skills"));
+    const r = run(JSON.stringify(input(s, "Update without a meter.")), { HOME: home, CLAUDE_PROJECT_DIR: scratch() });
+    expect(JSON.parse(r.stdout).decision).toBe("block");
+  });
+
+  test("lets the stop through when the script is not installed", () => {
+    const s = session();
+    const r = run(JSON.stringify(input(s, "Update without a meter.")), { HOME: scratch(), CLAUDE_PROJECT_DIR: scratch() });
+    expect(r).toEqual({ code: 0, stdout: "", stderr: "" });
   });
 });

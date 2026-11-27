@@ -103,16 +103,11 @@
 
 ## Follow-Up Backlog (Session-Close Debt Sweep)
 
-> Every noticed-but-unclosed item lands here so no debt leaves the session unrecorded.
-> `NOW` = closable in this session. `LATER` = needs a new plan, an external dependency, or a real scope decision.
+> The plan file's backlog section (implementation-plan template section 8) is the record. This log lists only the item IDs and their status; an item the plan lacks is written there first, then the plan is synced with `bun scripts/plan-sync.mjs <plan.md>`.
 
-| # | Follow-up (outcome + path + finish line) | Class | `defer: <ceiling>, <upgrade-trigger>` | Status |
-|---|---|---|---|---|
-| F1 | | `NOW` / `LATER` | | `OPEN` / `DONE` / `DECLINED` / `DEFERRED` |
-
-- [ ] 3-5 ranked follow-ups injected as one question-tool call of multi-select checkboxes, not as a prose report.
-- [ ] Every selected follow-up executed through the full pipeline with fresh evidence.
-- [ ] Declined and out-of-cap items written above, never dropped.
+| # | Status |
+|---|---|
+| F1 | `OPEN` / `DONE` / `DECLINED` / `DEFERRED` |
 
 ---
 

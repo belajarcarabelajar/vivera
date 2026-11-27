@@ -176,6 +176,7 @@ flowchart TD
 
 ## 8. Session-Close Debt Sweep & Follow-Up Backlog
 > Runs when every task above is `Done 100%`, except a terminal task, which runs once after the sweep. Filled with `templates/follow-up-injection-template.md`.
+> This section is the only backlog record: a progress log or handoff only copies it. Each write here is followed by `bun scripts/plan-sync.mjs <plan.md>`, so the plan's issue carries the backlog.
 
 | # | Follow-up (outcome + path + finish line) | Class | `defer: <ceiling>, <upgrade-trigger>` | Status |
 |---|---|---|---|---|

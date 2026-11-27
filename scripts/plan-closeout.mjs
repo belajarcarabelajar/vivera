@@ -19,7 +19,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo } from './plan-issue-sync.mjs';
+import {
+  planStatus, loadConfig, issueKey, ISSUES_STORE, resolveProjectRepo, sameRepo, hashOf, ISSUE_FORMAT, projectRootFor,
+} from './plan-issue-sync.mjs';
 import { planFileOf, planMissingOf } from './lib/registry-plan-file.mjs';
 import { planFreshness } from './plan-publish.mjs';
 import { extractFrontmatter, reapGroup } from './ultra-plan-runner.mjs';
@@ -89,45 +91,33 @@ export function checkCloseout({
 
   const planText = readFileSync(planFile, 'utf8');
   const status = planStatus(planText);
-  const planPath = issueKey(repoRoot, planFile);
+  const rec = issueRecord({ planFile, repoRoot, configPath });
+  const { planPath } = rec;
   const skipped = [];
   let entry = null;
   let project = null;
-  let configError = null;
   let foreign = null;
+  const configError = rec.error ?? null;
 
-  if (!existsSync(configPath)) {
+  if (rec.absent) {
     skipped.push(`plan.issues.json not found at ${configPath}, issue not checked`);
-  } else {
-    try {
-      const cfg = loadConfig(configPath);
-      // defer: local record only, upgrade when a closed-by-hand reopen is observed after a merge
-      entry = cfg.issues?.[planPath] ?? null;
-      // The key carries no repository, so a same-named plan elsewhere can own this record.
-      // The repository is decided exactly as syncOne decides it, so the gate never
-      // flags a record the sync itself would accept.
-      let own = null;
-      if (entry?.repo) {
-        try {
-          own = resolveProjectRepo(cfg, repoRoot);
-        } catch (e) {
-          skipped.push(`repository of ${repoRoot} not resolved (${e.message.split(/\.\s/)[0]}), foreign-record check not run`);
-        }
-      }
-      if (own && !sameRepo(own.repo, entry.repo)) {
-        foreign = {
-          code: 'ISSUE_OTHER_REPO',
-          message: `${planPath} is recorded for ${entry.repo}, but this repository is ${own.repo}; the record belongs to another repository`,
-          // syncOne refuses this key under any --project while the foreign record holds it.
-          fix: `rename ${planPath} so its key no longer matches the record of ${entry.repo}, then sync the renamed plan`,
-        };
-        entry = null;
-      } else if (own) project = own.project;
-      else if (entry) project = Object.keys(cfg.projects).find((k) => cfg.projects[k] === entry.repo) ?? null;
-      else skipped.push('plan has no issue record, nothing to close');
-    } catch (e) {
-      configError = e.message;
-    }
+  } else if (!configError) {
+    // defer: local record only, upgrade when a closed-by-hand reopen is observed after a merge
+    entry = rec.entry;
+    // A record without a repo predates the field, so its owner is looked up by value instead.
+    const own = entry?.repo ? rec.own : null;
+    if (entry?.repo && rec.ownError) skipped.push(`repository of ${repoRoot} not resolved (${rec.ownError}), foreign-record check not run`);
+    if (rec.foreign) {
+      foreign = {
+        code: 'ISSUE_OTHER_REPO',
+        message: `${planPath} is recorded for ${entry.repo}, but this repository is ${own.repo}; the record belongs to another repository`,
+        // syncOne refuses this key under any --project while the foreign record holds it.
+        fix: `rename ${planPath} so its key no longer matches the record of ${entry.repo}, then sync the renamed plan`,
+      };
+      entry = null;
+    } else if (own) project = own.project;
+    else if (entry) project = Object.keys(rec.cfg.projects).find((k) => rec.cfg.projects[k] === entry.repo) ?? null;
+    else skipped.push('plan has no issue record, nothing to close');
   }
 
   const gaps = closeoutGaps({ status, entry, planPath, project });
@@ -162,6 +152,54 @@ export function checkCloseout({
   }
 
   return { skipped: skipped.length ? skipped.join('; ') : null, gaps };
+}
+
+// The sidecar record of a plan, shared by the merge gate and readiness. The key carries
+// no repository, so a same-named plan elsewhere can own the record; the repository is
+// decided exactly as syncOne decides it, so neither caller flags a record the sync accepts.
+function issueRecord({ planFile, repoRoot, configPath }) {
+  const planPath = issueKey(repoRoot, planFile);
+  if (!existsSync(configPath)) return { planPath, absent: true };
+  let cfg;
+  try {
+    cfg = loadConfig(configPath);
+  } catch (e) {
+    return { planPath, error: e.message };
+  }
+  const entry = cfg.issues?.[planPath] ?? null;
+  let own = null;
+  let ownError = null;
+  try {
+    own = resolveProjectRepo(cfg, repoRoot);
+  } catch (e) {
+    ownError = e.message.split(/\.\s/)[0];
+  }
+  const foreign = Boolean(own && entry?.repo && !sameRepo(own.repo, entry.repo));
+  return { planPath, cfg, entry, own, ownError, foreign };
+}
+
+// Whether the plan's GitHub issue mirror matches the plan text, from the sidecar only.
+// Body drift uses the same test as deriveAction in plan-issue-sync.mjs.
+export function issueSyncState({ planFile, planText, repoRoot, configPath = ISSUES_STORE }) {
+  const state = (s, detail, fix = null) => ({ state: s, detail, fix });
+  let rec;
+  try {
+    rec = issueRecord({ planFile, repoRoot, configPath });
+  } catch (e) {
+    return state('NOT-CHECKED', e.message);
+  }
+  if (rec.absent) return state('NOT-CHECKED', `no sidecar at ${configPath}; run from the main checkout or set PLAN_ISSUES_CONFIG`);
+  if (rec.error) return state('UNREADABLE', rec.error);
+  if (rec.ownError) return state('NOT-CHECKED', `project of ${repoRoot} not resolved: ${rec.ownError}`);
+  if (rec.foreign) return state('NOT-CHECKED', `${rec.planPath} is recorded for ${rec.entry.repo}, not ${rec.own.repo}`);
+  const fix = `bun scripts/plan-sync.mjs ${planFile} --project ${rec.own.project}`;
+  const e = rec.entry;
+  if (!e) return state('MISSING', `no record for ${rec.planPath} in ${configPath}`, fix);
+  // deriveAction creates the issue when the record has no number, so no issue exists yet.
+  if (!e.number) return state('MISSING', `the record for ${rec.planPath} has no issue number`, fix);
+  if (e.hash !== hashOf(planText)) return state('DRIFT', `issue #${e.number} was synced from another text of the plan`, fix);
+  if ((e.format ?? 1) !== ISSUE_FORMAT) return state('DRIFT', `issue #${e.number} body is format ${e.format ?? 1}, current is ${ISSUE_FORMAT}`, fix);
+  return state('CURRENT', `issue #${e.number} matches the plan`);
 }
 
 const lineNumbers = (rows) =>
@@ -304,7 +342,12 @@ function readinessCli(opts) {
   const other = otherOpenBoxes(text);
   console.log(`other open boxes: ${other.length} (outside task sections; tick by hand with evidence, not counted)`);
   for (const b of other.slice(0, BOXES_SHOWN)) console.log(`    line ${b.line}: ${b.text}`);
-  const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length });
+  // The checkout holding the plan, found on the logical path as the sync finds it, not the skip_if cwd.
+  const issue = issueSyncState({ planFile: opts.plan, planText: text, repoRoot: projectRootFor({ plans: [opts.plan] }) });
+  console.log(`issue sync: ${issue.state} (${issue.detail})`);
+  if (issue.fix) console.log(`    fix: ${issue.fix}`);
+  const issueDrift = ['DRIFT', 'MISSING', 'UNREADABLE'].includes(issue.state) ? 1 : 0;
+  const v = readinessVerdict({ tasks, openNow, openBoxes: boxes.length, issueDrift, issueUnchecked: issue.state === 'NOT-CHECKED' });
   console.log(`readiness: ${v.verdict}${v.asserted ? ` (${v.asserted} asserted)` : ''}`);
   return v.exit;
 }

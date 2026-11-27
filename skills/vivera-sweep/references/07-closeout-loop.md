@@ -59,3 +59,7 @@ flowchart TD
     G -->|"tracked"| I["Temp worktree, one close-out PR per repository"]
     I --> J["PR exists: sync closes the issue, due.json records PR-OPEN"]
 ```
+
+## Audit across sessions
+
+Run `bun scripts/plan-closeout.mjs --audit` during the sweep for the repository. It reports every plan whose registry sessions are all finished with at least one merged while the plan is not `Complete`. Each plan it lists gets the same `Close plan` question in step 6.5.5.

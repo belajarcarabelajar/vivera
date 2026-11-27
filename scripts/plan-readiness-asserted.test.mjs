@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 // A namespace import, so a name the lib does not export yet fails its own test, not the whole file.
 import * as lib from './lib/plan-readiness.mjs';
 import { markDone } from './plan-mark-done.mjs';
+import { currentIssueEnv } from './lib/readiness-issue-fixture.mjs';
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
 const FENCE = '\x60\x60\x60';
@@ -49,13 +50,13 @@ const verdictOf = (text) => lib.readinessVerdict({
   openBoxes: lib.openStepBoxes(text).length,
 });
 
-function cli(text, extra = []) {
+function cli(text, extra = [], issueEnv = false) {
   const root = mkdtempSync(path.join(tmpdir(), 'plan-readiness-asserted-'));
   dirs.push(root);
   const file = path.join(root, 'plan.md');
   writeFileSync(file, text);
   const r = Bun.spawnSync(['bun', script, '--readiness', file, '--cwd', root, '--timeout-s', '10', ...extra.map((a) => a.replace('<root>', root))], {
-    stdout: 'pipe', stderr: 'pipe', env: { ...process.env },
+    stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...(issueEnv ? currentIssueEnv(root, file) : {}) },
   });
   return { root, file, out: r.stdout.toString(), err: r.stderr.toString(), exit: r.exitCode };
 }
@@ -81,13 +82,14 @@ test('asserted: DONE plus DONE-ASSERTED is READY, exit 0, with the asserted coun
 });
 
 test('asserted CLI: the task row keeps the asserted label and the verdict line counts it', () => {
-  const { out, exit } = cli(assertedPlan);
+  const { out, exit } = cli(assertedPlan, [], true);
   assert.equal(out, [
     'T1\tDONE\ttrue',
     'T2\tDONE-ASSERTED\tfalse',
     'open NOW follow-ups: 0',
     'open step boxes: 0',
     'other open boxes: 0 (outside task sections; tick by hand with evidence, not counted)',
+    'issue sync: CURRENT (issue #1 matches the plan)',
     'readiness: READY (1 asserted)',
     '',
   ].join('\n'));

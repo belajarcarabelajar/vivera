@@ -91,6 +91,7 @@ Treat unknown elements according to their epistemic nature before asking the use
 6. Size Rule — the plan file is required exactly when the work is too big to hold in one checklist:
    - **One task, one file, no dependency:** no plan file. The in-chat Mermaid diagram and the `[ ]` checklist are the plan. Writing a file here is ceremony the skill already promised to scale away.
    - **Two or more tasks, any `depends_on` edge, or anything a subagent will own:** write a real plan to `docs/code-plan/plans/YYYY-MM-DD-<name>.md` with `ultra-plan/v1` frontmatter, and validate it with `bun scripts/ultra-plan-runner.mjs <plan.md>` before the `Design` question in step 4. The point is not the document; it is that the runner can then check the DAG, the Mermaid contract, and each task's `run[]`/`skip_if` hook mechanically. A Bounded task that fans out to subagents with no runner behind it is the least-checked work in the whole pipeline.
+   - **A `LATER` backlog item in a session with no plan file:** write a minimal plan (`ultra-plan/v1` frontmatter, the one task, and the section 8 backlog), validate it with `bun scripts/ultra-plan-runner.mjs <plan.md>`, and sync it with `bun scripts/plan-sync.mjs <plan.md>`, so the backlog reaches an issue.
 ### Architectural: Brainstorming → Design
 1. Phase 1 — Ground in Environment: Non-mutating exploration of project context, configs, dependencies, and architecture before asking questions.
 2. Phase 2 — Intent Chat: Clarify goal, success criteria, constraints, and tradeoffs using the Two Kinds of Unknowns protocol.

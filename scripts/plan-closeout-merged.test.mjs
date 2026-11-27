@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { currentIssueEnv } from './lib/readiness-issue-fixture.mjs';
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
 // Isolated from the user's git config, and no repository above the temp root is found.
@@ -26,7 +27,7 @@ const env = {
   GIT_COMMITTER_NAME: 't',
   GIT_COMMITTER_EMAIL: 't@t',
 };
-const cli = (args) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env });
+const cli = (args, extra) => Bun.spawnSync(['bun', script, ...args], { stdout: 'pipe', stderr: 'pipe', env: { ...env, ...extra } });
 const gitRun = (cwd, args) => spawnSync('git', args, { cwd, env, encoding: 'utf8' });
 function git(cwd, ...args) {
   const r = gitRun(cwd, args);
@@ -98,7 +99,7 @@ function assertRemoved(f, out) {
 describe('readiness after every session of the plan landed', () => {
   test('a task OPEN in the checkout ahead of origin/main is read again at origin/main, named and removed, and counts as DONE', () => {
     const f = fixture(ANCESTOR, merged);
-    const r = cli(['--readiness', f.plan, '--registry', f.registry, '--timeout-s', '30']);
+    const r = cli(['--readiness', f.plan, '--registry', f.registry, '--timeout-s', '30'], currentIssueEnv(f.penutup, f.plan));
     const out = r.stdout.toString();
     assert.equal(mainLine(out).length, 1, out);
     assert.match(out, /^T1\tDONE\tgit merge-base --is-ancestor HEAD origin\/main$/m);

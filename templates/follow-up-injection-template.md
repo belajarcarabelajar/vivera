@@ -29,7 +29,7 @@
 | 10 | Other | | | |
 
 `NOW` = closes fully inside this session, no new approval, no destructive action, no external dependency.
-`LATER` = needs a new plan, an external dependency, or a genuine scope decision. Goes to the written backlog with a `defer: <ceiling>, <upgrade-trigger>` marker.
+`LATER` = needs a new plan, an external dependency, or a genuine scope decision. Goes to the plan file's backlog section with a `defer: <ceiling>, <upgrade-trigger>` marker.
 
 ## 3. Ranked Follow-Up Set (default 3-5, cap 5)
 
@@ -66,9 +66,11 @@ Selected follow-ups run the full pipeline: chunk, subagent fan-out, TDD for beha
 
 ### Second Sweep Pass
 
-Did executing a selected item create new debt in the surface it touched? List new candidates and write each one to the Deferred Backlog with a `defer:` line; the user is not asked again. Fix only breakage the follow-up itself caused. End with the stop line: `Sweep closed · <stars> · <N> closed · <M> deferred · re-pass: <K> → backlog`.
+Did executing a selected item create new debt in the surface it touched? List new candidates and write each one to the plan's backlog section with a `defer:` line, then sync as in section 6; the user is not asked again. Fix only breakage the follow-up itself caused. End with the stop line: `Sweep closed · <stars> · <N> closed · <M> deferred · re-pass: <K> → backlog`.
 
 ## 6. Deferred Backlog (`LATER`)
+
+Rows are written into the plan file's backlog section (implementation-plan template section 8), the only backlog record, then `bun scripts/plan-sync.mjs <plan.md>` and `bun scripts/plan-issue-sync.mjs --check <plan.md>` must both exit 0. The table below is this record's copy.
 
 | Item | Why deferred | `defer: <ceiling>, <upgrade-trigger>` |
 |---|---|---|

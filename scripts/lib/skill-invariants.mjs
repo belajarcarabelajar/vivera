@@ -67,6 +67,7 @@ export const INVARIANTS = [
   { label: 'a watch filter matches every terminal state', text: 'Silence is not success: the filter matches every terminal state' },
   { label: 'an expired watch is re-armed, not read as success', text: 'treats an expiry with zero events as a question about the filter, not as quiet success' },
   { label: 'shell guards match Monitor as well as Bash', text: 'PreToolUse guards match `Bash|Monitor`, never `Bash` alone' },
+  { label: 'the backlog lives only in the plan file', text: "The plan file's backlog section is the only backlog record" },
 ];
 
 /** Invariants whose sentence appears nowhere in the corpus. Empty means fine. */

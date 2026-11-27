@@ -93,8 +93,9 @@ A  src/api/rate-limit.test.ts
 
 ## Follow-Up Backlog (Carried Into Next Session)
 
-> Output of the Session-Close Debt Sweep. Anything not closed in this session must appear here
-> with its `defer:` marker, so the next session resumes the debt instead of rediscovering it.
+> Output of the Session-Close Debt Sweep. The plan file's backlog section is the record, and the rows
+> here are copies of it with their `defer:` markers, so the next session resumes the debt instead of
+> rediscovering it. An item the plan lacks is written there first, then the plan is synced.
 
 | # | Follow-up (outcome + path + finish line) | Class | `defer: <ceiling>, <upgrade-trigger>` | Status |
 |---|---|---|---|---|

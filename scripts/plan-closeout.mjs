@@ -193,6 +193,8 @@ export function issueSyncState({ planFile, planText, repoRoot, configPath = ISSU
   const fix = `bun scripts/plan-sync.mjs ${planFile} --project ${rec.own.project}`;
   const e = rec.entry;
   if (!e) return state('MISSING', `no record for ${rec.planPath} in ${configPath}`, fix);
+  // deriveAction creates the issue when the record has no number, so no issue exists yet.
+  if (!e.number) return state('MISSING', `the record for ${rec.planPath} has no issue number`, fix);
   if (e.hash !== hashOf(planText)) return state('DRIFT', `issue #${e.number} was synced from another text of the plan`, fix);
   if ((e.format ?? 1) !== ISSUE_FORMAT) return state('DRIFT', `issue #${e.number} body is format ${e.format ?? 1}, current is ${ISSUE_FORMAT}`, fix);
   return state('CURRENT', `issue #${e.number} matches the plan`);

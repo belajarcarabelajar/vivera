@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as closeout from './plan-closeout.mjs';
-import { hashOf } from './plan-issue-sync.mjs';
+import { hashOf, ISSUE_FORMAT } from './plan-issue-sync.mjs';
 
 const script = path.join(path.dirname(fileURLToPath(import.meta.url)), 'plan-closeout.mjs');
 const KEY = 'docs/code-plan/plans/demo.md';
@@ -46,7 +46,7 @@ function sidecar(base, issues, raw) {
 
 const record = (over = {}) => ({
   number: 7, url: 'https://github.com/o/r/issues/7', hash: hashOf(PLAN_TEXT), state: 'open',
-  status: 'Verification', repo: 'o/r', synced_at: '2026-11-27T00:00:00.000Z', format: 2, ...over,
+  status: 'Verification', repo: 'o/r', synced_at: '2026-11-27T00:00:00.000Z', format: ISSUE_FORMAT, ...over,
 });
 
 const { readinessVerdict } = closeout;
@@ -69,7 +69,7 @@ describe('issueSyncState', () => {
 
   test('a record with the right hash but an older body format is DRIFT', () => {
     const c = checkout();
-    const s = stateOf(c, sidecar(c.base, { [KEY]: record({ format: 1 }) }));
+    const s = stateOf(c, sidecar(c.base, { [KEY]: record({ format: ISSUE_FORMAT - 1 }) }));
     assert.equal(s.state, 'DRIFT');
     const noFormat = record();
     delete noFormat.format;
@@ -81,6 +81,15 @@ describe('issueSyncState', () => {
     const s = stateOf(c, sidecar(c.base, {}));
     assert.equal(s.state, 'MISSING');
     assert.equal(s.fix, `bun scripts/plan-sync.mjs ${c.planFile} --project demo`);
+  });
+
+  test('a record with no issue number is MISSING, since the sync would create the issue', () => {
+    const c = checkout();
+    const fix = `bun scripts/plan-sync.mjs ${c.planFile} --project demo`;
+    for (const number of [null, undefined]) {
+      const s = stateOf(c, sidecar(c.base, { [KEY]: record({ number }) }));
+      assert.deepEqual([s.state, s.fix], ['MISSING', fix], String(number));
+    }
   });
 
   test('no sidecar file, as in a session worktree, is NOT-CHECKED and says where to run it', () => {
@@ -161,5 +170,27 @@ describe('readiness CLI', () => {
     assert.match(out, /\nissue sync: CURRENT \(.+\)\nreadiness: READY\n$/);
     assert.doesNotMatch(out, /fix:/);
     assert.equal(exit, 0);
+  });
+
+  test('a missing record prints MISSING with its fix and exits 1', () => {
+    const c = checkout();
+    const { out, exit } = cli(c, sidecar(c.base, {}));
+    assert.match(out, /\nissue sync: MISSING \(.+\)\n {4}fix: bun scripts\/plan-sync\.mjs .+ --project demo\nreadiness: NOT-READY\n$/);
+    assert.equal(exit, 1);
+  });
+
+  test('a corrupt sidecar prints UNREADABLE and exits 1', () => {
+    const c = checkout();
+    const { out, exit } = cli(c, sidecar(c.base, null, '{ not json'));
+    assert.match(out, /\nissue sync: UNREADABLE \(.+\)\nreadiness: NOT-READY\n$/);
+    assert.equal(exit, 1);
+  });
+
+  test('a sidecar path that does not exist prints NOT-CHECKED and turns READY into NEEDS-HUMAN, exit 3', () => {
+    const c = checkout();
+    const { out, exit } = cli(c, path.join(c.base, 'no-such', 'plan.issues.json'));
+    assert.match(out, /^T1\tDONE\ttrue$/m);
+    assert.match(out, /\nissue sync: NOT-CHECKED \(.+\)\nreadiness: NEEDS-HUMAN\n$/);
+    assert.equal(exit, 3);
   });
 });
